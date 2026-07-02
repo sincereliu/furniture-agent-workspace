@@ -1,0 +1,5 @@
+[project]
+name = "furniture-agent-workspace"
+version = "0.1.0"
+description = "Furniture agent workspace scaffold"
+requires-python = ">=3.11"
