@@ -1,0 +1,4 @@
+interface:
+  display_name: "Furniture CAD"
+  short_description: "Plan furniture intent and generate validated CAD"
+  default_prompt: "Use $furniture-cad to turn my furniture idea into a confirmable design intent and continue to CAD when supported."

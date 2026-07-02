@@ -1,0 +1,147 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+title: WardrobeDesignIntent
+type: object
+required:
+  - DesignIntent
+additionalProperties: false
+properties:
+  DesignIntent:
+    type: object
+    required:
+      - object
+      - overall_size
+      - dimension_interpretation
+      - requirements
+      - layout
+      - style
+      - structural_strategy
+      - constraints
+    additionalProperties: false
+    properties:
+      object:
+        const: Wardrobe
+      overall_size:
+        type: object
+        required:
+          - width_mm
+          - depth_mm
+          - height_mm
+        additionalProperties: false
+        properties:
+          width_mm:
+            type: [number, "null"]
+            exclusiveMinimum: 0
+          depth_mm:
+            type: [number, "null"]
+            exclusiveMinimum: 0
+          height_mm:
+            type: [number, "null"]
+            exclusiveMinimum: 0
+      dimension_interpretation:
+        type: object
+        required:
+          - width_label
+          - depth_label
+          - height_label
+          - dimensions_are
+        additionalProperties: false
+        properties:
+          width_label:
+            type: [string, "null"]
+          depth_label:
+            type: [string, "null"]
+          height_label:
+            type: [string, "null"]
+          dimensions_are:
+            type: string
+            enum: [outer_carcass_size, internal_clear_size, unresolved]
+      requirements:
+        type: array
+        items:
+          type: string
+          enum:
+            - hang_clothes
+            - store_folded_items
+            - include_drawers
+            - include_mirror
+            - support_daily_use
+            - maximize_storage
+            - fit_specific_room
+      layout:
+        type: object
+        required:
+          - doors
+          - compartments
+        additionalProperties: false
+        properties:
+          doors:
+            type: object
+            required:
+              - type
+              - count
+            additionalProperties: false
+            properties:
+              type:
+                enum: [hinged, sliding, open, null]
+              count:
+                type: [integer, "null"]
+                minimum: 0
+          compartments:
+            type: object
+            required:
+              - hanging_bay
+              - shelf_bay
+              - drawer_bay
+            additionalProperties: false
+            properties:
+              hanging_bay:
+                type: [boolean, "null"]
+              shelf_bay:
+                type: [boolean, "null"]
+              drawer_bay:
+                type: [boolean, "null"]
+      style:
+        type: object
+        required:
+          - door_expression
+          - visible_drawer_fronts
+          - built_in_look
+        additionalProperties: false
+        properties:
+          door_expression:
+            enum: [slab, framed, mirrored, open, null]
+          visible_drawer_fronts:
+            type: [boolean, "null"]
+          built_in_look:
+            type: [boolean, "null"]
+      structural_strategy:
+        type: array
+        minItems: 1
+        items:
+          type: string
+          enum:
+            - panel_carcass
+            - vertical_partitions
+            - adjustable_shelves
+            - fixed_shelves
+            - drawer_stack
+            - hanging_rod
+            - back_panel
+            - face_frame
+            - plinth_base
+            - wall_fixing
+      constraints:
+        type: array
+        items:
+          type: string
+          enum:
+            - dimensions_are_outer_carcass_size
+            - dimensions_are_internal_clear_size
+            - door_clearance_must_be_resolved
+            - shelf_count_means_number_of_shelves
+            - drawer_count_means_number_of_drawers
+            - depth_not_specified
+            - height_not_specified
+            - door_type_not_specified
+            - material_thickness_not_specified
+            - anti_tip_or_wall_fixing_should_be_considered
