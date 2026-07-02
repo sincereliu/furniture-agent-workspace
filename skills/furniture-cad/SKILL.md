@@ -1,59 +1,68 @@
 ---
 name: furniture-cad
-description: Turn furniture requests into confirmable design intent, then plan, validate, and optionally generate CAD through this workspace. Use for tables, wardrobes, cabinets, shelves, desks, beds, furniture dimensions and layouts, Feature Trees, or furniture STEP generation. The current executable vertical slice supports rectangular tables; keep other furniture types at design-intent or planning level until their planner is implemented.
+description: Turn furniture requests into staged, confirmable design intent, furniture plans, and validated CAD through this workspace. Use for tables, wardrobes, floor or wall cabinets, shelves, desks, beds, panel-cabinet structure, dimensions, layouts, Feature Trees, preliminary panel/BOM reasoning, or STEP generation. Route by stage and furniture family; only claim executable CAD support that the live workspace actually implements.
 ---
 
 # Furniture CAD
 
-Use a staged furniture workflow. Keep user intent, the Feature Tree, generated
-source, and CAD artifacts as separate layers.
+Keep user intent, domain planning, the Feature Tree, generated source, and CAD
+artifacts as separate layers. Treat this skill as the agent's routing and domain
+guidance layer, not as a second CAD engine.
 
-## Core rules
+## Invariants
 
-- Default to a confirmable Design Intent before CAD. If the user explicitly
-  requests an end-to-end run and the request is complete, continue without an
-  extra approval stop.
 - Use millimeters unless the user specifies another unit.
-- Interpret furniture dimensions as `W x D x H`: X width from left to right, Y
-  depth from front to back, and Z height upward.
-- Use the lower-left ground corner of the finished furniture envelope as
-  `(0, 0, 0)`. Do not silently switch to a centered origin.
-- Use `T` or a named thickness field for board thickness; do not overload
+- Interpret overall dimensions as `W x D x H`: X left-to-right, Y from the
+  rear toward the user-facing front, and Z upward.
+- Use the lower-left-rear ground corner of the finished furniture envelope as
+  `(0, 0, 0)`. Compute centers only inside an implementation that requires them.
+- Use `T` or a named thickness field for material thickness; never overload
   furniture depth.
-- Preserve unresolved decisions as `null` at the intent stage. Ask one focused
-  question only when fit, ergonomics, safety, or fabrication would otherwise be
-  materially wrong.
-- Treat the intent as the editable source of truth. Do not hand-edit generated
-  Python, STEP, topology GLB, or other derived artifacts.
-- Never imply that an unsupported furniture type can be generated. The current
-  planner accepts only `table`.
+- Preserve unresolved decisions as `null` at the intent stage.
+- Treat the approved intent as the editable source of truth. Do not hand-edit
+  derived Python, STEP, topology GLB, BOM, or cut-list artifacts.
+- Report only validations and artifacts that actually ran or exist.
 
-## Workflow
+## Route the request
 
-1. Read `references/design-intent.md` and capture the request at the intent
-   level. Use the wardrobe template and schema only for wardrobe requests.
-2. State important assumptions and unresolved fit- or safety-critical fields.
-3. Stop for confirmation unless the user already requested an end-to-end run
-   with sufficient parameters.
-4. Before planning or generation, read `references/workspace-pipeline.md`.
-5. Convert an approved, supported intent into the exact executable input
-   contract. Keep semantic decisions in the intent; keep geometry sequencing in
-   the Feature Tree.
-6. Generate through the workspace entry point. Do not bypass the planner,
-   emitter, or CAD bridge with improvised one-off CAD code.
-7. Verify the command result and all required artifacts. Report unsupported
-   types or validation failures plainly instead of fabricating success.
+1. **Intent or design discussion:** Read `references/design-intent.md`. Return a
+   confirmable Design Intent and stop unless the user requested more.
+2. **Panel cabinet, wardrobe, floor cabinet, or wall cabinet:** Also read
+   `references/panel-cabinetry.md`. Use its structure rules as planning
+   knowledge, not as proof that generation is implemented.
+3. **Feature Tree or modeling plan:** Convert an approved intent into semantic
+   parts, dependencies, sizes, and lower-left positions. Keep manufacturing
+   annotations separate from geometry.
+4. **CAD generation:** Read `references/workspace-pipeline.md`, then use the
+   workspace entry point. The live executable planner currently supports only a
+   basic rectangular `table`.
+5. **BOM, panel list, edge banding, or manufacturing output:** Produce only a
+   clearly labeled preliminary result unless the live package implements and
+   validates that output. Do not treat migrated defaults as a factory-approved
+   standard without user confirmation.
 
-## Response boundaries
+## Interaction rules
 
-For an intent-only request, return:
+- Default to Design Intent before geometry. If the user explicitly requests an
+  end-to-end run and supplies enough information for a supported type, continue
+  without an extra approval stop.
+- Ask one focused question only when fit, ergonomics, safety, structure, or
+  fabrication would otherwise be materially wrong.
+- State assumptions beside the affected field instead of hiding them in prose.
+- For unsupported types, complete the useful intent or planning work and state
+  the exact execution boundary plainly.
 
-- the filled Design Intent;
-- a short list of assumptions or unresolved fields;
-- one confirmation question.
+## Generate and verify
 
-For an explicit generation request, return:
+For a supported generation request:
 
-- the normalized intent and important assumptions;
-- the generation/validation result;
-- links or paths to the produced artifacts.
+1. Normalize the approved intent to the executable input contract.
+2. Run the planner, emitter, and CAD bridge in that order.
+3. Do not bypass the pipeline with one-off CAD code or direct edits to
+   `external/text-to-cad`.
+4. Require a successful command result and non-empty required artifacts.
+5. Return the normalized intent, important assumptions, validation result, and
+   artifact paths.
+
+For an intent-only request, return the filled intent, unresolved fields, and at
+most one confirmation question.

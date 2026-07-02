@@ -29,10 +29,10 @@ def plan_table(spec: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("depth is too small for the selected leg_size and leg_inset")
 
     leg_positions = {
-        "leg_front_left": (leg_inset, leg_inset, 0.0),
-        "leg_front_right": (width - leg_inset - leg_size, leg_inset, 0.0),
-        "leg_back_left": (leg_inset, depth - leg_inset - leg_size, 0.0),
-        "leg_back_right": (
+        "leg_back_left": (leg_inset, leg_inset, 0.0),
+        "leg_back_right": (width - leg_inset - leg_size, leg_inset, 0.0),
+        "leg_front_left": (leg_inset, depth - leg_inset - leg_size, 0.0),
+        "leg_front_right": (
             width - leg_inset - leg_size,
             depth - leg_inset - leg_size,
             0.0,
@@ -61,9 +61,9 @@ def plan_table(spec: dict[str, Any]) -> dict[str, Any]:
         "furniture_type": "table",
         "units": "mm",
         "coordinate_system": {
-            "origin": "lower-left-ground-corner",
+            "origin": "lower-left-rear-ground-corner",
             "x": "left-to-right",
-            "y": "front-to-back",
+            "y": "rear-to-front",
             "z": "up",
         },
         "parameters": {

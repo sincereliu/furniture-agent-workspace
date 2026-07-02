@@ -32,16 +32,23 @@ class FurniturePipelineTests(unittest.TestCase):
             WORKSPACE_ROOT / "packages" / "furniture-cad-emitter" / "emitter.py",
         )
 
-    def test_table_plan_uses_lower_left_ground_origin(self) -> None:
+    def test_table_plan_uses_lower_left_rear_ground_origin(self) -> None:
         tree = self.planner.plan_furniture(
             {"type": "table", "width": 1200, "depth": 700, "height": 750}
         )
 
         features = {feature["id"]: feature for feature in tree["features"]}
-        self.assertEqual(tree["coordinate_system"]["origin"], "lower-left-ground-corner")
+        self.assertEqual(
+            tree["coordinate_system"]["origin"],
+            "lower-left-rear-ground-corner",
+        )
         self.assertEqual(features["table_top"]["position"], {"x": 0.0, "y": 0.0, "z": 720.0})
         self.assertEqual(
             features["leg_back_right"]["position"],
+            {"x": 1090.0, "y": 50.0, "z": 0.0},
+        )
+        self.assertEqual(
+            features["leg_front_right"]["position"],
             {"x": 1090.0, "y": 590.0, "z": 0.0},
         )
         self.assertEqual(len(features), 5)
