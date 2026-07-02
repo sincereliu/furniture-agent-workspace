@@ -1,28 +1,21 @@
 # CAD bridge
 
-This package provides a thin adapter layer between the furniture agent and the external text-to-cad repository.
+This package invokes the external text-to-cad STEP CLI without modifying the
+external submodule.
 
-## How it works
+The bridge accepts a generated Python source that defines `gen_step()`. It runs
+the external `skills/cad/scripts/step` launcher from the furniture workspace,
+then verifies that both the STEP file and its adjacent hidden Viewer topology
+GLB exist and are non-empty.
 
-1. The furniture agent creates a structured spec.
-2. The bridge writes that spec to a JSON request file.
-3. The bridge invokes an external command configured by the environment or by the caller.
-4. The result is returned in a stable, project-specific shape.
-
-## Example
+It does not send furniture JSON directly to text-to-cad. Furniture intent is
+planned into a Feature Tree and translated into build123d source before the
+bridge runs.
 
 ```python
-from pathlib import Path
-import importlib.util
-
-module_path = Path("packages/cad-bridge/adapter.py")
-spec = importlib.util.spec_from_file_location("cad_bridge_adapter", module_path)
-module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(module)
-
-bridge = module.CadBridge(command_template="python {repo}/scripts/whatever.py --request {request} --output {output}")
-result = bridge.generate({"type": "table", "width": 1200, "depth": 700, "height": 750})
-print(result)
+bridge = CadBridge()
+result = bridge.generate_from_source(
+    "generated/table/table.py",
+    "generated/table/table.step",
+)
 ```
-
-In practice, you can point the bridge to the specific CLI or Python entrypoint that the external repository exposes.

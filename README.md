@@ -21,3 +21,22 @@ This workspace is a scaffold for a furniture CAD agent system with a layered arc
 3. The planner converts the specification into a feature tree.
 4. Validation checks the plan and repairs issues when needed.
 5. The CAD bridge invokes the external engine to produce the final result.
+
+## Current executable vertical slice
+
+The first working vertical slice supports a basic rectangular table:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\generate_furniture.py examples\table_basic.json --force
+```
+
+This writes the normalized intent, Feature Tree, generated build123d source,
+STEP file, and hidden Viewer topology GLB under
+`generated\table_basic\`. The external text-to-cad submodule remains
+unmodified.
+
+Run the unit tests and real CAD smoke generation with:
+
+```powershell
+pwsh -File scripts\smoke_test.ps1
+```
