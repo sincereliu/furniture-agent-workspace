@@ -1,19 +1,19 @@
 # Schema
 
-The schema layer defines the shared contract for furniture generation.
+Schema 层定义了家具生成过程中的共享契约。
 
-## Core idea
+## 核心思路
 
-Furniture requests should be normalized into a structured spec before planning or execution begins.
+家具请求应在规划或执行开始前先被规范化为结构化规格。
 
-## Suggested schema concepts
+## 建议的 Schema 概念
 
-- furniture type, such as table, bed, or cabinet
-- dimensions including width, depth, height
-- structural options such as materials, joints, or style hints
-- constraints and validation rules
-- output expectations for the CAD generation step
+- 家具类型，例如桌子、床或柜子
+- 包括宽度、深度和高度在内的尺寸
+- 结构选项，例如材料、连接方式或风格提示
+- 约束条件和验证规则
+- CAD 生成步骤的输出预期
 
-## Design intent
+## 设计意图
 
-The schema should stay stable and independent from the CAD engine. This allows the planner, validator, and agent to operate on a clear model without being tightly coupled to external tools.
+Schema 应保持稳定，并且与 CAD 引擎解耦。这样规划器、验证器和代理就可以基于清晰的模型协同工作，而不会过度依赖外部工具。

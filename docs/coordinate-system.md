@@ -1,16 +1,13 @@
-# Coordinate System
+# 坐标系统
 
-Use one shared furniture coordinate system:
+使用一个统一的家具坐标系统：
 
-- origin: lower-left-rear ground corner of the finished furniture envelope;
-- X: left to right;
-- Y: rear toward the user-facing front;
-- Z: floor upward;
-- units: millimeters unless an input explicitly states otherwise.
+- 原点：成品家具外轮廓的左下后地角；
+- X：从左到右；
+- Y：从后方指向用户正面的方向；
+- Z：从地面向上；
+- 单位：除非输入明确指定，否则使用毫米。
 
-Positions describe a part's minimum corner. Compute centers only inside CAD
-primitives that require center-based placement.
+位置描述的是零件的最小角点。只有在 CAD 基元需要基于中心放置时，才计算中心点。
 
-For a table, back legs therefore have smaller Y values and front legs have
-larger Y values. For a cabinet, a recessed back panel has a smaller Y value than
-shelves and doors, while doors lie at or near the largest Y extent.
+例如，对于一张桌子，后腿的 Y 值较小，前腿的 Y 值较大。对于柜子，凹入的背板 Y 值小于搁板和门板，而门板则位于或接近最大的 Y 范围。

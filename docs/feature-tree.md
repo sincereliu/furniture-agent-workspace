@@ -1,3 +1,3 @@
-# Feature Tree
+# 特征树
 
-Planned feature hierarchy for the furniture CAD pipeline.
+家具 CAD 流水线中计划使用的特征层级结构。

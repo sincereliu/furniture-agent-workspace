@@ -1,47 +1,37 @@
-# Furniture Skill Migration
+# 家具技能迁移
 
-## Decision
+## 决策
 
-Keep `skills/furniture-cad` as one thin agent entry point. Move reusable
-furniture knowledge into progressive references and keep executable behavior in
-workspace packages. Do not copy the earlier all-in-one skill directory into
-this workspace.
+将 skills/furniture-cad 作为一个轻量级的 Agent 入口点保留。把可复用的家具知识迁移到渐进式参考资料中，并将可执行行为放在工作区包中。不要把早期的“一体化技能目录”直接复制到这个工作区。
 
-## Source-to-target map
+## 源到目标映射
 
-| Earlier `furniture` content | Target in this workspace | Action |
+| 早期 furniture 内容 | 本工作区中的目标 | 动作 |
 |---|---|---|
-| `SKILL.md` workflow and defaults | `skills/furniture-cad/SKILL.md` plus references | Distill and route by stage |
-| `references/cabinet-structures.md` | `references/panel-cabinetry.md` | Migrate structural semantics |
-| `references/panel-placement.md` | planner rules and tests | Preserve rear-to-front Y and verify ranges |
-| `configs/*.yaml` | future versioned domain-policy package | Do not duplicate inside skill prose |
-| `templates/*.py` | future planner strategies | Port behavior, not source layout |
-| `core/panel.py` | future furniture schema/domain package | Remove CAD-solid ownership from the record |
-| `core/generator.py` | planner plus emitter packages | Split planning from geometry emission |
-| `core/assembly_adapter.py` | `packages/cad-bridge` | Use the existing bridge instead |
-| order scripts and output layout | service or CLI layer | Keep out of the skill |
-| generated caches and historical comparison files | nowhere | Do not migrate |
+| SKILL.md 工作流和默认值 | skills/furniture-cad/SKILL.md 以及参考资料 | 按阶段提炼并路由 |
+| references/cabinet-structures.md | references/panel-cabinetry.md | 迁移结构语义 |
+| references/panel-placement.md | planner 规则和测试 | 保留后到前的 Y 方向并验证范围 |
+| configs/*.yaml | 未来版本化的领域策略包 | 不要在技能说明里重复 |
+| templates/*.py | 未来的 planner 策略 | 移植行为，而不是移植源码布局 |
+| core/panel.py | 未来的家具 schema/领域包 | 从记录中移除 CAD 实体所有权 |
+| core/generator.py | planner 与 emitter 包 | 将规划与几何输出拆分 |
+| core/assembly_adapter.py | packages/cad-bridge | 使用现有桥接层 |
+| 订单脚本和输出布局 | service 或 CLI 层 | 保留在技能之外 |
+| 生成缓存和历史对比文件 | 无 | 不迁移 |
 
-## Why a direct copy is unsafe
+## 为什么直接复制不安全
 
-- The earlier package mixes LLM instructions, business rules, CAD objects,
-  templates, order storage, and export commands.
-- Its rear-to-front Y convention is valid and now matches this workspace, but
-  the old formulas still need semantic planner tests before reuse.
-- It exports STEP directly, bypassing the current planner, emitter, and CAD
-  bridge.
-- Defaults are duplicated between Python and YAML, which invites drift.
-- Its skill description promises cabinet generation and BOM output that the
-  current workspace has not yet implemented or validated.
+- 早期包混合了 LLM 指令、业务规则、CAD 对象、模板、订单存储和导出命令。
+- 其“后到前”的 Y 方向约定是有效的，并且现在与本工作区一致，但旧公式在复用前仍需经过语义 planner 测试。
+- 它直接导出 STEP，绕过了当前的 planner、emitter 和 CAD bridge。
+- Python 和 YAML 中重复定义了默认值，容易产生漂移。
+- 其技能描述承诺了柜子生成和 BOM 输出，但当前工作区尚未实现或验证这些能力。
 
-## Implementation sequence
+## 实施顺序
 
-1. Stabilize a CAD-independent furniture schema for intent, semantic parts,
-   materials, and manufacturing annotations.
-2. Add panel-cabinet planner strategies with range-based coordinate tests.
-3. Extend the emitter to consume semantic panel features without embedding
-   business defaults.
-4. Add BOM and edge-banding outputs derived from the same approved Feature Tree.
-5. Add floor-cabinet, wall-cabinet, and wardrobe end-to-end fixtures.
-6. Only then change the skill capability statement from planning-only to
-   executable cabinet generation.
+1. 为意图、语义部件、材料和制造注释稳定一个与 CAD 解耦的家具 schema。
+2. 增加基于范围坐标测试的 panel-cabinet planner 策略。
+3. 扩展 emitter，使其消费语义 panel 特征，而不嵌入业务默认值。
+4. 增加基于同一审批后的 Feature Tree 的 BOM 和封边输出。
+5. 增加 floor-cabinet、wall-cabinet 和 wardrobe 的端到端夹具。
+6. 只有在上述步骤完成后，才将技能能力声明从“仅规划”改为“可执行柜子生成”。

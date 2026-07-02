@@ -1,24 +1,24 @@
-# Architecture
+# 架构
 
-The repository is organized as a layered system for furniture CAD generation.
+该仓库被组织为一个用于家具 CAD 生成的分层系统。
 
-## Layer responsibilities
+## 各层职责
 
-- Workspace: the top-level engineering project that coordinates all modules.
-- external/text-to-cad: the external CAD engine used for geometry generation.
-- packages/cad-bridge: an adapter layer that isolates the external dependency and exposes a stable interface.
-- packages/furniture-schema: the canonical schema for furniture parameters and input contracts.
-- packages/furniture-planner: converts a structured spec into a feature tree representation.
-- validation: checks constraints, validates the plan, and applies repair strategies.
-- services/furniture-agent: the orchestrator that coordinates intent parsing, planning, validation, and execution.
-- apps/web and apps/cli: user-facing interfaces for interaction.
-- skills/furniture-cad: reusable LLM rules and domain knowledge for furniture generation.
+- Workspace：协调所有模块的顶层工程项目。
+- external/text-to-cad：用于几何生成的外部 CAD 引擎。
+- packages/cad-bridge：隔离外部依赖并暴露稳定接口的适配层。
+- packages/furniture-schema：家具参数和输入契约的规范 schema。
+- packages/furniture-planner：将结构化规格转换为特征树表示。
+- validation：检查约束、验证计划并应用修复策略。
+- services/furniture-agent：协调意图解析、规划、验证和执行的编排器。
+- apps/web 和 apps/cli：面向用户的交互界面。
+- skills/furniture-cad：用于家具生成的可复用 LLM 规则和领域知识。
 
-## Recommended execution flow
+## 推荐执行流程
 
-1. The user sends a request through a web app or CLI.
-2. The agent interprets the request and produces a structured spec.
-3. The planner creates a feature tree from the spec.
-4. Validation checks the tree and repairs invalid or incomplete parts.
-5. The execution layer calls the CAD bridge, which talks to the external CAD engine.
-6. The final CAD artifact is returned to the user.
+1. 用户通过 Web 应用或 CLI 发出请求。
+2. Agent 解析请求并生成结构化规格。
+3. 规划器根据规格创建特征树。
+4. 验证层检查特征树并修复无效或不完整的部分。
+5. 执行层调用 CAD 桥接层，而后者再与外部 CAD 引擎通信。
+6. 最终的 CAD 工件返回给用户。
