@@ -5,56 +5,36 @@ description: Route furniture work through the correct local domain and CAD skill
 
 # Furniture Agent
 
-Act as this repository's entry point for furniture work. Discover and route to
-the maintained local skills; do not duplicate their domain or CAD instructions
-here.
-
-## Resolve the skill sources
-
-Resolve all paths from the repository root containing this `skills/` directory.
-
-1. Treat `skills/furniture-cad/SKILL.md` as the furniture-domain source. Read it
-   for every furniture request, then load only the references needed for the
-   current stage.
-2. Treat `external/text-to-cad/skills/` as the canonical CAD-engine skill
-   source. Load an external skill only when its capability is needed.
-3. Ignore `external/text-to-cad/plugins/cad/skills/` during local development.
-   It is a generated production copy of the canonical external skill tree.
-4. Read `references/skill-map.md` when selecting an external skill or checking
-   the boundary between workspace and engine responsibilities.
-
-If a required path is absent, inspect the live checkout and report the missing
-source instead of silently substituting remembered rules.
+Use this skill as the discoverable entry point for furniture work. Resolve all
+paths from the repository root and keep this entry focused on routing.
 
 ## Route the request
 
-1. Inspect the live code, tests, and current skill text before making
-   executable-capability claims. Prefer verified code over stale support lists.
-2. Classify the requested stage:
-   - For discussion, requirements, dimensions, or Design Intent, stay in the
-     furniture-domain skill and stop before CAD unless generation was asked.
-   - For furniture structure, placement, panelization, BOM, or manufacturing
-     reasoning, use the furniture-domain skill and live `packages/`.
-   - For CAD generation, modification, STEP inspection, geometry validation,
-     or snapshots, also load `external/text-to-cad/skills/cad/SKILL.md`.
-   - For visual review or artifact links, load
-     `external/text-to-cad/skills/cad-viewer/SKILL.md`.
-   - For named purchasable components, load
-     `external/text-to-cad/skills/step-parts/SKILL.md` before inventing a
-     placeholder.
-   - Route DXF, G-code, implicit CAD, URDF, SRDF, or SDF only when the requested
-     output requires the corresponding external skill.
-3. Keep approved furniture intent as the source of truth. Let workspace
-   packages own furniture planning and let the external engine own generic CAD
-   generation, inspection, snapshots, and viewing.
-4. Run and report only validations required by the task and successfully
-   executed.
+1. Read `skills/furniture-cad/SKILL.md` for every furniture request and follow
+   its stage-specific references.
+2. For discussion, Design Intent, furniture structure, panelization, BOM, or
+   manufacturing reasoning, stay in the furniture skill and live workspace
+   packages unless CAD work was requested.
+3. Load the smallest required skill from canonical
+   `external/text-to-cad/skills/`:
+   - `cad/SKILL.md` for CAD generation, modification, STEP inspection,
+     geometry validation, or snapshots.
+   - `cad-viewer/SKILL.md` for visual review or artifact links.
+   - `step-parts/SKILL.md` for named purchasable components.
+   - Other engine skills only when their specific output is requested.
+4. Ignore `external/text-to-cad/plugins/cad/skills/`; it is a generated
+   production copy.
+5. Before claiming executable support, inspect the relevant live code, tests,
+   and entry command. Report missing sources instead of substituting remembered
+   rules.
 
 ## Boundaries
 
+- Keep approved furniture intent as the source of truth.
+- Let workspace packages own furniture planning and the external engine own
+  generic CAD generation, inspection, snapshots, and viewing.
 - Do not edit `external/text-to-cad` to implement furniture-domain behavior.
 - Do not hand-edit derived STEP, GLB, BOM, cut-list, or generated Python
   artifacts when an upstream intent or source exists.
 - Do not load the entire external skill tree. Select the smallest relevant set.
-- Do not assume support from documentation alone. Confirm the live planner,
-  pipeline, tests, and entry command for the requested furniture family.
+- Report only validations that actually ran and artifacts that actually exist.
