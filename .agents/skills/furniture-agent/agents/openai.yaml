@@ -1,0 +1,4 @@
+interface:
+  display_name: "Furniture Agent"
+  short_description: "Route local furniture planning, CAD, and review"
+  default_prompt: "Use $furniture-agent to route this request through the local furniture and CAD skills."
