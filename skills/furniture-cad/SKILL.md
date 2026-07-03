@@ -15,10 +15,10 @@ use it.
 1. For every furniture request, read
    [references/intake-routing.md](references/intake-routing.md), identify the
    furniture family, and load its intake template:
-   [table](references/table-intake.yaml),
-   [floor cabinet](references/floor-cabinet-intake.yaml),
-   [wall cabinet](references/wall-cabinet-intake.yaml), or
-   [wardrobe](references/wardrobe-intake.yaml). Use the template only to collect
+   [table](references/intake/table.yaml),
+   [floor cabinet](references/intake/floor-cabinet.yaml),
+   [wall cabinet](references/intake/wall-cabinet.yaml), or
+   [wardrobe](references/intake/wardrobe.yaml). Use the template only to collect
    the few user decisions needed for routing and intent. Let runtime code and
    configuration own technical defaults.
 2. For requirements, dimensions, style, layout, or early design discussion,

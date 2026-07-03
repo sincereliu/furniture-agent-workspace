@@ -7,10 +7,10 @@ the agent must learn and which references or execution skills are needed.
 
 | User request | Intake template | Additional furniture reference |
 |---|---|---|
-| table, desk-like rectangular table | `table-intake.yaml` | none |
-| floor/base/storage cabinet | `floor-cabinet-intake.yaml` | `panel-cabinetry.md` |
-| wall/hanging cabinet | `wall-cabinet-intake.yaml` | `panel-cabinetry.md` |
-| wardrobe/closet | `wardrobe-intake.yaml` | `panel-cabinetry.md` |
+| table, desk-like rectangular table | `intake/table.yaml` | none |
+| floor/base/storage cabinet | `intake/floor-cabinet.yaml` | `panel-cabinetry.md` |
+| wall/hanging cabinet | `intake/wall-cabinet.yaml` | `panel-cabinetry.md` |
+| wardrobe/closet | `intake/wardrobe.yaml` | `panel-cabinetry.md` |
 | another furniture family | generic fields in `design-intent.md` | verify support |
 
 Do not wait for every field before selecting the furniture references. The
