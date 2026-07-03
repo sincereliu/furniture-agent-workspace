@@ -3,6 +3,11 @@
 Use this reference before planning geometry. Design Intent records what should
 be built and why. It is not a Feature Tree, panel cut list, or CAD program.
 
+First select the matching intake template through `intake-routing.md`. Fill its
+`intent` section during discussion and its `runtime` section only when
+generation is requested. A template is a question and routing contract, not a
+second executable schema.
+
 ## Capture
 
 - `type`: furniture family in user language; also record the executable type
@@ -43,7 +48,7 @@ makes the mapping implausible.
   requested planning or end-to-end generation.
 - For supported generation, normalize the approved intent to the flat JSON
   contract in `workspace-pipeline.md`; do not maintain a second furniture-type
-  schema inside the skill.
+  execution schema inside the skill.
 - For unsupported furniture, keep the user-facing intent useful and explicitly
   separate it from executable support.
 

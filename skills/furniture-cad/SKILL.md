@@ -12,18 +12,27 @@ use it.
 
 ## Route by task
 
-1. For requirements, dimensions, style, layout, or early design discussion,
-   read [references/design-intent.md](references/design-intent.md). Return a
-   confirmable Design Intent and stop unless the user requested planning or
+1. For every furniture request, read
+   [references/intake-routing.md](references/intake-routing.md), identify the
+   furniture family, and load its intake template:
+   [table](references/table-intake.yaml),
+   [floor cabinet](references/floor-cabinet-intake.yaml),
+   [wall cabinet](references/wall-cabinet-intake.yaml), or
+   [wardrobe](references/wardrobe-intake.yaml). Use the template to distinguish
+   routing parameters, design decisions, executable parameters, and
+   manufacturing gates.
+2. For requirements, dimensions, style, layout, or early design discussion,
+   also read [references/design-intent.md](references/design-intent.md). Return
+   a confirmable Design Intent and stop unless the user requested planning or
    generation.
-2. For wardrobes, floor cabinets, wall cabinets, panel placement, panel lists,
+3. For wardrobes, floor cabinets, wall cabinets, panel placement, panel lists,
    edge banding, or BOM reasoning, also read
    [references/panel-cabinetry.md](references/panel-cabinetry.md).
-3. Before claiming support, normalizing executable JSON, running generation, or
+4. Before claiming support, normalizing executable JSON, running generation, or
    reporting artifacts, read
    [references/workspace-pipeline.md](references/workspace-pipeline.md) and
    inspect the named live entry point when capability may have changed.
-4. For unsupported furniture families, complete useful intent or modeling-plan
+5. For unsupported furniture families, complete useful intent or modeling-plan
    work, then state the exact execution boundary. Do not invent a new runtime
    path inside the skill.
 

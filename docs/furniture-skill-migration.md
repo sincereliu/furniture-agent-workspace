@@ -20,9 +20,10 @@
 | 生成缓存和历史对比文件 | 无 | 不迁移 |
 
 旧版 `references/cabinet-structures.md`、`references/panel-placement.md` 和
-wardrobe 专用嵌套 DesignIntent schema 不作为现行 skill 资源保留。结构语义已经
-提炼到 `panel-cabinetry.md`，定位公式由 planner 与测试拥有，所有可执行品类共用
-`workspace-pipeline.md` 记录的扁平 JSON 契约。
+wardrobe 专用嵌套执行 schema 不作为现行 skill 资源保留。结构语义已经提炼到
+`panel-cabinetry.md`，定位公式由 planner 与测试拥有，所有可执行品类共用
+`workspace-pipeline.md` 记录的扁平 JSON 契约。需求采集模板仍然保留，但统一命名为
+`*-intake.yaml`；它们负责参数发现和路由，不直接发送给 planner。
 
 ## 为什么直接复制不安全
 

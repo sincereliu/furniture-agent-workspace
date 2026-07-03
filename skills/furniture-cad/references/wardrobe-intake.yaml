@@ -1,0 +1,72 @@
+template_version: 1
+routing:
+  family: panel_cabinet
+  subtype: wardrobe
+  furniture_reference: panel-cabinetry.md
+  executable_type: wardrobe
+
+intent:
+  purpose: null
+  overall_size:
+    width_mm: null
+    depth_mm: null
+    height_mm: null
+    dimension_basis: finished_envelope
+  room_fit:
+    opening_width_mm: null
+    opening_depth_mm: null
+    ceiling_height_mm: null
+    skirting_or_obstruction: null
+  front:
+    door_type: null
+    door_count: null
+    mirror_required: null
+  interior:
+    hanging:
+      long_clothes: null
+      short_clothes: null
+    shelves:
+      required: null
+      count: null
+    drawers:
+      required: null
+      count: null
+    compartment_layout: null
+  structure:
+    carcass_construction: null
+    back_strategy: null
+    base_strategy: null
+  installation:
+    built_in_or_freestanding: null
+    anti_tip_or_wall_fixing: null
+  appearance: null
+  constraints: []
+  unresolved: []
+
+runtime:
+  type: wardrobe
+  width: null
+  depth: null
+  height: null
+  board_thickness: null
+  back_thickness: null
+  door_thickness: null
+  toe_kick_height: null
+  back_offset: null
+  door_margin: null
+  door_hinge_gap: null
+  shelf_count: null
+  n_doors: null
+
+manufacturing:
+  material_grade: null
+  edge_banding: null
+  joinery: null
+  door_hardware: null
+  hanging_hardware: null
+  drawer_hardware: null
+  tolerances: null
+
+limits:
+  - Current runtime uses a fixed divider and shelf-zone template.
+  - Door type, drawer layout, hanging details, and room-fit fields are not fully executable.

@@ -1,0 +1,55 @@
+template_version: 1
+routing:
+  family: panel_cabinet
+  subtype: floor_cabinet
+  furniture_reference: panel-cabinetry.md
+  executable_type: floor_cabinet
+
+intent:
+  purpose: null
+  overall_size:
+    width_mm: null
+    depth_mm: null
+    height_mm: null
+    dimension_basis: finished_envelope
+  carcass:
+    construction: null
+    back_strategy: null
+    base_strategy: null
+  front:
+    door_type: null
+    door_count: null
+  interior:
+    shelf_count: null
+    divider_layout: null
+    drawer_layout: null
+  installation:
+    countertop_included_in_height: null
+    wall_fixing_required: null
+  constraints: []
+  unresolved: []
+
+runtime:
+  type: floor_cabinet
+  width: null
+  depth: null
+  height: null
+  board_thickness: null
+  back_thickness: null
+  door_thickness: null
+  toe_kick_height: null
+  back_offset: null
+  door_margin: null
+  door_hinge_gap: null
+  shelf_count: null
+  n_doors: null
+
+manufacturing:
+  material_grade: null
+  edge_banding: null
+  joinery: null
+  hardware: null
+  tolerances: null
+
+limits:
+  - Current runtime is a fixed carcass template and does not express arbitrary drawers or joinery.
