@@ -1,11 +1,12 @@
 # Panel Cabinetry
 
-Read this reference for wardrobes, floor cabinets, wall cabinets, storage
-cabinets, panel lists, edge banding, or preliminary BOM reasoning.
+Read this reference for floor cabinets, wall cabinets, storage cabinets,
+panel lists, edge banding, or preliminary BOM reasoning.
 
 This file owns cabinet design decisions and manufacturing caveats. The live
-planner owns placement formulas. `packages/furniture_schema/configs/` owns
-software defaults. Do not copy either into this reference.
+planner owns placement formulas. `packages/furniture_schema/spec.py` owns
+software defaults (dataclass fields + `CABINET_PRESETS`). Do not copy either
+into this reference.
 
 ## Coordinate convention
 
@@ -38,21 +39,15 @@ geometry matters.
   decorative panels.
 - Keep doors above an exposed toe-kick.
 - Treat the base/plinth choice as an explicit decision, not a universal rule.
+- Floor cabinets may include drawers, dividers, and hanging rods as optional
+  components.
 
 ### Wall cabinet
 
-- Do not add a toe-kick.
+- Do not add a toe-kick. Set `toe_kick_height` to 0.
 - Treat wall fixing, load, substrate, and installation clearance as
   safety-critical unresolved fields when unknown.
 - Model lighting recesses, fillers, and service gaps only when requested.
-
-### Wardrobe
-
-- Describe hanging, shelf, and drawer zones explicitly.
-- Do not reduce every wardrobe to a generic floor cabinet. Door system,
-  anti-tip fixing, compartment spans, and clothing clearance affect structure.
-- The current executable wardrobe template is a narrow software template. It
-  does not implement every wardrobe decision captured in Design Intent.
 
 ## Panel planning rules
 

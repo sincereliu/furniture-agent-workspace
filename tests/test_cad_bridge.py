@@ -27,8 +27,8 @@ class CadBridgeTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temporary_directory:
             workspace = Path(temporary_directory)
-            source_path = workspace / "generated" / "table.py"
-            output_path = workspace / "generated" / "table.step"
+            source_path = workspace / "generated" / "cabinet.py"
+            output_path = workspace / "generated" / "cabinet.step"
             launcher_path = workspace / "fake_step.py"
             source_path.parent.mkdir(parents=True)
             source_path.write_text("def gen_step():\n    return None\n", encoding="utf-8")
@@ -57,7 +57,7 @@ class CadBridgeTests(unittest.TestCase):
             self.assertEqual(result.status, "ok")
             self.assertEqual(result.returncode, 0)
             self.assertTrue(output_path.is_file())
-            self.assertTrue(output_path.with_name(".table.step.glb").is_file())
+            self.assertTrue(output_path.with_name(".cabinet.step.glb").is_file())
 
     def test_rejects_missing_source_before_launch(self) -> None:
         module = load_adapter_module()

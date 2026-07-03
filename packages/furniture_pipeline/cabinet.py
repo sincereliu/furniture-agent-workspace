@@ -10,7 +10,6 @@ from furniture_planner.cabinet_planner import CabinetPlanner
 from furniture_planner.templates.base import CabinetTemplate
 from furniture_planner.templates.floor_cabinet import FloorCabinet
 from furniture_planner.templates.wall_cabinet import WallCabinet
-from furniture_planner.templates.wardrobe import Wardrobe
 from furniture_schema.panel import PanelPlacement, PanelRecord
 from furniture_schema.spec import FurnitureSpec
 
@@ -18,13 +17,11 @@ from furniture_schema.spec import FurnitureSpec
 TEMPLATE_TYPES: dict[str, type[CabinetTemplate]] = {
     "floor_cabinet": FloorCabinet,
     "wall_cabinet": WallCabinet,
-    "wardrobe": Wardrobe,
 }
 
 FURNITURE_NAMES = {
     "floor_cabinet": "落地柜",
     "wall_cabinet": "吊柜",
-    "wardrobe": "衣柜",
 }
 
 

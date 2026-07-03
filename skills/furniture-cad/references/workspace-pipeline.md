@@ -7,10 +7,8 @@ running generation, or reporting artifacts.
 
 The live entry point `packages/furniture_planner/planner.py` accepts:
 
-- `table`: rectangular top with four rectangular legs;
 - `floor_cabinet`: fixed carcass template with back, toe-kick, shelves, doors;
-- `wall_cabinet`: fixed carcass template with back, shelves, doors, no toe-kick;
-- `wardrobe`: fixed template with carcass, divider, shelf zone, and doors.
+- `wall_cabinet`: fixed carcass template with back, shelves, doors, no toe-kick.
 
 These are narrow templates, not arbitrary furniture configurators. Inspect
 `planner.py` and the corresponding template before promising a layout variant.
@@ -25,7 +23,7 @@ All numeric values are millimeters. Every supported type requires:
   "type": "floor_cabinet",
   "width": 800,
   "depth": 600,
-  "height": 1000,
+  "height": 2000,
   "board_thickness": 18,
   "back_thickness": 9,
   "door_thickness": 18,
@@ -38,21 +36,15 @@ All numeric values are millimeters. Every supported type requires:
 }
 ```
 
-For `table`, the optional construction fields are `top_thickness` (default
-30), `leg_size` (default 60), and `leg_inset` (default 50).
+For `wall_cabinet`, the default dimensions are narrower: `width` 800, `height`
+900, `depth` 350, `toe_kick_height` 0, `shelf_count` 1.
 
-For cabinet types, the optional fields and current Python defaults are
-`board_thickness` 18, `back_thickness` 9, `door_thickness` 18,
-`toe_kick_height` 50, `back_offset` 18, `door_margin` 1.5,
-`door_hinge_gap` 2, `shelf_count` 4, and `n_doors` 2. These defaults describe
-current software behavior, not an approved manufacturing standard.
+Default dimensions and parameters live in
+`packages/furniture_schema/spec.py` (`CABINET_PRESETS` for per-type defaults,
+dataclass fields for global constants). Do not ask the user to fill them unless
+an override is requested or required by the design.
 
-The program reads these defaults from code or configuration. Do not copy them
-into intake templates and do not ask the user to fill them unless an override
-is requested or required by the design.
-
-The executable contract is flat JSON. Do not send the legacy nested
-`DesignIntent` YAML shape to the planner.
+The executable contract is flat JSON.
 
 Proceed to execution only when the overall dimensions are numeric and the
 requested variant matches a live template. Otherwise stop at intent or
@@ -89,7 +81,7 @@ generation.
 
 ## Panel and BOM path
 
-`packages/furniture_pipeline/cabinet.py` exposes `plan_cabinet()` for the three
+`packages/furniture_pipeline/cabinet.py` exposes `plan_cabinet()` for the two
 cabinet types. It returns placements, panel records, and an estimated BOM.
 The main generation CLI does not currently persist BOM or cut-list artifacts.
 Do not report such files unless a command actually created them.

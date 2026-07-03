@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import importlib.util
 import sys
-import tempfile
 import unittest
 from pathlib import Path
 
@@ -27,44 +26,6 @@ class FurniturePipelineTests(unittest.TestCase):
             "test_furniture_planner",
             WORKSPACE_ROOT / "packages" / "furniture_planner" / "planner.py",
         )
-        cls.emitter = load_module(
-            "test_furniture_emitter",
-            WORKSPACE_ROOT / "packages" / "furniture_cad_emitter" / "emitter.py",
-        )
-
-    def test_table_plan_uses_lower_left_rear_ground_origin(self) -> None:
-        tree = self.planner.plan_furniture(
-            {"type": "table", "width": 1200, "depth": 700, "height": 750}
-        )
-
-        features = {feature["id"]: feature for feature in tree["features"]}
-        self.assertEqual(
-            tree["coordinate_system"]["origin"],
-            "lower-left-rear-ground-corner",
-        )
-        self.assertEqual(features["table_top"]["position"], {"x": 0.0, "y": 0.0, "z": 720.0})
-        self.assertEqual(
-            features["leg_back_right"]["position"],
-            {"x": 1090.0, "y": 50.0, "z": 0.0},
-        )
-        self.assertEqual(
-            features["leg_front_right"]["position"],
-            {"x": 1090.0, "y": 590.0, "z": 0.0},
-        )
-        self.assertEqual(len(features), 5)
-
-    def test_emitter_writes_gen_step_source(self) -> None:
-        tree = self.planner.plan_furniture(
-            {"type": "table", "width": 1200, "depth": 700, "height": 750}
-        )
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            source_path = Path(temporary_directory) / "table.py"
-            self.emitter.write_build123d_source(tree, source_path)
-            source = source_path.read_text(encoding="utf-8")
-
-            compile(source, str(source_path), "exec")
-            self.assertIn("def gen_step():", source)
-            self.assertIn("Compound(children=parts", source)
 
     def test_rejects_unsupported_furniture_type(self) -> None:
         with self.assertRaisesRegex(ValueError, "supported:"):

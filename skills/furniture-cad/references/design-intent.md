@@ -3,10 +3,6 @@
 Use this reference before planning geometry. Design Intent records what should
 be built and why. It is not a Feature Tree, panel cut list, or CAD program.
 
-Load the matching intake template selected through `intake/catalog.yaml` and
-fill only its user-facing fields. A template is a minimal question contract,
-not an executable schema or a copy of program configuration.
-
 ## Capture
 
 - `type`: furniture family in user language; also record the executable type
@@ -55,10 +51,10 @@ makes the mapping implausible.
 
 ## Family-specific decisions
 
-- Table: top form, support/leg arrangement, clearances, and construction.
-- Floor or wall cabinet: carcass construction, back, plinth/toe-kick, doors,
+- **Floor cabinet**: carcass construction, back, plinth/toe-kick, doors,
   shelves/dividers, installation, and material thicknesses.
-- Wardrobe: door system, hanging/shelf/drawer zones, anti-tip or wall fixing,
-  compartment spans, and clothing clearance.
+- **Wall cabinet**: carcass construction, back, doors, shelves/dividers,
+  wall fixing, substrate, installation clearance, and material thicknesses.
+  No toe-kick.
 - Other types: capture the generic intent, then verify runtime support before
   promising generation.

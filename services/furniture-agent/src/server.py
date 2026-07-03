@@ -2,7 +2,6 @@
 
 启动: uvicorn services.furniture-agent.src.server:app --reload
 打开: http://localhost:8000/docs 查看 Swagger API 文档
-预览: http://localhost:8000/viewer/ 打开落地柜 3D 预览
 """
 
 from __future__ import annotations
@@ -18,7 +17,7 @@ sys.path.insert(0, str(WORKSPACE_ROOT))
 sys.path.insert(0, str(PACKAGES_ROOT))
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -28,22 +27,17 @@ from furniture_schema.spec import FurnitureSpec
 app = FastAPI(
     title="Furniture Agent — 板式家具拆单服务",
     version="0.1.0",
-    description="板式家具参数化拆单 API：柜体规划、拆单、BOM 生成、3D 预览",
+    description="板式家具参数化拆单 API：落地柜/吊柜 规划、拆单、BOM 生成",
 )
 
-# 静态文件服务
+# 静态文件服务 — 挂载 generated 目录，供访问 STEP/GLB 文件
 OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
-WORKSPACE_ROOT_FOR_STATIC = WORKSPACE_ROOT  # 保持引用
 app.mount("/generated", StaticFiles(directory=str(OUTPUT_ROOT)), name="generated")
-# 本地 Three.js
-NODE_MODULES_ROOT = WORKSPACE_ROOT / "node_modules"
-if NODE_MODULES_ROOT.exists():
-    app.mount("/node_modules", StaticFiles(directory=str(NODE_MODULES_ROOT)), name="node_modules")
 
 
 # ── 请求/响应模型 ──
 class CabinetRequest(BaseModel):
-    type: str = Field(default="floor_cabinet", description="家具类型: floor_cabinet / wall_cabinet / wardrobe")
+    type: str = Field(default="floor_cabinet", description="家具类型: floor_cabinet / wall_cabinet")
     width: float = Field(..., gt=0, description="总宽 mm (X)")
     depth: float = Field(..., gt=0, description="总深 mm (Y)")
     height: float = Field(..., gt=0, description="总高 mm (Z)")
@@ -89,23 +83,13 @@ async def health():
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    """返回预览页面 URL（重定向到 viewer）"""
+    """API 入口页面"""
     return """
     <html><body style="font-family:sans-serif;padding:40px;">
     <h1>Furniture Agent API</h1>
     <p><a href="/docs">API 文档 (Swagger)</a></p>
-    <p><a href="/viewer/">3D 查看器</a></p>
     </body></html>
     """
-
-
-@app.get("/viewer/", response_class=HTMLResponse)
-async def viewer():
-    """3D 预览页面"""
-    html_path = OUTPUT_ROOT / "viewer.html"
-    if html_path.exists():
-        return HTMLResponse(html_path.read_text(encoding="utf-8"))
-    return HTMLResponse("<h1>viewer.html 未找到，请先运行 generate_preview.py</h1>")
 
 
 @app.post("/api/plan-cabinet", response_model=BOMResponse)

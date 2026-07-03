@@ -13,9 +13,9 @@ use it.
 ## Route by task
 
 1. Read the [furniture catalog](references/intake/catalog.yaml), match the user
-   request to one family, and load only that entry's intake template. Use the
-   catalog fallback when no family matches. Let runtime code and configuration
-   own technical defaults.
+   request to one family. Use the catalog fallback when no family matches.
+   Default dimensions and parameters live in
+   `packages/furniture_schema/spec.py` (dataclass defaults + `CABINET_PRESETS`).
 2. For requirements, dimensions, style, layout, or early design discussion,
    also read [references/design-intent.md](references/design-intent.md). Return
    a confirmable Design Intent and stop unless the user requested planning or

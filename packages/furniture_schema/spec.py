@@ -8,13 +8,41 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+# ── 品类预设默认值 ──────────────────────────────────────────────
+# 所有品类的默认尺寸统一在此定义，AI Agent 和运行时共用。
+# 用户传入的 JSON 字段优先；缺失时从预设取值；预设缺字段时走 dataclass fallback。
+
+CABINET_PRESETS: Dict[str, Dict[str, Any]] = {
+    "floor_cabinet": {
+        "width": 800,
+        "height": 2000,
+        "depth": 600,
+        "toe_kick_height": 50,
+        "shelf_count": 4,
+        "n_doors": 2,
+    },
+    "wall_cabinet": {
+        "width": 800,
+        "height": 900,
+        "depth": 350,
+        "toe_kick_height": 0,
+        "shelf_count": 1,
+        "n_doors": 2,
+    },
+}
+
+
+def _get_preset(furniture_type: str) -> Dict[str, Any] | None:
+    """获取品类预设，找不到则返回 None。"""
+    return CABINET_PRESETS.get(furniture_type)
+
 
 @dataclass
 class FurnitureSpec:
-    """标准化的家具输入规格。
+    """标准化的柜体输入规格。
 
     字段说明:
-        furniture_type: 家具类型（table / floor_cabinet / wall_cabinet / wardrobe）
+        furniture_type: 家具类型（floor_cabinet / wall_cabinet）
         width:          总宽 mm（X 方向）
         depth:          总深 mm（Y 方向）
         height:         总高 mm（Z 方向）
@@ -27,9 +55,6 @@ class FurnitureSpec:
         door_hinge_gap:  门铰链深度间隙 mm（默认 2.0）
         shelf_count:     层板数量（默认 4）
         n_doors:         门板数量（默认 2）
-        top_thickness:   桌面厚度 mm（仅 table）
-        leg_size:        桌腿截面尺寸 mm（仅 table）
-        leg_inset:       桌腿内缩 mm（仅 table）
         options:         扩展选项字典
     """
 
@@ -46,10 +71,6 @@ class FurnitureSpec:
     door_hinge_gap: float = 2.0
     shelf_count: int = 4
     n_doors: int = 2
-    # table 特有参数
-    top_thickness: float = 30.0
-    leg_size: float = 60.0
-    leg_inset: float = 50.0
     # 扩展
     options: Dict[str, Any] = field(default_factory=dict)
 
@@ -58,34 +79,38 @@ class FurnitureSpec:
         return self.furniture_type in (
             "floor_cabinet",
             "wall_cabinet",
-            "wardrobe",
         )
-
-    @property
-    def is_table(self) -> bool:
-        return self.furniture_type == "table"
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "FurnitureSpec":
-        """从字典构建规格，自动做单位转换和默认值填充。"""
+        """从字典构建规格，自动做单位转换和默认值填充。
+
+        品类默认尺寸从 CABINET_PRESETS 获取；用户传入值可覆盖。
+        """
         furniture_type = str(data.get("type", "")).strip().lower()
+        preset = _get_preset(furniture_type)
+
+        def _get(key: str, fallback: Any) -> Any:
+            if key in data and data[key] is not None:
+                return data[key]
+            if preset and key in preset:
+                return preset[key]
+            return fallback
+
         return cls(
             furniture_type=furniture_type,
-            width=float(data.get("width", 0)),
-            depth=float(data.get("depth", 0)),
-            height=float(data.get("height", 0)),
-            board_thickness=float(data.get("board_thickness", 18.0)),
-            back_thickness=float(data.get("back_thickness", 9.0)),
-            door_thickness=float(data.get("door_thickness", 18.0)),
-            toe_kick_height=float(data.get("toe_kick_height", 50.0)),
-            back_offset=float(data.get("back_offset", 18.0)),
-            door_margin=float(data.get("door_margin", 1.5)),
-            door_hinge_gap=float(data.get("door_hinge_gap", 2.0)),
-            shelf_count=int(data.get("shelf_count", 4)),
-            n_doors=int(data.get("n_doors", 2)),
-            top_thickness=float(data.get("top_thickness", 30.0)),
-            leg_size=float(data.get("leg_size", 60.0)),
-            leg_inset=float(data.get("leg_inset", 50.0)),
+            width=float(_get("width", 0)),
+            depth=float(_get("depth", 0)),
+            height=float(_get("height", 0)),
+            board_thickness=float(_get("board_thickness", 18.0)),
+            back_thickness=float(_get("back_thickness", 9.0)),
+            door_thickness=float(_get("door_thickness", 18.0)),
+            toe_kick_height=float(_get("toe_kick_height", 50.0)),
+            back_offset=float(_get("back_offset", 18.0)),
+            door_margin=float(_get("door_margin", 1.5)),
+            door_hinge_gap=float(_get("door_hinge_gap", 2.0)),
+            shelf_count=int(_get("shelf_count", 4)),
+            n_doors=int(_get("n_doors", 2)),
             options=data.get("options", {}),
         )
 

@@ -48,10 +48,10 @@ class CabinetPipelineTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Unsupported cabinet type"):
             plan_cabinet(
                 FurnitureSpec(
-                    furniture_type="table",
+                    furniture_type="wardrobe",
                     width=1200,
-                    height=750,
-                    depth=700,
+                    height=2000,
+                    depth=600,
                 )
             )
 

@@ -2,7 +2,7 @@
 
 ## 决策
 
-将 skills/furniture-cad 作为一个轻量级的 Agent 入口点保留。把可复用的家具知识迁移到渐进式参考资料中，并将可执行行为放在工作区包中。不要把早期的“一体化技能目录”直接复制到这个工作区。
+将 skills/furniture-cad 作为一个轻量级的 Agent 入口点保留。把可复用的家具知识迁移到渐进式参考资料中，并将可执行行为放在工作区包中。不要把早期的"一体化技能目录"直接复制到这个工作区。
 
 ## 源到目标映射
 
@@ -22,23 +22,23 @@
 旧版 `references/cabinet-structures.md`、`references/panel-placement.md` 和
 wardrobe 专用嵌套执行 schema 不作为现行 skill 资源保留。结构语义已经提炼到
 `panel-cabinetry.md`，定位公式由 planner 与测试拥有，所有可执行品类共用
-`workspace-pipeline.md` 记录的扁平 JSON 契约。需求采集模板仍然保留，但统一命名为
-`*-intake.yaml`；它们只保留用户必须决定的少量参数，负责参数发现和路由，不复制
-程序默认值，也不直接发送给 planner。
+`workspace-pipeline.md` 记录的扁平 JSON 契约。品类默认值统一在
+`packages/furniture_schema/spec.py` 中定义（`CABINET_PRESETS`
+字典 + dataclass fallback），不分散在多个 YAML 文件中。
 
 ## 为什么直接复制不安全
 
 - 早期包混合了 LLM 指令、业务规则、CAD 对象、模板、订单存储和导出命令。
-- 其“后到前”的 Y 方向约定是有效的，并且现在与本工作区一致，但旧公式在复用前仍需经过语义 planner 测试。
+- 其"后到前"的 Y 方向约定是有效的，并且现在与本工作区一致，但旧公式在复用前仍需经过语义 planner 测试。
 - 它直接导出 STEP，绕过了当前的 planner、emitter 和 CAD bridge。
 - Python 和 YAML 中重复定义了默认值，容易产生漂移。
 - 历史技能描述把柜子生成、BOM、加工标准和 CAD 导出混成一个能力声明，无法区分
-  “代码能生成”与“结果已达到制造级”。
+  "代码能生成"与"结果已达到制造级"。
 
 ## 当前状态
 
-1. `table`、`floor_cabinet`、`wall_cabinet` 和 `wardrobe` 已接入统一 planner
-   与 box Feature Tree。
+1. `floor_cabinet` 和 `wall_cabinet` 已接入统一 planner 与 box Feature Tree；
+   table 和 wardrobe 已移除，其功能由通用柜体参数化方案替代。
 2. 柜体 package 可以生成板件记录和估算 BOM，但主生成 CLI 尚不落盘 BOM/cut-list。
-3. 三种柜体仍是固定模板；品类名可执行不代表任意结构变体都已实现。
+3. 两种柜体仍是固定模板；品类名可执行不代表任意结构变体都已实现。
 4. STEP 与 Viewer topology 仍须经过 CAD bridge 实跑并检查工件后才能宣称成功。

@@ -15,7 +15,7 @@ bridge runs.
 ```python
 bridge = CadBridge()
 result = bridge.generate_from_source(
-    "generated/table/table.py",
-    "generated/table/table.step",
+    "generated/cabinet/cabinet.py",
+    "generated/cabinet/cabinet.step",
 )
 ```

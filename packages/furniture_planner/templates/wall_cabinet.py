@@ -26,8 +26,7 @@ class WallCabinet(CabinetTemplate):
         # 吊柜底板：底面=0（无踢脚线）
         planner.place_bottom_panel()
         planner.place_back_panel()
-        # 吊柜无踢脚线
-        planner.place_toe_kick_frame()
+        # 吊柜无踢脚线（toe_kick_h=0，无需调用 place_toe_kick_frame）
 
         # 层板：等分内高，全部固定
         if self.shelf_count > 0:
