@@ -1,0 +1,39 @@
+# ============================================================
+# 材料库 — materials.yaml
+# ============================================================
+
+# 1. 标准板材规格（排版用）
+sheet_sizes:
+  std_2440x1220: { name: "标准大板 2440×1220", length: 2440, width: 1220 }
+  std_2745x1220: { name: "加长大板 2745×1220", length: 2745, width: 1220 }
+
+# 2. 材料族（base_material + surface + thickness + grade 的组合）
+board_families:
+  通用18mm:
+    base_material: "刨花板"
+    surface: "三聚氰胺饰面"
+    thickness: 18.0
+    grade: "E1"
+  通用9mm:
+    base_material: "刨花板"
+    surface: "三聚氰胺饰面"
+    thickness: 9.0
+    grade: "E1"
+  通用5mm:
+    base_material: "密度板"
+    surface: "三聚氰胺饰面"
+    thickness: 5.0
+    grade: "E1"
+
+# 3. 颜色库（纯颜色定义，独立于板材）
+colors:
+  深灰: { code: "#4A4A4A", texture: "哑光木纹" }
+  纯白: { code: "#FFFFFF", texture: "哑光" }
+  浅木纹: { code: "#C4A882", texture: "浅橡木纹" }
+  深木纹: { code: "#8B6914", texture: "深胡桃木纹" }
+
+# 4. 板件角色 → 默认材料映射
+panel_role_defaults:
+  carcass: { default_family: "通用18mm", default_color: "深灰" }
+  back:    { default_family: "通用9mm",  default_color: "深灰" }
+  door:    { default_family: "通用18mm", default_color: "纯白" }
