@@ -9,11 +9,9 @@ WORKSPACE_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(WORKSPACE_ROOT))
 sys.path.insert(0, str(WORKSPACE_ROOT / "packages"))
 
-from furniture_schema.spec import FurnitureSpec
-from furniture_planner.cabinet_planner import CabinetPlanner
-from furniture_planner.templates.floor_cabinet import FloorCabinet
-from furniture_panelizer.panelizer import panelize
 from furniture_cad_emitter.cabinet_emitter import panels_to_feature_tree
+from furniture_pipeline.cabinet import plan_cabinet
+from furniture_schema.spec import FurnitureSpec
 
 
 def main():
@@ -23,25 +21,21 @@ def main():
         width=1200,
         height=800,
         depth=600,
+        shelf_count=4,
+        n_doors=2,
     )
 
     print(f"规格: {spec.width:.0f}×{spec.height:.0f}×{spec.depth:.0f}mm")
     print(f"板厚: {spec.board_thickness}mm  层板: 4  门板: 2")
 
-    # 2. 规划
-    planner = CabinetPlanner(spec)
-    template = FloorCabinet(shelf_count=4, n_doors=2)
-    template.build(planner)
-    placements = planner._placements
-    print(f"\n规划完成: {len(placements)} 块板")
+    # 2. 规划、拆单和 BOM
+    pipeline_result = plan_cabinet(spec)
+    print(f"\n规划完成: {len(pipeline_result.placements)} 块板")
+    print(f"拆单完成: {len(pipeline_result.panels)} 条 PanelRecord")
 
-    # 3. 拆单
-    panels = panelize(placements)
-    print(f"拆单完成: {len(panels)} 条 PanelRecord")
-
-    # 4. 转换为 Feature Tree
+    # 3. 转换为 Feature Tree
     feature_tree = panels_to_feature_tree(
-        panels,
+        pipeline_result.panels,
         furniture_type="floor_cabinet",
         parameters={
             "width": spec.width,
@@ -52,7 +46,7 @@ def main():
     )
     print(f"Feature Tree 构造完成")
 
-    # 5. 生成 build123d 源码文件
+    # 4. 生成 build123d 源码文件
     from furniture_cad_emitter.emitter import write_build123d_source
 
     output_dir = WORKSPACE_ROOT / "generated"
@@ -61,7 +55,7 @@ def main():
     write_build123d_source(feature_tree, source_path)
     print(f"build123d 源码: {source_path}")
 
-    # 6. 通过 Bridge 生成 STEP + GLB
+    # 5. 通过 Bridge 生成 STEP + GLB
     from cad_bridge.adapter import CadBridge
 
     bridge = CadBridge()

@@ -6,11 +6,12 @@ This workspace is a scaffold for a furniture CAD agent system with a layered arc
 
 - Workspace acts as the top-level engineering project.
 - external/text-to-cad is the external CAD engine dependency.
-- packages/cad-bridge isolates the external CAD integration and keeps the rest of the system decoupled.
-- packages/furniture-schema defines the furniture parameter model.
-- packages/furniture-planner generates the feature tree from the spec.
+- packages/cad_bridge isolates the external CAD integration and keeps the rest of the system decoupled.
+- packages/furniture_schema defines the furniture parameter model.
+- packages/furniture_planner generates structural plans from a spec.
+- packages/furniture_pipeline owns the reusable cabinet planning, panelizing, and BOM use case.
 - validation performs checks and repair operations.
-- services/furniture-agent orchestrates the full workflow.
+- services/furniture-agent exposes the workflow through HTTP.
 - apps/web or apps/cli provide user-facing entry points.
 - skills/furniture-cad stores reusable LLM rules and domain guidance.
 

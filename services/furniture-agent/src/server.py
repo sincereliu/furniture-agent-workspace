@@ -22,13 +22,8 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from furniture_pipeline.cabinet import plan_cabinet
 from furniture_schema.spec import FurnitureSpec
-from furniture_planner.cabinet_planner import CabinetPlanner
-from furniture_planner.templates.floor_cabinet import FloorCabinet
-from furniture_planner.templates.wall_cabinet import WallCabinet
-from furniture_planner.templates.wardrobe import Wardrobe
-from furniture_panelizer.panelizer import panelize
-from furniture_panelizer.bom import generate_bom_report
 
 app = FastAPI(
     title="Furniture Agent — 板式家具拆单服务",
@@ -48,7 +43,7 @@ if NODE_MODULES_ROOT.exists():
 
 # ── 请求/响应模型 ──
 class CabinetRequest(BaseModel):
-    type: str = Field(default="floor_cabinet", description="家具类型: floor_cabinet / wall_cabinet / wardrobe / table")
+    type: str = Field(default="floor_cabinet", description="家具类型: floor_cabinet / wall_cabinet / wardrobe")
     width: float = Field(..., gt=0, description="总宽 mm (X)")
     depth: float = Field(..., gt=0, description="总深 mm (Y)")
     height: float = Field(..., gt=0, description="总高 mm (Z)")
@@ -132,29 +127,10 @@ async def plan_cabinet(req: CabinetRequest):
     except (ValueError, TypeError) as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    # 选择模板
-    template_map = {
-        "floor_cabinet": FloorCabinet,
-        "wall_cabinet": WallCabinet,
-        "wardrobe": Wardrobe,
-    }
-    template_cls = template_map.get(req.type)
-    if template_cls is None:
-        raise HTTPException(status_code=400, detail=f"不支持的家具类型: {req.type}")
-
-    # 规划
-    planner = CabinetPlanner(spec)
-    template = template_cls(shelf_count=req.shelf_count, n_doors=req.n_doors)
-    template.build(planner)
-
-    # 拆单
-    panels = panelize(planner._placements)
-
-    # BOM
-    type_names = {"floor_cabinet": "落地柜", "wall_cabinet": "吊柜", "wardrobe": "衣柜"}
-    furniture_name = type_names.get(req.type, req.type)
-    dimensions = f"{req.width:.0f}×{req.height:.0f}×{req.depth:.0f}mm"
-    report = generate_bom_report(furniture_name, dimensions, panels)
+    try:
+        report = plan_cabinet(spec).bom
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     return BOMResponse(
         furniture_name=report.furniture_name,

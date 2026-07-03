@@ -56,11 +56,11 @@ def main(argv: list[str] | None = None) -> int:
 
     planner = load_module(
         "furniture_planner",
-        WORKSPACE_ROOT / "packages" / "furniture-planner" / "planner.py",
+        WORKSPACE_ROOT / "packages" / "furniture_planner" / "planner.py",
     )
     emitter = load_module(
         "furniture_cad_emitter",
-        WORKSPACE_ROOT / "packages" / "furniture-cad-emitter" / "emitter.py",
+        WORKSPACE_ROOT / "packages" / "furniture_cad_emitter" / "emitter.py",
     )
     bridge_module = load_module(
         "furniture_cad_bridge",

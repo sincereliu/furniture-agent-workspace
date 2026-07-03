@@ -6,11 +6,12 @@
 
 - Workspace：协调所有模块的顶层工程项目。
 - external/text-to-cad：用于几何生成的外部 CAD 引擎。
-- packages/cad-bridge：隔离外部依赖并暴露稳定接口的适配层。
-- packages/furniture-schema：家具参数和输入契约的规范 schema。
-- packages/furniture-planner：将结构化规格转换为特征树表示。
+- packages/cad_bridge：隔离外部依赖并暴露稳定接口的适配层。
+- packages/furniture_schema：家具参数和输入契约的规范 schema。
+- packages/furniture_planner：将结构化规格转换为结构规划。
+- packages/furniture_pipeline：复用规划、拆单和 BOM 生成用例。
 - validation：检查约束、验证计划并应用修复策略。
-- services/furniture-agent：协调意图解析、规划、验证和执行的编排器。
+- services/furniture-agent：HTTP 输入输出和服务启动入口。
 - apps/web 和 apps/cli：面向用户的交互界面。
 - skills/furniture-cad：用于家具生成的可复用 LLM 规则和领域知识。
 
