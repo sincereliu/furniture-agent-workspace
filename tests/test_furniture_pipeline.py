@@ -25,11 +25,11 @@ class FurniturePipelineTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.planner = load_module(
             "test_furniture_planner",
-            WORKSPACE_ROOT / "packages" / "furniture-planner" / "planner.py",
+            WORKSPACE_ROOT / "packages" / "furniture_planner" / "planner.py",
         )
         cls.emitter = load_module(
             "test_furniture_emitter",
-            WORKSPACE_ROOT / "packages" / "furniture-cad-emitter" / "emitter.py",
+            WORKSPACE_ROOT / "packages" / "furniture_cad_emitter" / "emitter.py",
         )
 
     def test_table_plan_uses_lower_left_rear_ground_origin(self) -> None:
@@ -67,7 +67,7 @@ class FurniturePipelineTests(unittest.TestCase):
             self.assertIn("Compound(children=parts", source)
 
     def test_rejects_unsupported_furniture_type(self) -> None:
-        with self.assertRaisesRegex(ValueError, "supports 'table'"):
+        with self.assertRaisesRegex(ValueError, "supported:"):
             self.planner.plan_furniture(
                 {"type": "bed", "width": 2000, "depth": 2200, "height": 500}
             )

@@ -36,9 +36,14 @@ app = FastAPI(
     description="板式家具参数化拆单 API：柜体规划、拆单、BOM 生成、3D 预览",
 )
 
-# 静态文件服务（预览 HTML + GLB + STEP）
+# 静态文件服务
 OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
-app.mount("/output", StaticFiles(directory=str(OUTPUT_ROOT)), name="output")
+WORKSPACE_ROOT_FOR_STATIC = WORKSPACE_ROOT  # 保持引用
+app.mount("/generated", StaticFiles(directory=str(OUTPUT_ROOT)), name="generated")
+# 本地 Three.js
+NODE_MODULES_ROOT = WORKSPACE_ROOT / "node_modules"
+if NODE_MODULES_ROOT.exists():
+    app.mount("/node_modules", StaticFiles(directory=str(NODE_MODULES_ROOT)), name="node_modules")
 
 
 # ── 请求/响应模型 ──
@@ -146,8 +151,10 @@ async def plan_cabinet(req: CabinetRequest):
     panels = panelize(planner._placements)
 
     # BOM
+    type_names = {"floor_cabinet": "落地柜", "wall_cabinet": "吊柜", "wardrobe": "衣柜"}
+    furniture_name = type_names.get(req.type, req.type)
     dimensions = f"{req.width:.0f}×{req.height:.0f}×{req.depth:.0f}mm"
-    report = generate_bom_report(f"落地柜", dimensions, panels)
+    report = generate_bom_report(furniture_name, dimensions, panels)
 
     return BOMResponse(
         furniture_name=report.furniture_name,

@@ -8,8 +8,32 @@ from __future__ import annotations
 
 from typing import List
 
-from furniture_schema.hardware import BOMReport, HardwareRecord
+from furniture_schema.hardware import HardwareRecord
 from furniture_schema.panel import PanelRecord
+
+from dataclasses import dataclass
+
+
+@dataclass
+class BOMReport:
+    """完整的拆单报告。
+
+    这是 Panelizer（拆单层）的产出物，不是 Schema 定义。
+    """
+
+    furniture_name: str
+    dimensions: str
+    panels: list  # List[PanelRecord]
+    hardware: list  # List[HardwareRecord]
+    total_area_m2: float = 0.0
+
+    @property
+    def panel_count(self) -> int:
+        return len(self.panels)
+
+    @property
+    def hardware_item_count(self) -> int:
+        return len(self.hardware)
 
 
 # ============================================================

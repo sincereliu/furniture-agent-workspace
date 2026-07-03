@@ -24,28 +24,3 @@ class HardwareRecord:
     note: str = ""
 
 
-@dataclass
-class BOMReport:
-    """完整的拆单报告（BOM）。
-
-    字段说明:
-        furniture_name: 家具名称
-        dimensions:     外形尺寸描述（如 "800×1000×600mm"）
-        panels:         板件清单
-        hardware:       五金件清单
-        total_area_m2:  总展开面积（平方米）
-    """
-
-    furniture_name: str
-    dimensions: str
-    panels: list  # List[PanelRecord]
-    hardware: list  # List[HardwareRecord]
-    total_area_m2: float = 0.0
-
-    @property
-    def panel_count(self) -> int:
-        return len(self.panels)
-
-    @property
-    def hardware_item_count(self) -> int:
-        return len(self.hardware)

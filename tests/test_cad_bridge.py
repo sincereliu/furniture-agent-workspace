@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[1]
-ADAPTER_PATH = WORKSPACE_ROOT / "packages" / "cad-bridge" / "adapter.py"
+ADAPTER_PATH = WORKSPACE_ROOT / "packages" / "cad_bridge" / "adapter.py"
 
 
 def load_adapter_module():
