@@ -18,9 +18,9 @@ use it.
    [table](references/table-intake.yaml),
    [floor cabinet](references/floor-cabinet-intake.yaml),
    [wall cabinet](references/wall-cabinet-intake.yaml), or
-   [wardrobe](references/wardrobe-intake.yaml). Use the template to distinguish
-   routing parameters, design decisions, executable parameters, and
-   manufacturing gates.
+   [wardrobe](references/wardrobe-intake.yaml). Use the template only to collect
+   the few user decisions needed for routing and intent. Let runtime code and
+   configuration own technical defaults.
 2. For requirements, dimensions, style, layout, or early design discussion,
    also read [references/design-intent.md](references/design-intent.md). Return
    a confirmable Design Intent and stop unless the user requested planning or

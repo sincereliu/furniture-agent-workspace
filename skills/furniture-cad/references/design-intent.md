@@ -3,10 +3,9 @@
 Use this reference before planning geometry. Design Intent records what should
 be built and why. It is not a Feature Tree, panel cut list, or CAD program.
 
-First select the matching intake template through `intake-routing.md`. Fill its
-`intent` section during discussion and its `runtime` section only when
-generation is requested. A template is a question and routing contract, not a
-second executable schema.
+First select the matching intake template through `intake-routing.md`. Fill
+only its user-facing fields. A template is a minimal question and routing
+contract, not an executable schema or a copy of program configuration.
 
 ## Capture
 

@@ -30,21 +30,23 @@ family name is enough to route. Use missing fields to decide the next question.
 1. **Routing gate:** furniture family and requested outcome are known.
 2. **Intent gate:** dimensions and family-critical layout decisions are known,
    or explicitly recorded as unresolved.
-3. **Execution gate:** every required flat runtime field is numeric and the
-   requested variant matches a live template.
+3. **Execution gate:** overall dimensions are numeric and the requested variant
+   matches a live template.
 4. **Manufacturing gate:** material, joinery, hardware, edge banding,
    tolerances, installation, and safety assumptions are accepted.
 
 Ask one focused question at a time. Prefer the missing answer that can change
 the furniture family, finished envelope, major structure, or safety.
 
-## Template semantics
+## Template boundary
 
-- `routing` contains constants used to select references and runtime paths.
-- `intent` contains user decisions; `null` means unresolved.
-- `runtime` mirrors fields that can be normalized into executable JSON.
-- `manufacturing` contains decisions that must not be guessed for a final BOM.
-- `limits` warns when the current live template cannot express the full intent.
+- Keep only furniture type, finished size, and a few family-defining choices.
+- Use `null` for a user decision that is not known yet.
+- Do not include board thickness, back offset, gaps, hardware, edge banding,
+  tolerances, or other program-owned defaults.
+- Ask about a technical default only when the user wants to override it or when
+  it blocks fit, safety, or the requested structure.
 
-Never send an intake template directly to the planner. Normalize only its
-`runtime` values to the flat JSON contract in `workspace-pipeline.md`.
+Never send an intake template directly to the planner. The program must read
+its own defaults and normalize the approved minimal intent to the executable
+contract.

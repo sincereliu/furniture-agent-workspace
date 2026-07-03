@@ -47,6 +47,10 @@ For cabinet types, the optional fields and current Python defaults are
 `door_hinge_gap` 2, `shelf_count` 4, and `n_doors` 2. These defaults describe
 current software behavior, not an approved manufacturing standard.
 
+The program reads these defaults from code or configuration. Do not copy them
+into intake templates and do not ask the user to fill them unless an override
+is requested or required by the design.
+
 The executable contract is flat JSON. Do not send the legacy nested
 `DesignIntent` YAML shape to the planner.
 

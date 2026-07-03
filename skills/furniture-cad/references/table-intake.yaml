@@ -1,42 +1,8 @@
-template_version: 1
-routing:
-  family: table
-  furniture_reference: design-intent.md
-  executable_type: table
-
-intent:
-  purpose: null
-  overall_size:
-    width_mm: null
-    depth_mm: null
-    height_mm: null
-    dimension_basis: finished_envelope
-  top:
-    shape: rectangular
-    material: null
-    thickness_mm: null
-  support:
-    arrangement: four_legs
-    leg_section_mm: null
-    leg_inset_mm: null
-  appearance: null
-  constraints: []
-  unresolved: []
-
-runtime:
-  type: table
+type: table
+size_mm:
   width: null
   depth: null
   height: null
-  top_thickness: null
-  leg_size: null
-  leg_inset: null
-
-manufacturing:
-  material_grade: null
-  joinery: null
-  finish: null
-  tolerances: null
-
-limits:
-  - Current runtime supports only a rectangular top and four rectangular legs.
+purpose: null
+special_requirements: []
+unresolved: []
