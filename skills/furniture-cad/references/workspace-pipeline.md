@@ -1,36 +1,54 @@
 # Workspace Furniture Pipeline
 
-Read this reference before running planning or CAD generation.
+Read this reference before claiming executable support, normalizing input,
+running generation, or reporting artifacts.
 
 ## Current capability
 
-The executable vertical slice supports only a basic rectangular `table`.
-`packages/furniture-planner/planner.py` rejects every other `type`.
+The live entry point `packages/furniture_planner/planner.py` accepts:
 
-The accepted input is JSON:
+- `table`: rectangular top with four rectangular legs;
+- `floor_cabinet`: fixed carcass template with back, toe-kick, shelves, doors;
+- `wall_cabinet`: fixed carcass template with back, shelves, doors, no toe-kick;
+- `wardrobe`: fixed template with carcass, divider, shelf zone, and doors.
+
+These are narrow templates, not arbitrary furniture configurators. Inspect
+`planner.py` and the corresponding template before promising a layout variant.
+Other furniture families are intent/modeling-plan only until implemented.
+
+## Executable JSON
+
+All numeric values are millimeters. Every supported type requires:
 
 ```json
 {
-  "type": "table",
-  "width": 1200,
-  "depth": 700,
-  "height": 750,
-  "top_thickness": 30,
-  "leg_size": 60,
-  "leg_inset": 50
+  "type": "floor_cabinet",
+  "width": 800,
+  "depth": 600,
+  "height": 1000,
+  "board_thickness": 18,
+  "back_thickness": 9,
+  "door_thickness": 18,
+  "toe_kick_height": 50,
+  "back_offset": 18,
+  "door_margin": 1.5,
+  "door_hinge_gap": 2,
+  "shelf_count": 4,
+  "n_doors": 2
 }
 ```
 
-All numeric fields are millimeters. `width`, `depth`, and `height` are required.
-The planner defaults `top_thickness` to `30`, `leg_size` to `60`, and
-`leg_inset` to `50`.
+For `table`, the optional construction fields are `top_thickness` (default
+30), `leg_size` (default 60), and `leg_inset` (default 50).
 
-The planner also enforces:
+For cabinet types, the optional fields and current Python defaults are
+`board_thickness` 18, `back_thickness` 9, `door_thickness` 18,
+`toe_kick_height` 50, `back_offset` 18, `door_margin` 1.5,
+`door_hinge_gap` 2, `shelf_count` 4, and `n_doors` 2. These defaults describe
+current software behavior, not an approved manufacturing standard.
 
-- every size is positive;
-- `leg_inset` is non-negative;
-- `height > top_thickness`;
-- width and depth can each contain two insets and one leg size.
+The executable contract is flat JSON. Do not send the legacy nested
+`DesignIntent` YAML shape to the planner.
 
 ## Generation
 
@@ -57,16 +75,29 @@ The pipeline is:
 `intent JSON -> furniture planner -> Feature Tree -> furniture CAD emitter ->
 text-to-cad bridge -> STEP + Viewer topology`
 
-Do not send furniture JSON directly to text-to-cad and do not modify the
-external submodule for ordinary furniture generation.
+Do not send furniture JSON directly to text-to-cad. Do not bypass the planner
+with one-off CAD source or modify the external submodule for ordinary furniture
+generation.
+
+## Panel and BOM path
+
+`packages/furniture_pipeline/cabinet.py` exposes `plan_cabinet()` for the three
+cabinet types. It returns placements, panel records, and an estimated BOM.
+The main generation CLI does not currently persist BOM or cut-list artifacts.
+Do not report such files unless a command actually created them.
+
+Treat hardware estimates, edge banding, and tolerances as preliminary until the
+user accepts the relevant manufacturing policy.
 
 ## Verification
 
-Run the project verification workflow when changing the pipeline:
+Run the test suite after changing the skill's capability claims or pipeline:
 
 ```powershell
-pwsh -File scripts\smoke_test.ps1
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-For a single generation, require a zero exit code and verify that the reported
-STEP and topology artifacts exist and are non-empty.
+For a real CAD generation, require a zero exit code and verify that the
+reported STEP and topology artifacts exist and are non-empty. Use
+`pwsh -File scripts\smoke_test.ps1` when validating the full external CAD
+integration.

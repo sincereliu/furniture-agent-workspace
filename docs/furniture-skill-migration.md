@@ -19,19 +19,24 @@
 | 订单脚本和输出布局 | service 或 CLI 层 | 保留在技能之外 |
 | 生成缓存和历史对比文件 | 无 | 不迁移 |
 
+旧版 `references/cabinet-structures.md`、`references/panel-placement.md` 和
+wardrobe 专用嵌套 DesignIntent schema 不作为现行 skill 资源保留。结构语义已经
+提炼到 `panel-cabinetry.md`，定位公式由 planner 与测试拥有，所有可执行品类共用
+`workspace-pipeline.md` 记录的扁平 JSON 契约。
+
 ## 为什么直接复制不安全
 
 - 早期包混合了 LLM 指令、业务规则、CAD 对象、模板、订单存储和导出命令。
 - 其“后到前”的 Y 方向约定是有效的，并且现在与本工作区一致，但旧公式在复用前仍需经过语义 planner 测试。
 - 它直接导出 STEP，绕过了当前的 planner、emitter 和 CAD bridge。
 - Python 和 YAML 中重复定义了默认值，容易产生漂移。
-- 其技能描述承诺了柜子生成和 BOM 输出，但当前工作区尚未实现或验证这些能力。
+- 历史技能描述把柜子生成、BOM、加工标准和 CAD 导出混成一个能力声明，无法区分
+  “代码能生成”与“结果已达到制造级”。
 
-## 实施顺序
+## 当前状态
 
-1. 为意图、语义部件、材料和制造注释稳定一个与 CAD 解耦的家具 schema。
-2. 增加基于范围坐标测试的 panel-cabinet planner 策略。
-3. 扩展 emitter，使其消费语义 panel 特征，而不嵌入业务默认值。
-4. 增加基于同一审批后的 Feature Tree 的 BOM 和封边输出。
-5. 增加 floor-cabinet、wall-cabinet 和 wardrobe 的端到端夹具。
-6. 只有在上述步骤完成后，才将技能能力声明从“仅规划”改为“可执行柜子生成”。
+1. `table`、`floor_cabinet`、`wall_cabinet` 和 `wardrobe` 已接入统一 planner
+   与 box Feature Tree。
+2. 柜体 package 可以生成板件记录和估算 BOM，但主生成 CLI 尚不落盘 BOM/cut-list。
+3. 三种柜体仍是固定模板；品类名可执行不代表任意结构变体都已实现。
+4. STEP 与 Viewer topology 仍须经过 CAD bridge 实跑并检查工件后才能宣称成功。

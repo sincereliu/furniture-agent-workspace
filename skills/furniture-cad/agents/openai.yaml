@@ -1,4 +1,4 @@
 interface:
   display_name: "Furniture CAD"
-  short_description: "Stage furniture intent, planning, and validated CAD"
-  default_prompt: "Use $furniture-cad to turn my furniture request into staged design intent and continue only through capabilities this workspace supports."
+  short_description: "Plan furniture and run validated CAD workflows"
+  default_prompt: "Use $furniture-cad to turn my furniture request into confirmed intent and continue through the live validated pipeline."

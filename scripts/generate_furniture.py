@@ -64,7 +64,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     bridge_module = load_module(
         "furniture_cad_bridge",
-        WORKSPACE_ROOT / "packages" / "cad-bridge" / "adapter.py",
+        WORKSPACE_ROOT / "packages" / "cad_bridge" / "adapter.py",
     )
 
     feature_tree = planner.plan_furniture(spec_data)

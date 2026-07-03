@@ -3,95 +3,77 @@
 Read this reference for wardrobes, floor cabinets, wall cabinets, storage
 cabinets, panel lists, edge banding, or preliminary BOM reasoning.
 
-The rules below are distilled from the earlier `furniture` skill. They are
-domain knowledge for intent and planning. The old Python generator is not part
-of this skill and is not a runtime dependency.
+This file owns cabinet design decisions and manufacturing caveats. The live
+planner owns placement formulas. `packages/furniture_schema/configs/` owns
+software defaults. Do not copy either into this reference.
 
 ## Coordinate convention
 
-This workspace uses the lower-left **rear** ground corner of the finished
-envelope:
+Use the lower-left-rear ground corner of the finished envelope. X goes right,
+Y goes toward the user-facing front, and Z goes upward. Every panel position is
+its minimum corner. Back features therefore have smaller Y values than doors.
 
-- X: left to right;
-- Y: rear toward the user-facing front;
-- Z: floor upward.
+Do not restate numeric placement formulas here. Inspect
+`packages/furniture_planner/cabinet_planner.py` and its tests when exact
+geometry matters.
 
-This matches the earlier skill. Preserve its Y direction when migrating
-structural formulas: back-panel features stay at smaller Y values and doors
-stay at larger Y values. Still port behavior through semantic planner features
-and range-based tests rather than copying CAD code wholesale.
+## Resolve before planning
 
-## Structural families
+- Whether dimensions describe the finished envelope, carcass, internal
+  clearance, or installation opening.
+- Carcass construction: top/bottom between sides or covering sides.
+- Back strategy: applied, inset, rebated, grooved, or omitted.
+- Base strategy: floor-standing sides, legs, plinth, or toe-kick.
+- Door strategy: overlay/inset, hinged/sliding/open, count, gaps, and clearances.
+- Shelf/divider layout: fixed or adjustable, spans, loads, and clearances.
+- Material, thickness, grain, edge banding, joinery, hardware, and tolerances.
+- Installation and safety: wall fixing, anti-tip, service gaps, and expected
+  loads.
+
+## Family guidance
 
 ### Floor cabinet
 
-- Use floor-standing side panels.
-- Place top and bottom panels between the sides unless the intent says
-  otherwise.
-- Include a plinth or toe-kick only when requested or accepted as a default.
-- Keep doors above the toe-kick when the toe-kick is exposed.
-- Resolve whether the finished height includes legs, plinth, countertop, or
+- Resolve whether overall height includes plinth, legs, countertop, or
   decorative panels.
+- Keep doors above an exposed toe-kick.
+- Treat the base/plinth choice as an explicit decision, not a universal rule.
 
 ### Wall cabinet
 
-- Use full-height sides with top and bottom panels between them by default.
 - Do not add a toe-kick.
-- Capture wall fixing, load, and installation clearance as safety-critical
-  unresolved fields when they are unknown.
-- Treat an under-cabinet lighting recess as an explicit option.
+- Treat wall fixing, load, substrate, and installation clearance as
+  safety-critical unresolved fields when unknown.
+- Model lighting recesses, fillers, and service gaps only when requested.
 
 ### Wardrobe
 
-- Start from a panel carcass, then describe hanging, shelf, and drawer zones
-  explicitly.
-- Do not reduce every wardrobe to “floor cabinet plus hanging rod”; door system,
+- Describe hanging, shelf, and drawer zones explicitly.
+- Do not reduce every wardrobe to a generic floor cabinet. Door system,
   anti-tip fixing, compartment spans, and clothing clearance affect structure.
-- Keep the existing wardrobe Design Intent template as the specialized intent
-  contract. It does not prove wardrobe CAD support.
-
-## Provisional defaults
-
-Use these only as stated assumptions. Confirm them before a manufacturing-grade
-BOM or cut list:
-
-| Decision | Migrated default |
-|---|---:|
-| Carcass thickness | 18 mm |
-| Back thickness | 9 mm |
-| Door thickness | 18 mm |
-| Toe-kick height | 50 mm |
-| Back-panel recess from rear | 18 mm |
-| Door perimeter margin | 1.5 mm |
-| Door-to-carcass front gap | 2 mm |
-
-Material grade, sheet size, grain direction, edge banding, hardware, tolerances,
-and joinery belong in a versioned manufacturing policy or project spec. Do not
-hard-code them in `SKILL.md` or duplicate them across planner and emitter code.
+- The current executable wardrobe template is a narrow software template. It
+  does not implement every wardrobe decision captured in Design Intent.
 
 ## Panel planning rules
 
-- Represent each panel semantically: role, finished size, thickness, material,
-  lower-left position, orientation, quantity, and manufacturing annotations.
-- Keep geometric dimensions separate from cut dimensions and edge-banding
-  allowances.
-- Derive panel positions from carcass relationships and finished envelope
-  ranges. Avoid center-origin explanations.
-- Keep shelves and dividers clear of a recessed back panel.
-- Treat doors as front-mounted components with explicit gaps and overlay/inset
-  strategy.
-- Keep BOM and hardware records separate from CAD solids. A visible model is not
-  by itself a validated manufacturing result.
+- Represent each panel by semantic role, finished size, thickness, minimum
+  corner, orientation, quantity, and manufacturing annotations.
+- Keep solid geometry, cut dimensions, edge-banding allowances, drilling, and
+  hardware as separate data.
+- Derive positions from carcass relationships and envelope ranges.
+- Keep shelves/dividers clear of the selected back construction.
+- Keep BOM and hardware records separate from CAD solids.
 
 ## Validation gates
 
-Before claiming a cabinet plan is executable, verify:
+Before calling a result manufacturing-ready, verify:
 
 1. every panel has positive dimensions and stays within its intended envelope;
 2. mating faces and clearances agree with the chosen construction;
 3. shelves and dividers do not intersect the back panel or doors;
 4. door gaps, counts, and opening strategy are resolved;
-5. wall cabinets and tall wardrobes include fixing/load assumptions;
-6. the planner supports the furniture family;
-7. BOM, edge banding, and hardware outputs are generated from the same approved
-   plan rather than independently guessed.
+5. wall cabinets and tall furniture include fixing/load assumptions;
+6. the live planner supports the requested variant, not merely the family name;
+7. panel, BOM, edge-banding, and hardware outputs come from one approved plan;
+8. provisional software defaults have been replaced or accepted for the
+   manufacturing context.
