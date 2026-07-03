@@ -1,0 +1,53 @@
+version: 1
+
+families:
+  table:
+    aliases:
+      - table
+      - desk
+      - dining table
+      - work table
+      - 桌子
+      - 餐桌
+      - 书桌
+      - 工作台
+    intake: references/intake/table.yaml
+    planning_references: []
+
+  floor_cabinet:
+    aliases:
+      - floor cabinet
+      - base cabinet
+      - storage cabinet
+      - 地柜
+      - 底柜
+      - 落地柜
+      - 储物柜
+    intake: references/intake/floor-cabinet.yaml
+    planning_references:
+      - references/panel-cabinetry.md
+
+  wall_cabinet:
+    aliases:
+      - wall cabinet
+      - hanging cabinet
+      - 吊柜
+      - 壁柜
+    intake: references/intake/wall-cabinet.yaml
+    planning_references:
+      - references/panel-cabinetry.md
+
+  wardrobe:
+    aliases:
+      - wardrobe
+      - closet
+      - 衣柜
+      - 衣橱
+    intake: references/intake/wardrobe.yaml
+    planning_references:
+      - references/panel-cabinetry.md
+
+fallback:
+  intake: null
+  design_reference: references/design-intent.md
+  verify_runtime_support: true

@@ -1,6 +1,6 @@
 ---
 name: furniture-agent
-description: Route furniture work through the correct local domain and CAD skills in this repository. Use for furniture requirements, Design Intent, tables, wardrobes, floor or wall cabinets, panel structures, BOM or cut-list reasoning, Feature Trees, CAD generation, STEP inspection, artifact validation, or CAD Viewer handoff when instructions are split between skills/furniture-cad and external/text-to-cad/skills.
+description: Route furniture work through the correct local domain and CAD skills in this repository. Use for any furniture family, furniture requirements, Design Intent, panel structures, BOM or cut-list reasoning, Feature Trees, CAD generation, STEP inspection, artifact validation, or CAD Viewer handoff when instructions are split between skills/furniture-cad and external/text-to-cad/skills.
 ---
 
 # Furniture Agent

@@ -3,9 +3,9 @@
 Use this reference before planning geometry. Design Intent records what should
 be built and why. It is not a Feature Tree, panel cut list, or CAD program.
 
-First select the matching intake template through `intake-routing.md`. Fill
-only its user-facing fields. A template is a minimal question and routing
-contract, not an executable schema or a copy of program configuration.
+Load the matching intake template selected through `intake/catalog.yaml` and
+fill only its user-facing fields. A template is a minimal question contract,
+not an executable schema or a copy of program configuration.
 
 ## Capture
 
@@ -41,6 +41,8 @@ makes the mapping implausible.
 
 ## Boundaries
 
+- Treat intent as ready for planning when dimensions and family-critical layout
+  decisions are known or explicitly recorded as unresolved.
 - Do not add part coordinates, cut sizes, hardware quantities, CAD API calls,
   output paths, or a Feature Tree at this stage.
 - For interactive design discussion, stop after intent unless the user

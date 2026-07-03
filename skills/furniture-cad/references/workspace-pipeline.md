@@ -54,6 +54,10 @@ is requested or required by the design.
 The executable contract is flat JSON. Do not send the legacy nested
 `DesignIntent` YAML shape to the planner.
 
+Proceed to execution only when the overall dimensions are numeric and the
+requested variant matches a live template. Otherwise stop at intent or
+modeling-plan work and state the unsupported boundary.
+
 ## Generation
 
 From the workspace root, run:

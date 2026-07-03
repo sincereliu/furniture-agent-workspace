@@ -1,6 +1,6 @@
 ---
 name: furniture-cad
-description: Turn furniture requests into confirmable design intent, structured furniture specifications, panel-cabinet plans, preliminary BOM reasoning, Feature Trees, and validated CAD through this workspace. Use for tables, wardrobes, floor cabinets, wall cabinets, furniture dimensions or layouts, cabinet structure, panel placement, STEP generation, or questions about what the live furniture pipeline supports.
+description: Turn requests for any furniture family into confirmable design intent, structured furniture specifications, domain plans, preliminary BOM reasoning, Feature Trees, and validated CAD through this workspace. Use for furniture dimensions or layouts, structure, part placement, STEP generation, or questions about what the live furniture pipeline supports.
 ---
 
 # Furniture CAD
@@ -12,22 +12,16 @@ use it.
 
 ## Route by task
 
-1. For every furniture request, read
-   [references/intake-routing.md](references/intake-routing.md), identify the
-   furniture family, and load its intake template:
-   [table](references/intake/table.yaml),
-   [floor cabinet](references/intake/floor-cabinet.yaml),
-   [wall cabinet](references/intake/wall-cabinet.yaml), or
-   [wardrobe](references/intake/wardrobe.yaml). Use the template only to collect
-   the few user decisions needed for routing and intent. Let runtime code and
-   configuration own technical defaults.
+1. Read the [furniture catalog](references/intake/catalog.yaml), match the user
+   request to one family, and load only that entry's intake template. Use the
+   catalog fallback when no family matches. Let runtime code and configuration
+   own technical defaults.
 2. For requirements, dimensions, style, layout, or early design discussion,
    also read [references/design-intent.md](references/design-intent.md). Return
    a confirmable Design Intent and stop unless the user requested planning or
    generation.
-3. For wardrobes, floor cabinets, wall cabinets, panel placement, panel lists,
-   edge banding, or BOM reasoning, also read
-   [references/panel-cabinetry.md](references/panel-cabinetry.md).
+3. For structure, part placement, manufacturing, or BOM reasoning, load the
+   selected catalog entry's applicable `planning_references`.
 4. Before claiming support, normalizing executable JSON, running generation, or
    reporting artifacts, read
    [references/workspace-pipeline.md](references/workspace-pipeline.md) and
