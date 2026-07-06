@@ -71,6 +71,11 @@ class FurnitureSpec:
     door_hinge_gap: float = 2.0
     shelf_count: int = 4
     n_doors: int = 2
+    # 五金偏好 (Phase 2)
+    hinge_brand: str = ""           # 铰链品牌 ""=默认, "Blum", "DTC" 等
+    hinge_variant: str = ""         # 铰链规格组 ""=自动, "进口35mm杯全盖" 等
+    hinge_overlay: str = "full"     # 盖法: full=全盖, half=半盖, inset=内嵌
+    hinge_angle: int = 100          # 开启角度: 90, 110, 135, 165
     # 扩展
     options: Dict[str, Any] = field(default_factory=dict)
 

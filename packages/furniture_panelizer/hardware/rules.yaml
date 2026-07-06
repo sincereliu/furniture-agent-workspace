@@ -1,0 +1,100 @@
+# ============================================================================
+# 打孔规则 — 三合一 + 铰链
+# ============================================================================
+
+# ── 三合一系统排钻 ──────────────────────────────────────
+system_32_drilling:
+  # 适用于: 侧板、顶板、底板、固定层板
+  applies_to: [side, top, bottom, fixed_shelf]
+  # 默认偏移
+  first_hole_mm: 64       # 首孔距板边
+  last_hole_mm: 64        # 末孔距板边
+  max_spacing_mm: 512     # 孔间最大间距
+  min_spacing_mm: 32      # 孔间最小间距（32mm 系统）
+  # 孔位取整精度
+  snap_to_mm: 0.5
+  # 板材方向的孔位计算长度
+  drill_length_by_type:
+    side: height           # 侧板沿高度打孔
+    divider: height        # 中立板沿高度打孔
+    top: width             # 顶板沿宽度打孔
+    bottom: width          # 底板沿宽度打孔
+    fixed_shelf: width     # 固定层板沿宽度打孔
+
+# ── 铰链打孔 ──────────────────────────────────────────
+hinge_drilling:
+  # ── 数量与偏移规则：按门板长度分档 ──
+  # 每档独立定义 count / top_offset / bottom_offset
+  count_by_door_height:
+    - max_height_mm: 480
+      count: 2
+      top_offset_mm: 80
+      bottom_offset_mm: 80
+    - max_height_mm: 980
+      count: 2
+      top_offset_mm: 120
+      bottom_offset_mm: 120
+    - max_height_mm: 1500
+      count: 3
+      top_offset_mm: 120
+      bottom_offset_mm: 120
+    - max_height_mm: 2100
+      count: 4
+      top_offset_mm: 120
+      bottom_offset_mm: 120
+    - max_height_mm: 2750
+      count: 5
+      top_offset_mm: 120
+      bottom_offset_mm: 120
+
+  # ── 全局孔位参数 ──
+  position:
+    edge_offset_mm: 5        # 杯孔中心距门侧边（铰链臂侧）
+    max_spacing_mm: 600      # 铰链之间最大间距，超过时自动增加铰链数量
+    snap_to_mm: 0.5          # 孔位取整精度：0=不取整, 0.5=半毫米, 1.0=整毫米
+
+  # ── 杯孔参数（按 variant_group） ──
+  cup_by_variant_group:
+    国内35mm杯全盖:
+      cup_diameter_mm: 35
+      cup_depth_mm: 13
+      bore_distance_mm: 3     # 杯孔中心到门边的距离
+
+    国内35mm杯半盖:
+      cup_diameter_mm: 35
+      cup_depth_mm: 13
+      bore_distance_mm: 6     # 半盖时孔位内移
+
+    国内35mm杯内嵌:
+      cup_diameter_mm: 35
+      cup_depth_mm: 13
+      bore_distance_mm: 3
+
+    进口35mm杯全盖:
+      cup_diameter_mm: 35
+      cup_depth_mm: 12.7
+      bore_distance_mm: 3
+
+    进口35mm杯半盖:
+      cup_diameter_mm: 35
+      cup_depth_mm: 12.7
+      bore_distance_mm: 6
+
+    进口35mm杯内嵌:
+      cup_diameter_mm: 35
+      cup_depth_mm: 12.7
+      bore_distance_mm: 3
+
+  # ── 避让规则 ──
+  conflict_avoidance:
+    # 铰链孔位与系统排钻孔的最小间距 (mm)
+    min_spacing_to_system_holes_mm: 50
+
+    # 铰链孔位与层板位置的最小间距 (mm)
+    min_spacing_to_shelf_mm: 80
+
+    # 冲突时可微调的最大偏移范围 (mm)
+    adjustment_max_shift_mm: 30
+
+    # 避让优先级：shelf > system_holes（层板比系统孔更优先避开）
+    priority: [shelf, system_holes]

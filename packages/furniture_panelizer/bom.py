@@ -107,7 +107,10 @@ def estimate_hardware(panels: List[PanelRecord]) -> List[HardwareRecord]:
             c32_count += len(calc_system_holes(p.drill_length))
     if c32_count:
         hw.append(HardwareRecord(
-            "三合一连接件", "偏心轮φ15+预埋螺母+连杆", c32_count, "套"
+            name="三合一连接件",
+            spec="偏心轮φ15+预埋螺母+连杆",
+            quantity=c32_count,
+            unit="套",
         ))
 
     # 层板托：活动层板
@@ -117,31 +120,40 @@ def estimate_hardware(panels: List[PanelRecord]) -> List[HardwareRecord]:
             c21_count += len(calc_shelf_holes(p.drill_length)) * 2
     if c21_count:
         hw.append(HardwareRecord(
-            "二合一连接件(层板托)", "φ5mm层板托", c21_count, "套"
+            name="二合一连接件(层板托)",
+            spec="φ5mm层板托",
+            quantity=c21_count,
+            unit="套",
         ))
 
-    # 铰链
-    hinge_n = 0
-    for p in panels:
-        if p.panel_type == "door":
-            hinge_n += len(calc_hinge_positions(p.size_z))
-    if hinge_n:
-        hw.append(HardwareRecord(
-            "液压缓冲铰链", "全盖35mm杯孔", hinge_n, "个"
-        ))
+    # 铰链 — 使用硬件匹配引擎
+    door_panels = [p for p in panels if p.panel_type == "door"]
+    if door_panels:
+        from furniture_panelizer.hardware_matcher import match_hinges
+        hinge_matches = match_hinges(door_panels)
+        for match in hinge_matches:
+            hw.append(HardwareRecord(
+                "液压缓冲铰链",
+                f"{match['brand']} {match['model']} {match['angle']}°{match['overlay']}",
+                match["quantity"],
+                brand=match["brand"],
+                model=match["model"],
+                note=f"门板: {match['panel_name']}",
+                drilling=match["drilling"],
+            ))
 
     # 踢脚线角码
     if any(p.panel_type == "toe_kick" for p in panels):
-        hw.append(HardwareRecord("L型角码", "25×25mm镀锌", 4, "个"))
+        hw.append(HardwareRecord(name="L型角码", spec="25×25mm镀锌", quantity=4, unit="个"))
 
     # 背板螺丝
     if any(p.panel_type == "back" for p in panels):
-        hw.append(HardwareRecord("自攻螺丝", "3.5×16mm", 30, "个"))
+        hw.append(HardwareRecord(name="自攻螺丝", spec="3.5×16mm", quantity=30, unit="个"))
 
     # 门碰
     door_n = sum(1 for p in panels if p.panel_type == "door")
     if door_n:
-        hw.append(HardwareRecord("弹压门碰", "推弹式", door_n, "个"))
+        hw.append(HardwareRecord(name="弹压门碰", spec="推弹式", quantity=door_n, unit="个"))
 
     return hw
 

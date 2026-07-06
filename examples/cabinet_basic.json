@@ -1,6 +1,8 @@
 {
-  "type": "cabinet",
+  "type": "floor_cabinet",
   "width": 900,
   "depth": 450,
-  "height": 1800
+  "height": 1800,
+  "shelf_count": 4,
+  "n_doors": 2
 }

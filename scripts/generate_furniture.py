@@ -1,97 +1,107 @@
+"""端到端家具生成脚本：规划 → 拆单 → BOM → FeatureTree → 源码 → STEP/GLB
+
+用法:
+  python scripts/generate_furniture.py examples/cabinet_basic.json --name my_cabinet --force
+"""
+
 from __future__ import annotations
 
-import argparse
-import importlib.util
 import json
 import re
 import sys
-from dataclasses import asdict
 from pathlib import Path
-
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[1]
 SAFE_NAME = re.compile(r"^[A-Za-z0-9_-]+$")
 
+# 确保 packages 在 sys.path 中
+sys.path.insert(0, str(WORKSPACE_ROOT))
+sys.path.insert(0, str(WORKSPACE_ROOT / "packages"))
 
-def load_module(module_name: str, path: Path):
-    spec = importlib.util.spec_from_file_location(module_name, path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"Unable to load module from {path}")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+from furniture_pipeline.cabinet import plan_cabinet
+from furniture_schema.spec import FurnitureSpec
+from furniture_cad_emitter.cabinet_emitter import panels_to_feature_tree
+from furniture_cad_emitter.emitter import write_build123d_source
+from furniture_panelizer.bom import format_bom_markdown
+from cad_bridge.adapter import CadBridge
 
 
-def build_parser() -> argparse.ArgumentParser:
+def main() -> int:
+    import argparse
+
     parser = argparse.ArgumentParser(
-        description="Plan furniture, emit build123d source, and generate STEP via text-to-cad."
+        description="板式家具端到端生成：JSON spec → 拆单 → BOM → STEP/GLB"
     )
-    parser.add_argument("spec", help="Path to a furniture JSON specification.")
-    parser.add_argument(
-        "--name",
-        help="Artifact name. Defaults to the specification filename stem.",
-    )
+    parser.add_argument("spec", help="家具 JSON 规格文件路径")
+    parser.add_argument("--name", help="输出名称（默认使用文件名）")
     parser.add_argument(
         "--output-root",
         default="generated",
-        help="Workspace-relative or absolute artifact root. Default: generated",
+        help="输出根目录（默认 generated）",
     )
-    parser.add_argument("--force", action="store_true", help="Force STEP regeneration.")
-    return parser
+    parser.add_argument("--force", action="store_true", help="强制重新生成 STEP")
+    args = parser.parse_args()
 
-
-def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    # ── 1. 读取并解析规格 ──
     spec_path = _workspace_path(args.spec)
     spec_data = json.loads(spec_path.read_text(encoding="utf-8"))
+    fspec = FurnitureSpec.from_dict(spec_data)
 
     artifact_name = args.name or spec_path.stem
     if not SAFE_NAME.fullmatch(artifact_name):
-        raise ValueError("Artifact name may contain only letters, numbers, '-' and '_'.")
+        print(f"Error: 输出名称只能包含字母、数字、'-' 和 '_': {artifact_name}", file=sys.stderr)
+        return 1
 
     output_root = _workspace_path(args.output_root)
     artifact_dir = output_root / artifact_name
     artifact_dir.mkdir(parents=True, exist_ok=True)
 
-    planner = load_module(
-        "furniture_planner",
-        WORKSPACE_ROOT / "packages" / "furniture_planner" / "planner.py",
-    )
-    emitter = load_module(
-        "furniture_cad_emitter",
-        WORKSPACE_ROOT / "packages" / "furniture_cad_emitter" / "emitter.py",
-    )
-    bridge_module = load_module(
-        "furniture_cad_bridge",
-        WORKSPACE_ROOT / "packages" / "cad_bridge" / "adapter.py",
-    )
+    # ── 2. 规划 → 拆单 → BOM ──
+    print(f" 规划家具: {fspec.furniture_type} ({fspec.width:.0f}×{fspec.height:.0f}×{fspec.depth:.0f}mm)")
+    result = plan_cabinet(fspec)
+    print(f" 拆单完成: {result.bom.panel_count} 块板件")
+    print(f" 五金件: {result.bom.hardware_item_count} 项")
+    print(f" 总展开面积: {result.bom.total_area_m2:.4f} m²")
 
-    feature_tree = planner.plan_furniture(spec_data)
-    intent_path = artifact_dir / f"{artifact_name}.intent.json"
+    # 保存 Feature Tree JSON
+    feature_tree = panels_to_feature_tree(
+        result.panels, furniture_type=fspec.furniture_type,
+        parameters={
+            "width": fspec.width, "depth": fspec.depth, "height": fspec.height,
+            "board_thickness": fspec.board_thickness,
+        },
+    )
     feature_tree_path = artifact_dir / f"{artifact_name}.feature-tree.json"
-    source_path = artifact_dir / f"{artifact_name}.py"
-    step_path = artifact_dir / f"{artifact_name}.step"
-
-    intent_path.write_text(
-        json.dumps(spec_data, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
     feature_tree_path.write_text(
         json.dumps(feature_tree, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-    emitter.write_build123d_source(feature_tree, source_path)
+    print(f" Feature Tree → {feature_tree_path}")
 
-    bridge = bridge_module.CadBridge(workspace_root=WORKSPACE_ROOT)
-    result = bridge.generate_from_source(source_path, step_path, force=args.force)
-    payload = {
-        "intent_path": str(intent_path),
-        "feature_tree_path": str(feature_tree_path),
-        **asdict(result),
-    }
-    print(json.dumps(payload, ensure_ascii=False, indent=2))
-    return 0 if result.status == "ok" else 1
+    # 保存 BOM Markdown
+    bom_path = artifact_dir / f"{artifact_name}.bom.md"
+    bom_path.write_text(format_bom_markdown(result.bom), encoding="utf-8")
+    print(f" BOM 报告 → {bom_path}")
+
+    # ── 3. 生成 build123d 源码 → STEP/GLB ──
+    source_path = artifact_dir / f"{artifact_name}.py"
+    write_build123d_source(feature_tree, source_path)
+    print(f" build123d 源码 → {source_path}")
+
+    step_path = artifact_dir / f"{artifact_name}.step"
+    bridge = CadBridge(workspace_root=WORKSPACE_ROOT)
+    bridge_result = bridge.generate_from_source(source_path, step_path, force=args.force)
+
+    print(f"\n{'='*60}")
+    print(f"  CAD 生成结果: {bridge_result.status.upper()}")
+    print(f"  {bridge_result.message}")
+    if bridge_result.step_path:
+        print(f"  STEP: {bridge_result.step_path}")
+    if bridge_result.topology_path:
+        print(f"  GLB:  {bridge_result.topology_path}")
+    print(f"{'='*60}")
+
+    return 0 if bridge_result.status == "ok" else 1
 
 
 def _workspace_path(path: str | Path) -> Path:

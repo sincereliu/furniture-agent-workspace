@@ -10,7 +10,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "Unit tests failed with exit code $LASTEXITCODE"
 }
 
-& $python scripts\generate_furniture.py examples\table_basic.json --name smoke_table --force
+& $python scripts\generate_furniture.py examples\cabinet_basic.json --name smoke_cabinet --force
 if ($LASTEXITCODE -ne 0) {
     throw "Furniture CAD smoke generation failed with exit code $LASTEXITCODE"
 }
