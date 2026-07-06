@@ -5,33 +5,23 @@
 # ============================================================================
 
 # ── 三合一连接件 ────────────────────────────────────────
-# 业内统一标准，国产品牌规格一致
 three_in_one:
   标准:
     variant_group: 三合一标准
+    # 偏心轮（母件，安装在侧板面上）
     eccentric_wheel:
-      diameter_mm: 15
-      thickness_mm: 10
-      hole_diameter_mm: 20      # 侧板大孔（安装偏心轮）
-      hole_depth_mm: 12
-    pre_embedded_nut:
-      diameter_mm: 8
-      length_mm: 12
+      diameter_mm: 12            # 偏心轮本体直径
+      hole_depth_mm: 13.5        # 沉孔深度
+      center_offset_from_edge_mm: 33.5   # 偏心轮圆心距板前边
+    # 连接杆
     connecting_rod:
-      diameter_mm: 6
-      length_mm: 36
-    # 母件孔（侧板面）：偏心轮安装孔
-    female_hole:
-      face_diameter_mm: 20     # 盘头孔直径
-      face_depth_mm: 12        # 盘头孔深度
-      rod_hole_diameter_mm: 8  # 连杆横孔直径
-      rod_hole_depth_mm: 34    # 连杆横孔深度
-    # 公件孔（板端）：预埋螺母 + 连杆
-    male_hole:
-      nut_diameter_mm: 8
-      nut_depth_mm: 12
-      rod_diameter_mm: 5       # 引孔直径（比连杆略小）
-      rod_depth_mm: 34         # 引孔深度
+      diameter_mm: 8             # 连接杆直径
+      length_mm: 36              # 连接杆总长
+      insertion_depth_mm: 33     # 连接杆插入板端深度
+    # 预埋件（安装在板端）
+    pre_embedded_nut:
+      diameter_mm: 10            # 预埋件直径
+      depth_mm: 11               # 预埋孔深度
     brands:
       - name: 默认
         model: SJY-01
