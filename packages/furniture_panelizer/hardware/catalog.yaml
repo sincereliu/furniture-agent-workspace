@@ -26,6 +26,57 @@ three_in_one:
       - name: 默认
         model: SJY-01
 
+# ── 活动层板连接件 ────────────────────────────────────────
+shelf_connectors:
+  二合一:
+    variant_group: 二合一连接件
+    连接杆直径: 5mm
+    注塑件直径: 8mm
+    侧板孔: { diameter_mm: 10, depth_mm: 12 }
+    层板孔: { diameter_mm: 5, depth_mm: 10 }
+    note: 活动层板标准连接件
+    brands:
+      - name: 默认
+        model: EYJ-01
+
+  隔板钉:
+    variant_group: 隔板钉
+    钉径: 3mm
+    钉长: 25mm
+    侧板孔: { diameter_mm: 3, depth_mm: 8 }
+    note: 轻载层板，安装简便
+    brands:
+      - name: 默认
+        model: GBD-01
+
+# ── 抽屉滑轨 ──────────────────────────────────────────
+drawer_slides:
+  三节轨:
+    variant_group: 国产三节轨
+    mounting: 侧装
+    gap_requirement_mm: 12.5        # 每侧间隙
+    extension: 100%                 # 全拉出
+    standard_lengths_mm: [250, 300, 350, 400, 450, 500, 550, 600]
+    brands:
+      - name: 默认
+        model: SJG-01
+      - name: DTC
+        model: DTC-3S
+      - name: 悍高
+        model: HG-3S
+
+  隐藏轨:
+    variant_group: 国产隐藏轨
+    mounting: 底装
+    gap_requirement_mm: 12.7        # 每侧间隙
+    extension: 100%
+    standard_lengths_mm: [270, 300, 350, 400, 450, 500, 550]
+    brands:
+      - name: 默认
+        model: YCG-01
+      - name: Blum
+        model: 760H
+
 # ── 铰链 ──────────────────────────────────────────────
 
 hinges:

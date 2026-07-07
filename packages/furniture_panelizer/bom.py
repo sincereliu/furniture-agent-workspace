@@ -26,6 +26,7 @@ class BOMReport:
     panels: list  # List[PanelRecord]
     hardware: list  # List[HardwareRecord]
     total_area_m2: float = 0.0
+    cut_plans: list | None = None  # List[CuttingPlan] from cut_optimizer
 
     @property
     def panel_count(self) -> int:
@@ -100,37 +101,53 @@ def estimate_hardware(panels: List[PanelRecord]) -> List[HardwareRecord]:
     """
     hw: List[HardwareRecord] = []
 
-    # 三合一连接件：统计 32mm 系统孔的板件
-    c32_count = 0
-    for p in panels:
-        if p.panel_type in ("side", "top", "bottom", "fixed_shelf"):
-            c32_count += len(calc_system_holes(p.drill_length))
-    if c32_count:
+    # 三合一连接件 — 使用硬件匹配引擎
+    from furniture_panelizer.hardware_matcher import match_three_in_one
+    tio_matches = match_three_in_one(panels)
+    if tio_matches:
+        tio = tio_matches[0]  # 汇总结果
         hw.append(HardwareRecord(
             name="三合一连接件",
-            spec="偏心轮φ15+预埋螺母+连杆",
-            quantity=c32_count,
+            spec="偏心轮φ12+预埋螺母φ10×11+连接杆φ8×33",
+            quantity=tio["sets"],
             unit="套",
+            brand=tio["brand"],
+            model=tio["model"],
         ))
 
-    # 层板托：活动层板
-    c21_count = 0
-    for p in panels:
-        if p.panel_type == "movable_shelf":
-            c21_count += len(calc_shelf_holes(p.drill_length)) * 2
-    if c21_count:
+    # 活动层板连接件 — 使用硬件匹配引擎
+    from furniture_panelizer.hardware_matcher import match_shelf_connectors
+    shelf_matches = match_shelf_connectors(panels)
+    if shelf_matches:
+        total_shelf_sets = sum(m["sets"] for m in shelf_matches)
         hw.append(HardwareRecord(
-            name="二合一连接件(层板托)",
-            spec="φ5mm层板托",
-            quantity=c21_count,
+            name=f"{shelf_matches[0]['connector_type']}连接件",
+            spec=f"{shelf_matches[0]['brand']} {shelf_matches[0]['model']}",
+            quantity=total_shelf_sets,
             unit="套",
+            brand=shelf_matches[0]["brand"],
+            model=shelf_matches[0]["model"],
         ))
+    # 如果当前柜体没有活动层板，则匹配结果为空
 
-    # 铰链 — 使用硬件匹配引擎
+    # 铰链 — 使用硬件匹配引擎（接入真实避让数据）
     door_panels = [p for p in panels if p.panel_type == "door"]
     if door_panels:
         from furniture_panelizer.hardware_matcher import match_hinges
-        hinge_matches = match_hinges(door_panels)
+        from furniture_panelizer.drilling_engine import calc_system_32_holes
+
+        # 计算侧板系统排钻孔位（用于铰链避让）
+        side_panel = next((p for p in panels if p.panel_type == "side"), None)
+        real_system_holes = calc_system_32_holes(side_panel.drill_length) if side_panel else None
+
+        # 计算固定层板+顶板+底板的 Z 高度（用于铰链避让层板位置）
+        shelf_zs = [p.pos_z for p in panels if p.panel_type in ("top", "bottom", "fixed_shelf")]
+
+        hinge_matches = match_hinges(
+            door_panels,
+            system_holes=real_system_holes,
+            shelf_positions=shelf_zs,
+        )
         for match in hinge_matches:
             hw.append(HardwareRecord(
                 "液压缓冲铰链",
@@ -149,6 +166,28 @@ def estimate_hardware(panels: List[PanelRecord]) -> List[HardwareRecord]:
     # 背板螺丝
     if any(p.panel_type == "back" for p in panels):
         hw.append(HardwareRecord(name="自攻螺丝", spec="3.5×16mm", quantity=30, unit="个"))
+
+    # 抽屉滑轨 — 当柜体含抽屉时触发
+    # 抽屉深度 = 柜体深度 - 背板偏移 - 滑轨间隙
+    drawer_flag = any("drawer" in (p.panel_type or "") for p in panels)
+    if drawer_flag:
+        from furniture_panelizer.hardware_matcher import match_drawer_slides
+
+        # 从板件列表中推断抽屉参数（depth = 柜体depth方向，width = 柜体width方向）
+        drawer_depth = max((p.size_y for p in panels if p.panel_type in ("side", "bottom")), default=450)
+        drawer_width = max((p.size_x for p in panels if p.panel_type in ("top", "bottom")), default=800)
+
+        slide_matches = match_drawer_slides(drawer_depth, drawer_width)
+        for slide in slide_matches:
+            hw.append(HardwareRecord(
+                name="抽屉滑轨",
+                spec=f"{slide['brand']} {slide['model']} {slide['length_mm']}mm {slide['load_rating']}",
+                quantity=slide["quantity"],
+                unit="副",
+                brand=slide["brand"],
+                model=slide["model"],
+                note=f"{slide['slide_type']} | {slide['mounting']}",
+            ))
 
     # 门碰
     door_n = sum(1 for p in panels if p.panel_type == "door")

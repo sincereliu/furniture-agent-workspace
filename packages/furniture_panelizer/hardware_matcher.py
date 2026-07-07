@@ -37,51 +37,36 @@ def match_hinges(
     preferred_variant: str | None = None,
     overlay: str = "full",
     angle: int = 100,
+    system_holes: List[float] | None = None,
+    shelf_positions: List[float] | None = None,
 ) -> List[Dict[str, Any]]:
-    """为门板列表匹配合适的铰链型号和数量。
-
-    Args:
-        door_panels: 门板 PanelRecord 列表
-        preferred_brand: 品牌偏好（如 "Blum", "DTC"），None 则用默认
-        preferred_variant: 规格组偏好（如 "进口35mm杯全盖"），None 则自动匹配
-        overlay: 盖法，full / half / inset
-        angle: 铰链开启角度，默认 110
-
-    Returns:
-        [{brand, model, quantity, variant_group, drilling: [...]}, ...]
-        每个门板返回一条记录
-    """
     catalog = _load_catalog().get("hinges", {})
     if not catalog:
         return []
 
     results: List[Dict[str, Any]] = []
-    # 导入放在这里避免循环依赖
     from furniture_panelizer.drilling_engine import calc_hinge_positions
 
     for panel in door_panels:
-        door_h = panel.size_z  # 门高
-        door_w = panel.size_x  # 门宽
+        door_h = panel.size_z
+        door_w = panel.size_x
 
-        # 1. 找到匹配的铰链条目
         hinge_entry = _find_hinge_entry(
             catalog, overlay=overlay, angle=angle,
             preferred_variant=preferred_variant, preferred_brand=preferred_brand,
             door_width_mm=door_w,
         )
-
         if not hinge_entry:
             continue
 
-        # 2. 确定品牌
         brand = _pick_brand(hinge_entry, preferred_brand)
-
-        # 3. 计算孔位
         variant_group = hinge_entry["variant_group"]
         drilling = calc_hinge_positions(
             door_height_mm=door_h,
             door_width_mm=door_w,
             variant_group=variant_group,
+            system_holes=system_holes,
+            shelf_positions=shelf_positions,
         )
 
         results.append({
@@ -99,6 +84,183 @@ def match_hinges(
     return results
 
 
+# ── 三合一公母配对 ──────────────────────────────────────────
+def match_three_in_one(
+    panels: List[PanelRecord],
+    *,
+    preferred_brand: str | None = None,
+) -> List[Dict[str, Any]]:
+    catalog = _load_catalog().get("three_in_one", {})
+    if not catalog:
+        return []
+
+    entry = list(catalog.values())[0] if catalog else None
+    if not entry:
+        return []
+
+    from furniture_panelizer.drilling_engine import calc_system_32_holes
+
+    female_panels = [p for p in panels if p.panel_type in ("side", "divider")]
+    male_panels = [p for p in panels if p.panel_type in ("top", "bottom", "fixed_shelf")]
+
+    brand = _pick_brand(entry, preferred_brand)
+    ec = entry.get("eccentric_wheel", {})
+    cr = entry.get("connecting_rod", {})
+    pn = entry.get("pre_embedded_nut", {})
+
+    female_holes_total = 0
+    female_details: List[Dict[str, Any]] = []
+    for p in female_panels:
+        holes = calc_system_32_holes(p.drill_length)
+        female_holes_total += len(holes)
+        female_details.append({
+            "panel_id": p.label,
+            "panel_name": p.name,
+            "hole_count": len(holes),
+            "hole_positions_y_mm": holes,
+            "panel_z_start_mm": p.pos_z,
+        })
+
+    male_total_end_holes = 0
+    male_details: List[Dict[str, Any]] = []
+    for p in male_panels:
+        edge_holes = calc_system_32_holes(p.drill_length)
+        male_total_end_holes += len(edge_holes) * 2
+        male_details.append({
+            "panel_id": p.label,
+            "panel_name": p.name,
+            "panel_z_mm": p.pos_z,
+            "edge_hole_count": len(edge_holes),
+            "hole_positions_on_edge_mm": edge_holes,
+        })
+
+    sets = female_holes_total
+
+    return [{
+        "type": "三合一",
+        "brand": brand["name"],
+        "model": brand["model"],
+        "sets": sets,
+        "female_holes_total": female_holes_total,
+        "male_end_holes_total": male_total_end_holes,
+        "female_details": female_details,
+        "male_details": male_details,
+        "eccentric_wheel": {
+            "diameter_mm": ec.get("diameter_mm"),
+            "hole_depth_mm": ec.get("hole_depth_mm"),
+            "center_offset_from_edge_mm": ec.get("center_offset_from_edge_mm"),
+        },
+        "connecting_rod": {
+            "diameter_mm": cr.get("diameter_mm"),
+            "insertion_depth_mm": cr.get("insertion_depth_mm"),
+        },
+        "pre_embedded_nut": {
+            "diameter_mm": pn.get("diameter_mm"),
+            "depth_mm": pn.get("depth_mm"),
+        },
+    }]
+
+
+# ── 活动层板连接件匹配 ──────────────────────────────────────
+def match_shelf_connectors(
+    panels: List[PanelRecord],
+    *,
+    connector_type: str = "二合一",
+    preferred_brand: str | None = None,
+) -> List[Dict[str, Any]]:
+    catalog = _load_catalog().get("shelf_connectors", {})
+    entry = catalog.get(connector_type) if catalog else None
+    if not entry:
+        return []
+
+    from furniture_panelizer.drilling_engine import calc_shelf_holes
+
+    brand = _pick_brand(entry, preferred_brand)
+    results: List[Dict[str, Any]] = []
+
+    for p in panels:
+        if p.panel_type != "movable_shelf":
+            continue
+        if p.drill_length <= 0:
+            continue
+
+        holes = calc_shelf_holes(p.drill_length)
+        total_sets = len(holes) * 2
+
+        results.append({
+            "panel_id": p.label,
+            "panel_name": p.name,
+            "connector_type": connector_type,
+            "brand": brand["name"],
+            "model": brand["model"],
+            "sets": total_sets,
+            "hole_count_per_side": len(holes),
+            "hole_positions_on_edge_mm": holes,
+            "spec": entry.get("spec", {}),
+        })
+
+    return results
+
+
+# ── 抽屉滑轨匹配 ──────────────────────────────────────────
+def match_drawer_slides(
+    drawer_depth_mm: float,
+    drawer_width_mm: float,
+    *,
+    slide_type: str = "三节轨",
+    preferred_brand: str | None = None,
+) -> List[Dict[str, Any]]:
+    """根据抽屉参数匹配滑轨型号和数量。
+
+    Args:
+        drawer_depth_mm: 抽屉深度（Y方向，决定滑轨长度）
+        drawer_width_mm: 抽屉宽度（X方向，决定承重级别）
+        slide_type: "三节轨" 或 "隐藏轨"
+        preferred_brand: 品牌偏好
+
+    Returns:
+        [{brand, model, length_mm, quantity, load_rating, ...}]
+    """
+    catalog = _load_catalog().get("drawer_slides", {})
+    entry = catalog.get(slide_type) if catalog else None
+    if not entry:
+        return []
+
+    # 1. 匹配最近的标准长度（滑轨长度 ≤ 抽屉深度 - 50mm）
+    standard_lengths = sorted(entry.get("standard_lengths_mm", []))
+    if not standard_lengths:
+        return []
+
+    target_length = drawer_depth_mm - 50
+    match_length = None
+    for length in standard_lengths:
+        if length <= target_length:
+            match_length = length
+        else:
+            break
+
+    if match_length is None:
+        match_length = standard_lengths[0]  # 兜底最小号
+
+    # 2. 承载级别
+    load_rating = "30kg"
+    if drawer_width_mm > 600:
+        load_rating = "45kg"
+
+    brand = _pick_brand(entry, preferred_brand)
+
+    return [{
+        "slide_type": slide_type,
+        "brand": brand["name"],
+        "model": brand["model"],
+        "length_mm": match_length,
+        "quantity": 2,  # 每抽左右各1
+        "load_rating": load_rating,
+        "mounting": entry.get("mounting", "侧装"),
+        "gap_requirement_mm": entry.get("gap_requirement_mm", 12.5),
+    }]
+
+
 # ── 内部辅助 ─────────────────────────────────────────────────
 def _find_hinge_entry(
     catalog: Dict[str, Any],
@@ -108,21 +270,12 @@ def _find_hinge_entry(
     preferred_brand: str | None,
     door_width_mm: float,
 ) -> Dict[str, Any] | None:
-    """从铰链规格库中找到最佳匹配条目。
-
-    匹配优先级:
-      1. 指定了 preferred_variant → 在该组中按 overlay + angle 找
-      2. 指定了 preferred_brand → 找该品牌的第一个匹配
-      3. 默认 → 国内标准 35mm 优先
-    """
-    # 收集所有候选项
     candidates: List[Dict[str, Any]] = []
     for key, entry in catalog.items():
         if entry.get("overlay") != overlay:
             continue
         if entry.get("angle") != angle:
             continue
-        # 检查门宽限制
         max_w = entry.get("door_max_width_mm")
         if max_w and door_width_mm > max_w:
             continue
@@ -131,25 +284,21 @@ def _find_hinge_entry(
     if not candidates:
         return None
 
-    # 按规格组过滤
     if preferred_variant:
         filtered = [c for c in candidates if c["variant_group"] == preferred_variant]
         if filtered:
             candidates = filtered
 
-    # 按品牌过滤
     if preferred_brand:
         for c in candidates:
             for b in c["brands"]:
                 if b["name"] == preferred_brand:
                     return c
 
-    # 默认：选第一个（国内优先策略隐含在 catalog 顺序中）
     return candidates[0] if candidates else None
 
 
 def _pick_brand(entry: Dict[str, Any], preferred_brand: str | None) -> Dict[str, str]:
-    """从铰链条目中选出目标品牌"""
     brands = entry.get("brands", [])
     if not brands:
         return {"name": "默认", "model": "N/A"}
@@ -159,5 +308,4 @@ def _pick_brand(entry: Dict[str, Any], preferred_brand: str | None) -> Dict[str,
             if b["name"] == preferred_brand:
                 return b
 
-    # 返回第一个（默认品牌）
     return brands[0]
