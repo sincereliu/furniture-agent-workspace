@@ -1,0 +1,50 @@
+[
+  {
+    "name": "三合一连接件",
+    "spec": "偏心轮φ12+预埋螺母φ10×11+连接杆φ8×33",
+    "quantity": 8,
+    "unit": "套",
+    "brand": "默认",
+    "model": "SJY-01"
+  },
+  {
+    "name": "液压缓冲铰链",
+    "spec": "默认 HJ-100-F 100°full",
+    "quantity": 4,
+    "unit": "个",
+    "brand": "默认",
+    "model": "HJ-100-F"
+  },
+  {
+    "name": "液压缓冲铰链",
+    "spec": "默认 HJ-100-F 100°full",
+    "quantity": 4,
+    "unit": "个",
+    "brand": "默认",
+    "model": "HJ-100-F"
+  },
+  {
+    "name": "L型角码",
+    "spec": "25×25mm镀锌",
+    "quantity": 4,
+    "unit": "个",
+    "brand": "默认",
+    "model": ""
+  },
+  {
+    "name": "自攻螺丝",
+    "spec": "3.5×16mm",
+    "quantity": 30,
+    "unit": "个",
+    "brand": "默认",
+    "model": ""
+  },
+  {
+    "name": "弹压门碰",
+    "spec": "推弹式",
+    "quantity": 2,
+    "unit": "个",
+    "brand": "默认",
+    "model": ""
+  }
+]

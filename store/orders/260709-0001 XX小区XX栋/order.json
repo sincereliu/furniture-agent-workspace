@@ -1,0 +1,26 @@
+{
+  "order_id": "260709-0001",
+  "display_name": "260709-0001 XX小区XX栋",
+  "customer_name": "张先生",
+  "address": "XX小区XX栋",
+  "sign_date": "2026-07-09",
+  "delivery_date": "2026-08-01",
+  "notes": "深色免漆板",
+  "status": "待生产",
+  "items": [
+    {
+      "item_id": "地柜A",
+      "room": "厨房",
+      "furniture_type": "floor_cabinet",
+      "spec": {
+        "type": "floor_cabinet",
+        "width": 900,
+        "depth": 450,
+        "height": 1800,
+        "shelf_count": 4,
+        "n_doors": 2
+      },
+      "quantity": 1
+    }
+  ]
+}

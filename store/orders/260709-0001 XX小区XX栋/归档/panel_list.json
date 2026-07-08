@@ -1,0 +1,137 @@
+[
+  {
+    "name": "左侧板",
+    "type": "side",
+    "length": 18.0,
+    "width": 430.0,
+    "thickness": 18.0,
+    "material": "18mm免漆板",
+    "quantity": 1
+  },
+  {
+    "name": "右侧板",
+    "type": "side",
+    "length": 18.0,
+    "width": 430.0,
+    "thickness": 18.0,
+    "material": "18mm免漆板",
+    "quantity": 1
+  },
+  {
+    "name": "顶板",
+    "type": "top",
+    "length": 864.0,
+    "width": 430.0,
+    "thickness": 18.0,
+    "material": "18mm免漆板",
+    "quantity": 1
+  },
+  {
+    "name": "底板",
+    "type": "bottom",
+    "length": 864.0,
+    "width": 430.0,
+    "thickness": 18.0,
+    "material": "18mm免漆板",
+    "quantity": 1
+  },
+  {
+    "name": "背板",
+    "type": "back",
+    "length": 864.0,
+    "width": 9.0,
+    "thickness": 9.0,
+    "material": "9mm薄板",
+    "quantity": 1
+  },
+  {
+    "name": "后踢脚板",
+    "type": "toe_kick",
+    "length": 864.0,
+    "width": 18.0,
+    "thickness": 18.0,
+    "material": "18mm免漆板",
+    "quantity": 1
+  },
+  {
+    "name": "前踢脚板",
+    "type": "toe_kick",
+    "length": 864.0,
+    "width": 18.0,
+    "thickness": 18.0,
+    "material": "18mm免漆板",
+    "quantity": 1
+  },
+  {
+    "name": "踢脚支撑1",
+    "type": "toe_kick",
+    "length": 18.0,
+    "width": 394.0,
+    "thickness": 18.0,
+    "material": "18mm免漆板",
+    "quantity": 1
+  },
+  {
+    "name": "踢脚支撑2",
+    "type": "toe_kick",
+    "length": 18.0,
+    "width": 394.0,
+    "thickness": 18.0,
+    "material": "18mm免漆板",
+    "quantity": 1
+  },
+  {
+    "name": "层板(402mm)",
+    "type": "fixed_shelf",
+    "length": 864.0,
+    "width": 403.0,
+    "thickness": 18.0,
+    "material": "18mm免漆板",
+    "quantity": 1
+  },
+  {
+    "name": "层板(745mm)",
+    "type": "fixed_shelf",
+    "length": 864.0,
+    "width": 403.0,
+    "thickness": 18.0,
+    "material": "18mm免漆板",
+    "quantity": 1
+  },
+  {
+    "name": "层板(1087mm)",
+    "type": "fixed_shelf",
+    "length": 864.0,
+    "width": 403.0,
+    "thickness": 18.0,
+    "material": "18mm免漆板",
+    "quantity": 1
+  },
+  {
+    "name": "层板(1430mm)",
+    "type": "fixed_shelf",
+    "length": 864.0,
+    "width": 403.0,
+    "thickness": 18.0,
+    "material": "18mm免漆板",
+    "quantity": 1
+  },
+  {
+    "name": "左门板",
+    "type": "door",
+    "length": 447.0,
+    "width": 18.0,
+    "thickness": 18.0,
+    "material": "18mm颗粒板(纯白)",
+    "quantity": 1
+  },
+  {
+    "name": "右门板",
+    "type": "door",
+    "length": 447.0,
+    "width": 18.0,
+    "thickness": 18.0,
+    "material": "18mm颗粒板(纯白)",
+    "quantity": 1
+  }
+]

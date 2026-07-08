@@ -1,0 +1,30 @@
+[
+  {
+    "board": "18mm免漆板 #1",
+    "length": 2440.0,
+    "width": 1220.0,
+    "pieces": 10,
+    "utilization": 50.4
+  },
+  {
+    "board": "18mm免漆板 #2",
+    "length": 2440.0,
+    "width": 1220.0,
+    "pieces": 2,
+    "utilization": 23.4
+  },
+  {
+    "board": "9mm薄板 #1",
+    "length": 2440.0,
+    "width": 1220.0,
+    "pieces": 1,
+    "utilization": 0.3
+  },
+  {
+    "board": "18mm颗粒板(纯白) #1",
+    "length": 2440.0,
+    "width": 1220.0,
+    "pieces": 2,
+    "utilization": 0.5
+  }
+]

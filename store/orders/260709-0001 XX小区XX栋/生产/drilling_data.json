@@ -1,0 +1,181 @@
+[
+  {
+    "panel_id": "left_side_panel",
+    "panel_name": "左侧板",
+    "panel_type": "side",
+    "system_32_holes": [
+      64.0,
+      621.5,
+      1178.5,
+      1736.0
+    ]
+  },
+  {
+    "panel_id": "right_side_panel",
+    "panel_name": "右侧板",
+    "panel_type": "side",
+    "system_32_holes": [
+      64.0,
+      621.5,
+      1178.5,
+      1736.0
+    ]
+  },
+  {
+    "panel_id": "top_panel",
+    "panel_name": "顶板",
+    "panel_type": "top",
+    "system_32_holes": [
+      64.0,
+      800.0
+    ]
+  },
+  {
+    "panel_id": "bottom_panel",
+    "panel_name": "底板",
+    "panel_type": "bottom",
+    "system_32_holes": [
+      64.0,
+      800.0
+    ]
+  },
+  {
+    "panel_id": "back_panel",
+    "panel_name": "背板",
+    "panel_type": "back"
+  },
+  {
+    "panel_id": "toe_kick_back",
+    "panel_name": "后踢脚板",
+    "panel_type": "toe_kick"
+  },
+  {
+    "panel_id": "toe_kick_front",
+    "panel_name": "前踢脚板",
+    "panel_type": "toe_kick"
+  },
+  {
+    "panel_id": "toe_kick_support_1",
+    "panel_name": "踢脚支撑1",
+    "panel_type": "toe_kick"
+  },
+  {
+    "panel_id": "toe_kick_support_2",
+    "panel_name": "踢脚支撑2",
+    "panel_type": "toe_kick"
+  },
+  {
+    "panel_id": "shelf_z402",
+    "panel_name": "层板(402mm)",
+    "panel_type": "fixed_shelf",
+    "system_32_holes": [
+      64.0,
+      800.0
+    ]
+  },
+  {
+    "panel_id": "shelf_z745",
+    "panel_name": "层板(745mm)",
+    "panel_type": "fixed_shelf",
+    "system_32_holes": [
+      64.0,
+      800.0
+    ]
+  },
+  {
+    "panel_id": "shelf_z1087",
+    "panel_name": "层板(1087mm)",
+    "panel_type": "fixed_shelf",
+    "system_32_holes": [
+      64.0,
+      800.0
+    ]
+  },
+  {
+    "panel_id": "shelf_z1430",
+    "panel_name": "层板(1430mm)",
+    "panel_type": "fixed_shelf",
+    "system_32_holes": [
+      64.0,
+      800.0
+    ]
+  },
+  {
+    "panel_id": "left_door",
+    "panel_name": "左门板",
+    "panel_type": "door",
+    "hinge_holes": [
+      {
+        "y_mm": 120.0,
+        "x_offset_mm": 5,
+        "cup_diameter_mm": 35,
+        "cup_depth_mm": 13,
+        "bore_distance_mm": 3,
+        "side": "hinge_side"
+      },
+      {
+        "y_mm": 622.5,
+        "x_offset_mm": 5,
+        "cup_diameter_mm": 35,
+        "cup_depth_mm": 13,
+        "bore_distance_mm": 3,
+        "side": "hinge_side"
+      },
+      {
+        "y_mm": 1124.5,
+        "x_offset_mm": 5,
+        "cup_diameter_mm": 35,
+        "cup_depth_mm": 13,
+        "bore_distance_mm": 3,
+        "side": "hinge_side"
+      },
+      {
+        "y_mm": 1627.0,
+        "x_offset_mm": 5,
+        "cup_diameter_mm": 35,
+        "cup_depth_mm": 13,
+        "bore_distance_mm": 3,
+        "side": "hinge_side"
+      }
+    ]
+  },
+  {
+    "panel_id": "right_door",
+    "panel_name": "右门板",
+    "panel_type": "door",
+    "hinge_holes": [
+      {
+        "y_mm": 120.0,
+        "x_offset_mm": 5,
+        "cup_diameter_mm": 35,
+        "cup_depth_mm": 13,
+        "bore_distance_mm": 3,
+        "side": "hinge_side"
+      },
+      {
+        "y_mm": 622.5,
+        "x_offset_mm": 5,
+        "cup_diameter_mm": 35,
+        "cup_depth_mm": 13,
+        "bore_distance_mm": 3,
+        "side": "hinge_side"
+      },
+      {
+        "y_mm": 1124.5,
+        "x_offset_mm": 5,
+        "cup_diameter_mm": 35,
+        "cup_depth_mm": 13,
+        "bore_distance_mm": 3,
+        "side": "hinge_side"
+      },
+      {
+        "y_mm": 1627.0,
+        "x_offset_mm": 5,
+        "cup_diameter_mm": 35,
+        "cup_depth_mm": 13,
+        "bore_distance_mm": 3,
+        "side": "hinge_side"
+      }
+    ]
+  }
+]
