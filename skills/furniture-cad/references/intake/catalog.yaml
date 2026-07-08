@@ -11,7 +11,11 @@ families:
       - 落地柜
       - 储物柜
     planning_references:
-      - references/panel-cabinetry.md
+      - references/layout-planning.md
+      - references/panel-planning.md
+      - references/manufacturing-policy.md
+      - references/feature-tree.md
+      - references/validation.md
 
   wall_cabinet:
     aliases:
@@ -20,7 +24,11 @@ families:
       - 吊柜
       - 壁柜
     planning_references:
-      - references/panel-cabinetry.md
+      - references/layout-planning.md
+      - references/panel-planning.md
+      - references/manufacturing-policy.md
+      - references/feature-tree.md
+      - references/validation.md
 
 fallback:
   design_reference: references/design-intent.md

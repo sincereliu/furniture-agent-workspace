@@ -1,7 +1,14 @@
 # Workspace Furniture Pipeline
 
 Read this reference before claiming executable support, normalizing input,
-running generation, or reporting artifacts.
+running generation, or reporting runtime artifacts.
+
+Workspace Pipeline answers: "What does the current workspace execute?"
+
+This file owns runtime contracts, commands, generated artifact paths, and
+current executable limits. It does not own user intent, layout planning, panel
+semantics, manufacturing policy, Feature Tree design rules, or validation
+gates.
 
 ## Current capability
 
@@ -47,8 +54,8 @@ an override is requested or required by the design.
 The executable contract is flat JSON.
 
 Proceed to execution only when the overall dimensions are numeric and the
-requested variant matches a live template. Otherwise stop at intent or
-modeling-plan work and state the unsupported boundary.
+requested variant matches a live template. Otherwise stop at the appropriate
+DDD planning layer and state the unsupported boundary.
 
 ## Generation
 
@@ -70,21 +77,20 @@ The command writes to `generated/<artifact-name>/`:
 - `<artifact-name>.step`;
 - the hidden adjacent Viewer topology GLB produced by the CAD bridge.
 
-The pipeline is:
+The runtime pipeline is:
 
 `intent JSON -> existing furniture planner -> conceptual Panel Plan -> Feature
 Tree -> furniture CAD emitter -> text-to-cad bridge -> STEP + Viewer topology`
 
-The Panel Plan is a conceptual manufacturing layer produced by the existing
-planner flow before Feature Tree generation. It describes semantic furniture
-components; it does not add a new runtime command, planner interface, executable
-JSON shape, Feature Tree operation set, or STEP entity model.
+The conceptual Panel Plan is represented by the existing planner flow. It does
+not add a new runtime command, planner interface, executable JSON shape,
+Feature Tree operation set, or STEP entity model.
 
 Do not send furniture JSON directly to text-to-cad. Do not bypass the planner
 with one-off CAD source or modify the external submodule for ordinary furniture
 generation.
 
-## Panel and BOM path
+## Runtime panel and BOM path
 
 `packages/furniture_pipeline/cabinet.py` exposes `plan_cabinet()` for the two
 cabinet types. It returns placements, panel records, and an estimated BOM.
@@ -92,19 +98,3 @@ Treat those panel records as the current runtime expression of Panel Planning,
 not as a separate executable stage.
 The main generation CLI does not currently persist BOM or cut-list artifacts.
 Do not report such files unless a command actually created them.
-
-Treat hardware estimates, edge banding, and tolerances as preliminary until the
-user accepts the relevant manufacturing policy.
-
-## Verification
-
-Run the test suite after changing the skill's capability claims or pipeline:
-
-```powershell
-.\.venv\Scripts\python.exe -m unittest discover -s tests -v
-```
-
-For a real CAD generation, require a zero exit code and verify that the
-reported STEP and topology artifacts exist and are non-empty. Use
-`pwsh -File scripts\smoke_test.ps1` when validating the full external CAD
-integration.

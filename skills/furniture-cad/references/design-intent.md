@@ -1,15 +1,16 @@
 # Furniture Design Intent
 
-Use this reference before layout planning, panel decomposition, or geometry.
+Use this reference before layout planning, panel decomposition, manufacturing
+policy, Feature Tree planning, or runtime execution.
 Design Intent answers: "What furniture should be built?"
 
 Design Intent records the user's desired furniture and the reasons behind it.
-It is not a Panel Plan, Feature Tree, panel cut list, or CAD program.
+It is not a Layout Plan, Panel Plan, Manufacturing Policy, Feature Tree,
+runtime input, panel cut list, or CAD program.
 
 ## Capture
 
-- `type`: furniture family in user language; also record the executable type
-  when the runtime supports it.
+- `type`: furniture family in user language.
 - `purpose`: user-facing use and priorities.
 - `overall_size`: finished-envelope `width_mm`, `depth_mm`, and `height_mm`;
   keep unknown values as `null`.
@@ -17,7 +18,7 @@ It is not a Panel Plan, Feature Tree, panel cut list, or CAD program.
   other user-facing organization decisions.
 - `appearance`: visible style and finish choices that affect the design.
 - `structure`: high-level construction preferences, without decomposing them
-  into physical panels.
+  into layout zones, physical panels, or modeling operations.
 - `constraints`: room fit, ergonomics, safety, installation, fabrication, and
   material requirements.
 - `assumptions`: defaults tentatively accepted for this request.
@@ -33,7 +34,6 @@ closing paragraph.
 - `height_mm`: vertical span on Z.
 - Overall dimensions mean the finished outer envelope unless explicitly labeled
   as internal clearance, carcass size, or room opening.
-- The origin is the lower-left-rear ground corner of the finished envelope.
 
 When the user gives three unlabeled dimensions, tentatively map them to
 `W x D x H`, state that assumption, and correct it if the furniture context
@@ -45,15 +45,10 @@ makes the mapping implausible.
   family-critical layout decisions are known or explicitly recorded as
   unresolved.
 - Stop before panel decomposition. Do not add panel roles, quantities,
-  placements, part coordinates, cut sizes, hardware quantities, CAD API calls,
-  output paths, or a Feature Tree at this stage.
+  placements, part coordinates, cut sizes, hardware quantities, manufacturing
+  policies, CAD API calls, output paths, or a Feature Tree at this stage.
 - For interactive design discussion, stop after intent unless the user
   requested planning or end-to-end generation.
-- For supported generation, normalize the approved intent to the flat JSON
-  contract in `workspace-pipeline.md`; do not maintain a second furniture-type
-  execution schema inside the skill.
-- For unsupported furniture, keep the user-facing intent useful and explicitly
-  separate it from executable support.
 
 ## Family-specific decisions
 
@@ -62,5 +57,5 @@ makes the mapping implausible.
 - **Wall cabinet**: carcass construction, back, doors, shelves/dividers,
   wall fixing, substrate, installation clearance, and material thicknesses.
   No toe-kick.
-- Other types: capture the generic intent, then verify runtime support before
-  promising generation.
+- Other types: capture the generic intent and leave execution support to the
+  Workspace Pipeline layer.

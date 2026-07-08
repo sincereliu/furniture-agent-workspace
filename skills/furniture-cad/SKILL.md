@@ -1,23 +1,23 @@
 ---
 name: furniture-cad
-description: Turn requests for any furniture family into confirmable design intent, structured furniture specifications, Panel Planning, preliminary BOM reasoning, Feature Trees, and validated CAD through this workspace. Use for furniture dimensions or layouts, structure, part placement, STEP generation, or questions about what the live furniture pipeline supports.
+description: Turn requests for any furniture family into confirmable Design Intent, Layout Planning, Panel Planning, Manufacturing Policy, Feature Tree planning, and validated CAD through this workspace. Use for furniture dimensions or layouts, structure, panel semantics, manufacturing reasoning, STEP generation, or questions about what the live furniture pipeline supports.
 ---
 
 # Furniture CAD
 
-Use this skill as a thin router. Keep user intent, layout choices,
-manufacturing semantics, CAD modeling semantics, generated geometry, and
-manufacturing output as separate layers. Runtime code owns executable behavior;
-references in this skill explain how to use it.
+Use this skill as a thin router. Keep user intent, spatial organization,
+manufacturing parts, manufacturing rules, CAD modeling semantics, runtime
+execution, and validation as separate domain layers. Runtime code owns
+executable behavior; references in this skill explain how to use it.
 
 Conceptual workflow:
 
-`Design Intent -> Layout Planning -> Panel Planning -> Feature Tree -> CAD -> STEP`
+`Design Intent -> Layout Planning -> Panel Planning -> Manufacturing Policy -> Feature Tree -> CAD -> STEP`
 
-Panel Planning is the conceptual manufacturing layer that represents physical
-furniture components. In the current runtime, this layer is implemented inside
-the existing planner and related workspace packages; it is not a separate
-planner interface or new executable step.
+These are documentation and reasoning layers. In the current runtime, planning
+is still implemented by the existing planner and related workspace packages;
+this skill does not define a new planner interface, executable JSON shape, or
+runtime step.
 
 ## Route by task
 
@@ -25,13 +25,13 @@ planner interface or new executable step.
    request to one family. Use the catalog fallback when no family matches.
    Default dimensions and parameters live in
    `packages/furniture_schema/spec.py` (dataclass defaults + `CABINET_PRESETS`).
-2. For requirements, dimensions, style, layout, or early design discussion,
-   also read [references/design-intent.md](references/design-intent.md). Return
-   a confirmable Design Intent and stop unless the user requested planning or
-   generation.
-3. For structure, part placement, manufacturing, panel planning, or BOM
-   reasoning, load the
-   selected catalog entry's applicable `planning_references`.
+2. For user requirements, dimensions, style, constraints, or early design
+   discussion, read [references/design-intent.md](references/design-intent.md).
+   Return a confirmable Design Intent and stop unless the user requested later
+   stages.
+3. For layout, panel semantics, manufacturing policy, Feature Tree reasoning,
+   or validation, load the selected catalog entry's applicable
+   `planning_references`.
 4. Before claiming support, normalizing executable JSON, running generation, or
    reporting artifacts, read
    [references/workspace-pipeline.md](references/workspace-pipeline.md) and
@@ -40,29 +40,30 @@ planner interface or new executable step.
    work, then state the exact execution boundary. Do not invent a new runtime
    path inside the skill.
 
-## Shared invariants
+## Domain references
 
-- Use millimeters unless the user explicitly requests another unit.
-- Interpret overall dimensions as `W x D x H`: X left to right, Y rear to
-  user-facing front, and Z upward.
-- Use the lower-left-rear ground corner of the finished envelope as
-  `(0, 0, 0)`. Part positions are minimum corners.
-- Preserve unresolved intent decisions as `null` or an explicit unresolved
-  list. Never silently fill safety-, fit-, or fabrication-critical values.
-- Treat approved intent or executable JSON as source data. Do not hand-edit
-  derived Feature Trees, Python, STEP, topology GLB, BOM, or cut-list output.
-- Treat package defaults as software behavior, not factory-approved standards.
-- Report only commands, validations, and artifacts that actually ran or exist.
+- [Design Intent](references/design-intent.md): what furniture should be built.
+- [Layout Planning](references/layout-planning.md): how it is organized.
+- [Panel Planning](references/panel-planning.md): what physical components
+  exist.
+- [Manufacturing Policy](references/manufacturing-policy.md): how it should be
+  manufactured.
+- [Feature Tree](references/feature-tree.md): how components should be modeled.
+- [Workspace Pipeline](references/workspace-pipeline.md): what the current
+  runtime executes.
+- [Validation](references/validation.md): which gates must pass before
+  reporting success.
 
 ## Work in stages
 
 1. Capture and confirm Design Intent: what furniture should be built.
 2. Resolve Layout Planning: the major arrangement and furniture-family choices.
 3. Resolve Panel Planning: what physical furniture components exist.
-4. Produce Feature Tree modeling semantics before CAD geometry details.
-5. Run the workspace planner, emitter, and CAD bridge in order.
-6. Validate geometry and artifacts before reporting success.
-7. Derive panel/BOM output from the same approved specification or plan.
+4. Resolve Manufacturing Policy: materials, tolerances, joinery, and BOM
+   assumptions.
+5. Produce Feature Tree modeling semantics before CAD geometry details.
+6. Run the workspace planner, emitter, and CAD bridge in order when supported.
+7. Validate the relevant layers and artifacts before reporting success.
 
 If the user explicitly requests an end-to-end run and supplies enough
 information for a supported type, continue without an extra approval stop. Ask
@@ -74,6 +75,6 @@ fabrication materially wrong.
 - Intent work: the Design Intent, assumptions, unresolved decisions, and at
   most one blocking confirmation question.
 - Planning work: the normalized specification, layout decisions, Panel Plan
-  semantics, and clearly labeled provisional manufacturing assumptions.
+  semantics, manufacturing policy assumptions, and Feature Tree implications.
 - Generation work: the normalized input, command result, validations performed,
   and paths to artifacts that exist.
