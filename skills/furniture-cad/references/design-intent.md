@@ -1,7 +1,10 @@
 # Furniture Design Intent
 
-Use this reference before planning geometry. Design Intent records what should
-be built and why. It is not a Feature Tree, panel cut list, or CAD program.
+Use this reference before layout planning, panel decomposition, or geometry.
+Design Intent answers: "What furniture should be built?"
+
+Design Intent records the user's desired furniture and the reasons behind it.
+It is not a Panel Plan, Feature Tree, panel cut list, or CAD program.
 
 ## Capture
 
@@ -10,10 +13,11 @@ be built and why. It is not a Feature Tree, panel cut list, or CAD program.
 - `purpose`: user-facing use and priorities.
 - `overall_size`: finished-envelope `width_mm`, `depth_mm`, and `height_mm`;
   keep unknown values as `null`.
-- `layout`: doors, compartments, shelves, drawers, hanging zones, or other
-  major organization decisions.
+- `layout`: desired doors, compartments, shelves, drawers, hanging zones, or
+  other user-facing organization decisions.
 - `appearance`: visible style and finish choices that affect the design.
-- `structure`: high-level construction choices, without part coordinates.
+- `structure`: high-level construction preferences, without decomposing them
+  into physical panels.
 - `constraints`: room fit, ergonomics, safety, installation, fabrication, and
   material requirements.
 - `assumptions`: defaults tentatively accepted for this request.
@@ -37,9 +41,11 @@ makes the mapping implausible.
 
 ## Boundaries
 
-- Treat intent as ready for planning when dimensions and family-critical layout
-  decisions are known or explicitly recorded as unresolved.
-- Do not add part coordinates, cut sizes, hardware quantities, CAD API calls,
+- Treat intent as ready for the next planning layer when dimensions and
+  family-critical layout decisions are known or explicitly recorded as
+  unresolved.
+- Stop before panel decomposition. Do not add panel roles, quantities,
+  placements, part coordinates, cut sizes, hardware quantities, CAD API calls,
   output paths, or a Feature Tree at this stage.
 - For interactive design discussion, stop after intent unless the user
   requested planning or end-to-end generation.

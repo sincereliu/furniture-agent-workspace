@@ -1,12 +1,51 @@
-# Panel Cabinetry
+# Panel Planning
 
 Read this reference for floor cabinets, wall cabinets, storage cabinets,
 panel lists, edge banding, or preliminary BOM reasoning.
 
-This file owns cabinet design decisions and manufacturing caveats. The live
-planner owns placement formulas. `packages/furniture_schema/spec.py` owns
-software defaults (dataclass fields + `CABINET_PRESETS`). Do not copy either
-into this reference.
+Panel Planning answers: "What physical furniture components exist?"
+
+This file owns the manufacturing representation of furniture: semantic panels,
+component relationships, and manufacturing caveats. A Panel represents a
+manufacturing part, not a CAD solid.
+
+The live planner owns placement formulas. `packages/furniture_schema/spec.py`
+owns software defaults (dataclass fields + `CABINET_PRESETS`). Do not copy
+either into this reference.
+
+## Layer boundary
+
+Panel Planning comes after Design Intent and before Feature Tree generation.
+It converts furniture intent and layout choices into semantic furniture
+components.
+
+Typical panel roles include:
+
+- left side
+- right side
+- top
+- bottom
+- back
+- shelf
+- divider
+- door
+- drawer front
+- stretcher
+- toe kick
+
+Each Panel should conceptually contain:
+
+- semantic role
+- finished dimensions
+- thickness
+- material
+- quantity
+- orientation
+- placement
+- manufacturing annotations
+
+Do not define CAD geometry, Feature Tree operations, STEP entities, or runtime
+planner interfaces here.
 
 ## Coordinate convention
 
@@ -18,7 +57,7 @@ Do not restate numeric placement formulas here. Inspect
 `packages/furniture_planner/cabinet_planner.py` and its tests when exact
 geometry matters.
 
-## Resolve before planning
+## Resolve before Panel Planning
 
 - Whether dimensions describe the finished envelope, carcass, internal
   clearance, or installation opening.
@@ -49,10 +88,10 @@ geometry matters.
   safety-critical unresolved fields when unknown.
 - Model lighting recesses, fillers, and service gaps only when requested.
 
-## Panel planning rules
+## Panel Planning rules
 
-- Represent each panel by semantic role, finished size, thickness, minimum
-  corner, orientation, quantity, and manufacturing annotations.
+- Represent each panel by semantic role, finished dimensions, thickness,
+  material, quantity, orientation, placement, and manufacturing annotations.
 - Keep solid geometry, cut dimensions, edge-banding allowances, drilling, and
   hardware as separate data.
 - Derive positions from carcass relationships and envelope ranges.

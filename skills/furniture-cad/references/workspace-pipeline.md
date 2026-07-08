@@ -72,8 +72,13 @@ The command writes to `generated/<artifact-name>/`:
 
 The pipeline is:
 
-`intent JSON -> furniture planner -> Feature Tree -> furniture CAD emitter ->
-text-to-cad bridge -> STEP + Viewer topology`
+`intent JSON -> existing furniture planner -> conceptual Panel Plan -> Feature
+Tree -> furniture CAD emitter -> text-to-cad bridge -> STEP + Viewer topology`
+
+The Panel Plan is a conceptual manufacturing layer produced by the existing
+planner flow before Feature Tree generation. It describes semantic furniture
+components; it does not add a new runtime command, planner interface, executable
+JSON shape, Feature Tree operation set, or STEP entity model.
 
 Do not send furniture JSON directly to text-to-cad. Do not bypass the planner
 with one-off CAD source or modify the external submodule for ordinary furniture
@@ -83,6 +88,8 @@ generation.
 
 `packages/furniture_pipeline/cabinet.py` exposes `plan_cabinet()` for the two
 cabinet types. It returns placements, panel records, and an estimated BOM.
+Treat those panel records as the current runtime expression of Panel Planning,
+not as a separate executable stage.
 The main generation CLI does not currently persist BOM or cut-list artifacts.
 Do not report such files unless a command actually created them.
 

@@ -1,14 +1,23 @@
 ---
 name: furniture-cad
-description: Turn requests for any furniture family into confirmable design intent, structured furniture specifications, domain plans, preliminary BOM reasoning, Feature Trees, and validated CAD through this workspace. Use for furniture dimensions or layouts, structure, part placement, STEP generation, or questions about what the live furniture pipeline supports.
+description: Turn requests for any furniture family into confirmable design intent, structured furniture specifications, Panel Planning, preliminary BOM reasoning, Feature Trees, and validated CAD through this workspace. Use for furniture dimensions or layouts, structure, part placement, STEP generation, or questions about what the live furniture pipeline supports.
 ---
 
 # Furniture CAD
 
-Use this skill as a thin router. Keep user intent, executable input, domain
-planning, generated geometry, and manufacturing output as separate layers.
-Runtime code owns executable behavior; references in this skill explain how to
-use it.
+Use this skill as a thin router. Keep user intent, layout choices,
+manufacturing semantics, CAD modeling semantics, generated geometry, and
+manufacturing output as separate layers. Runtime code owns executable behavior;
+references in this skill explain how to use it.
+
+Conceptual workflow:
+
+`Design Intent -> Layout Planning -> Panel Planning -> Feature Tree -> CAD -> STEP`
+
+Panel Planning is the conceptual manufacturing layer that represents physical
+furniture components. In the current runtime, this layer is implemented inside
+the existing planner and related workspace packages; it is not a separate
+planner interface or new executable step.
 
 ## Route by task
 
@@ -20,7 +29,8 @@ use it.
    also read [references/design-intent.md](references/design-intent.md). Return
    a confirmable Design Intent and stop unless the user requested planning or
    generation.
-3. For structure, part placement, manufacturing, or BOM reasoning, load the
+3. For structure, part placement, manufacturing, panel planning, or BOM
+   reasoning, load the
    selected catalog entry's applicable `planning_references`.
 4. Before claiming support, normalizing executable JSON, running generation, or
    reporting artifacts, read
@@ -46,12 +56,13 @@ use it.
 
 ## Work in stages
 
-1. Capture and confirm Design Intent.
-2. Normalize supported work to the live JSON contract.
-3. Produce semantic parts and dependencies before CAD details.
-4. Run the workspace planner, emitter, and CAD bridge in order.
-5. Validate geometry and artifacts before reporting success.
-6. Derive panel/BOM output from the same approved specification or plan.
+1. Capture and confirm Design Intent: what furniture should be built.
+2. Resolve Layout Planning: the major arrangement and furniture-family choices.
+3. Resolve Panel Planning: what physical furniture components exist.
+4. Produce Feature Tree modeling semantics before CAD geometry details.
+5. Run the workspace planner, emitter, and CAD bridge in order.
+6. Validate geometry and artifacts before reporting success.
+7. Derive panel/BOM output from the same approved specification or plan.
 
 If the user explicitly requests an end-to-end run and supplies enough
 information for a supported type, continue without an extra approval stop. Ask
@@ -62,7 +73,7 @@ fabrication materially wrong.
 
 - Intent work: the Design Intent, assumptions, unresolved decisions, and at
   most one blocking confirmation question.
-- Planning work: the normalized specification, semantic structure, and clearly
-  labeled provisional manufacturing assumptions.
+- Planning work: the normalized specification, layout decisions, Panel Plan
+  semantics, and clearly labeled provisional manufacturing assumptions.
 - Generation work: the normalized input, command result, validations performed,
   and paths to artifacts that exist.
