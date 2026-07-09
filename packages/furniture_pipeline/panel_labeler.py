@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Dict, List
 
-from furniture_schema.order import PanelLabel
+from furniture_schema.panel import PanelLabel
 from furniture_schema.panel import PanelRecord
 
 # 房间名缩写映射
