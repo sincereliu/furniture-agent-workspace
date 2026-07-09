@@ -34,4 +34,5 @@ dist/
 # Generated artifacts
 generated/
 output/
+store/
 tmp/
