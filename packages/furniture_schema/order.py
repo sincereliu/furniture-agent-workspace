@@ -39,7 +39,7 @@ class Order:
 
 @dataclass
 class OrderIndex:
-    """所有订单的汇总索引（store/index.json 的内容）"""
+    """所有订单的汇总索引（generated/store/index.json 的内容）"""
     orders: List[Order] = field(default_factory=list)
 
 

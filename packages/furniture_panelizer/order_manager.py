@@ -2,7 +2,7 @@
 
 职责:
   ✅ 订单目录初始化
-  ✅ 流水号生成（扫描 store/orders/ 目录）
+  ✅ 流水号生成（扫描 generated/store/orders/ 目录）
   ✅ index.json 维护
   ❌ 不涉及 BOM/开料/打孔计算（那是 order_builder 的职责）
 """
@@ -19,7 +19,8 @@ from furniture_schema.order import Order, OrderIndex, OrderItem
 
 
 # ── 配置 ─────────────────────────────────────────────────────
-STORE_ROOT = Path(__file__).resolve().parents[2] / "store"
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+STORE_ROOT = Path(os.environ.get("FURNITURE_STORE_ROOT", _REPO_ROOT / "generated" / "store"))
 ORDERS_DIR = STORE_ROOT / "orders"
 INDEX_PATH = STORE_ROOT / "index.json"
 
