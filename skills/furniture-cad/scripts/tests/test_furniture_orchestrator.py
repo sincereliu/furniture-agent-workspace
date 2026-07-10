@@ -47,6 +47,17 @@ class FurnitureOrchestratorTests(unittest.TestCase):
                 {artifact.kind for artifact in result.revision.manifest.artifacts},
                 {"design_intent", "feature_tree", "bom", "cad_source"},
             )
+            cad_source = next(
+                artifact
+                for artifact in result.revision.manifest.artifacts
+                if artifact.kind == "cad_source"
+            )
+            self.assertTrue(
+                Path(cad_source.path).is_relative_to(
+                    WORKSPACE_ROOT / "temp" / "cad-source"
+                )
+            )
+            self.assertFalse(any(Path(temporary_directory).rglob("*.py")))
 
     def test_new_revision_marks_previous_artifacts_stale(self) -> None:
         project = self.orchestrator.create_project(

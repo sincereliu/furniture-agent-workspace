@@ -84,7 +84,9 @@ def main() -> int:
     print(f" BOM 报告 → {bom_path}")
 
     # ── 3. 生成 build123d 源码 → STEP/GLB ──
-    source_path = artifact_dir / f"{artifact_name}.py"
+    source_dir = WORKSPACE_ROOT / "temp" / "cad-source" / artifact_name
+    source_dir.mkdir(parents=True, exist_ok=True)
+    source_path = source_dir / f"{artifact_name}.py"
     write_build123d_source(feature_tree, source_path)
     print(f" build123d 源码 → {source_path}")
 

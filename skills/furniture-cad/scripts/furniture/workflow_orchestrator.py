@@ -196,7 +196,9 @@ class FurnitureOrchestrator:
         intent_path = artifact_dir / "design-intent.json"
         feature_tree_path = artifact_dir / "feature-tree.json"
         bom_path = artifact_dir / "bom.md"
-        source_path = artifact_dir / "model.py"
+        source_dir = self.workspace_root / "temp" / "cad-source" / revision.id
+        source_dir.mkdir(parents=True, exist_ok=True)
+        source_path = source_dir / "model.py"
         step_path = artifact_dir / "model.step"
 
         intent_path.write_text(

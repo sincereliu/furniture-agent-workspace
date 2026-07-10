@@ -73,14 +73,18 @@ The command writes to `generated/<artifact-name>/`:
 
 - `<artifact-name>.feature-tree.json`;
 - `<artifact-name>.bom.md`;
-- `<artifact-name>.py`;
 - `<artifact-name>.step`;
 - the hidden adjacent Viewer topology GLB produced by the CAD bridge.
 
+The derived build123d Python source is temporary and is written only under
+`temp/cad-source/<artifact-name>/`. It must never be persisted under
+`generated/`.
+
 The legacy CLI does not create a Project/Revision record. The application-layer
 `skills/furniture-cad/scripts/furniture/workflow_orchestrator.py` owns the traceable workflow and
-writes `design-intent.json`, `feature-tree.json`, `bom.md`, and derived CAD
-source into a revision directory before optionally invoking the CAD bridge.
+writes `design-intent.json`, `feature-tree.json`, and `bom.md` into a revision
+directory. It writes derived CAD source under `temp/cad-source/<revision-id>/`
+before optionally invoking the CAD bridge.
 `skills/furniture-cad/scripts/furniture/workflow_store.py` persists the Project/Revision state as
 `project.json`.
 

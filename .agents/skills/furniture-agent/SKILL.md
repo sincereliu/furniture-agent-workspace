@@ -13,8 +13,8 @@ paths from the repository root and keep this entry focused on routing.
 1. Read `skills/furniture-cad/SKILL.md` for every furniture request and follow
    its stage-specific references.
 2. For discussion, Design Intent, furniture structure, panelization, BOM, or
-   manufacturing reasoning, stay in the furniture skill and live workspace
-   packages unless CAD work was requested.
+   manufacturing reasoning, stay in the furniture skill and its runtime under
+   `skills/furniture-cad/scripts/` unless CAD work was requested.
 3. Load the smallest required skill from canonical
    `external/text-to-cad/skills/`:
    - `cad/SKILL.md` for CAD generation, modification, STEP inspection,
@@ -31,8 +31,16 @@ paths from the repository root and keep this entry focused on routing.
 ## Boundaries
 
 - Keep approved furniture intent as the source of truth.
-- Let workspace packages own furniture planning and the external engine own
-  generic CAD generation, inspection, snapshots, and viewing.
+- Let `skills/furniture-cad/scripts/` own furniture planning and let the
+  external engine own generic CAD generation, inspection, snapshots, and
+  viewing.
+- Reusable workspace scripts, runtime modules, and tests must stay under
+  `skills/furniture-cad/scripts/`. One-off scripts must stay under `temp/`.
+- Never create root `scripts/`, `packages/`, `tests/`, `scratch/`, or `tmp/`
+  code trees. Never write generated Python or other source code under
+  `generated/`.
+- Run `skills/furniture-cad/scripts/validate_workspace_layout.py` after any
+  workspace code-layout change and fix every reported violation.
 - Do not edit `external/text-to-cad` to implement furniture-domain behavior.
 - Do not hand-edit derived STEP, GLB, BOM, cut-list, or generated Python
   artifacts when an upstream intent or source exists.

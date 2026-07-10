@@ -15,9 +15,31 @@ Conceptual workflow:
 `Design Intent -> Layout Planning -> Panel Planning -> Manufacturing Policy -> Feature Tree -> CAD -> STEP`
 
 These are documentation and reasoning layers. In the current runtime, planning
-is still implemented by the existing planner and related workspace packages;
+is still implemented by the existing planner under this skill's `scripts/`;
 this skill does not define a new planner interface, executable JSON shape, or
 runtime step.
+
+## Mandatory code placement
+
+Keep the workspace to exactly two local script surfaces:
+
+1. Put reusable furniture runtime modules, commands, validation helpers, and
+   their tests under `skills/furniture-cad/scripts/`.
+2. Put disposable inspection, migration, debugging, and CAD experiment scripts
+   under the ignored `temp/` directory and remove them when the task ends.
+
+Do not create root-level `scripts/`, `packages/`, `tests/`, `scratch/`, or
+`tmp/` code trees. Do not put `.py`, `.pyc`, PowerShell, shell, JavaScript, or
+other generated source files under `generated/`; generated CAD source belongs
+under `temp/cad-source/`. Do not create a third script location for
+convenience. Before completing any code-layout or CAD-generation change, run:
+
+```powershell
+.\.venv\Scripts\python.exe skills\furniture-cad\scripts\validate_workspace_layout.py
+```
+
+Treat any reported violation as a failed validation and move or delete the
+offending file before reporting completion.
 
 ## Route by task
 
