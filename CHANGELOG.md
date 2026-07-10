@@ -7,3 +7,7 @@ Schema：保存稳定的数据契约
 Orchestrator：控制执行顺序和状态
 Domain packages：负责尺寸、板件、BOM、五金
 CAD Bridge：负责调用外部 CAD
+
+两个脚本文件夹的区别
+generated/	STEP、GLB、BOM、Feature Tree、订单与生产数据	默认保留
+temp/	临时 CAD Python、调试脚本、迁移脚本、中间文件	任务结束就删除
