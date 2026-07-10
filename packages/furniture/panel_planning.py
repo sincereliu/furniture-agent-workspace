@@ -11,8 +11,8 @@ from __future__ import annotations
 
 from typing import Dict, List
 
-from furniture_panelizer.edge_banding import get_edge_banding
-from furniture_schema.panel import PanelPlacement, PanelRecord
+from furniture.manufacturing_edge_banding import get_edge_banding
+from furniture.panel_models import PanelPlacement, PanelRecord
 
 # 默认材料配置（与外部 generator.py 的 DEFAULT_MATERIALS 一致）
 DEFAULT_MATERIALS: Dict[str, Dict[str, str | float]] = {

@@ -8,10 +8,10 @@ import json
 from typing import Any
 from uuid import uuid4
 
-from furniture_schema.artifacts import ArtifactManifest
-from furniture_schema.design_intent import DesignIntent
-from furniture_schema.validation import ValidationReport
-from furniture_schema.workflow import WorkflowState, utc_now
+from furniture.workflow_artifacts import ArtifactManifest
+from furniture.design_intent import DesignIntent
+from furniture.validation import ValidationReport
+from furniture.workflow_state import WorkflowState, utc_now
 
 
 def _id(prefix: str) -> str:

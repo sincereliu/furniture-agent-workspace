@@ -18,12 +18,12 @@ SAFE_NAME = re.compile(r"^[A-Za-z0-9_-]+$")
 sys.path.insert(0, str(WORKSPACE_ROOT))
 sys.path.insert(0, str(WORKSPACE_ROOT / "packages"))
 
-from furniture_pipeline.cabinet import plan_cabinet
-from furniture_schema.spec import FurnitureSpec
-from furniture_cad_emitter.cabinet_emitter import panels_to_feature_tree
-from furniture_cad_emitter.emitter import write_build123d_source
-from furniture_panelizer.bom import format_bom_markdown
-from cad_bridge.adapter import CadBridge
+from furniture.layout_pipeline import plan_cabinet
+from furniture.design_spec import FurnitureSpec
+from furniture.feature_tree_builder import panels_to_feature_tree
+from furniture.feature_tree_emitter import write_build123d_source
+from furniture.manufacturing_bom import format_bom_markdown
+from furniture.cad_bridge import CadBridge
 
 
 def main() -> int:

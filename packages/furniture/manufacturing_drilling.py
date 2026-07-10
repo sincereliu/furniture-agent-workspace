@@ -21,7 +21,7 @@ _RULES: Dict[str, Any] | None = None
 def _load_rules() -> Dict[str, Any]:
     global _RULES
     if _RULES is None:
-        rules_path = Path(__file__).resolve().parent / "hardware" / "rules.yaml"
+        rules_path = Path(__file__).resolve().parent / "hardware_rules.yaml"
         with open(rules_path, "r", encoding="utf-8") as f:
             _RULES = yaml.safe_load(f) or {}
     return _RULES
@@ -92,7 +92,7 @@ def calc_system_32_holes(
     board_length: float,
     board_type: str | None = None,
 ) -> List[float]:
-    """32mm 系统排钻孔位计算，使用 rules.yaml 的 system_32_drilling 规则。
+    """32mm 系统排钻孔位计算，使用 hardware_rules.yaml 的 system_32_drilling 规则。
 
     Args:
         board_length: 板的打孔方向长度（侧板=高度，顶底板/层板=宽度）

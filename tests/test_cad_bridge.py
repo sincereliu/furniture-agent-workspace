@@ -8,11 +8,11 @@ from pathlib import Path
 
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[1]
-ADAPTER_PATH = WORKSPACE_ROOT / "packages" / "cad_bridge" / "adapter.py"
+ADAPTER_PATH = WORKSPACE_ROOT / "packages" / "furniture" / "cad_bridge.py"
 
 
 def load_adapter_module():
-    spec = importlib.util.spec_from_file_location("cad_bridge_adapter", ADAPTER_PATH)
+    spec = importlib.util.spec_from_file_location("furniture_cad_bridge", ADAPTER_PATH)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Unable to load CAD bridge module from {ADAPTER_PATH}")
     module = importlib.util.module_from_spec(spec)

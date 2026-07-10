@@ -8,10 +8,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List
 
-from furniture_schema.hardware import HardwareRecord
-from furniture_schema.panel import PanelRecord
-from furniture_panelizer.hardware_matcher import match_hinges, match_shelf_connectors, match_three_in_one, match_drawer_slides
-from furniture_panelizer.drilling_engine import calc_system_32_holes
+from furniture.manufacturing_models import HardwareRecord
+from furniture.panel_models import PanelRecord
+from furniture.manufacturing_hardware import match_hinges, match_shelf_connectors, match_three_in_one, match_drawer_slides
+from furniture.manufacturing_drilling import calc_system_32_holes
 
 
 @dataclass
@@ -26,7 +26,6 @@ class BOMReport:
     panels: list  # List[PanelRecord]
     hardware: list  # List[HardwareRecord]
     total_area_m2: float = 0.0
-    cut_plans: list | None = None  # List[CuttingPlan] from cut_optimizer
 
     @property
     def panel_count(self) -> int:

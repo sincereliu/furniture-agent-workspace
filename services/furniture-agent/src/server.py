@@ -21,8 +21,8 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from furniture_pipeline.cabinet import plan_cabinet
-from furniture_schema.spec import FurnitureSpec
+from furniture.layout_pipeline import plan_cabinet
+from furniture.design_spec import FurnitureSpec
 
 app = FastAPI(
     title="Furniture Agent — 板式家具拆单服务",

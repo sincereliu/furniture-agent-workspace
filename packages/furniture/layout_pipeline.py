@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from furniture_panelizer.bom import BOMReport, generate_bom_report
-from furniture_panelizer.panelizer import panelize
-from furniture_planner.cabinet_planner import CabinetPlanner
-from furniture_planner.templates.base import build_from_blueprint
-from furniture_schema.panel import PanelPlacement, PanelRecord
-from furniture_schema.spec import FurnitureSpec
+from furniture.manufacturing_bom import BOMReport, generate_bom_report
+from furniture.panel_planning import panelize
+from furniture.layout_planning import CabinetPlanner
+from furniture.layout_template import build_from_blueprint
+from furniture.panel_models import PanelPlacement, PanelRecord
+from furniture.design_spec import FurnitureSpec
 
 SUPPORTED_TYPES = {"floor_cabinet", "wall_cabinet"}
 

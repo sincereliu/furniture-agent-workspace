@@ -24,7 +24,7 @@ class FurniturePipelineTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.planner = load_module(
             "test_furniture_planner",
-            WORKSPACE_ROOT / "packages" / "furniture_planner" / "planner.py",
+            WORKSPACE_ROOT / "packages" / "furniture" / "planner.py",
         )
 
     def test_rejects_unsupported_furniture_type(self) -> None:

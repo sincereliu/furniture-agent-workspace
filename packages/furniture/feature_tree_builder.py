@@ -12,7 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List
 
-from furniture_schema.panel import PanelRecord
+from furniture.panel_models import PanelRecord
 
 
 def panels_to_feature_tree(
@@ -107,6 +107,6 @@ def emit_panels_to_source(
     """
     feature_tree = panels_to_feature_tree(panels, furniture_type, parameters)
 
-    from furniture_cad_emitter.emitter import write_build123d_source
+    from furniture.feature_tree_emitter import write_build123d_source
 
     return write_build123d_source(feature_tree, source_path)

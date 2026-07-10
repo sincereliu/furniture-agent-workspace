@@ -24,7 +24,7 @@ runtime step.
 1. Read the [furniture catalog](references/intake/catalog.yaml), match the user
    request to one family. Use the catalog fallback when no family matches.
    Default dimensions and parameters live in
-   `packages/furniture_schema/spec.py` (dataclass defaults + `CABINET_PRESETS`).
+   `packages/furniture/design_spec.py` (dataclass defaults + `CABINET_PRESETS`).
 2. For user requirements, dimensions, style, constraints, or early design
    discussion, read [references/design-intent.md](references/design-intent.md).
    Return a confirmable Design Intent and stop unless the user requested later

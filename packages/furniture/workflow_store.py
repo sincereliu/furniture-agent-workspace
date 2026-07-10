@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from furniture_schema.project import Project
+from furniture.workflow_project import Project
 
 
 class JsonProjectStore:

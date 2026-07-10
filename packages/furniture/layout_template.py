@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from furniture_planner.cabinet_planner import CabinetPlanner
+    from furniture.layout_planning import CabinetPlanner
 
 
 def build_from_blueprint(planner: "CabinetPlanner") -> None:

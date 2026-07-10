@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 
-from furniture_schema.panel import PanelRecord
+from furniture.panel_models import PanelRecord
 
 
 # ── 加载规格库 ──────────────────────────────────────────────
@@ -23,7 +23,7 @@ _CATALOG: Dict[str, Any] | None = None
 def _load_catalog() -> Dict[str, Any]:
     global _CATALOG
     if _CATALOG is None:
-        catalog_path = Path(__file__).resolve().parent / "hardware" / "catalog.yaml"
+        catalog_path = Path(__file__).resolve().parent / "hardware_catalog.yaml"
         with open(catalog_path, "r", encoding="utf-8") as f:
             _CATALOG = yaml.safe_load(f) or {}
     return _CATALOG
@@ -45,7 +45,7 @@ def match_hinges(
         return []
 
     results: List[Dict[str, Any]] = []
-    from furniture_panelizer.drilling_engine import calc_hinge_positions
+    from furniture.manufacturing_drilling import calc_hinge_positions
 
     for panel in door_panels:
         door_h = panel.size_z
@@ -98,7 +98,7 @@ def match_three_in_one(
     if not entry:
         return []
 
-    from furniture_panelizer.drilling_engine import calc_system_32_holes
+    from furniture.manufacturing_drilling import calc_system_32_holes
 
     female_panels = [p for p in panels if p.panel_type in ("side", "divider")]
     male_panels = [p for p in panels if p.panel_type in ("top", "bottom", "fixed_shelf")]
@@ -173,7 +173,7 @@ def match_shelf_connectors(
     if not entry:
         return []
 
-    from furniture_panelizer.drilling_engine import calc_shelf_holes
+    from furniture.manufacturing_drilling import calc_shelf_holes
 
     brand = _pick_brand(entry, preferred_brand)
     results: List[Dict[str, Any]] = []

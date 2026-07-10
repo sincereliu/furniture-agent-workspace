@@ -15,7 +15,7 @@
 | templates/*.py | 未来的 planner 策略 | 移植行为，而不是移植源码布局 |
 | core/panel.py | 未来的家具 schema/领域包 | 从记录中移除 CAD 实体所有权 |
 | core/generator.py | planner 与 emitter 包 | 将规划与几何输出拆分 |
-| core/assembly_adapter.py | packages/cad-bridge | 使用现有桥接层 |
+| core/assembly_adapter.py | packages/furniture/cad_bridge.py | 使用统一包中的桥接模块 |
 | 订单脚本和输出布局 | service 或 CLI 层 | 保留在技能之外 |
 | 生成缓存和历史对比文件 | 无 | 不迁移 |
 
@@ -23,7 +23,7 @@
 wardrobe 专用嵌套执行 schema 不作为现行 skill 资源保留。结构语义已经提炼到
 `panel-cabinetry.md`，定位公式由 planner 与测试拥有，所有可执行品类共用
 `workspace-pipeline.md` 记录的扁平 JSON 契约。品类默认值统一在
-`packages/furniture_schema/spec.py` 中定义（`CABINET_PRESETS`
+`packages/furniture/design_spec.py` 中定义（`CABINET_PRESETS`
 字典 + dataclass fallback），不分散在多个 YAML 文件中。
 
 ## 为什么直接复制不安全
@@ -39,6 +39,7 @@ wardrobe 专用嵌套执行 schema 不作为现行 skill 资源保留。结构�
 
 1. `floor_cabinet` 和 `wall_cabinet` 已接入统一 planner 与 box Feature Tree；
    table 和 wardrobe 已移除，其功能由通用柜体参数化方案替代。
-2. 柜体 package 可以生成板件记录和估算 BOM，但主生成 CLI 尚不落盘 BOM/cut-list。
+2. 统一 `packages/furniture` 包可以生成板件记录和估算 BOM；主生成 CLI
+   会落盘 BOM，但不生成 cut-list。
 3. 两种柜体仍是固定模板；品类名可执行不代表任意结构变体都已实现。
 4. STEP 与 Viewer topology 仍须经过 CAD bridge 实跑并检查工件后才能宣称成功。

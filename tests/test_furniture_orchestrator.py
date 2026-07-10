@@ -9,11 +9,11 @@ from pathlib import Path
 WORKSPACE_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(WORKSPACE_ROOT / "packages"))
 
-from cad_bridge.adapter import CadBridge
-from furniture_agent.orchestrator import FurnitureOrchestrator
-from furniture_agent.store import JsonProjectStore
-from furniture_schema.design_intent import DesignIntent, OverallSize
-from furniture_schema.workflow import WorkflowStage
+from furniture.cad_bridge import CadBridge
+from furniture.workflow_orchestrator import FurnitureOrchestrator
+from furniture.workflow_store import JsonProjectStore
+from furniture.design_intent import DesignIntent, OverallSize
+from furniture.workflow_state import WorkflowStage
 
 
 def cabinet_intent(*, furniture_type: str = "floor_cabinet") -> DesignIntent:

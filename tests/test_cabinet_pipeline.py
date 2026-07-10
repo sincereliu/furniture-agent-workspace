@@ -8,8 +8,8 @@ from pathlib import Path
 WORKSPACE_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(WORKSPACE_ROOT / "packages"))
 
-from furniture_pipeline.cabinet import plan_cabinet
-from furniture_schema.spec import FurnitureSpec
+from furniture.layout_pipeline import plan_cabinet
+from furniture.design_spec import FurnitureSpec
 
 
 class CabinetPipelineTests(unittest.TestCase):

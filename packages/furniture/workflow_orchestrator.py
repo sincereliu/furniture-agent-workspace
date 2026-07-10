@@ -7,16 +7,16 @@ import json
 from pathlib import Path
 from typing import Any
 
-from cad_bridge.adapter import BridgeResult, CadBridge
-from furniture_cad_emitter.cabinet_emitter import panels_to_feature_tree
-from furniture_cad_emitter.emitter import write_build123d_source
-from furniture_panelizer.bom import format_bom_markdown
-from furniture_pipeline.cabinet import SUPPORTED_TYPES, CabinetPipelineResult, plan_cabinet
-from furniture_schema.design_intent import DesignIntent
-from furniture_schema.project import Project, Revision
-from furniture_schema.spec import FurnitureSpec
-from furniture_schema.validation import ValidationReport
-from furniture_schema.workflow import WorkflowStage
+from furniture.cad_bridge import BridgeResult, CadBridge
+from furniture.feature_tree_builder import panels_to_feature_tree
+from furniture.feature_tree_emitter import write_build123d_source
+from furniture.manufacturing_bom import format_bom_markdown
+from furniture.layout_pipeline import SUPPORTED_TYPES, CabinetPipelineResult, plan_cabinet
+from furniture.design_intent import DesignIntent
+from furniture.workflow_project import Project, Revision
+from furniture.design_spec import FurnitureSpec
+from furniture.validation import ValidationReport
+from furniture.workflow_state import WorkflowStage
 
 
 @dataclass(frozen=True)
@@ -170,7 +170,7 @@ class FurnitureOrchestrator:
     def _validate_feature_tree(self, feature_tree: dict[str, Any]) -> ValidationReport:
         report = ValidationReport(stage="feature_tree")
         try:
-            from furniture_cad_emitter.emitter import _validate_feature_tree
+            from furniture.feature_tree_emitter import _validate_feature_tree
 
             _validate_feature_tree(feature_tree)
         except ValueError as exc:

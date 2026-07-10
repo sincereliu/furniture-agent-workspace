@@ -12,7 +12,7 @@ gates.
 
 ## Current capability
 
-The live entry point `packages/furniture_planner/planner.py` accepts:
+The live entry point `packages/furniture/planner.py` accepts:
 
 - `floor_cabinet`: fixed carcass template with back, toe-kick, shelves, doors;
 - `wall_cabinet`: fixed carcass template with back, shelves, doors, no toe-kick.
@@ -47,7 +47,7 @@ For `wall_cabinet`, the default dimensions are narrower: `width` 800, `height`
 900, `depth` 350, `toe_kick_height` 0, `shelf_count` 1.
 
 Default dimensions and parameters live in
-`packages/furniture_schema/spec.py` (`CABINET_PRESETS` for per-type defaults,
+`packages/furniture/design_spec.py` (`CABINET_PRESETS` for per-type defaults,
 dataclass fields for global constants). Do not ask the user to fill them unless
 an override is requested or required by the design.
 
@@ -78,10 +78,10 @@ The command writes to `generated/<artifact-name>/`:
 - the hidden adjacent Viewer topology GLB produced by the CAD bridge.
 
 The legacy CLI does not create a Project/Revision record. The application-layer
-`packages/furniture_agent/orchestrator.py` owns the traceable workflow and
+`packages/furniture/workflow_orchestrator.py` owns the traceable workflow and
 writes `design-intent.json`, `feature-tree.json`, `bom.md`, and derived CAD
 source into a revision directory before optionally invoking the CAD bridge.
-`packages/furniture_agent/store.py` persists the Project/Revision state as
+`packages/furniture/workflow_store.py` persists the Project/Revision state as
 `project.json`.
 
 The runtime pipeline is:
@@ -99,7 +99,7 @@ generation.
 
 ## Runtime panel and BOM path
 
-`packages/furniture_pipeline/cabinet.py` exposes `plan_cabinet()` for the two
+`packages/furniture/layout_pipeline.py` exposes `plan_cabinet()` for the two
 cabinet types. It returns placements, panel records, and an estimated BOM.
 Treat those panel records as the current runtime expression of Panel Planning,
 not as a separate executable stage.

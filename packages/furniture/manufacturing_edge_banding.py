@@ -1,7 +1,4 @@
-"""封边规则引擎 — 根据板件类型和位置，判断每块板哪些边需要封边。
-
-规则来源: configs/edge_banding.yaml
-"""
+"""封边规则引擎 — 根据板件类型判断每块板哪些边需要封边。"""
 
 from __future__ import annotations
 

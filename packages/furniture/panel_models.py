@@ -1,4 +1,4 @@
-"""板件数据模型 — PanelPlacement, PanelRecord 和 PanelLabel
+"""板件数据模型 — PanelPlacement 和 PanelRecord
 
 纯 dataclass，不依赖任何 CAD 引擎（如 build123d）。
 """
@@ -34,26 +34,6 @@ class PanelPlacement:
     pos_z: float = 0.0
     depends_on: list[str] = field(default_factory=list)
     note: str = ""
-
-
-@dataclass
-class PanelLabel:
-    """单块板件的标签数据（原在 order.py，移至面板模块更合理）"""
-
-    label_id: str               # "260709-0001-KITCHEN-S01"
-    order_id: str
-    room: str
-    panel_name: str
-    panel_type: str
-    length_mm: float
-    width_mm: float
-    thickness_mm: float
-    material: str
-    color: str = ""
-    edge_banding: str = ""
-    cut_x_mm: float = 0.0      # 在板材上的排样位置
-    cut_y_mm: float = 0.0
-    board_index: int = 1       # 所属板材编号
 
 
 @dataclass

@@ -9,9 +9,9 @@ WORKSPACE_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(WORKSPACE_ROOT))
 sys.path.insert(0, str(WORKSPACE_ROOT / "packages"))
 
-from furniture_cad_emitter.cabinet_emitter import panels_to_feature_tree
-from furniture_pipeline.cabinet import plan_cabinet
-from furniture_schema.spec import FurnitureSpec
+from furniture.feature_tree_builder import panels_to_feature_tree
+from furniture.layout_pipeline import plan_cabinet
+from furniture.design_spec import FurnitureSpec
 
 
 def main():
@@ -47,7 +47,7 @@ def main():
     print(f"Feature Tree 构造完成")
 
     # 4. 生成 build123d 源码文件
-    from furniture_cad_emitter.emitter import write_build123d_source
+    from furniture.feature_tree_emitter import write_build123d_source
 
     output_dir = WORKSPACE_ROOT / "generated"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -56,7 +56,7 @@ def main():
     print(f"build123d 源码: {source_path}")
 
     # 5. 通过 Bridge 生成 STEP + GLB
-    from cad_bridge.adapter import CadBridge
+    from furniture.cad_bridge import CadBridge
 
     bridge = CadBridge()
     result = bridge.generate_from_source(source_path)
