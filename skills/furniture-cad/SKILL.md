@@ -24,7 +24,7 @@ runtime step.
 1. Read the [furniture catalog](references/intake/catalog.yaml), match the user
    request to one family. Use the catalog fallback when no family matches.
    Default dimensions and parameters live in
-   `packages/furniture/design_spec.py` (dataclass defaults + `CABINET_PRESETS`).
+   `scripts/furniture/design_spec.py` (dataclass defaults + `CABINET_PRESETS`).
 2. For user requirements, dimensions, style, constraints, or early design
    discussion, read [references/design-intent.md](references/design-intent.md).
    Return a confirmable Design Intent and stop unless the user requested later
@@ -62,7 +62,7 @@ runtime step.
 4. Resolve Manufacturing Policy: materials, tolerances, joinery, and BOM
    assumptions.
 5. Produce Feature Tree modeling semantics before CAD geometry details.
-6. Run the workspace planner, emitter, and CAD bridge in order when supported.
+6. Run the skill-owned planner, emitter, and CAD bridge in order when supported.
 7. Validate the relevant layers and artifacts before reporting success.
 
 If the user explicitly requests an end-to-end run and supplies enough

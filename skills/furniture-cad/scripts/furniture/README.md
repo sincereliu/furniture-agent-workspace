@@ -1,8 +1,8 @@
-# Furniture runtime
+# Furniture skill runtime
 
-This is the single furniture-domain runtime package. Its files follow the
-`furniture-cad` stages instead of splitting one workflow across several
-top-level `furniture_*` packages:
+This is the `furniture-cad` skill's private runtime package. Keeping it beside
+the skill avoids splitting one workflow across root-level `packages/`,
+`scripts/`, and `tests/` directories:
 
 1. `design_*` — Design Intent and executable dimensions.
 2. `layout_*` — layout planning and cabinet placement.

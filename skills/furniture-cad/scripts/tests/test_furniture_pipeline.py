@@ -6,7 +6,8 @@ import unittest
 from pathlib import Path
 
 
-WORKSPACE_ROOT = Path(__file__).resolve().parents[1]
+SCRIPT_ROOT = Path(__file__).resolve().parents[1]
+WORKSPACE_ROOT = Path(__file__).resolve().parents[4]
 
 
 def load_module(module_name: str, path: Path):
@@ -24,7 +25,7 @@ class FurniturePipelineTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.planner = load_module(
             "test_furniture_planner",
-            WORKSPACE_ROOT / "packages" / "furniture" / "planner.py",
+            SCRIPT_ROOT / "furniture" / "planner.py",
         )
 
     def test_rejects_unsupported_furniture_type(self) -> None:

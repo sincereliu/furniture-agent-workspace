@@ -18,13 +18,13 @@ DesignIntent
   -> STEP / Viewer topology
 ```
 
-`packages/furniture/workflow_orchestrator.py` 是应用层的单一编排入口。它只
+`skills/furniture-cad/scripts/furniture/workflow_orchestrator.py` 是应用层的单一编排入口。它只
 维护工作流、验证和产物血缘，不重新实现家具尺寸、板件、BOM 或 CAD
 算法。
 
 ## 边界
 
-家具领域运行时代码统一放在 `packages/furniture`，文件名按技能阶段组织：
+家具领域运行时代码统一放在 `skills/furniture-cad/scripts/furniture`，文件名按技能阶段组织：
 
 - `design_*`：Design Intent 和可执行尺寸规格；
 - `layout_*`：柜体布局、面约束和共享布局管线；
@@ -34,10 +34,10 @@ DesignIntent
 - `cad_bridge.py`：隔离外部 CAD CLI；
 - `workflow_*`：Project、Revision、验证、产物血缘和编排。
 
-- `packages/furniture`：拥有家具领域规划和工作流实现。
+- `skills/furniture-cad/scripts/furniture`：拥有家具领域规划和工作流实现。
 - `external/text-to-cad`：通用 CAD 生成、STEP 和 Viewer topology。
-- `skills/furniture-cad`：仅保存 LLM 路由、阶段说明和领域使用规则；不
-  拥有运行时 schema 或业务算法。
+- `skills/furniture-cad`：同时保存 LLM 路由、阶段说明，以及 skill 私有的
+  `scripts/` 运行代码；仓库根目录不再维护重复的 Python 包和入口。
 
 ## Revision 规则
 

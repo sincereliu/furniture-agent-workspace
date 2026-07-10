@@ -30,7 +30,7 @@ class CadBridge:
         step_launcher: Optional[str | Path] = None,
         timeout_seconds: int = 300,
     ) -> None:
-        default_workspace_root = Path(__file__).resolve().parents[2]
+        default_workspace_root = Path(__file__).resolve().parents[4]
         self.workspace_root = Path(workspace_root or default_workspace_root).resolve()
         self.external_repo_root = Path(
             external_repo_root

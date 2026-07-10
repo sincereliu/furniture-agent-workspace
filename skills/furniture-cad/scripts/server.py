@@ -1,6 +1,6 @@
 """Furniture Agent 服务 — FastAPI 入口
 
-启动: uvicorn services.furniture-agent.src.server:app --reload
+启动: ./.venv/Scripts/python.exe skills/furniture-cad/scripts/server.py
 打开: http://localhost:8000/docs 查看 Swagger API 文档
 """
 
@@ -9,19 +9,18 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-# 将 packages 目录加入 sys.path，确保能导入 workspace 内所有包
+# skill 自带运行包，服务入口与它位于同一个 scripts 目录。
+SCRIPT_ROOT = Path(__file__).resolve().parent
 WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
-PACKAGES_ROOT = WORKSPACE_ROOT / "packages"
 OUTPUT_ROOT = WORKSPACE_ROOT / "generated"
-sys.path.insert(0, str(WORKSPACE_ROOT))
-sys.path.insert(0, str(PACKAGES_ROOT))
+sys.path.insert(0, str(SCRIPT_ROOT))
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from furniture.layout_pipeline import plan_cabinet
+from furniture.layout_pipeline import plan_cabinet as run_cabinet_pipeline
 from furniture.design_spec import FurnitureSpec
 
 app = FastAPI(
@@ -112,7 +111,7 @@ async def plan_cabinet(req: CabinetRequest):
         raise HTTPException(status_code=422, detail=str(e))
 
     try:
-        report = plan_cabinet(spec).bom
+        report = run_cabinet_pipeline(spec).bom
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -150,7 +149,7 @@ async def plan_cabinet(req: CabinetRequest):
 # ── 启动入口 ──
 def main() -> None:
     import uvicorn
-    uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
 
 
 if __name__ == "__main__":

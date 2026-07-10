@@ -36,3 +36,5 @@ generated/
 output/
 store/
 tmp/
+temp/*
+!temp/README.md

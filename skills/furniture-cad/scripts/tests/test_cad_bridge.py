@@ -7,8 +7,9 @@ import unittest
 from pathlib import Path
 
 
-WORKSPACE_ROOT = Path(__file__).resolve().parents[1]
-ADAPTER_PATH = WORKSPACE_ROOT / "packages" / "furniture" / "cad_bridge.py"
+SCRIPT_ROOT = Path(__file__).resolve().parents[1]
+WORKSPACE_ROOT = Path(__file__).resolve().parents[4]
+ADAPTER_PATH = SCRIPT_ROOT / "furniture" / "cad_bridge.py"
 
 
 def load_adapter_module():

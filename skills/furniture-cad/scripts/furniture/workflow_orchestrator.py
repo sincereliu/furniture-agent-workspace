@@ -36,7 +36,7 @@ class FurnitureOrchestrator:
         cad_bridge: CadBridge | None = None,
     ) -> None:
         self.workspace_root = Path(
-            workspace_root or Path(__file__).resolve().parents[2]
+            workspace_root or Path(__file__).resolve().parents[4]
         ).resolve()
         self.cad_bridge = cad_bridge or CadBridge(workspace_root=self.workspace_root)
 
@@ -223,4 +223,3 @@ class FurnitureOrchestrator:
             if not path.is_file() or path.stat().st_size == 0:
                 report.add_error("MISSING_ARTIFACT", artifact.path)
         return report
-

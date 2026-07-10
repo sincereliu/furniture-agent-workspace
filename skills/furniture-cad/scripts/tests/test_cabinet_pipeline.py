@@ -5,8 +5,9 @@ import unittest
 from pathlib import Path
 
 
-WORKSPACE_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(WORKSPACE_ROOT / "packages"))
+SCRIPT_ROOT = Path(__file__).resolve().parents[1]
+WORKSPACE_ROOT = Path(__file__).resolve().parents[4]
+sys.path.insert(0, str(SCRIPT_ROOT))
 
 from furniture.layout_pipeline import plan_cabinet
 from furniture.design_spec import FurnitureSpec
