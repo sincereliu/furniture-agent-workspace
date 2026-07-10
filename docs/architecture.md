@@ -1,25 +1,53 @@
-# 架构
+# 家具 Agent 架构
 
-该仓库被组织为一个用于家具 CAD 生成的分层系统。
+当前目标不是同时支持所有家具，而是先让 `floor_cabinet` 和
+`wall_cabinet` 成为可追溯、可恢复、可验证的完整纵向切片。
 
-## 各层职责
+## 运行时主链
 
-- Workspace：协调所有模块的顶层工程项目。
-- external/text-to-cad：用于几何生成的外部 CAD 引擎。
-- packages/cad_bridge：隔离外部依赖并暴露稳定接口的适配层。
-- packages/furniture_schema：家具参数和输入契约的规范 schema。
-- packages/furniture_planner：将结构化规格转换为结构规划。
-- packages/furniture_pipeline：复用规划、拆单和 BOM 生成用例。
-- validation：检查约束、验证计划并应用修复策略。
-- services/furniture-agent：HTTP 输入输出和服务启动入口。
-- apps/web 和 apps/cli：面向用户的交互界面。
-- skills/furniture-cad：用于家具生成的可复用 LLM 规则和领域知识。
+```text
+DesignIntent
+  -> Project / Revision
+  -> FurnitureOrchestrator
+  -> cabinet planner
+  -> panelizer / BOM
+  -> Feature Tree v1
+  -> furniture CAD emitter
+  -> cad_bridge
+  -> external/text-to-cad
+  -> STEP / Viewer topology
+```
 
-## 推荐执行流程
+`packages/furniture_agent/orchestrator.py` 是应用层的单一编排入口。它只
+维护工作流、验证和产物血缘，不重新实现家具尺寸、板件、BOM 或 CAD
+算法。
 
-1. 用户通过 Web 应用或 CLI 发出请求。
-2. Agent 解析请求并生成结构化规格。
-3. 规划器根据规格创建特征树。
-4. 验证层检查特征树并修复无效或不完整的部分。
-5. 执行层调用 CAD 桥接层，而后者再与外部 CAD 引擎通信。
-6. 最终的 CAD 工件返回给用户。
+## 边界
+
+- `packages/furniture_schema`：DesignIntent、Project、Revision、
+  WorkflowState、ValidationReport 和 ArtifactManifest 等稳定契约。
+- `packages/furniture_agent`：单一 Orchestrator 和 JSON ProjectStore。
+- `packages/furniture_planner`：柜体尺寸与板件位置推导。
+- `packages/furniture_panelizer`：生产元数据、五金估算和 BOM。
+- `packages/furniture_cad_emitter`：把板件转换为当前 box-based Feature
+  Tree v1 和 CAD 源码。
+- `packages/cad_bridge`：隔离外部 CAD CLI。
+- `external/text-to-cad`：通用 CAD 生成、STEP 和 Viewer topology。
+- `skills/furniture-cad`：仅保存 LLM 路由、阶段说明和领域使用规则；不
+  拥有运行时 schema 或业务算法。
+
+## Revision 规则
+
+- DesignIntent 是每个 Revision 的上游真相。
+- 用户修改意图时创建新 Revision，不覆盖旧 Revision。
+- 新 Revision 会把上一 Revision 的已登记产物标记为 `stale`。
+- Manifest 记录产物路径、内容哈希、大小和来源 Revision。
+- ProjectStore 使用原子替换保存 `project.json`，进程重启后可以恢复。
+
+## 当前诚实边界
+
+- 只有地柜和吊柜进入运行时执行；其他品类停在意图或建模计划层。
+- 当前 Feature Tree 仍只执行 `box` 特征和 `compound` 根节点。
+- Layout Plan 和 Manufacturing Policy 仍是概念层，尚未伪装成独立的
+  运行时阶段。
+- BOM 是预估产物，未经制造策略确认时不称为制造就绪。

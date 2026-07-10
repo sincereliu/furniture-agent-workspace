@@ -71,11 +71,18 @@ underscores.
 
 The command writes to `generated/<artifact-name>/`:
 
-- `<artifact-name>.intent.json`;
 - `<artifact-name>.feature-tree.json`;
+- `<artifact-name>.bom.md`;
 - `<artifact-name>.py`;
 - `<artifact-name>.step`;
 - the hidden adjacent Viewer topology GLB produced by the CAD bridge.
+
+The legacy CLI does not create a Project/Revision record. The application-layer
+`packages/furniture_agent/orchestrator.py` owns the traceable workflow and
+writes `design-intent.json`, `feature-tree.json`, `bom.md`, and derived CAD
+source into a revision directory before optionally invoking the CAD bridge.
+`packages/furniture_agent/store.py` persists the Project/Revision state as
+`project.json`.
 
 The runtime pipeline is:
 
@@ -96,5 +103,6 @@ generation.
 cabinet types. It returns placements, panel records, and an estimated BOM.
 Treat those panel records as the current runtime expression of Panel Planning,
 not as a separate executable stage.
-The main generation CLI does not currently persist BOM or cut-list artifacts.
-Do not report such files unless a command actually created them.
+The main generation CLI persists a BOM Markdown report, but it does not persist
+a cut-list artifact. Do not report a cut list unless a command actually created
+one.
