@@ -1,0 +1,50 @@
+# 通用柜体蓝图 — 一份文件覆盖落地柜/吊柜所有变体
+#
+# 原则:
+#   - 只描述"有哪些部件"和"部件之间的结构关系"
+#   - 所有数值参数从 FurnitureSpec 读取，不写死在 YAML 里
+#   - furniture_type 区分: floor_cabinet / wall_cabinet
+#
+# 需配合 FurnitureSpec 的字段:
+#   toe_kick_height     — 0=无踢脚线, >0=踢脚线高度
+#   shelf_count         — 层板数量 (0=无层板)
+#   shelf_fixed         — true=固定层板, false=活动层板
+#   n_doors             — 门板数量 (0=无门板)
+#   has_back_panel      — true=有背板, false=无背板
+#   divider_count       — 中立板数量 (0=无立板, 将来扩展)
+#   side_placement      — floor=侧板落地, on_bottom=侧板坐底板 (将来扩展)
+
+name: 柜体蓝图
+description: >
+  通用板式柜体结构模板。
+  通过 FurnitureSpec 的字段控制: 踢脚线有/无, 层板数, 门板数, 背板有/无。
+
+toe_kick:
+  source: spec.toe_kick_height
+
+structure:
+  - side_panels        # 左右侧板 (必有)
+  - top_panel          # 顶板 (必有, 嵌侧板间)
+  - bottom_panel       # 底板 (必有)
+  - back_panel         # 背板 (条件: has_back_panel)
+  - toe_kick_frame     # 踢脚线框架 (条件: toe_kick_height > 0)
+
+shelves:
+  source: spec.shelf_count
+  fixed: true           # 将来: spec.shelf_fixed
+  placement: equal      # 等分内高
+
+doors:
+  source: spec.n_doors
+  type: hinged          # 平开门
+
+# 将来扩展 (不做为本次范围):
+# dividers:
+#   source: spec.divider_count
+#   placement: equal
+#
+# cut_rules:
+#   horizontal_cut_vertical: true
+#
+# validators:
+#   shelf_count: { min: 0, max: 8 }

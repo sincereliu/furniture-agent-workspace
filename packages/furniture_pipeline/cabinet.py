@@ -7,17 +7,11 @@ from dataclasses import dataclass
 from furniture_panelizer.bom import BOMReport, generate_bom_report
 from furniture_panelizer.panelizer import panelize
 from furniture_planner.cabinet_planner import CabinetPlanner
-from furniture_planner.templates.base import CabinetTemplate
-from furniture_planner.templates.floor_cabinet import FloorCabinet
-from furniture_planner.templates.wall_cabinet import WallCabinet
+from furniture_planner.templates.base import build_from_blueprint
 from furniture_schema.panel import PanelPlacement, PanelRecord
 from furniture_schema.spec import FurnitureSpec
 
-
-TEMPLATE_TYPES: dict[str, type[CabinetTemplate]] = {
-    "floor_cabinet": FloorCabinet,
-    "wall_cabinet": WallCabinet,
-}
+SUPPORTED_TYPES = {"floor_cabinet", "wall_cabinet"}
 
 FURNITURE_NAMES = {
     "floor_cabinet": "落地柜",
@@ -37,25 +31,20 @@ class CabinetPipelineResult:
 
 def plan_cabinet(spec: FurnitureSpec) -> CabinetPipelineResult:
     """Plan a supported cabinet type and produce its panel and BOM records."""
-    template_type = TEMPLATE_TYPES.get(spec.furniture_type)
-    if template_type is None:
-        supported = ", ".join(TEMPLATE_TYPES)
+    if spec.furniture_type not in SUPPORTED_TYPES:
+        supported = ", ".join(sorted(SUPPORTED_TYPES))
         raise ValueError(
             f"Unsupported cabinet type: {spec.furniture_type!r}; supported: {supported}"
         )
 
     planner = CabinetPlanner(spec)
-    template = template_type(
-        shelf_count=spec.shelf_count,
-        n_doors=spec.n_doors,
-    )
-    template.build(planner)
+    build_from_blueprint(planner)
 
     placements = list(planner._placements)
     panels = panelize(placements)
     dimensions = f"{spec.width:.0f}×{spec.height:.0f}×{spec.depth:.0f}mm"
     bom = generate_bom_report(
-        FURNITURE_NAMES[spec.furniture_type],
+        FURNITURE_NAMES.get(spec.furniture_type, spec.furniture_type),
         dimensions,
         panels,
     )

@@ -1,13 +1,7 @@
-"""品类模板基类 — 所有板式家具模板的父类
+"""蓝图构造器 — 从 FurnitureSpec 参数调用 CabinetPlanner 构建柜体。
 
-子类只需重写 build() 方法，声明结构即可。
-规划器通过 planner 参数注入：
-
-    class MyCabinet(CabinetTemplate):
-        def build(self, planner):
-            planner.place_side_panels()
-            planner.place_top_panel()
-            ...
+不再需要子类。一个函数覆盖落地柜/吊柜所有变体。
+所有参数从 planner.spec (FurnitureSpec) 读取。
 """
 
 from __future__ import annotations
@@ -18,26 +12,44 @@ if TYPE_CHECKING:
     from furniture_planner.cabinet_planner import CabinetPlanner
 
 
-class CabinetTemplate:
-    """品类模板基类
+def build_from_blueprint(planner: "CabinetPlanner") -> None:
+    """根据 FurnitureSpec 参数调用 planner 的 place_*() 方法构建柜体。
 
-    属性:
-        name: 品类名称（如"落地柜"、"吊柜"）
-        description: 简要描述
+    覆盖的变体:
+        - 落地柜: toe_kick_height > 0 → 有踢脚线框架
+        - 吊柜:   toe_kick_height = 0 → 无踢脚线框架
+        - 层板数: shelf_count 控制 (0 = 无层板)
+        - 门板数: n_doors 控制 (0 = 无门板)
+
+    Args:
+        planner: 已初始化 FurnitureSpec 的 CabinetPlanner 实例
     """
+    spec = planner.spec
 
-    name: str = "通用柜体"
-    description: str = ""
+    # ── 外框 (必有) ──
+    planner.place_side_panels()
+    planner.place_top_panel()
+    planner.place_bottom_panel()
+    planner.place_back_panel()
 
-    def build(self, planner: "CabinetPlanner") -> None:
-        """核心方法：描述柜体结构。
+    # ── 踢脚线 (条件) ──
+    if spec.toe_kick_height > 0:
+        planner.place_toe_kick_frame()
 
-        子类必须重写此方法，通过 planner 的各项 place_* 来声明：
-        - 有哪些板件
-        - 板件放在哪里
-        - 哪些固定、哪些活动
+    # ── 层板 (条件) ──
+    if spec.shelf_count > 0:
+        total_layers = spec.shelf_count + 1
+        layer_h = planner.internal_H / total_layers
+        for i in range(1, spec.shelf_count + 1):
+            z = planner.z_bottom_internal + i * layer_h - planner.T / 2
+            planner.place_shelf(z, fixed=True)
 
-        Args:
-            planner: CabinetPlanner 实例，已初始化尺寸参数
-        """
-        raise NotImplementedError("子类必须实现 build(planner) 方法")
+    # ── 门板 (条件) ──
+    if spec.n_doors == 1:
+        door_w = planner.params.W - planner.params.door_margin * 2
+        planner.place_door("single", door_w=door_w)
+    elif spec.n_doors == 2:
+        planner.place_door("left")
+        planner.place_door("right")
+    elif spec.n_doors > 2:
+        planner.place_doors(spec.n_doors)
