@@ -31,6 +31,20 @@ class CabinetPipelineResult:
 
 def plan_cabinet(spec: FurnitureSpec) -> CabinetPipelineResult:
     """Plan a supported cabinet type and produce its panel and BOM records."""
+    placements = plan_layout(spec)
+    panels = plan_panels(placements)
+    bom = plan_manufacturing(spec, panels)
+
+    return CabinetPipelineResult(
+        spec=spec,
+        placements=placements,
+        panels=panels,
+        bom=bom,
+    )
+
+
+def plan_layout(spec: FurnitureSpec) -> list[PanelPlacement]:
+    """Stage 2: resolve cabinet spatial organization and placements."""
     if spec.furniture_type not in SUPPORTED_TYPES:
         supported = ", ".join(sorted(SUPPORTED_TYPES))
         raise ValueError(
@@ -39,19 +53,22 @@ def plan_cabinet(spec: FurnitureSpec) -> CabinetPipelineResult:
 
     planner = CabinetPlanner(spec)
     build_from_blueprint(planner)
+    return list(planner._placements)
 
-    placements = list(planner._placements)
-    panels = panelize(placements)
+
+def plan_panels(placements: list[PanelPlacement]) -> list[PanelRecord]:
+    """Stage 3: convert layout placements into manufacturing panel records."""
+    return panelize(placements)
+
+
+def plan_manufacturing(
+    spec: FurnitureSpec,
+    panels: list[PanelRecord],
+) -> BOMReport:
+    """Stage 4: apply manufacturing, hardware, and BOM policy."""
     dimensions = f"{spec.width:.0f}×{spec.height:.0f}×{spec.depth:.0f}mm"
-    bom = generate_bom_report(
+    return generate_bom_report(
         FURNITURE_NAMES.get(spec.furniture_type, spec.furniture_type),
         dimensions,
         panels,
-    )
-
-    return CabinetPipelineResult(
-        spec=spec,
-        placements=placements,
-        panels=panels,
-        bom=bom,
     )

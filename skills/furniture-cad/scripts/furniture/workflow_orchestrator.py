@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from copy import deepcopy
+from dataclasses import asdict, dataclass
 import json
 from pathlib import Path
 import re
@@ -11,16 +12,36 @@ from typing import Any
 from furniture.cad_bridge import BridgeResult, CadBridge
 from furniture.feature_tree_builder import panels_to_feature_tree
 from furniture.feature_tree_emitter import write_build123d_source
-from furniture.manufacturing_bom import format_bom_markdown
-from furniture.layout_pipeline import SUPPORTED_TYPES, CabinetPipelineResult, plan_cabinet
+from furniture.manufacturing_bom import BOMReport, format_bom_markdown
+from furniture.manufacturing_models import HardwareRecord
+from furniture.layout_pipeline import (
+    SUPPORTED_TYPES,
+    CabinetPipelineResult,
+    plan_layout,
+    plan_manufacturing,
+    plan_panels,
+)
+from furniture.panel_models import PanelPlacement, PanelRecord
 from furniture.design_intent import DesignIntent
 from furniture.workflow_project import Project, Revision
 from furniture.design_spec import FurnitureSpec
 from furniture.validation import ValidationReport
-from furniture.workflow_state import WorkflowStage
+from furniture.workflow_state import (
+    STAGE_SEQUENCE,
+    WorkflowStage,
+    WorkflowState,
+    parse_stage,
+    stage_index,
+)
 
 
 SAFE_ARTIFACT_NAME = re.compile(r"^[A-Za-z0-9_-]+$")
+EDITABLE_STAGE_OUTPUTS = {
+    WorkflowStage.LAYOUT_PLANNED,
+    WorkflowStage.PANELS_PLANNED,
+    WorkflowStage.MANUFACTURING_PLANNED,
+    WorkflowStage.FEATURE_TREE_PLANNED,
+}
 
 
 @dataclass(frozen=True)
@@ -50,7 +71,56 @@ class FurnitureOrchestrator:
         return project
 
     def revise(self, project: Project, intent: DesignIntent) -> Revision:
+        """Start a new revision at stage 1; all parent artifacts become stale."""
         return project.add_revision(intent)
+
+    def revise_stage_output(
+        self,
+        project: Project,
+        stage: str | WorkflowStage,
+        output: dict[str, Any],
+    ) -> Revision:
+        """Create a revision from an edited stage-2..5 output.
+
+        Only confirmed upstream outputs are copied. The edited stage must be
+        confirmed again, and every downstream stage is deliberately absent so
+        it will be regenerated from the changed source of truth.
+        """
+        changed_stage = parse_stage(stage)
+        if changed_stage not in EDITABLE_STAGE_OUTPUTS:
+            editable = ", ".join(item.value for item in EDITABLE_STAGE_OUTPUTS)
+            raise ValueError(f"stage output is not directly editable; use one of: {editable}")
+
+        parent = project.latest
+        if changed_stage.value not in parent.stage_outputs:
+            raise ValueError(f"stage has no output to revise: {changed_stage.value}")
+
+        revision = project.add_revision(
+            DesignIntent.from_dict(parent.intent.to_dict())
+        )
+        revision.stage_outputs = {
+            key: deepcopy(value)
+            for key, value in parent.stage_outputs.items()
+            if stage_index(parse_stage(key)) < stage_index(changed_stage)
+        }
+        revision.stage_outputs[WorkflowStage.DESIGN_INTENT.value] = (
+            revision.intent.to_dict()
+        )
+        revision.stage_outputs[changed_stage.value] = deepcopy(output)
+        revision.approved_stages = [
+            value
+            for value in parent.approved_stages
+            if stage_index(parse_stage(value)) < stage_index(changed_stage)
+        ]
+        revision.workflow = WorkflowState()
+        if changed_stage != WorkflowStage.DESIGN_INTENT:
+            revision.workflow.advance(
+                changed_stage,
+                f"{changed_stage.value} revised; downstream outputs invalidated",
+            )
+        if changed_stage == WorkflowStage.FEATURE_TREE_PLANNED:
+            revision.feature_tree = deepcopy(output)
+        return revision
 
     def execute_spec(
         self,
@@ -61,23 +131,31 @@ class FurnitureOrchestrator:
         artifact_name: str | None = None,
         generate_cad: bool = False,
         force: bool = False,
+        through_stage: str | WorkflowStage | None = None,
     ) -> OrchestrationResult:
-        """Run a confirmed one-shot CLI/API specification through this orchestrator.
+        """Run an explicit batch request through the same seven-stage workflow.
 
-        Interactive Agent work can continue to use create_project(),
-        confirm_intent(), and run() separately. CLI and API requests are already
-        explicit execution requests, so this convenience method confirms their
-        normalized DesignIntent before running the same application workflow.
+        Interactive Agent work must use confirm_stage() + run_next() so every
+        stage remains visible. CLI/API batch requests may use this method to
+        auto-confirm successful intermediate stages without creating a second
+        execution path.
         """
         intent = self.intent_from_spec(spec)
         project = self.create_project(name, intent)
         self.confirm_intent(project)
-        return self.run(
+        target = parse_stage(through_stage) if through_stage else (
+            WorkflowStage.DELIVERY_VALIDATED
+            if generate_cad
+            else WorkflowStage.MANUFACTURING_PLANNED
+        )
+        return self.run_until(
             project,
+            target,
             output_root=output_root,
             artifact_name=artifact_name,
             generate_cad=generate_cad,
             force=force,
+            auto_confirm=True,
         )
 
     @staticmethod
@@ -150,10 +228,65 @@ class FurnitureOrchestrator:
         )
 
     def confirm_intent(self, project: Project) -> Revision:
+        return self.confirm_stage(project, WorkflowStage.DESIGN_INTENT)
+
+    def confirm_stage(
+        self,
+        project: Project,
+        stage: str | WorkflowStage | None = None,
+    ) -> Revision:
+        """Approve the current stage so the next stage may execute."""
         revision = project.latest
-        revision.intent = revision.intent.confirm()
-        revision.workflow.advance(WorkflowStage.INTENT_CONFIRMED, "intent confirmed")
+        current = revision.workflow.current
+        requested = parse_stage(stage) if stage is not None else current
+        if current == WorkflowStage.FAILED:
+            raise ValueError("failed revision must be replaced with a new revision")
+        if requested != current:
+            raise ValueError(
+                f"only the current stage may be confirmed: {current.value}"
+            )
+        if requested.value not in revision.stage_outputs:
+            raise ValueError(f"current stage has no output: {requested.value}")
+
+        if requested == WorkflowStage.DESIGN_INTENT:
+            revision.intent = revision.intent.confirm()
+            revision.stage_outputs[requested.value] = revision.intent.to_dict()
+
+        report = self._validate_stage_output(revision, requested)
+        revision.validations.append(report)
+        if not report.passed:
+            revision.workflow.fail(f"{requested.value} validation failed")
+            return revision
+
+        revision.approve_stage(requested)
+        revision.workflow.record(f"{requested.value} confirmed")
         return revision
+
+    def run_next(
+        self,
+        project: Project,
+        *,
+        output_root: str | Path | None = None,
+        artifact_name: str | None = None,
+        generate_cad: bool = False,
+        force: bool = False,
+    ) -> OrchestrationResult:
+        """Execute exactly one stage after the current confirmed checkpoint."""
+        revision = project.latest
+        if revision.workflow.current == WorkflowStage.FAILED:
+            return self._result(project)
+        current_index = stage_index(revision.workflow.current)
+        if current_index == len(STAGE_SEQUENCE) - 1:
+            return self._result(project)
+        return self.run_until(
+            project,
+            STAGE_SEQUENCE[current_index + 1],
+            output_root=output_root,
+            artifact_name=artifact_name,
+            generate_cad=generate_cad,
+            force=force,
+            auto_confirm=False,
+        )
 
     def run(
         self,
@@ -163,26 +296,126 @@ class FurnitureOrchestrator:
         artifact_name: str | None = None,
         generate_cad: bool = False,
         force: bool = False,
+        through_stage: str | WorkflowStage | None = None,
+        auto_confirm: bool = False,
     ) -> OrchestrationResult:
+        target = parse_stage(through_stage) if through_stage else (
+            WorkflowStage.DELIVERY_VALIDATED
+            if generate_cad
+            else WorkflowStage.FEATURE_TREE_PLANNED
+        )
+        return self.run_until(
+            project,
+            target,
+            output_root=output_root,
+            artifact_name=artifact_name,
+            generate_cad=generate_cad,
+            force=force,
+            auto_confirm=auto_confirm,
+        )
+
+    def run_until(
+        self,
+        project: Project,
+        target_stage: str | WorkflowStage,
+        *,
+        output_root: str | Path | None = None,
+        artifact_name: str | None = None,
+        generate_cad: bool = False,
+        force: bool = False,
+        auto_confirm: bool = False,
+    ) -> OrchestrationResult:
+        """Run toward a target, pausing at the first unconfirmed stage by default."""
+        target = parse_stage(target_stage)
         revision = project.latest
-        intent_report = self._validate_intent(revision.intent)
-        revision.validations.append(intent_report)
-        if not intent_report.passed:
-            revision.workflow.fail("DesignIntent validation failed")
-            return OrchestrationResult(project, revision, None)
-        if not revision.intent.confirmed:
-            revision.workflow.fail("DesignIntent must be confirmed before execution")
-            return OrchestrationResult(project, revision, None)
-
         try:
-            spec = self._to_spec(revision.intent)
-            pipeline = plan_cabinet(spec)
-            revision.workflow.advance(
-                WorkflowStage.PANEL_PLANNED, "cabinet panels and BOM planned"
-            )
+            while (
+                revision.workflow.current != WorkflowStage.FAILED
+                and stage_index(revision.workflow.current) < stage_index(target)
+            ):
+                current = revision.workflow.current
+                if not revision.is_stage_approved(current):
+                    break
+                next_stage = STAGE_SEQUENCE[stage_index(current) + 1]
+                self._execute_stage(
+                    project,
+                    revision,
+                    next_stage,
+                    output_root=output_root,
+                    artifact_name=artifact_name,
+                    generate_cad=generate_cad,
+                    force=force,
+                )
+                if revision.workflow.current == WorkflowStage.FAILED:
+                    break
+                if auto_confirm:
+                    self.confirm_stage(project, next_stage)
+                else:
+                    break
 
+            if (
+                auto_confirm
+                and revision.workflow.current == target
+                and not revision.is_stage_approved(target)
+            ):
+                self.confirm_stage(project, target)
+            return self._result(project)
+        except (OSError, TypeError, ValueError) as exc:
+            report = ValidationReport(stage="orchestration")
+            report.add_error("ORCHESTRATION_FAILED", str(exc))
+            revision.validations.append(report)
+            revision.workflow.fail(str(exc))
+            return self._result(project)
+
+    def _execute_stage(
+        self,
+        project: Project,
+        revision: Revision,
+        stage: WorkflowStage,
+        *,
+        output_root: str | Path | None,
+        artifact_name: str | None,
+        generate_cad: bool,
+        force: bool,
+    ) -> None:
+        spec = self._to_spec(revision.intent)
+
+        if stage == WorkflowStage.LAYOUT_PLANNED:
+            output = {
+                "placements": [asdict(item) for item in plan_layout(spec)],
+            }
+            self._complete_stage(
+                revision,
+                stage,
+                output,
+                "layout placements planned",
+            )
+            return
+
+        if stage == WorkflowStage.PANELS_PLANNED:
+            panels = plan_panels(self._placements_from_revision(revision))
+            self._complete_stage(
+                revision,
+                stage,
+                {"panels": [asdict(item) for item in panels]},
+                "manufacturing panel records planned",
+            )
+            return
+
+        if stage == WorkflowStage.MANUFACTURING_PLANNED:
+            bom = plan_manufacturing(spec, self._panels_from_revision(revision))
+            self._complete_stage(
+                revision,
+                stage,
+                asdict(bom),
+                "materials, hardware, and preliminary BOM planned",
+            )
+            return
+
+        if stage == WorkflowStage.FEATURE_TREE_PLANNED:
+            panels = self._panels_from_revision(revision)
             feature_tree = panels_to_feature_tree(
-                pipeline.panels,
+                panels,
                 furniture_type=spec.furniture_type,
                 parameters={
                     "width": spec.width,
@@ -192,61 +425,267 @@ class FurnitureOrchestrator:
                 },
             )
             revision.feature_tree = feature_tree
-            feature_report = self._validate_feature_tree(feature_tree)
-            revision.validations.append(feature_report)
-            if not feature_report.passed:
-                revision.workflow.fail("Feature Tree validation failed")
-                return OrchestrationResult(project, revision, pipeline)
-            revision.workflow.advance(
-                WorkflowStage.FEATURE_TREE_VALIDATED,
-                "box-based Feature Tree v1 validated",
+            self._complete_stage(
+                revision,
+                stage,
+                feature_tree,
+                "box-based Feature Tree v1 planned",
             )
+            return
 
-            bridge_result = None
-            if output_root is not None:
-                artifact_dir = self._artifact_dir(
-                    output_root,
-                    project,
-                    revision,
-                    artifact_name=artifact_name,
-                )
-                source_path, step_path = self._write_artifacts(
-                    revision,
-                    pipeline,
-                    artifact_dir,
-                    artifact_name=artifact_name,
-                )
-                revision.workflow.advance(
-                    WorkflowStage.ARTIFACTS_GENERATED,
-                    "planning artifacts generated",
-                )
-                if generate_cad:
-                    bridge_result = self.cad_bridge.generate_from_source(
-                        source_path, step_path, force=force
-                    )
-                    if bridge_result.status != "ok":
-                        revision.workflow.fail(bridge_result.message)
-                        return OrchestrationResult(project, revision, pipeline, bridge_result)
-                    revision.manifest.add_file("step", bridge_result.step_path)
-                    revision.manifest.add_file("viewer_topology", bridge_result.topology_path)
-
-                artifact_report = self._validate_artifacts(revision)
-                revision.validations.append(artifact_report)
-                if artifact_report.passed:
-                    revision.workflow.advance(
-                        WorkflowStage.ARTIFACTS_VERIFIED,
-                        "manifest files verified",
-                    )
-                else:
-                    revision.workflow.fail("artifact validation failed")
-
-            return OrchestrationResult(project, revision, pipeline, bridge_result)
-        except (OSError, TypeError, ValueError) as exc:
-            report = ValidationReport(stage="orchestration")
-            report.add_error("ORCHESTRATION_FAILED", str(exc))
+        if stage == WorkflowStage.CAD_GENERATED:
+            if output_root is None:
+                raise ValueError("CAD generation requires output_root")
+            if not generate_cad:
+                raise ValueError("CAD generation requires generate_cad=True")
+            pipeline = self._pipeline_from_revision(revision)
+            if pipeline is None:
+                raise ValueError("manufacturing stage must exist before CAD generation")
+            artifact_dir = self._artifact_dir(
+                output_root,
+                project,
+                revision,
+                artifact_name=artifact_name,
+            )
+            source_path, step_path = self._write_artifacts(
+                revision,
+                pipeline,
+                artifact_dir,
+                artifact_name=artifact_name,
+            )
+            bridge = self.cad_bridge.generate_from_source(
+                source_path,
+                step_path,
+                force=force,
+            )
+            revision.stage_outputs[stage.value] = asdict(bridge)
+            if bridge.status == "ok":
+                if bridge.step_path:
+                    revision.manifest.add_file("step", bridge.step_path)
+                if bridge.topology_path:
+                    revision.manifest.add_file("viewer_topology", bridge.topology_path)
+            report = self._validate_stage_output(revision, stage)
             revision.validations.append(report)
-            revision.workflow.fail(str(exc))
-            return OrchestrationResult(project, revision, None)
+            if not report.passed:
+                revision.workflow.fail(bridge.message)
+                return
+            revision.workflow.advance(stage, "STEP and Viewer topology generated")
+            return
+
+        if stage == WorkflowStage.DELIVERY_VALIDATED:
+            report = self._validate_artifacts(revision)
+            revision.stage_outputs[stage.value] = report.to_dict()
+            revision.validations.append(report)
+            if not report.passed:
+                revision.workflow.fail("delivery validation failed")
+                return
+            revision.workflow.advance(stage, "delivery artifacts verified")
+            return
+
+        raise ValueError(f"stage is not executable: {stage.value}")
+
+    def _complete_stage(
+        self,
+        revision: Revision,
+        stage: WorkflowStage,
+        output: dict[str, Any],
+        note: str,
+    ) -> None:
+        revision.stage_outputs[stage.value] = deepcopy(output)
+        report = self._validate_stage_output(revision, stage)
+        revision.validations.append(report)
+        if not report.passed:
+            revision.workflow.fail(f"{stage.value} validation failed")
+            return
+        revision.workflow.advance(stage, note)
+
+    def _result(self, project: Project) -> OrchestrationResult:
+        revision = project.latest
+        return OrchestrationResult(
+            project=project,
+            revision=revision,
+            pipeline=self._pipeline_from_revision(revision),
+            bridge=self._bridge_from_revision(revision),
+        )
+
+    def _pipeline_from_revision(
+        self,
+        revision: Revision,
+    ) -> CabinetPipelineResult | None:
+        required = (
+            WorkflowStage.LAYOUT_PLANNED.value,
+            WorkflowStage.PANELS_PLANNED.value,
+            WorkflowStage.MANUFACTURING_PLANNED.value,
+        )
+        if not all(key in revision.stage_outputs for key in required):
+            return None
+        return CabinetPipelineResult(
+            spec=self._to_spec(revision.intent),
+            placements=self._placements_from_revision(revision),
+            panels=self._panels_from_revision(revision),
+            bom=self._bom_from_revision(revision),
+        )
+
+    def _placements_from_revision(self, revision: Revision) -> list[PanelPlacement]:
+        output = revision.stage_outputs[WorkflowStage.LAYOUT_PLANNED.value]
+        return [PanelPlacement(**item) for item in output.get("placements", [])]
+
+    def _panels_from_revision(self, revision: Revision) -> list[PanelRecord]:
+        output = revision.stage_outputs[WorkflowStage.PANELS_PLANNED.value]
+        return [PanelRecord(**item) for item in output.get("panels", [])]
+
+    def _bom_from_revision(self, revision: Revision) -> BOMReport:
+        output = revision.stage_outputs[WorkflowStage.MANUFACTURING_PLANNED.value]
+        return BOMReport(
+            furniture_name=str(output["furniture_name"]),
+            dimensions=str(output["dimensions"]),
+            panels=[PanelRecord(**item) for item in output.get("panels", [])],
+            hardware=[HardwareRecord(**item) for item in output.get("hardware", [])],
+            total_area_m2=float(output.get("total_area_m2", 0.0)),
+        )
+
+    def _bridge_from_revision(self, revision: Revision) -> BridgeResult | None:
+        output = revision.stage_outputs.get(WorkflowStage.CAD_GENERATED.value)
+        return BridgeResult(**output) if output else None
+
+    def _validate_stage_output(
+        self,
+        revision: Revision,
+        stage: WorkflowStage,
+    ) -> ValidationReport:
+        try:
+            if stage == WorkflowStage.DESIGN_INTENT:
+                return self._validate_intent(revision.intent)
+            if stage == WorkflowStage.LAYOUT_PLANNED:
+                return self._validate_layout(
+                    self._to_spec(revision.intent),
+                    self._placements_from_revision(revision),
+                )
+            if stage == WorkflowStage.PANELS_PLANNED:
+                return self._validate_panels(self._panels_from_revision(revision))
+            if stage == WorkflowStage.MANUFACTURING_PLANNED:
+                return self._validate_manufacturing(
+                    self._bom_from_revision(revision),
+                    self._panels_from_revision(revision),
+                )
+            if stage == WorkflowStage.FEATURE_TREE_PLANNED:
+                return self._validate_feature_tree(
+                    revision.stage_outputs[stage.value]
+                )
+            if stage == WorkflowStage.CAD_GENERATED:
+                return self._validate_cad(self._bridge_from_revision(revision))
+            if stage == WorkflowStage.DELIVERY_VALIDATED:
+                report = ValidationReport(stage=stage.value)
+                if not revision.stage_outputs[stage.value].get("passed", False):
+                    report.add_error(
+                        "DELIVERY_NOT_VALIDATED",
+                        "delivery validation report did not pass",
+                    )
+                return report
+        except (KeyError, TypeError, ValueError) as exc:
+            report = ValidationReport(stage=stage.value)
+            report.add_error("INVALID_STAGE_OUTPUT", str(exc))
+            return report
+        raise ValueError(f"unsupported validation stage: {stage.value}")
+
+    def _validate_layout(
+        self,
+        spec: FurnitureSpec,
+        placements: list[PanelPlacement],
+    ) -> ValidationReport:
+        report = ValidationReport(stage=WorkflowStage.LAYOUT_PLANNED.value)
+        if not placements:
+            report.add_error("EMPTY_LAYOUT", "layout contains no placements")
+            return report
+        ids = {item.id for item in placements}
+        for item in placements:
+            for axis, size, position, limit in (
+                ("x", item.size_x, item.pos_x, spec.width),
+                ("y", item.size_y, item.pos_y, spec.depth),
+                ("z", item.size_z, item.pos_z, spec.height),
+            ):
+                if size <= 0:
+                    report.add_error(
+                        "NON_POSITIVE_LAYOUT_SIZE",
+                        f"{item.id}.{axis} size must be positive",
+                        item.id,
+                    )
+                if position < -1e-6 or position + size > limit + 1e-6:
+                    report.add_error(
+                        "LAYOUT_OUTSIDE_ENVELOPE",
+                        f"{item.id} exceeds the {axis.upper()} envelope",
+                        item.id,
+                    )
+            for dependency in item.depends_on:
+                if dependency not in ids:
+                    report.add_error(
+                        "UNKNOWN_LAYOUT_DEPENDENCY",
+                        f"{item.id} depends on unknown placement {dependency}",
+                        item.id,
+                    )
+        return report
+
+    def _validate_panels(self, panels: list[PanelRecord]) -> ValidationReport:
+        report = ValidationReport(stage=WorkflowStage.PANELS_PLANNED.value)
+        if not panels:
+            report.add_error("EMPTY_PANEL_PLAN", "panel plan contains no panels")
+            return report
+        for panel in panels:
+            if panel.quantity <= 0:
+                report.add_error(
+                    "INVALID_PANEL_QUANTITY",
+                    f"{panel.label} quantity must be positive",
+                    panel.label,
+                )
+            if min(panel.length_mm, panel.width_mm, panel.thickness) <= 0:
+                report.add_error(
+                    "NON_POSITIVE_PANEL_SIZE",
+                    f"{panel.label} has a non-positive manufacturing size",
+                    panel.label,
+                )
+        return report
+
+    def _validate_manufacturing(
+        self,
+        bom: BOMReport,
+        panels: list[PanelRecord],
+    ) -> ValidationReport:
+        report = ValidationReport(stage=WorkflowStage.MANUFACTURING_PLANNED.value)
+        if bom.panel_count != len(panels):
+            report.add_error(
+                "BOM_PANEL_MISMATCH",
+                "BOM panel count does not match the confirmed panel plan",
+            )
+        if bom.total_area_m2 <= 0:
+            report.add_error("INVALID_BOM_AREA", "BOM total area must be positive")
+        for item in bom.hardware:
+            if item.quantity < 0:
+                report.add_error(
+                    "INVALID_HARDWARE_QUANTITY",
+                    f"{item.name} quantity cannot be negative",
+                    item.name,
+                )
+        return report
+
+    def _validate_cad(self, bridge: BridgeResult | None) -> ValidationReport:
+        report = ValidationReport(stage=WorkflowStage.CAD_GENERATED.value)
+        if bridge is None:
+            report.add_error("MISSING_CAD_RESULT", "CAD stage has no bridge result")
+            return report
+        if bridge.status != "ok":
+            report.add_error("CAD_GENERATION_FAILED", bridge.message)
+            return report
+        for kind, path in (
+            ("step", bridge.step_path),
+            ("viewer_topology", bridge.topology_path),
+        ):
+            if not path or not Path(path).is_file():
+                report.add_error(
+                    "MISSING_CAD_ARTIFACT",
+                    f"{kind} artifact is missing",
+                    kind,
+                )
+        return report
 
     def _validate_intent(self, intent: DesignIntent) -> ValidationReport:
         report = ValidationReport(stage="design_intent")
@@ -319,6 +758,9 @@ class FurnitureOrchestrator:
     ) -> tuple[Path, Path]:
         if artifact_name:
             intent_path = artifact_dir / f"{artifact_name}.design-intent.json"
+            layout_path = artifact_dir / f"{artifact_name}.layout-plan.json"
+            panel_path = artifact_dir / f"{artifact_name}.panel-plan.json"
+            manufacturing_path = artifact_dir / f"{artifact_name}.manufacturing-plan.json"
             feature_tree_path = artifact_dir / f"{artifact_name}.feature-tree.json"
             bom_path = artifact_dir / f"{artifact_name}.bom.md"
             source_key = artifact_name
@@ -326,6 +768,9 @@ class FurnitureOrchestrator:
             step_filename = f"{artifact_name}.step"
         else:
             intent_path = artifact_dir / "design-intent.json"
+            layout_path = artifact_dir / "layout-plan.json"
+            panel_path = artifact_dir / "panel-plan.json"
+            manufacturing_path = artifact_dir / "manufacturing-plan.json"
             feature_tree_path = artifact_dir / "feature-tree.json"
             bom_path = artifact_dir / "bom.md"
             source_key = revision.id
@@ -341,6 +786,30 @@ class FurnitureOrchestrator:
             json.dumps(revision.intent.to_dict(), ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
+        layout_path.write_text(
+            json.dumps(
+                revision.stage_outputs[WorkflowStage.LAYOUT_PLANNED.value],
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        panel_path.write_text(
+            json.dumps(
+                revision.stage_outputs[WorkflowStage.PANELS_PLANNED.value],
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        manufacturing_path.write_text(
+            json.dumps(
+                revision.stage_outputs[WorkflowStage.MANUFACTURING_PLANNED.value],
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
         feature_tree_path.write_text(
             json.dumps(revision.feature_tree, ensure_ascii=False, indent=2),
             encoding="utf-8",
@@ -349,6 +818,13 @@ class FurnitureOrchestrator:
         write_build123d_source(revision.feature_tree or {}, source_path)
 
         revision.manifest.add_file("design_intent", intent_path)
+        revision.manifest.add_file("layout_plan", layout_path)
+        revision.manifest.add_file("panel_plan", panel_path)
+        revision.manifest.add_file(
+            "manufacturing_plan",
+            manufacturing_path,
+            readiness="preliminary",
+        )
         revision.manifest.add_file("feature_tree", feature_tree_path)
         revision.manifest.add_file("bom", bom_path, readiness="preliminary")
         revision.manifest.add_file("cad_source", source_path, derived=True)

@@ -11,7 +11,7 @@ from uuid import uuid4
 from furniture.workflow_artifacts import ArtifactManifest
 from furniture.design_intent import DesignIntent
 from furniture.validation import ValidationReport
-from furniture.workflow_state import WorkflowState, utc_now
+from furniture.workflow_state import WorkflowStage, WorkflowState, parse_stage, utc_now
 
 
 def _id(prefix: str) -> str:
@@ -29,10 +29,28 @@ class Revision:
     validations: list[ValidationReport] = field(default_factory=list)
     manifest: ArtifactManifest | None = None
     feature_tree: dict[str, Any] | None = None
+    stage_outputs: dict[str, Any] = field(default_factory=dict)
+    approved_stages: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if self.manifest is None:
             self.manifest = ArtifactManifest(source_revision_id=self.id)
+        self.stage_outputs.setdefault(
+            WorkflowStage.DESIGN_INTENT.value,
+            self.intent.to_dict(),
+        )
+        if self.feature_tree is not None:
+            self.stage_outputs.setdefault(
+                WorkflowStage.FEATURE_TREE_PLANNED.value,
+                self.feature_tree,
+            )
+
+    def is_stage_approved(self, stage: WorkflowStage) -> bool:
+        return stage.value in self.approved_stages
+
+    def approve_stage(self, stage: WorkflowStage) -> None:
+        if stage.value not in self.approved_stages:
+            self.approved_stages.append(stage.value)
 
     @property
     def intent_sha256(self) -> str:
@@ -53,6 +71,8 @@ class Revision:
             "validations": [report.to_dict() for report in self.validations],
             "manifest": self.manifest.to_dict() if self.manifest else None,
             "feature_tree": self.feature_tree,
+            "stage_outputs": self.stage_outputs,
+            "approved_stages": self.approved_stages,
         }
 
     @classmethod
@@ -73,6 +93,11 @@ class Revision:
                 else None
             ),
             feature_tree=data.get("feature_tree"),
+            stage_outputs=dict(data.get("stage_outputs", {})),
+            approved_stages=[
+                parse_stage(str(value)).value
+                for value in data.get("approved_stages", [])
+            ],
         )
 
 

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import sys
+from copy import deepcopy
 import shutil
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,18 +14,44 @@ WORKSPACE_ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(SCRIPT_ROOT))
 
 from furniture.cad_bridge import CadBridge
-from furniture.workflow_orchestrator import FurnitureOrchestrator
-from furniture.workflow_store import JsonProjectStore
 from furniture.design_intent import DesignIntent, OverallSize
-from furniture.workflow_state import WorkflowStage
+from furniture.workflow_orchestrator import FurnitureOrchestrator
+from furniture.workflow_state import STAGE_SEQUENCE, WorkflowStage
+from furniture.workflow_store import JsonProjectStore
 
 
 def cabinet_intent(*, furniture_type: str = "floor_cabinet") -> DesignIntent:
     return DesignIntent(
         furniture_type=furniture_type,
-        purpose="测试柜体纵向切片",
+        purpose="测试柜体七阶段工作流",
         overall_size=OverallSize(width_mm=800, depth_mm=600, height_mm=1000),
         layout={"shelf_count": 2, "n_doors": 2},
+    )
+
+
+def fake_orchestrator(temporary_root: Path) -> FurnitureOrchestrator:
+    launcher_path = temporary_root / "fake_step.py"
+    launcher_path.write_text(
+        "\n".join(
+            [
+                "import sys",
+                "from pathlib import Path",
+                "output = Path(sys.argv[sys.argv.index('--output') + 1])",
+                "output.parent.mkdir(parents=True, exist_ok=True)",
+                "output.write_text('STEP', encoding='utf-8')",
+                "output.with_name(f'.{output.name}.glb').write_bytes(b'GLB')",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    bridge = CadBridge(
+        workspace_root=WORKSPACE_ROOT,
+        python_executable=sys.executable,
+        step_launcher=launcher_path,
+    )
+    return FurnitureOrchestrator(
+        workspace_root=WORKSPACE_ROOT,
+        cad_bridge=bridge,
     )
 
 
@@ -32,143 +59,234 @@ class FurnitureOrchestratorTests(unittest.TestCase):
     def setUp(self) -> None:
         self.orchestrator = FurnitureOrchestrator(workspace_root=WORKSPACE_ROOT)
 
-    def test_confirmed_floor_cabinet_runs_and_tracks_artifacts(self) -> None:
+    def test_interactive_workflow_pauses_at_every_stage(self) -> None:
         project = self.orchestrator.create_project("玄关柜", cabinet_intent())
+        revision = project.latest
+
+        self.assertEqual(revision.workflow.current, WorkflowStage.DESIGN_INTENT)
+        self.assertEqual(
+            set(revision.stage_outputs),
+            {WorkflowStage.DESIGN_INTENT.value},
+        )
+
         self.orchestrator.confirm_intent(project)
+        for expected in STAGE_SEQUENCE[1:5]:
+            result = self.orchestrator.run_next(project)
+            self.assertEqual(result.revision.workflow.current, expected)
+            self.assertIn(expected.value, result.revision.stage_outputs)
+            self.assertFalse(result.revision.is_stage_approved(expected))
 
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            result = self.orchestrator.run(project, output_root=temporary_directory)
+            paused = self.orchestrator.run_next(project)
+            self.assertEqual(paused.revision.workflow.current, expected)
 
-            self.assertIsNotNone(result.pipeline)
-            self.assertEqual(
-                result.revision.workflow.current,
-                WorkflowStage.ARTIFACTS_VERIFIED,
-            )
-            self.assertTrue(all(report.passed for report in result.revision.validations))
-            self.assertEqual(
-                {artifact.kind for artifact in result.revision.manifest.artifacts},
-                {"design_intent", "feature_tree", "bom", "cad_source"},
-            )
-            cad_source = next(
-                artifact
-                for artifact in result.revision.manifest.artifacts
-                if artifact.kind == "cad_source"
-            )
-            self.addCleanup(
-                shutil.rmtree,
-                Path(cad_source.path).parent,
-                ignore_errors=True,
-            )
-            self.assertTrue(
-                Path(cad_source.path).is_relative_to(
-                    WORKSPACE_ROOT / "temp" / "cad-source"
-                )
-            )
-            self.assertFalse(any(Path(temporary_directory).rglob("*.py")))
+            self.orchestrator.confirm_stage(project, expected)
 
-    def test_execute_spec_is_the_named_one_shot_entry(self) -> None:
+        self.assertEqual(
+            project.latest.workflow.current,
+            WorkflowStage.FEATURE_TREE_PLANNED,
+        )
+        self.assertEqual(
+            set(project.latest.stage_outputs),
+            {stage.value for stage in STAGE_SEQUENCE[:5]},
+        )
+
+    def test_revising_layout_invalidates_and_regenerates_downstream(self) -> None:
+        result = self.orchestrator.execute_spec(
+            "可修改柜体",
+            {
+                "type": "floor_cabinet",
+                "width": 800,
+                "depth": 600,
+                "height": 1000,
+                "shelf_count": 2,
+                "n_doors": 2,
+            },
+            through_stage=WorkflowStage.FEATURE_TREE_PLANNED,
+        )
+        project = result.project
+        parent = project.latest
+        old_panel_output = deepcopy(
+            parent.stage_outputs[WorkflowStage.PANELS_PLANNED.value]
+        )
+        edited_layout = deepcopy(
+            parent.stage_outputs[WorkflowStage.LAYOUT_PLANNED.value]
+        )
+        shelf = next(
+            item
+            for item in edited_layout["placements"]
+            if "shelf" in item["panel_type"]
+        )
+        shelf["pos_z"] += 10
+
+        revised = self.orchestrator.revise_stage_output(
+            project,
+            WorkflowStage.LAYOUT_PLANNED,
+            edited_layout,
+        )
+
+        self.assertEqual(revised.parent_revision_id, parent.id)
+        self.assertEqual(
+            set(revised.stage_outputs),
+            {
+                WorkflowStage.DESIGN_INTENT.value,
+                WorkflowStage.LAYOUT_PLANNED.value,
+            },
+        )
+        self.assertNotIn(
+            WorkflowStage.FEATURE_TREE_PLANNED.value,
+            revised.stage_outputs,
+        )
+        self.assertEqual(
+            revised.approved_stages,
+            [WorkflowStage.DESIGN_INTENT.value],
+        )
+
+        self.orchestrator.confirm_stage(project, WorkflowStage.LAYOUT_PLANNED)
+        regenerated = self.orchestrator.run_until(
+            project,
+            WorkflowStage.FEATURE_TREE_PLANNED,
+            auto_confirm=True,
+        )
+
+        new_panel_output = regenerated.revision.stage_outputs[
+            WorkflowStage.PANELS_PLANNED.value
+        ]
+        self.assertNotEqual(new_panel_output, old_panel_output)
+        self.assertIn(
+            WorkflowStage.FEATURE_TREE_PLANNED.value,
+            regenerated.revision.stage_outputs,
+        )
+
+    def test_named_batch_generation_records_all_seven_stages(self) -> None:
         artifact_name = f"orchestrator-test-{uuid4().hex}"
         source_dir = WORKSPACE_ROOT / "temp" / "cad-source" / artifact_name
         try:
             with tempfile.TemporaryDirectory() as temporary_directory:
-                result = self.orchestrator.execute_spec(
+                temporary_root = Path(temporary_directory)
+                orchestrator = fake_orchestrator(temporary_root)
+                result = orchestrator.execute_spec(
                     artifact_name,
                     {
-                        "type": "floor_cabinet",
-                        "width": 900,
-                        "depth": 500,
-                        "height": 1100,
-                        "board_thickness": 20,
-                        "shelf_count": 3,
-                        "n_doors": 1,
+                        "type": "wall_cabinet",
+                        "width": 800,
+                        "depth": 350,
+                        "height": 900,
                     },
-                    output_root=temporary_directory,
+                    output_root=temporary_root / "outputs",
                     artifact_name=artifact_name,
+                    generate_cad=True,
                 )
 
-                self.assertIsNotNone(result.pipeline)
-                self.assertTrue(result.revision.intent.confirmed)
-                self.assertEqual(result.pipeline.spec.board_thickness, 20)
-                self.assertEqual(result.pipeline.spec.shelf_count, 3)
-                self.assertEqual(result.pipeline.spec.n_doors, 1)
-                artifact_paths = {
-                    artifact.kind: Path(artifact.path)
-                    for artifact in result.revision.manifest.artifacts
+                self.assertEqual(
+                    result.revision.workflow.current,
+                    WorkflowStage.DELIVERY_VALIDATED,
+                )
+                self.assertEqual(
+                    set(result.revision.stage_outputs),
+                    {stage.value for stage in STAGE_SEQUENCE},
+                )
+                self.assertEqual(
+                    result.revision.approved_stages,
+                    [stage.value for stage in STAGE_SEQUENCE],
+                )
+                self.assertTrue(all(report.passed for report in result.revision.validations))
+                artifact_kinds = {
+                    artifact.kind for artifact in result.revision.manifest.artifacts
                 }
                 self.assertEqual(
-                    artifact_paths["feature_tree"].name,
-                    f"{artifact_name}.feature-tree.json",
+                    artifact_kinds,
+                    {
+                        "design_intent",
+                        "layout_plan",
+                        "panel_plan",
+                        "manufacturing_plan",
+                        "feature_tree",
+                        "bom",
+                        "cad_source",
+                        "step",
+                        "viewer_topology",
+                    },
                 )
-                self.assertEqual(
-                    artifact_paths["bom"].name,
-                    f"{artifact_name}.bom.md",
-                )
-                self.assertTrue(artifact_paths["cad_source"].is_relative_to(source_dir))
+                self.assertIsNotNone(result.pipeline)
+                self.assertEqual(result.bridge.status, "ok")
         finally:
             shutil.rmtree(source_dir, ignore_errors=True)
 
-    def test_intent_from_spec_preserves_category_dimension_defaults(self) -> None:
-        intent = self.orchestrator.intent_from_spec({"type": "wall_cabinet"})
+    def test_new_intent_revision_marks_parent_artifacts_stale(self) -> None:
+        artifact_name = f"revision-test-{uuid4().hex}"
+        source_dir = WORKSPACE_ROOT / "temp" / "cad-source" / artifact_name
+        try:
+            with tempfile.TemporaryDirectory() as temporary_directory:
+                temporary_root = Path(temporary_directory)
+                orchestrator = fake_orchestrator(temporary_root)
+                result = orchestrator.execute_spec(
+                    artifact_name,
+                    {
+                        "type": "wall_cabinet",
+                        "width": 800,
+                        "depth": 350,
+                        "height": 900,
+                    },
+                    output_root=temporary_root / "outputs",
+                    artifact_name=artifact_name,
+                    generate_cad=True,
+                )
+                parent = result.revision
 
-        self.assertEqual(intent.overall_size.width_mm, 800)
-        self.assertEqual(intent.overall_size.depth_mm, 350)
-        self.assertEqual(intent.overall_size.height_mm, 900)
+                revised = orchestrator.revise(
+                    result.project,
+                    DesignIntent(
+                        furniture_type="wall_cabinet",
+                        overall_size=OverallSize(900, 350, 900),
+                    ),
+                )
 
-    def test_new_revision_marks_previous_artifacts_stale(self) -> None:
-        project = self.orchestrator.create_project(
-            "吊柜", cabinet_intent(furniture_type="wall_cabinet")
-        )
-        self.orchestrator.confirm_intent(project)
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            self.orchestrator.run(project, output_root=temporary_directory)
-            old_revision = project.latest
-            old_source = next(
-                artifact
-                for artifact in old_revision.manifest.artifacts
-                if artifact.kind == "cad_source"
-            )
-            self.addCleanup(
-                shutil.rmtree,
-                Path(old_source.path).parent,
-                ignore_errors=True,
-            )
-            self.orchestrator.revise(
-                project,
-                DesignIntent(
-                    furniture_type="wall_cabinet",
-                    overall_size=OverallSize(900, 350, 900),
-                ),
-            )
+                self.assertEqual(revised.parent_revision_id, parent.id)
+                self.assertTrue(all(item.stale for item in parent.manifest.artifacts))
+                self.assertEqual(
+                    set(revised.stage_outputs),
+                    {WorkflowStage.DESIGN_INTENT.value},
+                )
+        finally:
+            shutil.rmtree(source_dir, ignore_errors=True)
 
-            self.assertEqual(project.latest.number, 2)
-            self.assertEqual(project.latest.parent_revision_id, old_revision.id)
-            self.assertTrue(all(item.stale for item in old_revision.manifest.artifacts))
-
-    def test_unconfirmed_intent_does_not_execute(self) -> None:
+    def test_unconfirmed_intent_pauses_without_executing_layout(self) -> None:
         project = self.orchestrator.create_project("未确认", cabinet_intent())
-        result = self.orchestrator.run(project)
+        result = self.orchestrator.run_until(
+            project,
+            WorkflowStage.FEATURE_TREE_PLANNED,
+        )
 
         self.assertIsNone(result.pipeline)
-        self.assertEqual(result.revision.workflow.current, WorkflowStage.FAILED)
+        self.assertEqual(
+            result.revision.workflow.current,
+            WorkflowStage.DESIGN_INTENT,
+        )
+        self.assertNotIn(
+            WorkflowStage.LAYOUT_PLANNED.value,
+            result.revision.stage_outputs,
+        )
 
-    def test_unsupported_family_is_reported_without_calling_pipeline(self) -> None:
+    def test_unsupported_family_fails_at_design_intent_confirmation(self) -> None:
         project = self.orchestrator.create_project(
             "床", cabinet_intent(furniture_type="bed")
         )
-        self.orchestrator.confirm_intent(project)
-        result = self.orchestrator.run(project)
+        revision = self.orchestrator.confirm_intent(project)
 
-        self.assertIsNone(result.pipeline)
-        self.assertFalse(result.revision.validations[0].passed)
+        self.assertEqual(revision.workflow.current, WorkflowStage.FAILED)
+        self.assertFalse(revision.validations[-1].passed)
         self.assertEqual(
-            result.revision.validations[0].issues[0].code,
+            revision.validations[-1].issues[0].code,
             "UNSUPPORTED_FURNITURE_TYPE",
         )
 
-    def test_project_round_trips_through_json_store(self) -> None:
-        project = self.orchestrator.create_project("可恢复项目", cabinet_intent())
-        self.orchestrator.confirm_intent(project)
-        self.orchestrator.run(project)
+    def test_project_store_round_trips_stage_outputs_and_approvals(self) -> None:
+        result = self.orchestrator.execute_spec(
+            "可恢复项目",
+            {"type": "floor_cabinet"},
+            through_stage=WorkflowStage.FEATURE_TREE_PLANNED,
+        )
+        project = result.project
 
         with tempfile.TemporaryDirectory() as temporary_directory:
             store = JsonProjectStore(temporary_directory)
@@ -176,71 +294,19 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             restored = store.load(project.id)
 
         self.assertEqual(restored.id, project.id)
-        self.assertEqual(restored.latest.intent_sha256, project.latest.intent_sha256)
+        self.assertEqual(restored.latest.stage_outputs, project.latest.stage_outputs)
+        self.assertEqual(restored.latest.approved_stages, project.latest.approved_stages)
         self.assertEqual(
             restored.latest.workflow.current,
-            WorkflowStage.FEATURE_TREE_VALIDATED,
+            WorkflowStage.FEATURE_TREE_PLANNED,
         )
 
-    def test_wall_cabinet_runs_through_cad_bridge_and_manifest(self) -> None:
-        project = self.orchestrator.create_project(
-            "完整吊柜", cabinet_intent(furniture_type="wall_cabinet")
-        )
-        self.orchestrator.confirm_intent(project)
+    def test_intent_from_spec_preserves_category_dimension_defaults(self) -> None:
+        intent = self.orchestrator.intent_from_spec({"type": "wall_cabinet"})
 
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            temporary_root = Path(temporary_directory)
-            launcher_path = temporary_root / "fake_step.py"
-            launcher_path.write_text(
-                "\n".join(
-                    [
-                        "import sys",
-                        "from pathlib import Path",
-                        "output = Path(sys.argv[sys.argv.index('--output') + 1])",
-                        "output.parent.mkdir(parents=True, exist_ok=True)",
-                        "output.write_text('STEP', encoding='utf-8')",
-                        "output.with_name(f'.{output.name}.glb').write_bytes(b'GLB')",
-                    ]
-                ),
-                encoding="utf-8",
-            )
-            bridge = CadBridge(
-                workspace_root=WORKSPACE_ROOT,
-                python_executable=sys.executable,
-                step_launcher=launcher_path,
-            )
-            orchestrator = FurnitureOrchestrator(
-                workspace_root=WORKSPACE_ROOT,
-                cad_bridge=bridge,
-            )
-            result = orchestrator.run(
-                project,
-                output_root=temporary_root,
-                generate_cad=True,
-            )
-            cad_source = next(
-                artifact
-                for artifact in result.revision.manifest.artifacts
-                if artifact.kind == "cad_source"
-            )
-            self.addCleanup(
-                shutil.rmtree,
-                Path(cad_source.path).parent,
-                ignore_errors=True,
-            )
-
-            self.assertEqual(result.bridge.status, "ok")
-            self.assertEqual(
-                result.revision.workflow.current,
-                WorkflowStage.ARTIFACTS_VERIFIED,
-            )
-            self.assertIn(
-                "step", {artifact.kind for artifact in result.revision.manifest.artifacts}
-            )
-            self.assertIn(
-                "viewer_topology",
-                {artifact.kind for artifact in result.revision.manifest.artifacts},
-            )
+        self.assertEqual(intent.overall_size.width_mm, 800)
+        self.assertEqual(intent.overall_size.depth_mm, 350)
+        self.assertEqual(intent.overall_size.height_mm, 900)
 
 
 if __name__ == "__main__":
