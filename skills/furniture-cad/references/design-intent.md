@@ -1,61 +1,40 @@
-# Furniture Design Intent
+# 家具设计意图
 
-Use this reference before layout planning, panel decomposition, manufacturing
-policy, Feature Tree planning, or runtime execution.
-Design Intent answers: "What furniture should be built?"
+在布局规划、板件拆分、制造策略、特征树规划或运行时执行之前使用本文档。设计意图回答：“要制作什么家具？”
 
-Design Intent records the user's desired furniture and the reasons behind it.
-It is not a Layout Plan, Panel Plan, Manufacturing Policy, Feature Tree,
-runtime input, panel cut list, or CAD program.
+设计意图记录用户想要的家具及其原因。它不是布局方案、板件方案、制造策略、特征树、运行时输入、板件裁切清单或 CAD 程序。
 
-## Capture
+## 捕获内容
 
-- `type`: furniture family in user language.
-- `purpose`: user-facing use and priorities.
-- `overall_size`: finished-envelope `width_mm`, `depth_mm`, and `height_mm`;
-  keep unknown values as `null`.
-- `layout`: desired doors, compartments, shelves, drawers, hanging zones, or
-  other user-facing organization decisions.
-- `appearance`: visible style and finish choices that affect the design.
-- `structure`: high-level construction preferences, without decomposing them
-  into layout zones, physical panels, or modeling operations.
-- `constraints`: room fit, ergonomics, safety, installation, fabrication, and
-  material requirements.
-- `assumptions`: defaults tentatively accepted for this request.
-- `unresolved`: decisions still requiring confirmation.
+- `type`：用用户语言描述的家具类别。
+- `purpose`：面向用户的用途和优先级。
+- `overall_size`：成品外包络的 `width_mm`、`depth_mm` 和 `height_mm`；未知值保留为 `null`。
+- `layout`：期望的门、隔间、层板、抽屉、挂衣区或其他面向用户的组织决策。
+- `appearance`：会影响设计的可见风格和饰面选择。
+- `structure`：高层结构偏好；此时不拆成布局区域、实体板件或建模操作。
+- `constraints`：房间适配、人体工学、安全、安装、制造和材料要求。
+- `assumptions`：本次请求暂时采用的默认假设。
+- `unresolved`：仍需确认的决策。
 
-State each assumption beside the affected field. Do not hide assumptions in a
-closing paragraph.
+每个假设都写在其影响的字段旁，不要藏在结尾段落中。
 
-## Dimension convention
+## 尺寸约定
 
-- `width_mm`: left-to-right span on X.
-- `depth_mm`: rear-to-front span on Y.
-- `height_mm`: vertical span on Z.
-- Overall dimensions mean the finished outer envelope unless explicitly labeled
-  as internal clearance, carcass size, or room opening.
+- `width_mm`：X 轴从左到右的跨度。
+- `depth_mm`：Y 轴从后到前的跨度。
+- `height_mm`：Z 轴竖直方向的跨度。
+- 除非明确标为内部净空、柜体尺寸或房间洞口，否则总体尺寸均指成品外包络。
 
-When the user gives three unlabeled dimensions, tentatively map them to
-`W x D x H`, state that assumption, and correct it if the furniture context
-makes the mapping implausible.
+当用户提供三个未标注的尺寸时，暂按 `W x D x H` 映射，明确写出该假设；若家具语境表明映射不合理，则进行修正。
 
-## Boundaries
+## 边界
 
-- Treat intent as ready for the next planning layer when dimensions and
-  family-critical layout decisions are known or explicitly recorded as
-  unresolved.
-- Stop before panel decomposition. Do not add panel roles, quantities,
-  placements, part coordinates, cut sizes, hardware quantities, manufacturing
-  policies, CAD API calls, output paths, or a Feature Tree at this stage.
-- For interactive design discussion, stop after intent unless the user
-  requested planning or end-to-end generation.
+- 当尺寸及类别关键布局决策已知，或已明确记录为未解决项时，可认为意图已准备好进入下一规划层。
+- 在板件拆分前停止。本阶段不得添加板件角色、数量、位置、部件坐标、裁切尺寸、五金数量、制造策略、CAD API 调用、输出路径或特征树。
+- 对交互式设计讨论，除非用户要求规划或端到端生成，否则在意图阶段停止。
 
-## Family-specific decisions
+## 类别特定决策
 
-- **Floor cabinet**: carcass construction, back, plinth/toe-kick, doors,
-  shelves/dividers, installation, and material thicknesses.
-- **Wall cabinet**: carcass construction, back, doors, shelves/dividers,
-  wall fixing, substrate, installation clearance, and material thicknesses.
-  No toe-kick.
-- Other types: capture the generic intent and leave execution support to the
-  Workspace Pipeline layer.
+- **地柜**：柜体结构、背板、踢脚板或底座、门、层板或隔板、安装方式和材料厚度。
+- **吊柜**：柜体结构、背板、门、层板或隔板、墙体固定、基层、安装净空和材料厚度；不设踢脚板。
+- 其他类型：捕获通用意图，将执行支持交给工作区流水线层判断。

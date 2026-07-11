@@ -1,60 +1,48 @@
-# Panel Planning
+# 板件规划
 
-Use this reference after Layout Planning and before Manufacturing Policy or
-Feature Tree planning. Panel Planning answers: "What physical furniture
-components exist?"
+在布局规划之后、制造策略或特征树规划之前使用本文档。板件规划回答：“存在哪些实体家具部件？”
 
-This file owns the manufacturing representation of furniture as semantic
-components. A Panel represents a manufacturing part, not a CAD solid.
+本文件负责将家具表达为具有语义的制造部件。板件代表制造零件，而非 CAD 实体。
 
-## Layer boundary
+## 层边界
 
-Panel Planning converts Design Intent and Layout Planning decisions into
-semantic furniture components. It does not define manufacturing rules, Feature
-Tree operations, CAD geometry, STEP entities, runtime commands, or planner
-interfaces.
+板件规划把设计意图和布局规划决策转换为语义化家具部件。它不定义制造规则、特征树操作、CAD 几何、STEP 实体、运行时命令或规划器接口。
 
-Typical panel roles include:
+常见板件角色包括：
 
-- left side
-- right side
-- top
-- bottom
-- back
-- shelf
-- divider
-- door
-- drawer front
-- stretcher
-- toe kick
+- 左侧板
+- 右侧板
+- 顶板
+- 底板
+- 背板
+- 层板
+- 隔板
+- 门板
+- 抽屉面板
+- 横撑
+- 踢脚板
 
-Each Panel should conceptually contain:
+每块板件在概念上应包含：
 
-- semantic role
-- finished dimensions
-- thickness
-- material
-- quantity
-- orientation
-- placement
-- manufacturing annotations
+- 语义角色
+- 成品尺寸
+- 厚度
+- 材料
+- 数量
+- 朝向
+- 位置
+- 制造注释
 
-## Panel rules
+## 板件规则
 
-- Represent each panel by role and relationship to the finished envelope or
-  layout zone.
-- Use placement as a furniture-domain position, such as a minimum corner,
-  envelope range, face, or relationship to another panel.
-- Keep shelves and dividers clear of the selected back construction.
-- Keep door and drawer fronts related to their opening strategy and clearance
-  envelope.
-- Keep BOM and hardware records separate from CAD solids.
+- 用板件角色及其与成品包络或布局区域的关系表达每块板件。
+- 使用家具领域的位置表达，例如最小角点、包络范围、面或与其他板件的关系。
+- 层板和隔板不得与选定的背板结构冲突。
+- 门板和抽屉面板必须关联其开启策略及净空包络。
+- BOM 和五金记录应与 CAD 实体分离。
 
-## Boundary
+## 边界
 
-- Do not define CAD primitives, boolean operations, Feature Tree dependencies,
-  STEP entities, executable JSON, command lines, edge-banding allowances,
-  drilling patterns, or factory approval.
-- Refer material rules, tolerances, joinery, edge banding, and hardware policy
-  to Manufacturing Policy.
-- Refer modeling dependencies and CAD representation to Feature Tree.
+- 不得定义 CAD 基元、布尔操作、特征树依赖、STEP 实体、可执行 JSON、命令行、封边余量、钻孔模式或工厂批准状态。
+- 材料规则、公差、连接方式、封边和五金策略交给制造策略层。
+- 建模依赖和 CAD 表达交给特征树层。

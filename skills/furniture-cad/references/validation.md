@@ -1,46 +1,31 @@
-# Validation
+# 验证
 
-Use this reference before reporting a plan, manufacturing result, generated
-geometry, or artifact as successful. Validation answers: "Which gates must
-pass?"
+在将规划、制造结果、生成的几何或产物报告为成功前使用本文档。验证回答：“必须通过哪些关卡？”
 
-This file owns cross-layer acceptance gates. It does not define user intent,
-layout policy, panel records, manufacturing rules, Feature Tree schema, runtime
-commands, or STEP entities.
+本文件负责跨层验收关卡，不定义用户意图、布局策略、板件记录、制造规则、特征树模式、运行时命令或 STEP 实体。
 
-## Cross-layer gates
+## 跨层关卡
 
-Before calling a result ready for the next layer, verify the relevant gates:
+在认定结果可进入下一层前，验证相关关卡：
 
-1. Design Intent records the requested furniture, dimensions, constraints,
-   assumptions, and unresolved decisions without hidden defaults.
-2. Layout Planning keeps zones, openings, clearances, and installation context
-   within the finished envelope.
-3. Panel Planning gives each panel a semantic role, positive finished
-   dimensions, quantity, orientation, placement, and annotations.
-4. Manufacturing Policy states whether material, edge banding, joinery,
-   hardware, tolerances, and BOM records are preliminary or accepted.
-5. Feature Tree modeling semantics preserve dependencies and do not invent
-   unsupported runtime capabilities.
-6. Runtime support is verified against the live planner and emitter before
-   promising generation.
-7. Generated artifacts are reported only when the command actually created
-   them and they exist.
+1. 设计意图记录了所需家具、尺寸、约束、假设和未解决决策，且没有隐藏默认值。
+2. 布局规划使区域、开口、净空和安装环境保持在成品包络内。
+3. 板件规划为每块板件给出语义角色、正数成品尺寸、数量、朝向、位置和注释。
+4. 制造策略明确材料、封边、连接、五金、公差和 BOM 记录是暂定还是已接受。
+5. 特征树建模语义保留依赖关系，且不虚构运行时不支持的能力。
+6. 承诺生成前，已对照实时规划器和发射器验证运行时支持。
+7. 只有命令确实生成且文件存在时，才报告生成产物。
 
-## Cabinet-specific gates
+## 柜体特定关卡
 
-- Mating faces and clearances agree with the chosen construction policy.
-- Shelves and dividers do not intersect the selected back strategy or door
-  envelope.
-- Door gaps, door count, and opening strategy are resolved.
-- Wall cabinets and tall furniture include fixing and load assumptions.
-- Panel, BOM, edge-banding, and hardware outputs come from one approved plan.
-- Provisional software defaults have been replaced or accepted for the
-  manufacturing context.
+- 配合面和净空符合所选结构策略。
+- 层板和隔板不与所选背板策略或门板包络相交。
+- 门缝、门数量和开启策略已经确定。
+- 吊柜和高柜包含固定方式和荷载假设。
+- 板件、BOM、封边和五金输出来自同一份已确认方案。
+- 暂定的软件默认值已针对制造环境替换或获得接受。
 
-## Reporting boundary
+## 报告边界
 
-- Report only commands, validations, and artifacts that actually ran or exist.
-- Do not call BOM, edge-banding, hardware, or cut-list output
-  manufacturing-ready until the relevant manufacturing policy and validation
-  gates are accepted.
+- 只报告实际运行或存在的命令、验证和产物。
+- 在相关制造策略和验证关卡获得接受前，不得将 BOM、封边、五金或裁切清单输出称为可直接制造。

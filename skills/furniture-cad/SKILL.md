@@ -1,102 +1,65 @@
 ---
 name: furniture-cad
-description: Turn requests for any furniture family into confirmable Design Intent, Layout Planning, Panel Planning, Manufacturing Policy, Feature Tree planning, and validated CAD through this workspace. Use for furniture dimensions or layouts, structure, panel semantics, manufacturing reasoning, STEP generation, or questions about what the live furniture pipeline supports.
+description: 通过本工作区，把任何家具类别的请求转化为可确认的设计意图、布局规划、板件规划、制造策略、特征树规划和经过验证的 CAD。适用于家具尺寸或布局、结构、板件语义、制造推理、STEP 生成，以及当前家具流水线能力范围相关问题。
 ---
 
-# Furniture CAD
+# 家具 CAD
 
-Use this skill as a thin router. Keep user intent, spatial organization,
-manufacturing parts, manufacturing rules, CAD modeling semantics, runtime
-execution, and validation as separate domain layers. Runtime code owns
-executable behavior; references in this skill explain how to use it.
+将本技能作为轻量路由器。用户意图、空间组织、制造零件、制造规则、CAD 建模语义、运行时执行和验证应保持为独立领域层。运行时代码决定可执行行为；本技能中的参考文档说明如何使用这些行为。
 
-Conceptual workflow:
+概念工作流：
 
-`Design Intent -> Layout Planning -> Panel Planning -> Manufacturing Policy -> Feature Tree -> CAD -> STEP`
+`设计意图 -> 布局规划 -> 板件规划 -> 制造策略 -> 特征树 -> CAD -> STEP`
 
-These are documentation and reasoning layers. In the current runtime, planning
-is still implemented by the existing planner under this skill's `scripts/`;
-this skill does not define a new planner interface, executable JSON shape, or
-runtime step.
+这些是文档和推理层。当前运行时仍由本技能 `scripts/` 下已有的规划器实现规划；本技能不定义新的规划器接口、可执行 JSON 结构或运行时步骤。
 
-## Mandatory code placement
+## 强制代码放置规则
 
-Keep the workspace to exactly two local script surfaces:
+工作区只保留两个本地脚本位置：
 
-1. Put reusable furniture runtime modules, commands, validation helpers, and
-   their tests under `skills/furniture-cad/scripts/`.
-2. Put disposable inspection, migration, debugging, and CAD experiment scripts
-   under the ignored `temp/` directory and remove them when the task ends.
+1. 可复用的家具运行时模块、命令、验证辅助工具及其测试，放在 `skills/furniture-cad/scripts/` 下。
+2. 一次性的检查、迁移、调试和 CAD 实验脚本，放在已忽略的 `temp/` 目录下，并在任务结束时删除。
 
-Do not create root-level `scripts/`, `packages/`, `tests/`, `scratch/`, or
-`tmp/` code trees. Do not put `.py`, `.pyc`, PowerShell, shell, JavaScript, or
-other generated source files under `generated/`; generated CAD source belongs
-under `temp/cad-source/`. Do not create a third script location for
-convenience. Before completing any code-layout or CAD-generation change, run:
+禁止创建根级 `scripts/`、`packages/`、`tests/`、`scratch/` 或 `tmp/` 代码树。禁止在 `generated/` 下放置 `.py`、`.pyc`、PowerShell、shell、JavaScript 或其他生成的源文件；生成的 CAD 源码应放在 `temp/cad-source/`。不得为了方便创建第三个脚本位置。完成任何代码布局或 CAD 生成变更前，运行：
 
 ```powershell
 .\.venv\Scripts\python.exe skills\furniture-cad\scripts\validate_workspace_layout.py
 ```
 
-Treat any reported violation as a failed validation and move or delete the
-offending file before reporting completion.
+任何报告的违规项都视为验证失败；报告完成前必须移动或删除违规文件。
 
-## Route by task
+## 按任务路由
 
-1. Read the [furniture catalog](references/intake/catalog.yaml), match the user
-   request to one family. Use the catalog fallback when no family matches.
-   Default dimensions and parameters live in
-   `scripts/furniture/design_spec.py` (dataclass defaults + `CABINET_PRESETS`).
-2. For user requirements, dimensions, style, constraints, or early design
-   discussion, read [references/design-intent.md](references/design-intent.md).
-   Return a confirmable Design Intent and stop unless the user requested later
-   stages.
-3. For layout, panel semantics, manufacturing policy, Feature Tree reasoning,
-   or validation, load the selected catalog entry's applicable
-   `planning_references`.
-4. Before claiming support, normalizing executable JSON, running generation, or
-   reporting artifacts, read
-   [references/workspace-pipeline.md](references/workspace-pipeline.md) and
-   inspect the named live entry point when capability may have changed.
-5. For unsupported furniture families, complete useful intent or modeling-plan
-   work, then state the exact execution boundary. Do not invent a new runtime
-   path inside the skill.
+1. 读取[家具目录](references/intake/catalog.yaml)，将用户请求匹配到一个类别；无匹配时使用目录的回退规则。默认尺寸和参数位于 `scripts/furniture/design_spec.py`（数据类默认值及 `CABINET_PRESETS`）。
+2. 对于用户需求、尺寸、风格、约束或早期设计讨论，读取 [references/design-intent.md](references/design-intent.md)。返回一份可确认的设计意图；除非用户要求后续阶段，否则到此停止。
+3. 对于布局、板件语义、制造策略、特征树推理或验证，加载所选目录项适用的 `planning_references`。
+4. 在声称支持、规范化可执行 JSON、运行生成或报告产物前，读取 [references/workspace-pipeline.md](references/workspace-pipeline.md)；若能力可能已变化，还要检查其中指向的实时入口。
+5. 对不受支持的家具类别，先完成有价值的意图或建模方案工作，再明确说明执行边界；不得在技能内虚构新的运行时路径。
 
-## Domain references
+## 领域参考文档
 
-- [Design Intent](references/design-intent.md): what furniture should be built.
-- [Layout Planning](references/layout-planning.md): how it is organized.
-- [Panel Planning](references/panel-planning.md): what physical components
-  exist.
-- [Manufacturing Policy](references/manufacturing-policy.md): how it should be
-  manufactured.
-- [Feature Tree](references/feature-tree.md): how components should be modeled.
-- [Workspace Pipeline](references/workspace-pipeline.md): what the current
-  runtime executes.
-- [Validation](references/validation.md): which gates must pass before
-  reporting success.
+- [设计意图](references/design-intent.md)：要制作什么家具。
+- [布局规划](references/layout-planning.md)：家具如何组织。
+- [板件规划](references/panel-planning.md)：有哪些实体部件。
+- [制造策略](references/manufacturing-policy.md)：应如何制造。
+- [特征树](references/feature-tree.md)：部件应如何建模。
+- [工作区流水线](references/workspace-pipeline.md)：当前运行时实际执行什么。
+- [验证](references/validation.md)：报告成功前必须通过哪些关卡。
 
-## Work in stages
+## 分阶段工作
 
-1. Capture and confirm Design Intent: what furniture should be built.
-2. Resolve Layout Planning: the major arrangement and furniture-family choices.
-3. Resolve Panel Planning: what physical furniture components exist.
-4. Resolve Manufacturing Policy: materials, tolerances, joinery, and BOM
-   assumptions.
-5. Produce Feature Tree modeling semantics before CAD geometry details.
-6. Run the skill-owned planner, emitter, and CAD bridge in order when supported.
-7. Validate the relevant layers and artifacts before reporting success.
+1. 捕获并确认设计意图：要制作什么家具。
+2. 解决布局规划：主要布局和家具类别选择。
+3. 解决板件规划：存在哪些实体家具部件。
+4. 解决制造策略：材料、公差、连接方式和 BOM 假设。
+5. 在 CAD 几何细节前生成特征树建模语义。
+6. 在受支持时，依次运行技能自有的规划器、发射器和 CAD 桥接器。
+7. 报告成功前验证相关层和产物。
 
-If the user explicitly requests an end-to-end run and supplies enough
-information for a supported type, continue without an extra approval stop. Ask
-one focused question only when proceeding would make fit, safety, structure, or
-fabrication materially wrong.
+若用户明确要求端到端运行，并为受支持类型提供了足够信息，则无需额外批准即可继续。只有继续操作会导致适配、安全、结构或制造出现实质错误时，才询问一个聚焦问题。
 
-## Return
+## 返回内容
 
-- Intent work: the Design Intent, assumptions, unresolved decisions, and at
-  most one blocking confirmation question.
-- Planning work: the normalized specification, layout decisions, Panel Plan
-  semantics, manufacturing policy assumptions, and Feature Tree implications.
-- Generation work: the normalized input, command result, validations performed,
-  and paths to artifacts that exist.
+- 意图工作：设计意图、假设、未解决决策，以及至多一个阻塞性的确认问题。
+- 规划工作：规范化规格、布局决策、板件规划语义、制造策略假设和特征树影响。
+- 生成工作：规范化输入、命令结果、已执行的验证，以及实际存在的产物路径。

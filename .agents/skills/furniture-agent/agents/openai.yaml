@@ -1,4 +1,4 @@
 interface:
-  display_name: "Furniture Agent"
-  short_description: "Route local furniture planning, CAD, and review"
-  default_prompt: "Use $furniture-agent to route this request through the local furniture and CAD skills."
+  display_name: "家具智能体"
+  short_description: "路由本地家具规划、CAD 与审查工作"
+  default_prompt: "使用 $furniture-agent 将此请求路由到本地家具技能和 CAD 技能。"

@@ -1,35 +1,21 @@
-# Feature Tree
+# 特征树
 
-Use this reference after Panel Planning and Manufacturing Policy when CAD
-modeling semantics are needed. Feature Tree answers: "How should these
-components be modeled?"
+在板件规划和制造策略之后、需要 CAD 建模语义时使用本文档。特征树回答：“这些部件应如何建模？”
 
-This file owns CAD modeling intent: feature identities, dependencies,
-parameter sources, and assembly structure. It does not own user requirements,
-layout choices, manufacturing policy, runtime commands, STEP entities, or
-artifact validation.
+本文件负责 CAD 建模意图：特征标识、依赖关系、参数来源和装配结构。它不负责用户需求、布局选择、制造策略、运行时命令、STEP 实体或产物验证。
 
-## Modeling responsibilities
+## 建模职责
 
-- Convert semantic components into modeling features with stable names.
-- Preserve dependencies between components, such as panels depending on the
-  finished envelope, shelves depending on bay ranges, and doors depending on
-  openings.
-- Keep manufacturing annotations available as metadata when useful, without
-  turning them into fabrication approval.
-- Keep CAD details downstream of the Feature Tree; this layer describes what
-  should be modeled, not how a CAD API call is executed.
+- 将语义化部件转换为具有稳定名称的建模特征。
+- 保留部件之间的依赖，例如板件依赖成品包络、层板依赖格位范围、门板依赖开口。
+- 必要时将制造注释保留为元数据，但不得将其视为加工批准。
+- CAD 细节应位于特征树下游；本层描述要建模什么，而不是如何执行 CAD API 调用。
 
-## Execution boundary
+## 执行边界
 
-Feature Tree planning may describe modeling semantics even when the current
-runtime cannot execute every semantic detail. Executable support belongs to the
-Workspace Pipeline layer.
+即使当前运行时无法执行所有语义细节，特征树规划仍可描述建模语义。可执行支持归工作区流水线层负责。
 
-## Boundary
+## 边界
 
-- Do not define Design Intent fields, layout zones, panel decomposition rules,
-  manufacturing tolerances, command lines, output paths, STEP topology, or
-  validation results here.
-- Do not bypass the workspace planner by hand-writing one-off CAD source for
-  ordinary furniture generation.
+- 此处不得定义设计意图字段、布局区域、板件拆分规则、制造公差、命令行、输出路径、STEP 拓扑或验证结果。
+- 普通家具生成不得绕过工作区规划器，手写一次性 CAD 源码。

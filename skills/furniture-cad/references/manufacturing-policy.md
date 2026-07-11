@@ -1,42 +1,26 @@
-# Manufacturing Policy
+# 制造策略
 
-Use this reference after Panel Planning when manufacturing assumptions, BOM
-reasoning, or fabrication caveats matter. Manufacturing Policy answers: "How
-should it be manufactured?"
+在板件规划之后，当制造假设、BOM 推理或加工注意事项重要时使用本文档。制造策略回答：“应如何制造？”
 
-This file owns material and process policy. It does not own user intent,
-layout organization, panel decomposition, Feature Tree operations, CAD
-geometry, runtime commands, or artifact validation.
+本文件负责材料和工艺策略，不负责用户意图、布局组织、板件拆分、特征树操作、CAD 几何、运行时命令或产物验证。
 
-## Resolve policy
+## 需确定的策略
 
-- Material family, grade, thickness policy, grain direction, visible faces, and
-  finish expectations.
-- Edge banding policy: which exposed edges need banding, banding thickness, and
-  whether allowances are preliminary or accepted.
-- Joinery policy: screws, dowels, cams, dados, rabbets, grooves, glue, or other
-  construction assumptions.
-- Hardware policy: hinges, slides, pulls, shelf pins, wall fixing, anti-tip
-  hardware, and load assumptions.
-- Tolerances and clearances: door gaps, reveal, installation clearance,
-  service gaps, floor/wall unevenness, and safety margins.
-- BOM policy: whether records are preliminary estimates, accepted purchasing
-  records, or manufacturing-ready records.
+- 材料类别、等级、厚度策略、纹理方向、可见面和饰面预期。
+- 封边策略：哪些外露边需要封边、封边厚度，以及余量是暂定还是已接受。
+- 连接策略：螺钉、木榫、偏心件、槽口、企口、沟槽、胶合或其他结构假设。
+- 五金策略：铰链、滑轨、拉手、层板托、墙体固定、防倾倒五金和荷载假设。
+- 公差和净空：门缝、留缝、安装净空、设备缝隙、地墙不平度和安全余量。
+- BOM 策略：记录是初步估算、已接受的采购记录还是可直接制造的记录。
 
-## Cabinet guidance
+## 柜体指导
 
-- Back strategy may be applied, inset, rebated, grooved, or omitted; keep the
-  selected policy explicit.
-- Toe-kick, plinth, leg, and base hardware assumptions must be explicit for
-  floor cabinets.
-- Wall cabinets need explicit fixing, substrate, load, and installation
-  assumptions before being called manufacturing-ready.
+- 背板可采用覆盖、嵌入、企口、开槽或省略策略；所选策略必须明确。
+- 地柜必须明确踢脚、底座、柜脚和底部五金假设。
+- 吊柜在称为可制造前，必须明确固定方式、基层、荷载和安装假设。
 
-## Boundary
+## 边界
 
-- Do not create or alter panel roles, panel counts, layout zones, Feature Tree
-  nodes, CAD operations, STEP entities, executable JSON, or runtime artifact
-  paths.
-- Treat package defaults as software behavior, not factory-approved standards.
-- Treat hardware estimates, edge banding, and tolerances as preliminary until
-  the user accepts the relevant manufacturing policy.
+- 不得创建或修改板件角色、板件数量、布局区域、特征树节点、CAD 操作、STEP 实体、可执行 JSON 或运行时产物路径。
+- 将程序包默认值视为软件行为，不得视为工厂批准的标准。
+- 在用户接受相关制造策略前，五金估算、封边和公差均视为暂定内容。

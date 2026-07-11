@@ -1,4 +1,4 @@
 interface:
-  display_name: "Furniture CAD"
-  short_description: "Plan furniture and run validated CAD workflows"
-  default_prompt: "Use $furniture-cad to turn my furniture request into confirmed intent and continue through the live validated pipeline."
+  display_name: "家具 CAD"
+  short_description: "规划家具并运行经过验证的 CAD 工作流"
+  default_prompt: "使用 $furniture-cad 将我的家具请求转成已确认的设计意图，并继续执行当前经过验证的流水线。"

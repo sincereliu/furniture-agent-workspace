@@ -1,60 +1,41 @@
-# Layout Planning
+# 布局规划
 
-Use this reference after Design Intent and before Panel Planning.
-Layout Planning answers: "How is the furniture organized?"
+在设计意图之后、板件规划之前使用本文档。布局规划回答：“家具如何组织？”
 
-This file owns spatial organization: zones, compartments, openings, shelves,
-drawers, doors, hanging areas, service clearances, and furniture-family layout
-choices. It does not define physical panel records, manufacturing allowances,
-Feature Tree operations, CAD solids, runtime commands, or validation results.
+本文件负责空间组织：区域、隔间、开口、层板、抽屉、门、挂衣区、设备净空及家具类别的布局选择。它不定义实体板件记录、制造余量、特征树操作、CAD 实体、运行时命令或验证结果。
 
-## Coordinate convention
+## 坐标约定
 
-- Use millimeters unless the user explicitly requests another unit.
-- Interpret overall dimensions as `W x D x H`: X left to right, Y rear to
-  user-facing front, and Z upward.
-- Use the lower-left-rear ground corner of the finished envelope as
-  `(0, 0, 0)`.
-- Describe layout regions as envelope ranges and offsets. Do not convert them
-  into CAD primitive centers in this layer.
+- 除非用户明确要求其他单位，否则使用毫米。
+- 总体尺寸解释为 `W x D x H`：X 从左到右，Y 从后向用户侧前方，Z 向上。
+- 以成品外包络左后下方的地面角为 `(0, 0, 0)`。
+- 使用包络范围和偏移描述布局区域；本层不要将其转换成 CAD 基元中心。
 
-## Resolve for layout
+## 布局需确定的事项
 
-- Whether dimensions describe the finished envelope, carcass, internal
-  clearance, or installation opening.
-- The major organization: open bays, doors, shelves, dividers, drawers,
-  hanging zones, service spaces, or decorative zones.
-- Door strategy at the layout level: open, hinged, sliding, overlay, inset,
-  count, and required clearances.
-- Shelf or divider strategy at the layout level: fixed, adjustable, count,
-  approximate spans, and load-sensitive zones.
-- Base strategy at the layout level: floor-standing sides, legs, plinth, or
-  toe-kick.
-- Installation context: wall fixing zones, anti-tip needs, service gaps, room
-  obstacles, and access constraints.
+- 尺寸描述的是成品外包络、柜体、内部净空还是安装洞口。
+- 主要组织方式：开放格、门、层板、隔板、抽屉、挂衣区、设备空间或装饰区域。
+- 布局层的门策略：开放、铰链门、滑门、盖门、嵌门、数量及所需净空。
+- 布局层的层板或隔板策略：固定或可调、数量、大致跨度和承重敏感区域。
+- 布局层的底部策略：侧板落地、柜脚、底座或踢脚板。
+- 安装环境：墙体固定区、防倾倒需求、设备缝隙、房间障碍和通行限制。
 
-## Family guidance
+## 类别指导
 
-### Floor cabinet
+### 地柜
 
-- Resolve whether overall height includes plinth, legs, countertop, or
-  decorative panels.
-- Keep door and drawer fronts above an exposed toe-kick zone.
-- Treat the base/plinth choice as an explicit layout decision, not a universal
-  rule.
-- Floor cabinets may include drawers, dividers, shelves, and hanging rods as
-  optional layout zones when requested.
+- 确定总高度是否包含底座、柜脚、台面或装饰板。
+- 门板和抽屉面板应位于外露踢脚区域之上。
+- 将底部或底座选择作为明确的布局决策，而非通用规则。
+- 用户需要时，地柜可包含抽屉、隔板、层板和挂衣杆等可选布局区域。
 
-### Wall cabinet
+### 吊柜
 
-- Do not add a toe-kick zone.
-- Treat wall fixing, expected load, substrate, and installation clearance as
-  safety-critical unresolved layout fields when unknown.
-- Include lighting recesses, fillers, and service gaps only when requested.
+- 不要增加踢脚区域。
+- 墙体固定、预期荷载、基层和安装净空未知时，应作为安全关键的未解决布局字段。
+- 只有用户要求时才加入灯槽、收口板和设备缝隙。
 
-## Boundary
+## 边界
 
-- Do not define panel roles, panel quantities, finished panel dimensions,
-  edge-banding policy, drilling, hardware counts, Feature Tree nodes, CAD API
-  calls, STEP entities, or runtime artifact paths.
-- Pass resolved layout decisions to Panel Planning.
+- 不得定义板件角色、数量、成品板件尺寸、封边策略、钻孔、五金数量、特征树节点、CAD API 调用、STEP 实体或运行时产物路径。
+- 将已确定的布局决策传递给板件规划。

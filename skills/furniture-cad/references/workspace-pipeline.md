@@ -1,29 +1,21 @@
-# Workspace Furniture Pipeline
+# 工作区家具流水线
 
-Read this reference before claiming executable support, normalizing input,
-running generation, or reporting runtime artifacts.
+在声称具备可执行支持、规范化输入、运行生成或报告运行时产物前，读取本文档。工作区流水线回答：“当前工作区实际执行什么？”
 
-Workspace Pipeline answers: "What does the current workspace execute?"
+本文件负责运行时契约、命令、生成产物路径和当前执行限制。它不负责用户意图、布局规划、板件语义、制造策略、特征树设计规则或验证关卡。
 
-This file owns runtime contracts, commands, generated artifact paths, and
-current executable limits. It does not own user intent, layout planning, panel
-semantics, manufacturing policy, Feature Tree design rules, or validation
-gates.
+## 当前能力
 
-## Current capability
+实时入口 `skills/furniture-cad/scripts/furniture/planner.py` 接受：
 
-The live entry point `skills/furniture-cad/scripts/furniture/planner.py` accepts:
+- `floor_cabinet`：固定柜体模板，包含背板、踢脚板、层板和门板。
+- `wall_cabinet`：固定柜体模板，包含背板、层板和门板，不含踢脚板。
 
-- `floor_cabinet`: fixed carcass template with back, toe-kick, shelves, doors;
-- `wall_cabinet`: fixed carcass template with back, shelves, doors, no toe-kick.
+这些是边界明确的模板，不是任意家具配置器。承诺布局变体前，必须检查 `planner.py` 及相应模板。其他家具类别在实现前只支持意图或建模方案。
 
-These are narrow templates, not arbitrary furniture configurators. Inspect
-`planner.py` and the corresponding template before promising a layout variant.
-Other furniture families are intent/modeling-plan only until implemented.
+## 可执行 JSON
 
-## Executable JSON
-
-All numeric values are millimeters. Every supported type requires:
+所有数值单位均为毫米。每个受支持类型都需要：
 
 ```json
 {
@@ -43,70 +35,45 @@ All numeric values are millimeters. Every supported type requires:
 }
 ```
 
-For `wall_cabinet`, the default dimensions are narrower: `width` 800, `height`
-900, `depth` 350, `toe_kick_height` 0, `shelf_count` 1.
+`wall_cabinet` 的默认尺寸较小：`width` 800、`height` 900、`depth` 350、`toe_kick_height` 0、`shelf_count` 1。
 
-Default dimensions and parameters live in
-`skills/furniture-cad/scripts/furniture/design_spec.py` (`CABINET_PRESETS` for per-type defaults,
-dataclass fields for global constants). Do not ask the user to fill them unless
-an override is requested or required by the design.
+默认尺寸和参数位于 `skills/furniture-cad/scripts/furniture/design_spec.py`：`CABINET_PRESETS` 保存各类型默认值，数据类字段保存全局常量。除非用户要求覆盖或设计必须覆盖，否则不要要求用户逐项填写。
 
-The executable contract is flat JSON.
+可执行契约是扁平 JSON。
 
-Proceed to execution only when the overall dimensions are numeric and the
-requested variant matches a live template. Otherwise stop at the appropriate
-DDD planning layer and state the unsupported boundary.
+只有总体尺寸为数值且请求的变体与实时模板匹配时，才进入执行。否则停在合适的 DDD 规划层，并说明不支持的边界。
 
-## Generation
+## 生成
 
-From the workspace root, run:
+在工作区根目录运行：
 
 ```powershell
 .\.venv\Scripts\python.exe skills\furniture-cad\scripts\generate_furniture.py <spec.json> --force
 ```
 
-Use `--name <artifact-name>` when the desired artifact name differs from the
-spec filename. Names may contain only letters, numbers, hyphens, and
-underscores.
+当期望的产物名称与规格文件名不同时，使用 `--name <artifact-name>`。名称只能包含字母、数字、连字符和下划线。
 
-The command writes to `generated/<artifact-name>/`:
+命令写入 `generated/<artifact-name>/`：
 
-- `<artifact-name>.feature-tree.json`;
-- `<artifact-name>.bom.md`;
-- `<artifact-name>.step`;
-- the hidden adjacent Viewer topology GLB produced by the CAD bridge.
+- `<artifact-name>.feature-tree.json`
+- `<artifact-name>.bom.md`
+- `<artifact-name>.step`
+- CAD 桥接器生成的相邻隐藏 Viewer 拓扑 GLB
 
-The derived build123d Python source is temporary and is written only under
-`temp/cad-source/<artifact-name>/`. It must never be persisted under
-`generated/`.
+派生的 build123d Python 源码是临时文件，只写入 `temp/cad-source/<artifact-name>/`，绝不能持久化到 `generated/`。
 
-The legacy CLI does not create a Project/Revision record. The application-layer
-`skills/furniture-cad/scripts/furniture/workflow_orchestrator.py` owns the traceable workflow and
-writes `design-intent.json`, `feature-tree.json`, and `bom.md` into a revision
-directory. It writes derived CAD source under `temp/cad-source/<revision-id>/`
-before optionally invoking the CAD bridge.
-`skills/furniture-cad/scripts/furniture/workflow_store.py` persists the Project/Revision state as
-`project.json`.
+旧版 CLI 不创建 Project/Revision 记录。应用层的 `skills/furniture-cad/scripts/furniture/workflow_orchestrator.py` 负责可追溯工作流，并把 `design-intent.json`、`feature-tree.json` 和 `bom.md` 写入修订目录。它先把派生 CAD 源码写入 `temp/cad-source/<revision-id>/`，随后可选择调用 CAD 桥接器。`skills/furniture-cad/scripts/furniture/workflow_store.py` 将 Project/Revision 状态持久化为 `project.json`。
 
-The runtime pipeline is:
+运行时流水线为：
 
-`intent JSON -> existing furniture planner -> conceptual Panel Plan -> Feature
-Tree -> furniture CAD emitter -> text-to-cad bridge -> STEP + Viewer topology`
+`意图 JSON -> 现有家具规划器 -> 概念板件方案 -> 特征树 -> 家具 CAD 发射器 -> text-to-cad 桥接器 -> STEP + Viewer 拓扑`
 
-The conceptual Panel Plan is represented by the existing planner flow. It does
-not add a new runtime command, planner interface, executable JSON shape,
-Feature Tree operation set, or STEP entity model.
+概念板件方案由现有规划器流程表达。它不增加新的运行时命令、规划器接口、可执行 JSON 结构、特征树操作集或 STEP 实体模型。
 
-Do not send furniture JSON directly to text-to-cad. Do not bypass the planner
-with one-off CAD source or modify the external submodule for ordinary furniture
-generation.
+不要把家具 JSON 直接发送给 text-to-cad。普通家具生成不得用一次性 CAD 源码绕过规划器，也不得修改外部子模块。
 
-## Runtime panel and BOM path
+## 运行时板件与 BOM 路径
 
-`skills/furniture-cad/scripts/furniture/layout_pipeline.py` exposes `plan_cabinet()` for the two
-cabinet types. It returns placements, panel records, and an estimated BOM.
-Treat those panel records as the current runtime expression of Panel Planning,
-not as a separate executable stage.
-The main generation CLI persists a BOM Markdown report, but it does not persist
-a cut-list artifact. Do not report a cut list unless a command actually created
-one.
+`skills/furniture-cad/scripts/furniture/layout_pipeline.py` 为两种柜体类型公开 `plan_cabinet()`。它返回位置、板件记录和估算 BOM。将这些板件记录视为板件规划当前的运行时表达，而不是单独的可执行阶段。
+
+主生成 CLI 会持久化 BOM Markdown 报告，但不会持久化裁切清单产物。除非某个命令确实创建了裁切清单，否则不得报告存在裁切清单。
