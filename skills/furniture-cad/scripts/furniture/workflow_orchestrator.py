@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 from pathlib import Path
+import re
 from typing import Any
 
 from furniture.cad_bridge import BridgeResult, CadBridge
@@ -17,6 +18,9 @@ from furniture.workflow_project import Project, Revision
 from furniture.design_spec import FurnitureSpec
 from furniture.validation import ValidationReport
 from furniture.workflow_state import WorkflowStage
+
+
+SAFE_ARTIFACT_NAME = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 @dataclass(frozen=True)
@@ -48,6 +52,103 @@ class FurnitureOrchestrator:
     def revise(self, project: Project, intent: DesignIntent) -> Revision:
         return project.add_revision(intent)
 
+    def execute_spec(
+        self,
+        name: str,
+        spec: dict[str, Any],
+        *,
+        output_root: str | Path | None = None,
+        artifact_name: str | None = None,
+        generate_cad: bool = False,
+        force: bool = False,
+    ) -> OrchestrationResult:
+        """Run a confirmed one-shot CLI/API specification through this orchestrator.
+
+        Interactive Agent work can continue to use create_project(),
+        confirm_intent(), and run() separately. CLI and API requests are already
+        explicit execution requests, so this convenience method confirms their
+        normalized DesignIntent before running the same application workflow.
+        """
+        intent = self.intent_from_spec(spec)
+        project = self.create_project(name, intent)
+        self.confirm_intent(project)
+        return self.run(
+            project,
+            output_root=output_root,
+            artifact_name=artifact_name,
+            generate_cad=generate_cad,
+            force=force,
+        )
+
+    @staticmethod
+    def intent_from_spec(spec: dict[str, Any]) -> DesignIntent:
+        """Convert the maintained flat executable JSON into a DesignIntent."""
+        data = dict(spec)
+        furniture_type = str(
+            data.get("type", data.get("furniture_type", ""))
+        ).strip().lower()
+        size = data.get("overall_size", {})
+        normalized_spec = FurnitureSpec.from_dict({**data, "type": furniture_type})
+
+        def dimension(nested_key: str, flat_key: str, fallback: float) -> Any:
+            value = size.get(nested_key, data.get(flat_key))
+            return fallback if value is None else value
+
+        layout = dict(data.get("layout", {}))
+        for key in ("shelf_count", "n_doors", "toe_kick_height"):
+            if key in data:
+                layout[key] = data[key]
+
+        structure = dict(data.get("structure", {}))
+        reserved = {
+            "type",
+            "furniture_type",
+            "width",
+            "depth",
+            "height",
+            "overall_size",
+            "purpose",
+            "layout",
+            "appearance",
+            "structure",
+            "constraints",
+            "assumptions",
+            "unresolved",
+            "confirmed",
+            "schema_version",
+            "shelf_count",
+            "n_doors",
+            "toe_kick_height",
+        }
+        for key, value in data.items():
+            if key not in reserved:
+                structure[key] = value
+
+        return DesignIntent.from_dict(
+            {
+                "furniture_type": furniture_type,
+                "overall_size": {
+                    "width_mm": dimension(
+                        "width_mm", "width", normalized_spec.width
+                    ),
+                    "depth_mm": dimension(
+                        "depth_mm", "depth", normalized_spec.depth
+                    ),
+                    "height_mm": dimension(
+                        "height_mm", "height", normalized_spec.height
+                    ),
+                },
+                "purpose": data.get("purpose", ""),
+                "layout": layout,
+                "appearance": data.get("appearance", {}),
+                "structure": structure,
+                "constraints": data.get("constraints", []),
+                "assumptions": data.get("assumptions", {}),
+                "unresolved": data.get("unresolved", []),
+                "schema_version": data.get("schema_version", 1),
+            }
+        )
+
     def confirm_intent(self, project: Project) -> Revision:
         revision = project.latest
         revision.intent = revision.intent.confirm()
@@ -59,6 +160,7 @@ class FurnitureOrchestrator:
         project: Project,
         *,
         output_root: str | Path | None = None,
+        artifact_name: str | None = None,
         generate_cad: bool = False,
         force: bool = False,
     ) -> OrchestrationResult:
@@ -102,9 +204,17 @@ class FurnitureOrchestrator:
 
             bridge_result = None
             if output_root is not None:
-                artifact_dir = self._artifact_dir(output_root, project, revision)
+                artifact_dir = self._artifact_dir(
+                    output_root,
+                    project,
+                    revision,
+                    artifact_name=artifact_name,
+                )
                 source_path, step_path = self._write_artifacts(
-                    revision, pipeline, artifact_dir
+                    revision,
+                    pipeline,
+                    artifact_dir,
+                    artifact_name=artifact_name,
                 )
                 revision.workflow.advance(
                     WorkflowStage.ARTIFACTS_GENERATED,
@@ -178,12 +288,24 @@ class FurnitureOrchestrator:
         return report
 
     def _artifact_dir(
-        self, output_root: str | Path, project: Project, revision: Revision
+        self,
+        output_root: str | Path,
+        project: Project,
+        revision: Revision,
+        *,
+        artifact_name: str | None = None,
     ) -> Path:
         root = Path(output_root)
         if not root.is_absolute():
             root = self.workspace_root / root
-        path = root.resolve() / project.id / f"revision-{revision.number}"
+        if artifact_name is not None:
+            if not SAFE_ARTIFACT_NAME.fullmatch(artifact_name):
+                raise ValueError(
+                    "artifact_name may contain only letters, digits, '-' and '_'"
+                )
+            path = root.resolve() / artifact_name
+        else:
+            path = root.resolve() / project.id / f"revision-{revision.number}"
         path.mkdir(parents=True, exist_ok=True)
         return path
 
@@ -192,14 +314,28 @@ class FurnitureOrchestrator:
         revision: Revision,
         pipeline: CabinetPipelineResult,
         artifact_dir: Path,
+        *,
+        artifact_name: str | None = None,
     ) -> tuple[Path, Path]:
-        intent_path = artifact_dir / "design-intent.json"
-        feature_tree_path = artifact_dir / "feature-tree.json"
-        bom_path = artifact_dir / "bom.md"
-        source_dir = self.workspace_root / "temp" / "cad-source" / revision.id
+        if artifact_name:
+            intent_path = artifact_dir / f"{artifact_name}.design-intent.json"
+            feature_tree_path = artifact_dir / f"{artifact_name}.feature-tree.json"
+            bom_path = artifact_dir / f"{artifact_name}.bom.md"
+            source_key = artifact_name
+            source_filename = f"{artifact_name}.py"
+            step_filename = f"{artifact_name}.step"
+        else:
+            intent_path = artifact_dir / "design-intent.json"
+            feature_tree_path = artifact_dir / "feature-tree.json"
+            bom_path = artifact_dir / "bom.md"
+            source_key = revision.id
+            source_filename = "model.py"
+            step_filename = "model.step"
+
+        source_dir = self.workspace_root / "temp" / "cad-source" / source_key
         source_dir.mkdir(parents=True, exist_ok=True)
-        source_path = source_dir / "model.py"
-        step_path = artifact_dir / "model.step"
+        source_path = source_dir / source_filename
+        step_path = artifact_dir / step_filename
 
         intent_path.write_text(
             json.dumps(revision.intent.to_dict(), ensure_ascii=False, indent=2),

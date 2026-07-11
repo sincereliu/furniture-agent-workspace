@@ -11,7 +11,7 @@ description: 通过本工作区，把任何家具类别的请求转化为可确�
 
 `设计意图 -> 布局规划 -> 板件规划 -> 制造策略 -> 特征树 -> CAD -> STEP`
 
-这些是文档和推理层。当前运行时仍由本技能 `scripts/` 下已有的规划器实现规划；本技能不定义新的规划器接口、可执行 JSON 结构或运行时步骤。
+这些是文档和推理层。当前运行时由 `scripts/furniture/workflow_orchestrator.py` 统一编排，并委托已有规划器实现领域规划；本技能不定义新的规划器接口、可执行 JSON 结构或平行运行时步骤。
 
 ## 强制代码放置规则
 
@@ -35,6 +35,7 @@ description: 通过本工作区，把任何家具类别的请求转化为可确�
 3. 对于布局、板件语义、制造策略、特征树推理或验证，加载所选目录项适用的 `planning_references`。
 4. 在声称支持、规范化可执行 JSON、运行生成或报告产物前，读取 [references/workspace-pipeline.md](references/workspace-pipeline.md)；若能力可能已变化，还要检查其中指向的实时入口。
 5. 对不受支持的家具类别，先完成有价值的意图或建模方案工作，再明确说明执行边界；不得在技能内虚构新的运行时路径。
+6. CLI、API 和 Agent 必须统一经过 `FurnitureOrchestrator`；领域规划器、发射器和 CAD Bridge 只由 Orchestrator 或其委托的领域流水线调用。
 
 ## 领域参考文档
 

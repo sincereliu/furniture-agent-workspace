@@ -7,26 +7,23 @@
 from __future__ import annotations
 
 import json
-import re
 import sys
 from pathlib import Path
 
 SCRIPT_ROOT = Path(__file__).resolve().parent
 WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
-SAFE_NAME = re.compile(r"^[A-Za-z0-9_-]+$")
 
 # skill 自带 furniture 运行包，不依赖仓库根目录的 packages/。
 sys.path.insert(0, str(SCRIPT_ROOT))
 
-from furniture.layout_pipeline import plan_cabinet
-from furniture.design_spec import FurnitureSpec
-from furniture.feature_tree_builder import panels_to_feature_tree
-from furniture.feature_tree_emitter import write_build123d_source
-from furniture.manufacturing_bom import format_bom_markdown
-from furniture.cad_bridge import CadBridge
+from furniture.workflow_orchestrator import FurnitureOrchestrator
 
 
-def main() -> int:
+def main(
+    argv: list[str] | None = None,
+    *,
+    orchestrator: FurnitureOrchestrator | None = None,
+) -> int:
     import argparse
 
     parser = argparse.ArgumentParser(
@@ -40,59 +37,59 @@ def main() -> int:
         help="输出根目录（默认 generated）",
     )
     parser.add_argument("--force", action="store_true", help="强制重新生成 STEP")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
-    # ── 1. 读取并解析规格 ──
+    # CLI 只负责协议适配；完整执行顺序统一由 FurnitureOrchestrator 控制。
     spec_path = _workspace_path(args.spec)
     spec_data = json.loads(spec_path.read_text(encoding="utf-8"))
-    fspec = FurnitureSpec.from_dict(spec_data)
-
     artifact_name = args.name or spec_path.stem
-    if not SAFE_NAME.fullmatch(artifact_name):
-        print(f"Error: 输出名称只能包含字母、数字、'-' 和 '_': {artifact_name}", file=sys.stderr)
+
+    try:
+        application = orchestrator or FurnitureOrchestrator(
+            workspace_root=WORKSPACE_ROOT
+        )
+        orchestration = application.execute_spec(
+            artifact_name,
+            spec_data,
+            output_root=args.output_root,
+            artifact_name=artifact_name,
+            generate_cad=True,
+            force=args.force,
+        )
+    except (OSError, TypeError, ValueError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
         return 1
 
-    output_root = _workspace_path(args.output_root)
-    artifact_dir = output_root / artifact_name
-    artifact_dir.mkdir(parents=True, exist_ok=True)
+    if orchestration.pipeline is None or orchestration.bridge is None:
+        for report in orchestration.revision.validations:
+            for issue in report.issues:
+                print(f"Error [{issue.code}]: {issue.message}", file=sys.stderr)
+        return 1
 
-    # ── 2. 规划 → 拆单 → BOM ──
-    print(f" 规划家具: {fspec.furniture_type} ({fspec.width:.0f}×{fspec.height:.0f}×{fspec.depth:.0f}mm)")
-    result = plan_cabinet(fspec)
-    print(f" 拆单完成: {result.bom.panel_count} 块板件")
-    print(f" 五金件: {result.bom.hardware_item_count} 项")
-    print(f" 总展开面积: {result.bom.total_area_m2:.4f} m²")
-
-    # 保存 Feature Tree JSON
-    feature_tree = panels_to_feature_tree(
-        result.panels, furniture_type=fspec.furniture_type,
-        parameters={
-            "width": fspec.width, "depth": fspec.depth, "height": fspec.height,
-            "board_thickness": fspec.board_thickness,
-        },
+    pipeline = orchestration.pipeline
+    fspec = pipeline.spec
+    print(
+        f" 规划家具: {fspec.furniture_type} "
+        f"({fspec.width:.0f}×{fspec.height:.0f}×{fspec.depth:.0f}mm)"
     )
-    feature_tree_path = artifact_dir / f"{artifact_name}.feature-tree.json"
-    feature_tree_path.write_text(
-        json.dumps(feature_tree, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    print(f" Feature Tree → {feature_tree_path}")
+    print(f" 拆单完成: {pipeline.bom.panel_count} 块板件")
+    print(f" 五金件: {pipeline.bom.hardware_item_count} 项")
+    print(f" 总展开面积: {pipeline.bom.total_area_m2:.4f} m²")
 
-    # 保存 BOM Markdown
-    bom_path = artifact_dir / f"{artifact_name}.bom.md"
-    bom_path.write_text(format_bom_markdown(result.bom), encoding="utf-8")
-    print(f" BOM 报告 → {bom_path}")
+    for kind, label in (
+        ("design_intent", "设计意图"),
+        ("feature_tree", "Feature Tree"),
+        ("bom", "BOM 报告"),
+        ("cad_source", "build123d 源码"),
+    ):
+        artifact = next(
+            item
+            for item in orchestration.revision.manifest.artifacts
+            if item.kind == kind
+        )
+        print(f" {label} → {artifact.path}")
 
-    # ── 3. 生成 build123d 源码 → STEP/GLB ──
-    source_dir = WORKSPACE_ROOT / "temp" / "cad-source" / artifact_name
-    source_dir.mkdir(parents=True, exist_ok=True)
-    source_path = source_dir / f"{artifact_name}.py"
-    write_build123d_source(feature_tree, source_path)
-    print(f" build123d 源码 → {source_path}")
-
-    step_path = artifact_dir / f"{artifact_name}.step"
-    bridge = CadBridge(workspace_root=WORKSPACE_ROOT)
-    bridge_result = bridge.generate_from_source(source_path, step_path, force=args.force)
+    bridge_result = orchestration.bridge
 
     print(f"\n{'='*60}")
     print(f"  CAD 生成结果: {bridge_result.status.upper()}")

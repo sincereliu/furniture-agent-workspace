@@ -3,3 +3,10 @@ name = "furniture-agent-workspace"
 version = "0.1.0"
 description = "Furniture agent workspace scaffold"
 requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+]
+
+[tool.setuptools]
+packages = []

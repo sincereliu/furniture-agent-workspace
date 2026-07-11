@@ -10,4 +10,4 @@
 6. `cad_bridge.py` —— 调用并验证外部 STEP 生成。
 7. `workflow_*` —— 编排、修订、验证和产物谱系。
 
-`planner.py` 是边界明确的无状态规划门面。家具 JSON 必须先经过规划和特征树生成，之后 `cad_bridge.py` 才能调用外部 `text-to-cad` 引擎。
+`workflow_orchestrator.py` 是唯一应用层入口，CLI、API 与 Agent 都通过它执行。`planner.py` 和 `layout_pipeline.py` 是无状态领域规划门面，不是独立应用入口；特征树发射器和 `cad_bridge.py` 由 Orchestrator 按统一顺序调用。

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import sys
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from uuid import uuid4
 
 
 SCRIPT_ROOT = Path(__file__).resolve().parents[1]
@@ -52,12 +54,65 @@ class FurnitureOrchestratorTests(unittest.TestCase):
                 for artifact in result.revision.manifest.artifacts
                 if artifact.kind == "cad_source"
             )
+            self.addCleanup(
+                shutil.rmtree,
+                Path(cad_source.path).parent,
+                ignore_errors=True,
+            )
             self.assertTrue(
                 Path(cad_source.path).is_relative_to(
                     WORKSPACE_ROOT / "temp" / "cad-source"
                 )
             )
             self.assertFalse(any(Path(temporary_directory).rglob("*.py")))
+
+    def test_execute_spec_is_the_named_one_shot_entry(self) -> None:
+        artifact_name = f"orchestrator-test-{uuid4().hex}"
+        source_dir = WORKSPACE_ROOT / "temp" / "cad-source" / artifact_name
+        try:
+            with tempfile.TemporaryDirectory() as temporary_directory:
+                result = self.orchestrator.execute_spec(
+                    artifact_name,
+                    {
+                        "type": "floor_cabinet",
+                        "width": 900,
+                        "depth": 500,
+                        "height": 1100,
+                        "board_thickness": 20,
+                        "shelf_count": 3,
+                        "n_doors": 1,
+                    },
+                    output_root=temporary_directory,
+                    artifact_name=artifact_name,
+                )
+
+                self.assertIsNotNone(result.pipeline)
+                self.assertTrue(result.revision.intent.confirmed)
+                self.assertEqual(result.pipeline.spec.board_thickness, 20)
+                self.assertEqual(result.pipeline.spec.shelf_count, 3)
+                self.assertEqual(result.pipeline.spec.n_doors, 1)
+                artifact_paths = {
+                    artifact.kind: Path(artifact.path)
+                    for artifact in result.revision.manifest.artifacts
+                }
+                self.assertEqual(
+                    artifact_paths["feature_tree"].name,
+                    f"{artifact_name}.feature-tree.json",
+                )
+                self.assertEqual(
+                    artifact_paths["bom"].name,
+                    f"{artifact_name}.bom.md",
+                )
+                self.assertTrue(artifact_paths["cad_source"].is_relative_to(source_dir))
+        finally:
+            shutil.rmtree(source_dir, ignore_errors=True)
+
+    def test_intent_from_spec_preserves_category_dimension_defaults(self) -> None:
+        intent = self.orchestrator.intent_from_spec({"type": "wall_cabinet"})
+
+        self.assertEqual(intent.overall_size.width_mm, 800)
+        self.assertEqual(intent.overall_size.depth_mm, 350)
+        self.assertEqual(intent.overall_size.height_mm, 900)
 
     def test_new_revision_marks_previous_artifacts_stale(self) -> None:
         project = self.orchestrator.create_project(
@@ -67,6 +122,16 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_directory:
             self.orchestrator.run(project, output_root=temporary_directory)
             old_revision = project.latest
+            old_source = next(
+                artifact
+                for artifact in old_revision.manifest.artifacts
+                if artifact.kind == "cad_source"
+            )
+            self.addCleanup(
+                shutil.rmtree,
+                Path(old_source.path).parent,
+                ignore_errors=True,
+            )
             self.orchestrator.revise(
                 project,
                 DesignIntent(
@@ -152,6 +217,16 @@ class FurnitureOrchestratorTests(unittest.TestCase):
                 project,
                 output_root=temporary_root,
                 generate_cad=True,
+            )
+            cad_source = next(
+                artifact
+                for artifact in result.revision.manifest.artifacts
+                if artifact.kind == "cad_source"
+            )
+            self.addCleanup(
+                shutil.rmtree,
+                Path(cad_source.path).parent,
+                ignore_errors=True,
             )
 
             self.assertEqual(result.bridge.status, "ok")

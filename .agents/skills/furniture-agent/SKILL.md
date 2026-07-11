@@ -18,11 +18,13 @@ description: 将家具工作路由到本仓库正确的本地域技能和 CAD �
    - 只有明确请求对应输出时，才加载其他引擎技能。
 4. 忽略 `external/text-to-cad/plugins/cad/skills/`，它是生成的生产副本。
 5. 声称具备可执行支持前，检查实时代码、测试和入口命令；源码缺失时如实报告。
+6. 执行规划或生成时统一经过 `FurnitureOrchestrator`：Agent 与命令行调用 `skills/furniture-cad/scripts/generate_furniture.py`，API 调用 `skills/furniture-cad/scripts/server.py`，两个协议入口内部都委托 Orchestrator。不得从 Agent 直接调用 `plan_cabinet()`、特征树发射器或 `CadBridge` 拼装第二条流水线。
 
 ## 边界
 
 - 以已确认的家具意图为事实来源。
 - `skills/furniture-cad/scripts/` 负责家具规划；外部引擎负责通用 CAD 生成、检查、快照和查看。
+- CLI、API 与 Agent 只是协议入口，执行顺序、意图确认、状态、验证和产物谱系统一归 `FurnitureOrchestrator`。
 - 可复用脚本、运行时模块和测试放在 `skills/furniture-cad/scripts/`；一次性脚本放在 `temp/`。
 - 禁止创建根级 `scripts/`、`packages/`、`tests/`、`scratch/` 或 `tmp/` 代码树；禁止把生成源码写入 `generated/`。
 - 代码布局变更后运行 `skills/furniture-cad/scripts/validate_workspace_layout.py` 并修复全部违规项。

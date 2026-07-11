@@ -6,7 +6,7 @@
 
 ## 当前能力
 
-实时入口 `skills/furniture-cad/scripts/furniture/planner.py` 接受：
+唯一应用层入口是 `skills/furniture-cad/scripts/furniture/workflow_orchestrator.py`。它接受已确认的 `DesignIntent`，也通过 `execute_spec()` 接受 CLI/API 使用的扁平规格 JSON。它当前委托的领域规划器支持：
 
 - `floor_cabinet`：固定柜体模板，包含背板、踢脚板、层板和门板。
 - `wall_cabinet`：固定柜体模板，包含背板、层板和门板，不含踢脚板。
@@ -55,6 +55,7 @@
 
 命令写入 `generated/<artifact-name>/`：
 
+- `<artifact-name>.design-intent.json`
 - `<artifact-name>.feature-tree.json`
 - `<artifact-name>.bom.md`
 - `<artifact-name>.step`
@@ -62,11 +63,11 @@
 
 派生的 build123d Python 源码是临时文件，只写入 `temp/cad-source/<artifact-name>/`，绝不能持久化到 `generated/`。
 
-旧版 CLI 不创建 Project/Revision 记录。应用层的 `skills/furniture-cad/scripts/furniture/workflow_orchestrator.py` 负责可追溯工作流，并把 `design-intent.json`、`feature-tree.json` 和 `bom.md` 写入修订目录。它先把派生 CAD 源码写入 `temp/cad-source/<revision-id>/`，随后可选择调用 CAD 桥接器。`skills/furniture-cad/scripts/furniture/workflow_store.py` 将 Project/Revision 状态持久化为 `project.json`。
+CLI、API 与 Agent 均委托 `skills/furniture-cad/scripts/furniture/workflow_orchestrator.py`。Orchestrator 负责 Project/Revision、意图确认、规划顺序、验证、产物清单和可选 CAD 桥接。命名的一次性 CLI 运行写入 `generated/<artifact-name>/`；交互式 Project/Revision 工作流写入 `<output-root>/<project-id>/revision-<n>/`。派生 CAD 源码统一写入 `temp/cad-source/`。`skills/furniture-cad/scripts/furniture/workflow_store.py` 可将 Project/Revision 状态持久化为 `project.json`。
 
 运行时流水线为：
 
-`意图 JSON -> 现有家具规划器 -> 概念板件方案 -> 特征树 -> 家具 CAD 发射器 -> text-to-cad 桥接器 -> STEP + Viewer 拓扑`
+`CLI / API / Agent -> FurnitureOrchestrator -> 意图 JSON -> 家具规划器 -> 概念板件方案 -> 特征树 -> 家具 CAD 发射器 -> text-to-cad 桥接器 -> STEP + Viewer 拓扑`
 
 概念板件方案由现有规划器流程表达。它不增加新的运行时命令、规划器接口、可执行 JSON 结构、特征树操作集或 STEP 实体模型。
 

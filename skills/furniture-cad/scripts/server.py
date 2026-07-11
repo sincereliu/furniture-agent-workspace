@@ -20,14 +20,14 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from furniture.layout_pipeline import plan_cabinet as run_cabinet_pipeline
-from furniture.design_spec import FurnitureSpec
+from furniture.workflow_orchestrator import FurnitureOrchestrator
 
 app = FastAPI(
     title="Furniture Agent — 板式家具拆单服务",
     version="0.1.0",
     description="板式家具参数化拆单 API：落地柜/吊柜 规划、拆单、BOM 生成",
 )
+ORCHESTRATOR = FurnitureOrchestrator(workspace_root=WORKSPACE_ROOT)
 
 # 静态文件服务 — 挂载 generated 目录，供访问 STEP/GLB 文件
 OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
@@ -40,12 +40,15 @@ class CabinetRequest(BaseModel):
     width: float = Field(..., gt=0, description="总宽 mm (X)")
     depth: float = Field(..., gt=0, description="总深 mm (Y)")
     height: float = Field(..., gt=0, description="总高 mm (Z)")
-    board_thickness: float = Field(default=18.0, gt=0, description="柜体板厚 mm")
-    back_thickness: float = Field(default=9.0, gt=0, description="背板厚 mm")
-    door_thickness: float = Field(default=18.0, gt=0, description="门板厚 mm")
-    toe_kick_height: float = Field(default=50.0, ge=0, description="踢脚线高 mm")
-    shelf_count: int = Field(default=4, ge=0, description="层板数量")
-    n_doors: int = Field(default=2, ge=0, description="门板数量")
+    board_thickness: float | None = Field(default=None, gt=0, description="柜体板厚 mm")
+    back_thickness: float | None = Field(default=None, gt=0, description="背板厚 mm")
+    door_thickness: float | None = Field(default=None, gt=0, description="门板厚 mm")
+    toe_kick_height: float | None = Field(default=None, ge=0, description="踢脚线高 mm")
+    back_offset: float | None = Field(default=None, ge=0, description="背板后移 mm")
+    door_margin: float | None = Field(default=None, ge=0, description="门板四周间隙 mm")
+    door_hinge_gap: float | None = Field(default=None, ge=0, description="门铰深度间隙 mm")
+    shelf_count: int | None = Field(default=None, ge=0, description="层板数量")
+    n_doors: int | None = Field(default=None, ge=0, description="门板数量")
 
 
 class PanelResponse(BaseModel):
@@ -94,26 +97,27 @@ async def root():
 @app.post("/api/plan-cabinet", response_model=BOMResponse)
 async def plan_cabinet(req: CabinetRequest):
     """规划柜体、拆单、返回 BOM"""
+    spec = req.model_dump(exclude_none=True)
     try:
-        spec = FurnitureSpec(
-            furniture_type=req.type,
-            width=req.width,
-            height=req.height,
-            depth=req.depth,
-            board_thickness=req.board_thickness,
-            back_thickness=req.back_thickness,
-            door_thickness=req.door_thickness,
-            toe_kick_height=req.toe_kick_height,
-            shelf_count=req.shelf_count,
-            n_doors=req.n_doors,
+        orchestration = ORCHESTRATOR.execute_spec(
+            f"api-{req.type}",
+            spec,
         )
-    except (ValueError, TypeError) as e:
+    except (OSError, TypeError, ValueError) as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    try:
-        report = run_cabinet_pipeline(spec).bom
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    if orchestration.pipeline is None:
+        errors = [
+            issue.message
+            for validation in orchestration.revision.validations
+            for issue in validation.issues
+        ]
+        raise HTTPException(
+            status_code=400,
+            detail="; ".join(errors) or "furniture orchestration failed",
+        )
+
+    report = orchestration.pipeline.bom
 
     return BOMResponse(
         furniture_name=report.furniture_name,
