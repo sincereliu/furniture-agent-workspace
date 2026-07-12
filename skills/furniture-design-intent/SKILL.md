@@ -13,8 +13,13 @@ description: 将家具需求整理为可确认的设计意图。适用于讨论�
 
 1. 读取 [家具目录](references/intake/catalog.yaml)，匹配家具类别；无匹配时使用 fallback，但不得声称该类别可执行。
 2. 读取 [设计意图约定](references/design-intent.md)，整理类别、尺寸、用途、风格、约束、假设和未决问题。
-3. 默认值以 `scripts/furniture_design_intent/design_spec.py` 的实时定义为准。
-4. 展示 `design_intent` 阶段输出并等待确认。不得自行进入布局、板件、制造、特征树或 CAD。
+3. 默认值以 `scripts/furniture_design_intent/design_spec.py` 的实时定义为准，包括：
+   - `board_thickness`（18mm）、`back_thickness`（9mm）、`door_thickness`（18mm）
+   - `back_offset`（18mm）、`door_margin`（1.5mm）、`door_hinge_gap`（2mm）
+   - `groove_depth`（6mm）：背板入槽深度，含 1mm 加工余量
+   - `groove_clearance`（1mm）：槽宽比背板厚的余量，槽宽 = `back_thickness + groove_clearance`
+4. 用户可覆盖 `back_thickness`、`groove_depth`、`groove_clearance`；三者联动时按 `design_spec.py` 的 dataclass 默认值 fallback。
+5. 展示 `design_intent` 阶段输出并等待确认。不得自行进入布局、板件、制造、特征树或 CAD。
 
 ## 边界
 
