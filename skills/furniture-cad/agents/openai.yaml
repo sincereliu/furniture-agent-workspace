@@ -1,4 +1,4 @@
 interface:
-  display_name: "家具 CAD"
-  short_description: "规划家具并运行经过验证的 CAD 工作流"
-  default_prompt: "使用 $furniture-cad 将我的家具请求转成已确认的设计意图，并继续执行当前经过验证的流水线。"
+  display_name: "家具 CAD 生成"
+  short_description: "根据已确认特征树生成家具 STEP 和 Viewer 拓扑产物"
+  default_prompt: "使用 $furniture-cad 根据已确认的特征树生成家具 CAD，并在当前阶段完成后暂停。"

@@ -1,0 +1,4 @@
+interface:
+  display_name: "家具特征树规划"
+  short_description: "把已确认制造策略转换为可审查的家具特征树建模语义和依赖"
+  default_prompt: "使用 $furniture-feature-tree 根据已确认制造策略规划家具特征树。"

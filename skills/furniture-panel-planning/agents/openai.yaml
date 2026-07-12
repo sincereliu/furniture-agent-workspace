@@ -1,0 +1,4 @@
+interface:
+  display_name: "家具板件规划"
+  short_description: "把已确认的家具布局拆分为有稳定名称、尺寸和语义的实体板件"
+  default_prompt: "使用 $furniture-panel-planning 根据已确认布局生成板件规划。"

@@ -1,11 +1,13 @@
 ---
 name: furniture-cad
-description: 通过本工作区，把任何家具类别的请求转化为可确认的设计意图、布局规划、板件规划、制造策略、特征树规划和经过验证的 CAD。适用于家具尺寸或布局、结构、板件语义、制造推理、STEP 生成，以及当前家具流水线能力范围相关问题。
+description: 根据已确认特征树生成家具 CAD，并核对当前运行时能力。适用于 cad_generated 阶段、CLI/API 批处理、STEP 生成和 Viewer 拓扑生成；不负责特征树规划或最终交付验证。
 ---
 
-# 家具 CAD
+# 家具 CAD 执行
 
-将本技能作为轻量路由器。用户意图、空间组织、制造零件、制造规则、CAD 建模语义、运行时执行和验证应保持为独立领域层。运行时代码决定可执行行为；本技能中的参考文档说明如何使用这些行为。
+阶段：`cad_generated`
+
+本技能拥有唯一运行时代码目录 `scripts/`，但七个阶段仍统一由 `FurnitureOrchestrator` 执行。
 
 概念工作流：
 
@@ -30,40 +32,19 @@ description: 通过本工作区，把任何家具类别的请求转化为可确�
 
 ## 按任务路由
 
-1. 读取[家具目录](references/intake/catalog.yaml)，将用户请求匹配到一个类别；无匹配时使用目录的回退规则。默认尺寸和参数位于 `scripts/furniture/design_spec.py`（数据类默认值及 `CABINET_PRESETS`）。
-2. 对于用户需求、尺寸、风格、约束或早期设计讨论，读取 [references/design-intent.md](references/design-intent.md)。返回一份可确认的设计意图；除非用户要求后续阶段，否则到此停止。
-3. 对于布局、板件语义、制造策略、特征树推理或验证，加载所选目录项适用的 `planning_references`。
-4. 在声称支持、规范化可执行 JSON、运行生成或报告产物前，读取 [references/workspace-pipeline.md](references/workspace-pipeline.md)；若能力可能已变化，还要检查其中指向的实时入口。
-5. 对不受支持的家具类别，先完成有价值的意图或建模方案工作，再明确说明执行边界；不得在技能内虚构新的运行时路径。
-6. CLI、API 和 Agent 必须统一经过 `FurnitureOrchestrator`；领域规划器、发射器和 CAD Bridge 只由 Orchestrator 或其委托的领域流水线调用。
-7. 交互式工作使用 `confirm_stage()` 与 `run_next()`，每次只完成一个阶段并停止。只有用户检查当前 Revision 的 `stage_outputs` 并确认后，才进入下一阶段。
+1. 在声称支持、规范化可执行 JSON、生成或报告产物前，读取 [工作区流水线](references/workspace-pipeline.md) 并检查其中指向的实时入口。
+2. 要求 `feature_tree_planned` 已确认；通过 `FurnitureOrchestrator.run_next()` 生成 CAD。
+3. CLI、API 和 Agent 必须统一经过 `FurnitureOrchestrator`；发射器和 CAD Bridge 只由 Orchestrator 调用。
+4. 展示 `stage_outputs.cad_generated` 后停止，不得同时完成交付验证。
+5. 只有明确的一次性 CLI/API 批处理才使用 `execute_spec()` 或 `scripts/generate_furniture.py`。
 
 ## 领域参考文档
 
-- [设计意图](references/design-intent.md)：要制作什么家具。
-- [布局规划](references/layout-planning.md)：家具如何组织。
-- [板件规划](references/panel-planning.md)：有哪些实体部件。
-- [制造策略](references/manufacturing-policy.md)：应如何制造。
-- [特征树](references/feature-tree.md)：部件应如何建模。
 - [工作区流水线](references/workspace-pipeline.md)：当前运行时实际执行什么。
-- [验证](references/validation.md)：报告成功前必须通过哪些关卡。
-
-## 分阶段工作
-
-1. `design_intent`：捕获并确认设计意图——要制作什么家具。
-2. `layout_planned`：解决布局规划——主要布局、空间组织和定位。
-3. `panels_planned`：解决板件规划——存在哪些实体家具部件。
-4. `manufacturing_planned`：解决制造策略——材料、公差、连接方式、五金和 BOM 假设。
-5. `feature_tree_planned`：在 CAD 几何前生成特征树建模语义。
-6. `cad_generated`：运行发射器和 CAD Bridge，生成 STEP 与 Viewer 拓扑。
-7. `delivery_validated`：验证相关层、文件和产物谱系后再交付。
-
-默认在每个阶段完成后暂停并等待用户确认。明确的一次性 CLI/API 批处理可以使用 `execute_spec()` 自动确认已经通过验证的中间阶段，但交互式 Agent 不得用批处理入口跳过用户检查点。
-
-设计意图变化使用 `revise()` 创建新 Revision 并从第 1 阶段重新开始。布局、板件、制造策略或特征树变化使用 `revise_stage_output()`：新 Revision 只复制被修改阶段之前已确认的 `stage_outputs` 和 `approved_stages`，不复制该阶段之后的结果；用户重新确认修改阶段后，再逐级生成下游。
 
 ## 返回内容
 
-- 意图工作：设计意图、假设、未解决决策，以及至多一个阻塞性的确认问题。
-- 规划工作：规范化规格、布局决策、板件规划语义、制造策略假设和特征树影响。
-- 生成工作：规范化输入、命令结果、已执行的验证，以及实际存在的产物路径。
+- 规范化输入和已确认的特征树来源。
+- CAD 命令结果以及 `stage_outputs.cad_generated`。
+- 实际存在的 STEP、Viewer 拓扑和产物路径。
+- 下一阶段使用 `skills/furniture-delivery-validation/SKILL.md`，本阶段不报告最终交付通过。

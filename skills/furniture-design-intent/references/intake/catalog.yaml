@@ -1,0 +1,37 @@
+version: 1
+
+families:
+  floor_cabinet:
+    aliases:
+      - floor cabinet
+      - base cabinet
+      - storage cabinet
+      - 地柜
+      - 底柜
+      - 落地柜
+      - 储物柜
+    stage_skills:
+      - furniture-layout
+      - furniture-panel-planning
+      - furniture-manufacturing
+      - furniture-feature-tree
+      - furniture-cad
+      - furniture-delivery-validation
+
+  wall_cabinet:
+    aliases:
+      - wall cabinet
+      - hanging cabinet
+      - 吊柜
+      - 壁柜
+    stage_skills:
+      - furniture-layout
+      - furniture-panel-planning
+      - furniture-manufacturing
+      - furniture-feature-tree
+      - furniture-cad
+      - furniture-delivery-validation
+
+fallback:
+  design_reference: references/design-intent.md
+  verify_runtime_support: true
