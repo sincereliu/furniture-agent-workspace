@@ -71,6 +71,8 @@ class FurnitureSpec:
     door_hinge_gap: float = 2.0
     shelf_count: int = 4
     n_doors: int = 2
+    groove_depth: float = 6.0
+    groove_clearance: float = 1.0
     # 五金偏好 (Phase 2)
     hinge_brand: str = ""           # 铰链品牌 ""=默认, "Blum", "DTC" 等
     hinge_variant: str = ""         # 铰链规格组 ""=自动, "进口35mm杯全盖" 等
@@ -116,6 +118,8 @@ class FurnitureSpec:
             door_hinge_gap=float(_get("door_hinge_gap", 2.0)),
             shelf_count=int(_get("shelf_count", 4)),
             n_doors=int(_get("n_doors", 2)),
+            groove_depth=float(_get("groove_depth", 6.0)),
+            groove_clearance=float(_get("groove_clearance", 1.0)),
             options=data.get("options", {}),
         )
 

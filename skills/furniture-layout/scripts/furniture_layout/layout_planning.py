@@ -40,6 +40,8 @@ class CabinetParams:
     back_offset: float  # 背板距后
     door_margin: float  # 门板四周缝
     door_hinge_gap: float  # 门铰链深度间隙
+    groove_depth: float   # 背板入槽深度（含余量）
+    groove_width: float   # 槽宽 = T_back + groove_clearance（含余量）
 
     # 派生尺寸
     side_depth: float     # 侧板深度 = D_total - T_door - door_hinge_gap
@@ -77,6 +79,8 @@ class CabinetParams:
             back_offset=back_offset,
             door_margin=door_margin,
             door_hinge_gap=door_hinge_gap,
+            groove_depth=spec.groove_depth,
+            groove_width=spec.back_thickness + spec.groove_clearance,
             side_depth=side_depth,
             internal_W=internal_W,
             internal_H=actual_internal_H,
@@ -426,18 +430,21 @@ class CabinetPlanner:
     ) -> PanelPlacement:
         """放置背板：距背面 back_offset mm，插槽安装。
 
-        背板高度 = H - toe_kick_h，宽度 = internal_W。
+        背板嵌入左右侧板、顶板、底板的插槽中。每边入槽 groove_depth mm。
+        背板宽度 = internal_W + 2 × groove_depth
+        背板高度 = H - toe_kick_h - 2T + 2 × groove_depth
         """
         p = self.params
-        if side_L is None:
-            side_L = self._placements[0]
-        if side_R is None:
-            side_R = self._placements[1]
+        gd = p.groove_depth
 
-        cx, back_w = FaceQuery.placed_between_x(side_L, side_R)
-        x = cx - back_w / 2
-        bh = p.H - p.toe_kick_h
-        z = p.toe_kick_h
+        # 宽度：侧板内宽 + 左右各入槽 gd
+        back_w = p.internal_W + 2 * gd
+        x = p.T - gd
+
+        # 高度：顶板底面到踢脚线顶面（即底板顶面）+ 上下各入槽 gd
+        bh = p.H - p.toe_kick_h - 2 * p.T + 2 * gd
+        z = p.toe_kick_h + p.T - gd
+
         y = p.back_offset
 
         placement = PanelPlacement(
@@ -451,7 +458,7 @@ class CabinetPlanner:
             pos_y=y,
             pos_z=z,
             depends_on=["left_side_panel", "right_side_panel", "bottom_panel"],
-            note=f"距后{p.back_offset:.0f}mm插槽安装",
+            note=f"距后{p.back_offset:.0f}mm插槽安装，入槽{gd:.0f}mm",
         )
         self._placements.append(placement)
         return placement
