@@ -18,13 +18,16 @@ description: 将家具工作路由到本仓库正确的本地域技能和 CAD �
    - 只有明确请求对应输出时，才加载其他引擎技能。
 4. 忽略 `external/text-to-cad/plugins/cad/skills/`，它是生成的生产副本。
 5. 声称具备可执行支持前，检查实时代码、测试和入口命令；源码缺失时如实报告。
-6. 执行规划或生成时统一经过 `FurnitureOrchestrator`：Agent 与命令行调用 `skills/furniture-cad/scripts/generate_furniture.py`，API 调用 `skills/furniture-cad/scripts/server.py`，两个协议入口内部都委托 Orchestrator。不得从 Agent 直接调用 `plan_cabinet()`、特征树发射器或 `CadBridge` 拼装第二条流水线。
+6. 执行规划或生成时统一经过 `FurnitureOrchestrator`。交互式 Agent 使用 `confirm_stage()` 和 `run_next()`：每次只确认当前阶段、执行下一个阶段、返回该阶段的 `stage_outputs`，然后停止并等待用户确认“继续”。不得使用 `execute_spec()` 绕过交互阶段确认；不得从 Agent 直接调用 `plan_cabinet()`、特征树发射器或 `CadBridge` 拼装第二条流水线。
+7. 用户修改设计意图时使用 `revise()` 从第 1 阶段创建新 Revision；用户修改布局、板件、制造策略或特征树时使用 `revise_stage_output()`。新 Revision 只继承被修改阶段之前已确认的输出，被修改阶段及全部下游必须重新确认或生成。
+8. 只有明确的一次性批处理请求才调用 `skills/furniture-cad/scripts/generate_furniture.py` 或 `execute_spec()`；API 入口 `skills/furniture-cad/scripts/server.py` 同样只做协议适配，执行仍由 Orchestrator 负责。
 
 ## 边界
 
 - 以已确认的家具意图为事实来源。
 - `skills/furniture-cad/scripts/` 负责家具规划；外部引擎负责通用 CAD 生成、检查、快照和查看。
 - CLI、API 与 Agent 只是协议入口，执行顺序、意图确认、状态、验证和产物谱系统一归 `FurnitureOrchestrator`。
+- 七个阶段都是用户可见的检查点。交互工作不得在同一轮越过多个未确认阶段；生成 CAD 前必须已确认设计意图、布局规划、板件规划、制造策略和特征树。
 - 可复用脚本、运行时模块和测试放在 `skills/furniture-cad/scripts/`；一次性脚本放在 `temp/`。
 - 禁止创建根级 `scripts/`、`packages/`、`tests/`、`scratch/` 或 `tmp/` 代码树；禁止把生成源码写入 `generated/`。
 - 代码布局变更后运行 `skills/furniture-cad/scripts/validate_workspace_layout.py` 并修复全部违规项。
