@@ -8,10 +8,31 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List
 
-from furniture.manufacturing_models import HardwareRecord
-from furniture.panel_models import PanelRecord
-from furniture.manufacturing_hardware import match_hinges, match_shelf_connectors, match_three_in_one, match_drawer_slides
-from furniture.manufacturing_drilling import calc_system_32_holes
+from furniture_design_intent.design_spec import FurnitureSpec
+from furniture_panel_planning.panel_models import PanelRecord
+
+from .manufacturing_drilling import calc_system_32_holes
+from .manufacturing_hardware import match_drawer_slides, match_hinges, match_shelf_connectors, match_three_in_one
+from .manufacturing_models import HardwareRecord
+
+
+FURNITURE_NAMES = {
+    "floor_cabinet": "落地柜",
+    "wall_cabinet": "吊柜",
+}
+
+
+def plan_manufacturing(
+    spec: FurnitureSpec,
+    panels: list[PanelRecord],
+) -> BOMReport:
+    """Stage 4 entry: apply manufacturing, hardware, and BOM policy."""
+    dimensions = f"{spec.width:.0f}×{spec.height:.0f}×{spec.depth:.0f}mm"
+    return generate_bom_report(
+        FURNITURE_NAMES.get(spec.furniture_type, spec.furniture_type),
+        dimensions,
+        panels,
+    )
 
 
 @dataclass

@@ -7,22 +7,22 @@ description: 根据已确认特征树生成家具 CAD，并核对当前运行时
 
 阶段：`cad_generated`
 
-本技能拥有唯一运行时代码目录 `scripts/`，但七个阶段仍统一由 `FurnitureOrchestrator` 执行。
+每个阶段 Skill 拥有自己的 `scripts/` 运行时代码；七个阶段仍统一由 `FurnitureOrchestrator` 执行。
 
 概念工作流：
 
 `设计意图 -> 布局规划 -> 板件规划 -> 制造策略 -> 特征树 -> CAD 生成 -> 验证交付`
 
-这些是文档和推理层。当前运行时由 `scripts/furniture/workflow_orchestrator.py` 统一编排，并委托已有规划器实现领域规划；本技能不定义新的规划器接口、可执行 JSON 结构或平行运行时步骤。
+当前运行时由 `scripts/furniture_workflow/workflow_orchestrator.py` 统一编排，并调用各阶段 Skill 的运行时包；CAD 阶段实现位于 `scripts/furniture_cad/`。本技能不定义新的规划器接口、可执行 JSON 结构或平行运行时步骤。
 
 ## 强制代码放置规则
 
-工作区只保留两个本地脚本位置：
+工作区只允许两类本地脚本位置：
 
-1. 可复用的家具运行时模块、命令、验证辅助工具及其测试，放在 `skills/furniture-cad/scripts/` 下。
+1. 可复用的阶段运行时模块放在对应的 `skills/furniture-*/scripts/`；跨阶段 Orchestrator、CLI/API、布局校验器和集成测试放在 `skills/furniture-cad/scripts/`。
 2. 一次性的检查、迁移、调试和 CAD 实验脚本，放在已忽略的 `temp/` 目录下，并在任务结束时删除。
 
-禁止创建根级 `scripts/`、`packages/`、`tests/`、`scratch/` 或 `tmp/` 代码树。禁止在 `generated/` 下放置 `.py`、`.pyc`、PowerShell、shell、JavaScript 或其他生成的源文件；生成的 CAD 源码应放在 `temp/cad-source/`。不得为了方便创建第三个脚本位置。完成任何代码布局或 CAD 生成变更前，运行：
+禁止创建根级 `scripts/`、`packages/`、`tests/`、`scratch/` 或 `tmp/` 代码树。禁止在非家具阶段 Skill 中创建新的脚本面。禁止在 `generated/` 下放置 `.py`、`.pyc`、PowerShell、shell、JavaScript 或其他生成的源文件；生成的 CAD 源码应放在 `temp/cad-source/`。完成任何代码布局或 CAD 生成变更前，运行：
 
 ```powershell
 .\.venv\Scripts\python.exe skills\furniture-cad\scripts\validate_workspace_layout.py

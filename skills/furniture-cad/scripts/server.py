@@ -15,12 +15,16 @@ WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
 OUTPUT_ROOT = WORKSPACE_ROOT / "generated"
 sys.path.insert(0, str(SCRIPT_ROOT))
 
+from runtime_paths import bootstrap_runtime_paths
+
+bootstrap_runtime_paths(WORKSPACE_ROOT)
+
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from furniture.workflow_orchestrator import FurnitureOrchestrator
+from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 
 app = FastAPI(
     title="Furniture Agent — 板式家具拆单服务",

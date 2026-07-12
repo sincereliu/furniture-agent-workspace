@@ -6,7 +6,7 @@
 
 ## 当前能力
 
-唯一应用层入口是 `skills/furniture-cad/scripts/furniture/workflow_orchestrator.py`。它接受已确认的 `DesignIntent`，也通过 `execute_spec()` 接受 CLI/API 使用的扁平规格 JSON。它当前委托的领域规划器支持：
+唯一应用层入口是 `skills/furniture-cad/scripts/furniture_workflow/workflow_orchestrator.py`。它接受已确认的 `DesignIntent`，也通过 `execute_spec()` 接受 CLI/API 使用的扁平规格 JSON。各阶段实现由对应 Skill 的运行时包拥有。当前委托的领域规划器支持：
 
 - `floor_cabinet`：固定柜体模板，包含背板、踢脚板、层板和门板。
 - `wall_cabinet`：固定柜体模板，包含背板、层板和门板，不含踢脚板。
@@ -80,7 +80,7 @@ result = orchestrator.run_next(
 
 `wall_cabinet` 的默认尺寸较小：`width` 800、`height` 900、`depth` 350、`toe_kick_height` 0、`shelf_count` 1。
 
-默认尺寸和参数位于 `skills/furniture-cad/scripts/furniture/design_spec.py`：`CABINET_PRESETS` 保存各类型默认值，数据类字段保存全局常量。除非用户要求覆盖或设计必须覆盖，否则不要要求用户逐项填写。
+默认尺寸和参数位于 `skills/furniture-design-intent/scripts/furniture_design_intent/design_spec.py`：`CABINET_PRESETS` 保存各类型默认值，数据类字段保存全局常量。除非用户要求覆盖或设计必须覆盖，否则不要要求用户逐项填写。
 
 可执行契约是扁平 JSON。
 
@@ -109,7 +109,7 @@ result = orchestrator.run_next(
 
 派生的 build123d Python 源码是临时文件，只写入 `temp/cad-source/<artifact-name>/`，绝不能持久化到 `generated/`。
 
-CLI、API 与 Agent 均委托 `skills/furniture-cad/scripts/furniture/workflow_orchestrator.py`。Orchestrator 负责 Project/Revision、七阶段输出、逐阶段确认、验证、产物清单和可选 CAD 桥接。命名的一次性 CLI 运行写入 `generated/<artifact-name>/`；交互式 Project/Revision 工作流写入 `<output-root>/<project-id>/revision-<n>/`。派生 CAD 源码统一写入 `temp/cad-source/`。`skills/furniture-cad/scripts/furniture/workflow_store.py` 可将 Project/Revision、`stage_outputs` 和 `approved_stages` 持久化为 `project.json`。
+CLI、API 与 Agent 均委托 `skills/furniture-cad/scripts/furniture_workflow/workflow_orchestrator.py`。Orchestrator 负责 Project/Revision、七阶段输出、逐阶段确认、验证、产物清单和可选 CAD 桥接。命名的一次性 CLI 运行写入 `generated/<artifact-name>/`；交互式 Project/Revision 工作流写入 `<output-root>/<project-id>/revision-<n>/`。派生 CAD 源码统一写入 `temp/cad-source/`。`skills/furniture-cad/scripts/furniture_workflow/workflow_store.py` 可将 Project/Revision、`stage_outputs` 和 `approved_stages` 持久化为 `project.json`。
 
 运行时流水线为：
 
@@ -121,12 +121,12 @@ CLI、API 与 Agent 均委托 `skills/furniture-cad/scripts/furniture/workflow_o
 
 ## 运行时板件与 BOM 路径
 
-`skills/furniture-cad/scripts/furniture/layout_pipeline.py` 为两种柜体类型公开三个独立阶段函数：
+三个阶段函数由各自 Skill 拥有：
 
-- `plan_layout()`：生成布局与板件定位记录。
-- `plan_panels()`：把布局转换成制造板件记录。
-- `plan_manufacturing()`：应用材料、五金和 BOM 策略。
+- `skills/furniture-layout/scripts/furniture_layout/layout_pipeline.py` 的 `plan_layout()`：生成布局与板件定位记录。
+- `skills/furniture-panel-planning/scripts/furniture_panel_planning/panel_planning.py` 的 `plan_panels()`：把布局转换成制造板件记录。
+- `skills/furniture-manufacturing/scripts/furniture_manufacturing/manufacturing_bom.py` 的 `plan_manufacturing()`：应用材料、五金和 BOM 策略。
 
-`plan_cabinet()` 保留为组合这些领域函数的无状态兼容门面；交互式工作流由 Orchestrator 分阶段调用三个函数，不通过 `plan_cabinet()` 把检查点合并掉。
+`skills/furniture-cad/scripts/furniture_workflow/cabinet_pipeline.py` 的 `plan_cabinet()` 保留为组合这些领域函数的无状态兼容门面；交互式工作流由 Orchestrator 分阶段调用三个函数，不通过 `plan_cabinet()` 把检查点合并掉。
 
 主生成 CLI 会持久化 BOM Markdown 报告，但不会持久化裁切清单产物。除非某个命令确实创建了裁切清单，否则不得报告存在裁切清单。

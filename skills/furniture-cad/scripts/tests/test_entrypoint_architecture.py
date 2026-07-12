@@ -22,10 +22,10 @@ class EntrypointArchitectureTests(unittest.TestCase):
     def test_cli_and_api_only_import_the_application_orchestrator(self) -> None:
         for filename in ("generate_furniture.py", "server.py"):
             modules = imported_modules(SCRIPTS_ROOT / filename)
-            self.assertIn("furniture.workflow_orchestrator", modules)
-            self.assertNotIn("furniture.layout_pipeline", modules)
-            self.assertNotIn("furniture.feature_tree_emitter", modules)
-            self.assertNotIn("furniture.cad_bridge", modules)
+            self.assertIn("furniture_workflow.workflow_orchestrator", modules)
+            self.assertNotIn("furniture_layout.layout_pipeline", modules)
+            self.assertNotIn("furniture_feature_tree.feature_tree_emitter", modules)
+            self.assertNotIn("furniture_cad.cad_bridge", modules)
 
     def test_agent_routes_execution_through_the_orchestrator(self) -> None:
         agent_skill = (

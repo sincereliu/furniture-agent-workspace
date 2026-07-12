@@ -8,10 +8,11 @@ import json
 from typing import Any
 from uuid import uuid4
 
-from furniture.workflow_artifacts import ArtifactManifest
-from furniture.design_intent import DesignIntent
-from furniture.validation import ValidationReport
-from furniture.workflow_state import WorkflowStage, WorkflowState, parse_stage, utc_now
+from furniture_delivery_validation.validation import ValidationReport
+from furniture_design_intent.design_intent import DesignIntent
+
+from .workflow_artifacts import ArtifactManifest
+from .workflow_state import WorkflowStage, WorkflowState, parse_stage, utc_now
 
 
 def _id(prefix: str) -> str:

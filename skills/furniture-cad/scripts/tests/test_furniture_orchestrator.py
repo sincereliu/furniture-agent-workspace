@@ -13,11 +13,15 @@ SCRIPT_ROOT = Path(__file__).resolve().parents[1]
 WORKSPACE_ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(SCRIPT_ROOT))
 
-from furniture.cad_bridge import CadBridge
-from furniture.design_intent import DesignIntent, OverallSize
-from furniture.workflow_orchestrator import FurnitureOrchestrator
-from furniture.workflow_state import STAGE_SEQUENCE, WorkflowStage
-from furniture.workflow_store import JsonProjectStore
+from runtime_paths import bootstrap_runtime_paths
+
+bootstrap_runtime_paths(WORKSPACE_ROOT)
+
+from furniture_cad.cad_bridge import CadBridge
+from furniture_design_intent.design_intent import DesignIntent, OverallSize
+from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
+from furniture_workflow.workflow_state import STAGE_SEQUENCE, WorkflowStage
+from furniture_workflow.workflow_store import JsonProjectStore
 
 
 def cabinet_intent(*, furniture_type: str = "floor_cabinet") -> DesignIntent:

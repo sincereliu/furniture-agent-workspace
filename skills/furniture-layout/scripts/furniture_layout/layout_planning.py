@@ -17,9 +17,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
-from furniture.layout_faces import FaceQuery
-from furniture.panel_models import PanelPlacement
-from furniture.design_spec import FurnitureSpec
+from furniture_design_intent.design_spec import FurnitureSpec
+from furniture_panel_planning.panel_models import PanelPlacement
+
+from .layout_faces import FaceQuery
 
 
 @dataclass

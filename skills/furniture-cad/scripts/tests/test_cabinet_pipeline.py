@@ -9,8 +9,12 @@ SCRIPT_ROOT = Path(__file__).resolve().parents[1]
 WORKSPACE_ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(SCRIPT_ROOT))
 
-from furniture.layout_pipeline import plan_cabinet
-from furniture.design_spec import FurnitureSpec
+from runtime_paths import bootstrap_runtime_paths
+
+bootstrap_runtime_paths(WORKSPACE_ROOT)
+
+from furniture_design_intent.design_spec import FurnitureSpec
+from furniture_workflow.cabinet_pipeline import plan_cabinet
 
 
 class CabinetPipelineTests(unittest.TestCase):

@@ -7,7 +7,7 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
-from furniture.workflow_state import utc_now
+from .workflow_state import utc_now
 
 
 @dataclass

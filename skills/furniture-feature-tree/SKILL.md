@@ -16,6 +16,7 @@ description: 将已确认的家具制造策略转换为可审查的特征树建�
 
 ## 边界
 
+- 本阶段运行时代码位于 `scripts/furniture_feature_tree/`。
 - 修改特征树时使用 `revise_stage_output()`，使本阶段及下游失效。
 - 不直接调用特征树发射器、CAD Bridge 或外部 CAD CLI。
 - 不在本技能中定义第二套特征树格式或运行时。

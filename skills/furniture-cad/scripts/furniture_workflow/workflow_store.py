@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from furniture.workflow_project import Project
+from .workflow_project import Project
 
 
 class JsonProjectStore:
@@ -29,4 +29,3 @@ class JsonProjectStore:
         if not path.is_file():
             raise ValueError(f"project not found: {project_id}")
         return Project.from_dict(json.loads(path.read_text(encoding="utf-8")))
-

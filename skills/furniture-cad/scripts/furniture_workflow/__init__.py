@@ -1,2 +1,1 @@
-"""Furniture-domain runtime ordered by the furniture-cad skill stages."""
-
+"""Shared workflow state and the single furniture application orchestrator."""

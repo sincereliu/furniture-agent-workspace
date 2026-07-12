@@ -8,6 +8,11 @@ from pathlib import Path
 
 SCRIPT_ROOT = Path(__file__).resolve().parents[1]
 WORKSPACE_ROOT = Path(__file__).resolve().parents[4]
+sys.path.insert(0, str(SCRIPT_ROOT))
+
+from runtime_paths import bootstrap_runtime_paths
+
+bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 
 def load_module(module_name: str, path: Path):
@@ -25,7 +30,7 @@ class FurniturePipelineTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.planner = load_module(
             "test_furniture_planner",
-            SCRIPT_ROOT / "furniture" / "planner.py",
+            SCRIPT_ROOT / "furniture_workflow" / "planner.py",
         )
 
     def test_rejects_unsupported_furniture_type(self) -> None:

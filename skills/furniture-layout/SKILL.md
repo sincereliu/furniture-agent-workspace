@@ -16,6 +16,7 @@ description: 根据已确认的家具设计意图规划空间组织、净空、�
 
 ## 边界
 
+- 本阶段运行时代码位于 `scripts/furniture_layout/`。
 - 默认坐标原点是成品外包络的左下落地角。
 - 修改布局时使用 `revise_stage_output()`，使本阶段及下游失效。
 - 不决定板厚、连接件、孔位、BOM 或 CAD 几何。

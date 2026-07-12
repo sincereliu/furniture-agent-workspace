@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any
 
-from furniture.workflow_state import utc_now
+from furniture_workflow.workflow_state import utc_now
 
 
 class ValidationSeverity(str, Enum):

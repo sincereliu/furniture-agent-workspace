@@ -31,6 +31,16 @@ STAGE_REFERENCES = {
     "furniture-delivery-validation": ("references/validation.md",),
 }
 
+STAGE_RUNTIME_PACKAGES = {
+    "furniture-design-intent": "furniture_design_intent",
+    "furniture-layout": "furniture_layout",
+    "furniture-panel-planning": "furniture_panel_planning",
+    "furniture-manufacturing": "furniture_manufacturing",
+    "furniture-feature-tree": "furniture_feature_tree",
+    "furniture-cad": "furniture_cad",
+    "furniture-delivery-validation": "furniture_delivery_validation",
+}
+
 
 class SkillArchitectureTests(unittest.TestCase):
     def test_seven_stages_have_one_skill_each(self) -> None:
@@ -81,13 +91,16 @@ class SkillArchitectureTests(unittest.TestCase):
         ):
             self.assertFalse((cad_references / moved_reference).exists())
 
-    def test_only_cad_skill_owns_runtime_scripts(self) -> None:
-        runtime_owners = [
-            skill_name
-            for skill_name in STAGE_SKILLS.values()
-            if (SKILLS_ROOT / skill_name / "scripts").is_dir()
-        ]
-        self.assertEqual(runtime_owners, ["furniture-cad"])
+    def test_each_stage_skill_owns_its_runtime_package(self) -> None:
+        for skill_name, package_name in STAGE_RUNTIME_PACKAGES.items():
+            package_root = SKILLS_ROOT / skill_name / "scripts" / package_name
+            self.assertTrue(package_root.is_dir(), package_root)
+            self.assertTrue((package_root / "__init__.py").is_file(), package_root)
+
+        workflow_package = (
+            SKILLS_ROOT / "furniture-cad" / "scripts" / "furniture_workflow"
+        )
+        self.assertTrue((workflow_package / "workflow_orchestrator.py").is_file())
 
 
 if __name__ == "__main__":

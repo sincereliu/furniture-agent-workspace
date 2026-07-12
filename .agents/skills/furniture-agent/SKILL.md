@@ -17,7 +17,7 @@ description: 将家具工作路由到本仓库正确的本地域技能和 CAD �
    - `feature_tree_planned`：`skills/furniture-feature-tree/SKILL.md`
    - `cad_generated`：`skills/furniture-cad/SKILL.md`
    - `delivery_validated`：`skills/furniture-delivery-validation/SKILL.md`
-2. 讨论、设计意图、家具结构、板件拆分、BOM 或制造推理停在对应领域技能；可执行阶段仍统一使用 `skills/furniture-cad/scripts/` 运行时。
+2. 讨论、设计意图、家具结构、板件拆分、BOM 或制造推理停在对应领域技能；可执行实现由各阶段 Skill 的 `scripts/` 拥有，执行顺序仍统一经过 `FurnitureOrchestrator`。
 3. 从权威目录 `external/text-to-cad/skills/` 中只加载所需的最小技能：
    - CAD 生成、修改、STEP 检查、几何验证或快照：`cad/SKILL.md`。
    - 可视化审查或产物链接：`cad-viewer/SKILL.md`。
@@ -32,10 +32,10 @@ description: 将家具工作路由到本仓库正确的本地域技能和 CAD �
 ## 边界
 
 - 以已确认的家具意图为事实来源。
-- 七个本地技能与七个检查点一一对应，`skills/furniture-cad/scripts/` 仍是唯一运行时；外部引擎负责通用 CAD 生成、检查、快照和查看。
+- 七个本地技能与七个检查点一一对应，每个 Skill 拥有本阶段运行时代码；`skills/furniture-cad/scripts/furniture_workflow/` 中的 Orchestrator 是唯一应用层执行入口。
 - CLI、API 与 Agent 只是协议入口，执行顺序、意图确认、状态、验证和产物谱系统一归 `FurnitureOrchestrator`。
 - 七个阶段都是用户可见的检查点。交互工作不得在同一轮越过多个未确认阶段；生成 CAD 前必须已确认设计意图、布局规划、板件规划、制造策略和特征树。
-- 可复用脚本、运行时模块和测试放在 `skills/furniture-cad/scripts/`；一次性脚本放在 `temp/`。
+- 可复用脚本和运行时模块放在所属阶段 Skill 的 `scripts/`；跨阶段入口与集成测试放在 `skills/furniture-cad/scripts/`；一次性脚本放在 `temp/`。
 - 禁止创建根级 `scripts/`、`packages/`、`tests/`、`scratch/` 或 `tmp/` 代码树；禁止把生成源码写入 `generated/`。
 - 代码布局变更后运行 `skills/furniture-cad/scripts/validate_workspace_layout.py` 并修复全部违规项。
 - 不得通过修改 `external/text-to-cad` 实现家具领域行为。

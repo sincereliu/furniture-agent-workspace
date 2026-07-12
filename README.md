@@ -15,7 +15,7 @@ FurnitureOrchestrator
             +-- 验证、Project/Revision、产物清单
 ```
 
-`skills/furniture-cad/scripts/furniture/workflow_orchestrator.py` 是唯一应用层入口。CLI、API 与 Agent 不直接拼装规划器、发射器或 CAD Bridge。
+`skills/furniture-cad/scripts/furniture_workflow/workflow_orchestrator.py` 是唯一应用层入口。七个阶段实现由各自 Skill 的 `scripts/` 拥有；CLI、API 与 Agent 不直接拼装规划器、发射器或 CAD Bridge。
 
 ## 七阶段交互
 
@@ -45,4 +45,4 @@ FurnitureOrchestrator
 .\.venv\Scripts\python.exe skills\furniture-cad\scripts\server.py
 ```
 
-可复用代码只放在 `skills/furniture-cad/scripts/`；一次性脚本和派生 CAD 源码放在 `temp/`；最终产物放在 `generated/`。
+可复用阶段代码放在对应的 `skills/furniture-*/scripts/`；统一 Orchestrator、CLI/API 和集成测试放在 `skills/furniture-cad/scripts/`；一次性脚本和派生 CAD 源码放在 `temp/`；最终产物放在 `generated/`。

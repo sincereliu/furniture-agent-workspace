@@ -1,13 +1,11 @@
-# 家具技能运行时
+# 家具跨阶段运行时
 
-这是 `furniture-cad` 技能的私有运行时包。把它放在技能旁边，可以避免将同一工作流拆散到根目录的 `packages/`、`scripts/` 和 `tests/` 中：
+此目录只保存 CAD 阶段和跨阶段应用层：
 
-1. `design_*` —— 设计意图与可执行尺寸。
-2. `layout_*` —— 布局规划与柜体定位。
-3. `panel_*` —— 板件语义与生产记录。
-4. `manufacturing_*` —— 封边、钻孔、五金和 BOM 策略。
-5. `feature_tree_*` —— 特征树构建与 CAD 源码发射。
-6. `cad_bridge.py` —— 调用并验证外部 STEP 生成。
-7. `workflow_*` —— 编排、修订、验证和产物谱系。
+- `furniture_workflow/`：唯一 Orchestrator、Project/Revision、阶段状态、产物谱系和持久化。
+- `furniture_cad/`：CAD Bridge。
+- `generate_furniture.py`、`server.py`：CLI/API 协议入口。
+- `runtime_paths.py`：加载七个阶段 Skill 的运行时包。
+- `tests/`、`validate_workspace_layout.py`：跨阶段集成测试和仓库布局守卫。
 
-`workflow_orchestrator.py` 是唯一应用层入口，CLI、API 与 Agent 都通过它执行。它把七个阶段记录在 Revision 的 `stage_outputs` 和 `approved_stages` 中：`confirm_stage()` 确认当前阶段，`run_next()` 只执行下一阶段，`run_until()` 默认停在第一个未确认阶段，`revise_stage_output()` 从修改点建立新 Revision 并使下游失效。`planner.py` 和 `layout_pipeline.py` 是无状态领域规划门面，不是独立应用入口；特征树发射器和 `cad_bridge.py` 由 Orchestrator 按统一顺序调用。
+设计意图、布局、板件、制造、特征树和交付验证代码分别位于对应 `skills/furniture-*/scripts/`。`FurnitureOrchestrator` 仍是唯一应用层入口：CLI、API 与 Agent 都通过它执行，各阶段包不得建立平行状态机或第二条流水线。

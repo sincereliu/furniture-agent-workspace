@@ -22,9 +22,10 @@ def plan_furniture(spec: dict[str, Any]) -> dict[str, Any]:
 
 def _plan_cabinet(spec: dict[str, Any], furniture_type: str) -> dict[str, Any]:
     """委托给 pipeline + emitter，返回 Feature Tree dict。"""
-    from furniture.design_spec import FurnitureSpec
-    from furniture.layout_pipeline import plan_cabinet
-    from furniture.feature_tree_builder import panels_to_feature_tree
+    from furniture_design_intent.design_spec import FurnitureSpec
+    from furniture_feature_tree.feature_tree_builder import panels_to_feature_tree
+
+    from .cabinet_pipeline import plan_cabinet
 
     fspec = FurnitureSpec.from_dict(spec)
     result = plan_cabinet(fspec)

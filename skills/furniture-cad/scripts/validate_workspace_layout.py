@@ -1,4 +1,4 @@
-"""Enforce the furniture workspace's two allowed local script surfaces."""
+"""Enforce stage-owned skill scripts plus the disposable temp surface."""
 
 from __future__ import annotations
 
@@ -23,10 +23,18 @@ SCRIPT_SUFFIXES = {
     ".ts",
     ".tsx",
 }
-ALLOWED_SCRIPT_ROOTS = (
-    Path("skills/furniture-cad/scripts"),
-    Path("temp"),
+STAGE_SKILL_NAMES = (
+    "furniture-design-intent",
+    "furniture-layout",
+    "furniture-panel-planning",
+    "furniture-manufacturing",
+    "furniture-feature-tree",
+    "furniture-cad",
+    "furniture-delivery-validation",
 )
+ALLOWED_SCRIPT_ROOTS = tuple(
+    Path("skills") / skill_name / "scripts" for skill_name in STAGE_SKILL_NAMES
+) + (Path("temp"),)
 EXCLUDED_ROOTS = {".git", ".venv", "external"}
 FORBIDDEN_TOP_LEVEL_CODE_TREES = {"packages", "scripts", "scratch", "tests", "tmp"}
 
@@ -58,7 +66,7 @@ def find_violations(workspace_root: Path) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Validate that local scripts only exist in the furniture skill or temp/."
+        description="Validate that local scripts only exist in stage skills or temp/."
     )
     parser.add_argument(
         "--workspace-root",
@@ -74,7 +82,7 @@ def main() -> int:
             print(f"- {violation}")
         return 1
 
-    print("Workspace script layout is valid: skills/furniture-cad/scripts + temp only.")
+    print("Workspace script layout is valid: stage-owned skills/*/scripts + temp only.")
     return 0
 
 

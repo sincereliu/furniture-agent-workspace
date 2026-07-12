@@ -1,7 +1,7 @@
 """面约束定位引擎 — 板件之间通过面对齐，不再手工计算坐标。
 
 用法:
-    from furniture.layout_faces import FaceQuery
+    from furniture_layout.layout_faces import FaceQuery
 
     # 查询已放置板件的面位置
     panel = PanelPlacement(id="left_side", pos_x=0, pos_y=0, pos_z=0, size_x=18, size_y=580, size_z=1000)
@@ -15,7 +15,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from furniture.panel_models import PanelPlacement
+    from furniture_panel_planning.panel_models import PanelPlacement
 
 
 class FaceQuery:

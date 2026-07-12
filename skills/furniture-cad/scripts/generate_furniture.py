@@ -16,7 +16,11 @@ WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
 # skill 自带 furniture 运行包，不依赖仓库根目录的 packages/。
 sys.path.insert(0, str(SCRIPT_ROOT))
 
-from furniture.workflow_orchestrator import FurnitureOrchestrator
+from runtime_paths import bootstrap_runtime_paths
+
+bootstrap_runtime_paths(WORKSPACE_ROOT)
+
+from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 
 
 def main(

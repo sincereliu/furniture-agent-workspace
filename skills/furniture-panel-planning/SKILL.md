@@ -16,6 +16,7 @@ description: 将已确认的家具布局拆分为有语义的实体板件。适�
 
 ## 边界
 
+- 本阶段运行时代码位于 `scripts/furniture_panel_planning/`。
 - 板件必须有稳定标识、语义角色、尺寸、位置和材料角色。
 - 修改板件规划时使用 `revise_stage_output()`，使本阶段及下游失效。
 - 不在此阶段确定连接件孔位、封边细节、最终 BOM 或 CAD 操作。

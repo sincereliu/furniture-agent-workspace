@@ -9,7 +9,7 @@ from pathlib import Path
 
 SCRIPT_ROOT = Path(__file__).resolve().parents[1]
 WORKSPACE_ROOT = Path(__file__).resolve().parents[4]
-ADAPTER_PATH = SCRIPT_ROOT / "furniture" / "cad_bridge.py"
+ADAPTER_PATH = SCRIPT_ROOT / "furniture_cad" / "cad_bridge.py"
 
 
 def load_adapter_module():

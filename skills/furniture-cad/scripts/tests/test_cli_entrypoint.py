@@ -15,9 +15,13 @@ SCRIPT_ROOT = Path(__file__).resolve().parents[1]
 WORKSPACE_ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(SCRIPT_ROOT))
 
+from runtime_paths import bootstrap_runtime_paths
+
+bootstrap_runtime_paths(WORKSPACE_ROOT)
+
 import generate_furniture
-from furniture.cad_bridge import CadBridge
-from furniture.workflow_orchestrator import FurnitureOrchestrator
+from furniture_cad.cad_bridge import CadBridge
+from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 
 
 class CliEntrypointTests(unittest.TestCase):

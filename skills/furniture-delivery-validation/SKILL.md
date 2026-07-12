@@ -16,6 +16,7 @@ description: 验证家具阶段谱系、STEP、Viewer 拓扑和实际交付产�
 
 ## 边界
 
+- 本阶段运行时代码位于 `scripts/furniture_delivery_validation/`。
 - STEP 检查、几何测量或快照委托 `external/text-to-cad/skills/cad/SKILL.md`。
 - 可视化审查和链接按需委托 `external/text-to-cad/skills/cad-viewer/SKILL.md`。
 - 只报告实际运行过的验证和实际存在的产物，不手工修改派生文件。

@@ -11,8 +11,8 @@ from __future__ import annotations
 
 from typing import Dict, List
 
-from furniture.manufacturing_edge_banding import get_edge_banding
-from furniture.panel_models import PanelPlacement, PanelRecord
+from .manufacturing_edge_banding import get_edge_banding
+from .panel_models import PanelPlacement, PanelRecord
 
 # 默认材料配置（与外部 generator.py 的 DEFAULT_MATERIALS 一致）
 DEFAULT_MATERIALS: Dict[str, Dict[str, str | float]] = {
@@ -101,3 +101,8 @@ def panelize(
         records.append(record)
 
     return records
+
+
+def plan_panels(placements: List[PanelPlacement]) -> List[PanelRecord]:
+    """Stage 3 entry: convert layout placements into panel records."""
+    return panelize(placements)

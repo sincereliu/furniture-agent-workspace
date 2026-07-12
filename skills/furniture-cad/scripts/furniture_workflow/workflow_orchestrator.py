@@ -9,24 +9,21 @@ from pathlib import Path
 import re
 from typing import Any
 
-from furniture.cad_bridge import BridgeResult, CadBridge
-from furniture.feature_tree_builder import panels_to_feature_tree
-from furniture.feature_tree_emitter import write_build123d_source
-from furniture.manufacturing_bom import BOMReport, format_bom_markdown
-from furniture.manufacturing_models import HardwareRecord
-from furniture.layout_pipeline import (
-    SUPPORTED_TYPES,
-    CabinetPipelineResult,
-    plan_layout,
-    plan_manufacturing,
-    plan_panels,
-)
-from furniture.panel_models import PanelPlacement, PanelRecord
-from furniture.design_intent import DesignIntent
-from furniture.workflow_project import Project, Revision
-from furniture.design_spec import FurnitureSpec
-from furniture.validation import ValidationReport
-from furniture.workflow_state import (
+from furniture_cad.cad_bridge import BridgeResult, CadBridge
+from furniture_delivery_validation.validation import ValidationReport
+from furniture_design_intent.design_intent import DesignIntent
+from furniture_design_intent.design_spec import FurnitureSpec
+from furniture_feature_tree.feature_tree_builder import panels_to_feature_tree
+from furniture_feature_tree.feature_tree_emitter import write_build123d_source
+from furniture_layout.layout_pipeline import SUPPORTED_TYPES, plan_layout
+from furniture_manufacturing.manufacturing_bom import BOMReport, format_bom_markdown, plan_manufacturing
+from furniture_manufacturing.manufacturing_models import HardwareRecord
+from furniture_panel_planning.panel_models import PanelPlacement, PanelRecord
+from furniture_panel_planning.panel_planning import plan_panels
+
+from .cabinet_pipeline import CabinetPipelineResult
+from .workflow_project import Project, Revision
+from .workflow_state import (
     STAGE_SEQUENCE,
     WorkflowStage,
     WorkflowState,
@@ -719,7 +716,7 @@ class FurnitureOrchestrator:
     def _validate_feature_tree(self, feature_tree: dict[str, Any]) -> ValidationReport:
         report = ValidationReport(stage="feature_tree")
         try:
-            from furniture.feature_tree_emitter import _validate_feature_tree
+            from furniture_feature_tree.feature_tree_emitter import _validate_feature_tree
 
             _validate_feature_tree(feature_tree)
         except ValueError as exc:

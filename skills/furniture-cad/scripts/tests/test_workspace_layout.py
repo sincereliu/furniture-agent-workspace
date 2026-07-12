@@ -14,8 +14,25 @@ from validate_workspace_layout import find_violations
 
 
 class WorkspaceLayoutTests(unittest.TestCase):
-    def test_live_workspace_uses_only_two_script_surfaces(self) -> None:
+    def test_live_workspace_uses_only_stage_skills_and_temp(self) -> None:
         self.assertEqual(find_violations(WORKSPACE_ROOT), [])
+
+    def test_accepts_stage_owned_script_and_rejects_unrelated_skill_script(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            stage_scripts = root / "skills" / "furniture-layout" / "scripts"
+            stage_scripts.mkdir(parents=True)
+            (stage_scripts / "layout.py").write_text("pass\n", encoding="utf-8")
+            unrelated_scripts = root / "skills" / "other-skill" / "scripts"
+            unrelated_scripts.mkdir(parents=True)
+            (unrelated_scripts / "tool.py").write_text("pass\n", encoding="utf-8")
+
+            violations = find_violations(root)
+
+        self.assertEqual(
+            violations,
+            ["script outside allowed locations: skills/other-skill/scripts/tool.py"],
+        )
 
     def test_rejects_root_code_tree_and_generated_source(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
