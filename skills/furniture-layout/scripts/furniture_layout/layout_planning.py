@@ -42,6 +42,9 @@ class CabinetParams:
     door_hinge_gap: float  # 门铰链深度间隙
     groove_depth: float   # 背板入槽深度（含余量）
     groove_width: float   # 槽宽 = T_back + groove_clearance（含余量）
+    toe_kick_reveal_front: float   # 前踢脚板距侧板前缘缩进
+    toe_kick_reveal_back: float    # 后踢脚板距 Y=0 缩进
+    toe_kick_support_count: int    # 支撑板数量（自动或手动）
 
     # 派生尺寸
     side_depth: float     # 侧板深度 = D_total - T_door - door_hinge_gap
@@ -81,12 +84,30 @@ class CabinetParams:
             door_hinge_gap=door_hinge_gap,
             groove_depth=spec.groove_depth,
             groove_width=spec.back_thickness + spec.groove_clearance,
+            toe_kick_reveal_front=spec.toe_kick_reveal_front,
+            toe_kick_reveal_back=spec.toe_kick_reveal_back,
+            toe_kick_support_count=_resolve_support_count(
+                spec.toe_kick_support_count, spec.width
+            ),
             side_depth=side_depth,
             internal_W=internal_W,
             internal_H=actual_internal_H,
             z_bottom_internal=actual_toe_kick + T,
             z_top_internal=spec.height - T,
         )
+
+
+def _resolve_support_count(explicit: int | None, width: float) -> int:
+    """推导踢脚线支撑板数量。
+
+    自动规则: W < 600 → 0; 否则 1 + floor((W - 600) / 300)
+    手动覆盖: explicit 不为 None 时直接返回 explicit
+    """
+    if explicit is not None:
+        return max(0, explicit)
+    if width < 600:
+        return 0
+    return 1 + int((width - 600) // 300)
 
 
 class CabinetPlanner:
@@ -352,8 +373,10 @@ class CabinetPlanner:
         side_L: PanelPlacement | None = None,
         side_R: PanelPlacement | None = None,
     ) -> List[PanelPlacement]:
-        """放置踢脚板框架：后踢脚 + 前踢脚 + 2条中间支撑。
+        """放置踢脚板框架：后踢脚 + 前踢脚 + N 条中间支撑。
 
+        前/后踢脚板距柜体外露侧各缩进 toe_kick_reveal_front/back。
+        支撑板数量由柜体宽度自动计算或手动覆盖。
         踢脚线高度为 0 时跳过。
         """
         p = self.params
@@ -369,7 +392,7 @@ class CabinetPlanner:
         x = cx - kick_w / 2
         results = []
 
-        # 后踢脚板（Y=0~T，靠背板侧）
+        # 后踢脚板：距 Y=0 缩进 toe_kick_reveal_back
         back_kick = PanelPlacement(
             id="toe_kick_back",
             name="后踢脚板",
@@ -378,14 +401,14 @@ class CabinetPlanner:
             size_y=p.T,
             size_z=p.toe_kick_h,
             pos_x=x,
-            pos_y=0.0,
+            pos_y=p.toe_kick_reveal_back,
             pos_z=0.0,
             depends_on=["left_side_panel", "right_side_panel"],
         )
         self._placements.append(back_kick)
         results.append(back_kick)
 
-        # 前踢脚板（Y=side_depth-T~side_depth，靠门侧）
+        # 前踢脚板：距侧板前缘缩进 toe_kick_reveal_front
         front_kick = PanelPlacement(
             id="toe_kick_front",
             name="前踢脚板",
@@ -394,32 +417,38 @@ class CabinetPlanner:
             size_y=p.T,
             size_z=p.toe_kick_h,
             pos_x=x,
-            pos_y=p.side_depth - p.T,
+            pos_y=p.side_depth - p.T - p.toe_kick_reveal_front,
             pos_z=0.0,
             depends_on=["left_side_panel", "right_side_panel"],
         )
         self._placements.append(front_kick)
         results.append(front_kick)
 
-        # 中间支撑板 ×2（沿 X 方向分布）
-        inner_d = p.side_depth - 2 * p.T
-        gap = kick_w / 3
-        for i in range(2):
-            sx = x + (i + 1) * gap
-            support = PanelPlacement(
-                id=f"toe_kick_support_{i + 1}",
-                name=f"踢脚支撑{i + 1}",
-                panel_type="toe_kick",
-                size_x=p.T,
-                size_y=inner_d,
-                size_z=p.toe_kick_h,
-                pos_x=sx,
-                pos_y=p.T,
-                pos_z=0.0,
-                depends_on=["left_side_panel", "right_side_panel"],
+        # 中间支撑板（数量 = toe_kick_support_count）
+        support_count = p.toe_kick_support_count
+        if support_count > 0:
+            support_y_start = p.toe_kick_reveal_back + p.T
+            support_y_end = (
+                p.side_depth - p.T - p.toe_kick_reveal_front
             )
-            self._placements.append(support)
-            results.append(support)
+            support_d = support_y_end - support_y_start
+            gap = (kick_w - support_count * p.T) / (support_count + 1)
+            for i in range(support_count):
+                sx = x + gap + i * (p.T + gap)
+                support = PanelPlacement(
+                    id=f"toe_kick_support_{i + 1}",
+                    name=f"踢脚支撑{i + 1}",
+                    panel_type="toe_kick",
+                    size_x=p.T,
+                    size_y=support_d,
+                    size_z=p.toe_kick_h,
+                    pos_x=sx,
+                    pos_y=support_y_start,
+                    pos_z=0.0,
+                    depends_on=["toe_kick_back", "toe_kick_front"],
+                )
+                self._placements.append(support)
+                results.append(support)
 
         return results
 
@@ -457,7 +486,7 @@ class CabinetPlanner:
             pos_x=x,
             pos_y=y,
             pos_z=z,
-            depends_on=["left_side_panel", "right_side_panel", "bottom_panel"],
+            depends_on=["left_side_panel", "right_side_panel", "top_panel", "bottom_panel"],
             note=f"距后{p.back_offset:.0f}mm插槽安装，入槽{gd:.0f}mm",
         )
         self._placements.append(placement)

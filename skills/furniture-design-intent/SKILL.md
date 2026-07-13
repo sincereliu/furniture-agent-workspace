@@ -18,7 +18,10 @@ description: 将家具需求整理为可确认的设计意图。适用于讨论�
    - `back_offset`（18mm）、`door_margin`（1.5mm）、`door_hinge_gap`（2mm）
    - `groove_depth`（6mm）：背板入槽深度，含 1mm 加工余量
    - `groove_clearance`（1mm）：槽宽比背板厚的余量，槽宽 = `back_thickness + groove_clearance`
-4. 用户可覆盖 `back_thickness`、`groove_depth`、`groove_clearance`；三者联动时按 `design_spec.py` 的 dataclass 默认值 fallback。
+   - `toe_kick_reveal_front`（1mm）：前踢脚板距侧板前缘缩进量
+   - `toe_kick_reveal_back`（30mm）：后踢脚板距 Y=0 缩进量
+   - `toe_kick_support_count`（None=自动）：踢脚线支撑板数量；None 时按宽度自动推导
+4. 用户可覆盖 `back_thickness`、`groove_depth`、`groove_clearance`、`toe_kick_reveal_front`、`toe_kick_reveal_back`、`toe_kick_support_count`；未传入时按 dataclass 默认值 fallback。
 5. 展示 `design_intent` 阶段输出并等待确认。不得自行进入布局、板件、制造、特征树或 CAD。
 
 ## 边界
