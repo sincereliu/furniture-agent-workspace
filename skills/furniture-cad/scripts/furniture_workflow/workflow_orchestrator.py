@@ -822,6 +822,9 @@ class FurnitureOrchestrator:
         }
         data.update(intent.structure)
         data.update(intent.layout)
+        # pass back_mount through if present; otherwise let FurnitureSpec default to "auto"
+        if "back_mount" in intent.structure:
+            data["back_mount"] = intent.structure["back_mount"]
         return FurnitureSpec.from_dict(data)
 
     def _validate_feature_tree(self, feature_tree: dict[str, Any]) -> ValidationReport:

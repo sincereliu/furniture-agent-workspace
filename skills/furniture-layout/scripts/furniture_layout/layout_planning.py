@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from furniture_design_intent.design_spec import FurnitureSpec
+from furniture_design_intent.design_spec import FurnitureSpec, resolve_back_mount
 
 
 @dataclass(frozen=True)
@@ -25,6 +25,7 @@ class CabinetLayout:
     internal_z_start: float
     internal_z_end: float
     back_plane_y: float
+    back_mount: str
     toe_kick_height: float
     toe_kick_rear_y: float
     toe_kick_front_y: float
@@ -34,7 +35,21 @@ class CabinetLayout:
     @classmethod
     def from_spec(cls, spec: FurnitureSpec) -> "CabinetLayout":
         board = spec.board_thickness
-        side_depth = spec.depth - spec.door_thickness - spec.door_hinge_gap
+        back_mount = resolve_back_mount(
+            spec.back_mount, spec.back_thickness, spec.board_thickness
+        )
+
+        if back_mount == "cover":
+            side_depth = (
+                spec.depth - spec.door_thickness - spec.door_hinge_gap - spec.back_thickness
+            )
+            back_plane_y = 0.0
+            internal_y_start = spec.back_thickness
+        else:
+            side_depth = spec.depth - spec.door_thickness - spec.door_hinge_gap
+            back_plane_y = spec.back_offset
+            internal_y_start = spec.back_offset + spec.back_thickness
+
         toe_kick = (
             spec.toe_kick_height if spec.furniture_type != "wall_cabinet" else 0.0
         )
@@ -48,11 +63,12 @@ class CabinetLayout:
             internal_height=spec.height - toe_kick - 2 * board,
             internal_x_start=board,
             internal_x_end=spec.width - board,
-            internal_y_start=spec.back_offset + spec.back_thickness,
+            internal_y_start=internal_y_start,
             internal_y_end=side_depth,
             internal_z_start=toe_kick + board,
             internal_z_end=spec.height - board,
-            back_plane_y=spec.back_offset,
+            back_plane_y=back_plane_y,
+            back_mount=back_mount,
             toe_kick_height=toe_kick,
             toe_kick_rear_y=spec.toe_kick_reveal_back,
             toe_kick_front_y=side_depth - spec.toe_kick_reveal_front,

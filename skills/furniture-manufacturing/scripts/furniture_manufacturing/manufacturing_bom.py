@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List
 
-from furniture_design_intent.design_spec import FurnitureSpec
+from furniture_design_intent.design_spec import FurnitureSpec, resolve_back_mount
 from furniture_panel_planning.panel_models import PanelPlacement
 
 from .manufacturing_edge_banding import get_edge_banding
@@ -48,8 +48,11 @@ def plan_manufacturing(
     placements: list[PanelPlacement],
 ) -> BOMReport:
     """Stage 4: apply materials and emit explicit machining operations."""
-    panels = [_manufacturing_panel(spec, item) for item in placements]
-    operations = _back_groove_operations(spec, placements)
+    back_mount = resolve_back_mount(
+        spec.back_mount, spec.back_thickness, spec.board_thickness
+    )
+    panels = [_manufacturing_panel(spec, back_mount, item) for item in placements]
+    operations = _back_groove_operations(spec, back_mount, placements)
     dimensions = f"{spec.width:.0f}×{spec.height:.0f}×{spec.depth:.0f}mm"
     return BOMReport(
         furniture_name=FURNITURE_NAMES.get(spec.furniture_type, spec.furniture_type),
@@ -61,7 +64,7 @@ def plan_manufacturing(
     )
 
 
-def _manufacturing_panel(spec: FurnitureSpec, placement: PanelPlacement) -> PanelRecord:
+def _manufacturing_panel(spec: FurnitureSpec, back_mount: str, placement: PanelPlacement) -> PanelRecord:
     if placement.material_role == "back":
         material = f"{spec.back_thickness:g}mm背板"
         thickness = spec.back_thickness
@@ -91,7 +94,7 @@ def _manufacturing_panel(spec: FurnitureSpec, placement: PanelPlacement) -> Pane
         size_z=placement.size_z,
         quantity=placement.quantity,
         drill_length=drill_length,
-        edge_banding=get_edge_banding(placement.panel_type),
+        edge_banding=_edge_banding_for(placement.panel_type, back_mount),
         note=placement.note,
         pos_x=placement.pos_x,
         pos_y=placement.pos_y,
@@ -100,10 +103,19 @@ def _manufacturing_panel(spec: FurnitureSpec, placement: PanelPlacement) -> Pane
     )
 
 
+def _edge_banding_for(panel_type: str, back_mount: str) -> dict[str, str]:
+    if panel_type == "back" and back_mount == "groove":
+        return {}
+    return get_edge_banding(panel_type)
+
+
 def _back_groove_operations(
     spec: FurnitureSpec,
+    back_mount: str,
     placements: list[PanelPlacement],
 ) -> list[MachiningOperation]:
+    if back_mount != "groove":
+        return []
     by_id = {panel.id: panel for panel in placements}
     required = {"left_side_panel", "right_side_panel", "top_panel", "bottom_panel", "back_panel"}
     if not required.issubset(by_id):
@@ -112,7 +124,7 @@ def _back_groove_operations(
     board = spec.board_thickness
     depth = spec.groove_depth
     groove_width = spec.back_thickness + spec.groove_clearance
-    groove_y = spec.back_offset - spec.groove_clearance / 2
+    groove_y = spec.back_offset
     common = {"operation_type": "cut_box", "size_y": groove_width, "pos_y": groove_y}
     return [
         MachiningOperation(

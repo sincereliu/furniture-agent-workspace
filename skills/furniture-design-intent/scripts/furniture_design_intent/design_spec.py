@@ -76,6 +76,8 @@ class FurnitureSpec:
     toe_kick_reveal_front: float = 1.0
     toe_kick_reveal_back: float = 30.0
     toe_kick_support_count: int | None = None
+    back_mount: str = "auto"
+    back_rail_height: float = 70.0
     # 五金偏好 (Phase 2)
     hinge_brand: str = ""           # 铰链品牌 ""=默认, "Blum", "DTC" 等
     hinge_variant: str = ""         # 铰链规格组 ""=自动, "进口35mm杯全盖" 等
@@ -134,7 +136,7 @@ class FurnitureSpec:
         )
         internal_height = self.height - actual_toe_kick - 2 * self.board_thickness
         groove_width = self.back_thickness + self.groove_clearance
-        groove_y = self.back_offset - self.groove_clearance / 2
+        groove_y = self.back_offset
 
         if side_depth <= 0:
             errors.append("depth must exceed door_thickness + door_hinge_gap")
@@ -202,6 +204,8 @@ class FurnitureSpec:
             toe_kick_reveal_front=float(_get("toe_kick_reveal_front", 1.0)),
             toe_kick_reveal_back=float(_get("toe_kick_reveal_back", 30.0)),
             toe_kick_support_count=_optional_int(data.get("toe_kick_support_count")),
+            back_mount=str(_get("back_mount", "auto")),
+            back_rail_height=float(_get("back_rail_height", 70.0)),
             options=data.get("options", {}),
         )
 
@@ -220,6 +224,21 @@ def _optional_int(value: Any) -> int | None:
     if isinstance(value, str) and value.strip() != str(converted):
         raise ValueError("toe_kick_support_count must be an integer or null")
     return converted
+
+
+def resolve_back_mount(spec_back_mount: str, back_thickness: float, board_thickness: float) -> str:
+    """Derive the effective back mount mode.
+
+    "auto"  → "groove" for thin back (back_thickness < board_thickness)
+               "insert" for thick back (back_thickness >= board_thickness)
+    "groove" / "insert" / "cover"  → as-is (explicit override)
+    """
+    VALID = {"auto", "groove", "insert", "cover"}
+    if spec_back_mount not in VALID:
+        raise ValueError(f"back_mount must be one of: {', '.join(sorted(VALID))}")
+    if spec_back_mount != "auto":
+        return spec_back_mount
+    return "insert" if back_thickness >= board_thickness else "groove"
 
 
 def resolve_toe_kick_support_count(explicit: int | None, width: float) -> int:

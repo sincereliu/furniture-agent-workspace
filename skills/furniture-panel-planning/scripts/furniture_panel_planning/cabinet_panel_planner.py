@@ -71,30 +71,100 @@ def build_cabinet_panels(
         ]
     )
 
-    groove_depth = spec.groove_depth
-    back_width = layout.internal_width + 2 * groove_depth
-    back_height = layout.internal_height + 2 * groove_depth
-    panels.append(
-        PanelPlacement(
-            id="back_panel",
-            name="背板",
-            panel_type="back",
-            size_x=back_width,
-            size_y=spec.back_thickness,
-            size_z=back_height,
-            pos_x=layout.internal_x_start - groove_depth,
-            pos_y=layout.back_plane_y,
-            pos_z=layout.internal_z_start - groove_depth,
-            material_role="back",
-            depends_on=[
-                "left_side_panel",
-                "right_side_panel",
-                "top_panel",
-                "bottom_panel",
-            ],
-            note=f"四边入槽{groove_depth:.0f}mm的成品背板",
+    back_mount = layout.back_mount
+
+    if back_mount == "groove":
+        groove_depth = spec.groove_depth
+        back_width = layout.internal_width + 2 * groove_depth
+        back_height = layout.internal_height + 2 * groove_depth
+        panels.append(
+            PanelPlacement(
+                id="back_panel",
+                name="背板",
+                panel_type="back",
+                size_x=back_width,
+                size_y=spec.back_thickness,
+                size_z=back_height,
+                pos_x=layout.internal_x_start - groove_depth,
+                pos_y=layout.back_plane_y,
+                pos_z=layout.internal_z_start - groove_depth,
+                material_role="back",
+                depends_on=[
+                    "left_side_panel",
+                    "right_side_panel",
+                    "top_panel",
+                    "bottom_panel",
+                ],
+                note=f"四边入槽{groove_depth:.0f}mm的成品背板",
+            )
         )
-    )
+        # back rails for groove-mounted back panels
+        rail_h = spec.back_rail_height
+        rail_count = int(layout.internal_height // 500)
+        if rail_h > 0 and rail_count > 0:
+            step = (layout.internal_height - rail_count * rail_h) / rail_count
+            for i in range(rail_count):
+                rail_z = layout.internal_z_start + step + i * (rail_h + step)
+                panels.append(
+                    PanelPlacement(
+                        id=f"back_rail_{i + 1}",
+                        name=f"背拉条{i + 1}",
+                        panel_type="back_rail",
+                        size_x=layout.internal_width,
+                        size_y=board,
+                        size_z=rail_h,
+                        pos_x=layout.internal_x_start,
+                        pos_y=0.0,
+                        pos_z=rail_z,
+                        material_role="carcass",
+                        depends_on=["left_side_panel", "right_side_panel"],
+                        note=f"背板拉条，{rail_h:.0f}×{board:.0f}mm",
+                    )
+                )
+    elif back_mount == "insert":
+        panels.append(
+            PanelPlacement(
+                id="back_panel",
+                name="背板",
+                panel_type="back",
+                size_x=layout.internal_width,
+                size_y=spec.back_thickness,
+                size_z=layout.internal_height,
+                pos_x=layout.internal_x_start,
+                pos_y=layout.back_plane_y,
+                pos_z=layout.internal_z_start,
+                material_role="back",
+                depends_on=[
+                    "left_side_panel",
+                    "right_side_panel",
+                    "top_panel",
+                    "bottom_panel",
+                ],
+                note="内嵌背板，三合一连接",
+            )
+        )
+    else:  # cover
+        panels.append(
+            PanelPlacement(
+                id="back_panel",
+                name="背板",
+                panel_type="back",
+                size_x=layout.width,
+                size_y=spec.back_thickness,
+                size_z=layout.height,
+                pos_x=0.0,
+                pos_y=0.0,
+                pos_z=0.0,
+                material_role="back",
+                depends_on=[
+                    "left_side_panel",
+                    "right_side_panel",
+                    "top_panel",
+                    "bottom_panel",
+                ],
+                note="外盖背板，覆盖整个背面",
+            )
+        )
 
     if layout.toe_kick_height > 0:
         panels.extend(_toe_kick_panels(spec, layout))
