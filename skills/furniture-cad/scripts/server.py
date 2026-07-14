@@ -53,6 +53,11 @@ class CabinetRequest(BaseModel):
     door_hinge_gap: float | None = Field(default=None, ge=0, description="门铰深度间隙 mm")
     shelf_count: int | None = Field(default=None, ge=0, description="层板数量")
     n_doors: int | None = Field(default=None, ge=0, description="门板数量")
+    groove_depth: float | None = Field(default=None, gt=0, description="背板入槽深度 mm")
+    groove_clearance: float | None = Field(default=None, ge=0, description="槽宽相对背板厚度的余量 mm")
+    toe_kick_reveal_front: float | None = Field(default=None, ge=0, description="前踢脚板后缩 mm")
+    toe_kick_reveal_back: float | None = Field(default=None, ge=0, description="后踢脚板前移 mm")
+    toe_kick_support_count: int | None = Field(default=None, ge=0, description="踢脚支撑板数量；空值为自动")
 
 
 class PanelResponse(BaseModel):

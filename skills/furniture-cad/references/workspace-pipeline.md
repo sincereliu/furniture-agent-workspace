@@ -73,6 +73,11 @@ result = orchestrator.run_next(
   "back_offset": 18,
   "door_margin": 1.5,
   "door_hinge_gap": 2,
+  "groove_depth": 6,
+  "groove_clearance": 1,
+  "toe_kick_reveal_front": 1,
+  "toe_kick_reveal_back": 30,
+  "toe_kick_support_count": null,
   "shelf_count": 4,
   "n_doors": 2
 }
@@ -115,7 +120,7 @@ CLI、API 与 Agent 均委托 `skills/furniture-cad/scripts/furniture_workflow/w
 
 `CLI / API / Agent -> FurnitureOrchestrator -> 设计意图 -> 布局 -> 板件 -> 制造/BOM -> 特征树 -> CAD Bridge -> STEP + Viewer 拓扑 -> 交付验证`
 
-概念板件方案由现有规划器流程表达。它不增加新的运行时命令、规划器接口、可执行 JSON 结构、特征树操作集或 STEP 实体模型。
+Feature Tree v2 支持板件 `box` 和目标明确的 `cut_box` 减料操作。CAD 发射器先创建单块板件，再对该板件执行制造阶段确认的切削，最后装配完成加工后的板件。
 
 不要把家具 JSON 直接发送给 text-to-cad。普通家具生成不得用一次性 CAD 源码绕过规划器，也不得修改外部子模块。
 
@@ -123,9 +128,9 @@ CLI、API 与 Agent 均委托 `skills/furniture-cad/scripts/furniture_workflow/w
 
 三个阶段函数由各自 Skill 拥有：
 
-- `skills/furniture-layout/scripts/furniture_layout/layout_pipeline.py` 的 `plan_layout()`：生成布局与板件定位记录。
-- `skills/furniture-panel-planning/scripts/furniture_panel_planning/panel_planning.py` 的 `plan_panels()`：把布局转换成制造板件记录。
-- `skills/furniture-manufacturing/scripts/furniture_manufacturing/manufacturing_bom.py` 的 `plan_manufacturing()`：应用材料、五金和 BOM 策略。
+- `skills/furniture-layout/scripts/furniture_layout/layout_pipeline.py` 的 `plan_layout()`：生成包络、净空和布局区域，不生成板件。
+- `skills/furniture-panel-planning/scripts/furniture_panel_planning/panel_planning.py` 的 `plan_panels()`：把布局转换成实体板件角色、尺寸和位置。
+- `skills/furniture-manufacturing/scripts/furniture_manufacturing/manufacturing_bom.py` 的 `plan_manufacturing()`：应用材料、封边、五金、BOM 和槽加工策略。
 
 `skills/furniture-cad/scripts/furniture_workflow/cabinet_pipeline.py` 的 `plan_cabinet()` 保留为组合这些领域函数的无状态兼容门面；交互式工作流由 Orchestrator 分阶段调用三个函数，不通过 `plan_cabinet()` 把检查点合并掉。
 

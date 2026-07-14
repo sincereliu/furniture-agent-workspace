@@ -35,8 +35,9 @@ description: 根据已确认特征树生成家具 CAD，并核对当前运行时
 1. 在声称支持、规范化可执行 JSON、生成或报告产物前，读取 [工作区流水线](references/workspace-pipeline.md) 并检查其中指向的实时入口。
 2. 要求 `feature_tree_planned` 已确认；通过 `FurnitureOrchestrator.run_next()` 生成 CAD。
 3. CLI、API 和 Agent 必须统一经过 `FurnitureOrchestrator`；发射器和 CAD Bridge 只由 Orchestrator 调用。
-4. 展示 `stage_outputs.cad_generated` 后停止，不得同时完成交付验证。
-5. 只有明确的一次性 CLI/API 批处理才使用 `execute_spec()` 或 `scripts/generate_furniture.py`。
+4. Feature Tree `cut_box` 由发射器对指定板件执行 build123d 布尔减料；不得用板件重叠冒充开槽。
+5. 展示 `stage_outputs.cad_generated` 后停止，不得同时完成交付验证。
+6. 只有明确的一次性 CLI/API 批处理才使用 `execute_spec()` 或 `scripts/generate_furniture.py`。
 
 ## 领域参考文档
 

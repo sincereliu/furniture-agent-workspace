@@ -115,12 +115,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         edited_layout = deepcopy(
             parent.stage_outputs[WorkflowStage.LAYOUT_PLANNED.value]
         )
-        shelf = next(
-            item
-            for item in edited_layout["placements"]
-            if "shelf" in item["panel_type"]
-        )
-        shelf["pos_z"] += 10
+        edited_layout["layout"]["shelf_count"] = 1
 
         revised = self.orchestrator.revise_stage_output(
             project,
@@ -215,6 +210,38 @@ class FurnitureOrchestratorTests(unittest.TestCase):
                 self.assertEqual(result.bridge.status, "ok")
         finally:
             shutil.rmtree(source_dir, ignore_errors=True)
+
+    def test_revised_manufacturing_operation_must_remain_inside_target_panel(self) -> None:
+        result = self.orchestrator.execute_spec(
+            "加工验证",
+            {
+                "type": "floor_cabinet",
+                "width": 800,
+                "depth": 600,
+                "height": 1000,
+            },
+            through_stage=WorkflowStage.MANUFACTURING_PLANNED,
+        )
+        edited = deepcopy(
+            result.revision.stage_outputs[WorkflowStage.MANUFACTURING_PLANNED.value]
+        )
+        edited["operations"][0]["pos_x"] = -1
+        revision = self.orchestrator.revise_stage_output(
+            result.project,
+            WorkflowStage.MANUFACTURING_PLANNED,
+            edited,
+        )
+
+        self.orchestrator.confirm_stage(
+            result.project,
+            WorkflowStage.MANUFACTURING_PLANNED,
+        )
+
+        self.assertEqual(revision.workflow.current, WorkflowStage.FAILED)
+        self.assertIn(
+            "OPERATION_OUTSIDE_TARGET",
+            {issue.code for issue in revision.validations[-1].issues},
+        )
 
     def test_new_intent_revision_marks_parent_artifacts_stale(self) -> None:
         artifact_name = f"revision-test-{uuid4().hex}"

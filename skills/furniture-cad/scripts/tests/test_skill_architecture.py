@@ -102,6 +102,37 @@ class SkillArchitectureTests(unittest.TestCase):
         )
         self.assertTrue((workflow_package / "workflow_orchestrator.py").is_file())
 
+    def test_layout_does_not_own_panel_or_manufacturing_runtime(self) -> None:
+        layout_package = (
+            SKILLS_ROOT
+            / "furniture-layout"
+            / "scripts"
+            / "furniture_layout"
+        )
+        layout_source = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in layout_package.glob("*.py")
+        )
+        self.assertNotIn("PanelPlacement", layout_source)
+        self.assertNotIn("cut_box", layout_source)
+        self.assertFalse((layout_package / "layout_template.py").exists())
+
+        panel_package = (
+            SKILLS_ROOT
+            / "furniture-panel-planning"
+            / "scripts"
+            / "furniture_panel_planning"
+        )
+        manufacturing_package = (
+            SKILLS_ROOT
+            / "furniture-manufacturing"
+            / "scripts"
+            / "furniture_manufacturing"
+        )
+        self.assertTrue((panel_package / "cabinet_panel_planner.py").is_file())
+        self.assertFalse((panel_package / "manufacturing_edge_banding.py").exists())
+        self.assertTrue((manufacturing_package / "manufacturing_edge_banding.py").is_file())
+
 
 if __name__ == "__main__":
     unittest.main()

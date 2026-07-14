@@ -13,16 +13,15 @@ description: 将家具需求整理为可确认的设计意图。适用于讨论�
 
 1. 读取 [家具目录](references/intake/catalog.yaml)，匹配家具类别；无匹配时使用 fallback，但不得声称该类别可执行。
 2. 读取 [设计意图约定](references/design-intent.md)，整理类别、尺寸、用途、风格、约束、假设和未决问题。
-3. 默认值以 `scripts/furniture_design_intent/design_spec.py` 的实时定义为准，包括：
+3. 可执行输入默认值以 `scripts/furniture_design_intent/design_spec.py` 的实时定义为准，包括：
    - `board_thickness`（18mm）、`back_thickness`（9mm）、`door_thickness`（18mm）
    - `back_offset`（18mm）、`door_margin`（1.5mm）、`door_hinge_gap`（2mm）
-   - `groove_depth`（6mm）：背板入槽深度，含 1mm 加工余量
-   - `groove_clearance`（1mm）：槽宽比背板厚的余量，槽宽 = `back_thickness + groove_clearance`
-   - `toe_kick_reveal_front`（1mm）：前踢脚板距侧板前缘缩进量
-   - `toe_kick_reveal_back`（30mm）：后踢脚板距 Y=0 缩进量
-   - `toe_kick_support_count`（None=自动）：踢脚线支撑板数量；None 时按宽度自动推导
-4. 用户可覆盖 `back_thickness`、`groove_depth`、`groove_clearance`、`toe_kick_reveal_front`、`toe_kick_reveal_back`、`toe_kick_support_count`；未传入时按 dataclass 默认值 fallback。
-5. 展示 `design_intent` 阶段输出并等待确认。不得自行进入布局、板件、制造、特征树或 CAD。
+4. 本阶段只记录用户明确给出的结构偏好和参数覆盖，不计算板件或加工：
+   - `toe_kick_reveal_front/back` 传递给布局阶段形成踢脚空间区域；
+   - `toe_kick_support_count` 传递给板件阶段决定支撑板数量；
+   - `groove_depth/groove_clearance` 作为背板连接偏好，分别由板件阶段计算背板成品尺寸、制造阶段计算槽加工。
+5. 在确认前调用实时 `FurnitureSpec.validation_errors()`，拒绝非正尺寸、越界槽、无效支撑数量和没有净空的踢脚区域。
+6. 展示 `design_intent` 阶段输出并等待确认。不得自行进入布局、板件、制造、特征树或 CAD。
 
 ## 边界
 

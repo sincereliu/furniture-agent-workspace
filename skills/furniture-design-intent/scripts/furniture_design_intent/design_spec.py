@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 # ── 品类预设默认值 ──────────────────────────────────────────────
 # 所有品类的默认尺寸统一在此定义，AI Agent 和运行时共用。
@@ -91,6 +91,82 @@ class FurnitureSpec:
             "wall_cabinet",
         )
 
+    def validation_errors(self) -> list[str]:
+        """Validate the executable cabinet contract before stage execution."""
+        errors: list[str] = []
+        positive_fields = {
+            "width": self.width,
+            "depth": self.depth,
+            "height": self.height,
+            "board_thickness": self.board_thickness,
+            "back_thickness": self.back_thickness,
+            "door_thickness": self.door_thickness,
+            "groove_depth": self.groove_depth,
+        }
+        for name, value in positive_fields.items():
+            if value <= 0:
+                errors.append(f"{name} must be greater than zero")
+
+        non_negative_fields = {
+            "toe_kick_height": self.toe_kick_height,
+            "back_offset": self.back_offset,
+            "door_margin": self.door_margin,
+            "door_hinge_gap": self.door_hinge_gap,
+            "groove_clearance": self.groove_clearance,
+            "toe_kick_reveal_front": self.toe_kick_reveal_front,
+            "toe_kick_reveal_back": self.toe_kick_reveal_back,
+        }
+        for name, value in non_negative_fields.items():
+            if value < 0:
+                errors.append(f"{name} cannot be negative")
+
+        if self.shelf_count < 0:
+            errors.append("shelf_count cannot be negative")
+        if self.n_doors < 0:
+            errors.append("n_doors cannot be negative")
+        if self.toe_kick_support_count is not None and self.toe_kick_support_count < 0:
+            errors.append("toe_kick_support_count cannot be negative")
+
+        side_depth = self.depth - self.door_thickness - self.door_hinge_gap
+        internal_width = self.width - 2 * self.board_thickness
+        actual_toe_kick = (
+            self.toe_kick_height if self.furniture_type != "wall_cabinet" else 0.0
+        )
+        internal_height = self.height - actual_toe_kick - 2 * self.board_thickness
+        groove_width = self.back_thickness + self.groove_clearance
+        groove_y = self.back_offset - self.groove_clearance / 2
+
+        if side_depth <= 0:
+            errors.append("depth must exceed door_thickness + door_hinge_gap")
+        if internal_width <= 0:
+            errors.append("width must exceed twice board_thickness")
+        if internal_height <= 0:
+            errors.append(
+                "height must exceed toe_kick_height + twice board_thickness"
+            )
+        if self.groove_depth > self.board_thickness:
+            errors.append("groove_depth cannot exceed board_thickness")
+        if groove_y < 0 or groove_y + groove_width > side_depth:
+            errors.append("back groove must remain inside the cabinet side depth")
+
+        if actual_toe_kick > 0:
+            support_depth = (
+                side_depth
+                - self.toe_kick_reveal_front
+                - self.toe_kick_reveal_back
+                - 2 * self.board_thickness
+            )
+            if support_depth <= 0:
+                errors.append("toe-kick reveals leave no positive support depth")
+            support_count = resolve_toe_kick_support_count(
+                self.toe_kick_support_count,
+                self.width,
+            )
+            if support_count * self.board_thickness >= internal_width:
+                errors.append("toe_kick_support_count leaves no positive clear spacing")
+
+        return errors
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "FurnitureSpec":
         """从字典构建规格，自动做单位转换和默认值填充。
@@ -125,41 +201,31 @@ class FurnitureSpec:
             groove_clearance=float(_get("groove_clearance", 1.0)),
             toe_kick_reveal_front=float(_get("toe_kick_reveal_front", 1.0)),
             toe_kick_reveal_back=float(_get("toe_kick_reveal_back", 30.0)),
-            toe_kick_support_count=data.get("toe_kick_support_count"),
+            toe_kick_support_count=_optional_int(data.get("toe_kick_support_count")),
             options=data.get("options", {}),
         )
 
 
-@dataclass
-class Feature:
-    """特征树中的单个特征。
+def _optional_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise ValueError("toe_kick_support_count must be an integer or null")
+    try:
+        converted = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("toe_kick_support_count must be an integer or null") from exc
+    if isinstance(value, float) and not value.is_integer():
+        raise ValueError("toe_kick_support_count must be an integer or null")
+    if isinstance(value, str) and value.strip() != str(converted):
+        raise ValueError("toe_kick_support_count must be an integer or null")
+    return converted
 
-    字段说明:
-        id:         唯一标识符
-        type:       特征类型（box / compound）
-        size:       {x, y, z} 尺寸 mm
-        position:   {x, y, z} min corner 位置 mm
-        depends_on: 依赖特征 id 列表
-        tags:       语义标签列表（如 ["side", "left"]）
-    """
 
-    id: str
-    type: str  # "box" | "compound"
-    size: Dict[str, float]
-    position: Dict[str, float]
-    depends_on: List[str] = field(default_factory=list)
-    tags: List[str] = field(default_factory=list)
-
-    @classmethod
-    def from_placement(cls, placement: "PanelPlacement") -> "Feature":
-        """从 PanelPlacement 构建 Feature。"""
-        from .panel import PanelPlacement
-
-        return cls(
-            id=placement.id,
-            type="box",
-            size={"x": placement.size_x, "y": placement.size_y, "z": placement.size_z},
-            position={"x": placement.pos_x, "y": placement.pos_y, "z": placement.pos_z},
-            depends_on=list(placement.depends_on),
-            tags=[placement.panel_type],
-        )
+def resolve_toe_kick_support_count(explicit: int | None, width: float) -> int:
+    """Resolve the maintained project default for toe-kick supports."""
+    if explicit is not None:
+        return explicit
+    if width < 600:
+        return 0
+    return 1 + int((width - 600) // 300)

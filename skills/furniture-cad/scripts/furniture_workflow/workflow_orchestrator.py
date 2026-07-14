@@ -16,9 +16,14 @@ from furniture_design_intent.design_spec import FurnitureSpec
 from furniture_feature_tree.feature_tree_builder import panels_to_feature_tree
 from furniture_feature_tree.feature_tree_emitter import write_build123d_source
 from furniture_layout.layout_pipeline import SUPPORTED_TYPES, plan_layout
+from furniture_layout.layout_planning import CabinetLayout
 from furniture_manufacturing.manufacturing_bom import BOMReport, format_bom_markdown, plan_manufacturing
-from furniture_manufacturing.manufacturing_models import HardwareRecord
-from furniture_panel_planning.panel_models import PanelPlacement, PanelRecord
+from furniture_manufacturing.manufacturing_models import (
+    HardwareRecord,
+    MachiningOperation,
+    PanelRecord,
+)
+from furniture_panel_planning.panel_models import PanelPlacement
 from furniture_panel_planning.panel_planning import plan_panels
 
 from .cabinet_pipeline import CabinetPipelineResult
@@ -378,29 +383,27 @@ class FurnitureOrchestrator:
         spec = self._to_spec(revision.intent)
 
         if stage == WorkflowStage.LAYOUT_PLANNED:
-            output = {
-                "placements": [asdict(item) for item in plan_layout(spec)],
-            }
+            output = {"layout": asdict(plan_layout(spec))}
             self._complete_stage(
                 revision,
                 stage,
                 output,
-                "layout placements planned",
+                "cabinet envelope, clear regions, and layout counts planned",
             )
             return
 
         if stage == WorkflowStage.PANELS_PLANNED:
-            panels = plan_panels(self._placements_from_revision(revision))
+            panels = plan_panels(spec, self._layout_from_revision(revision))
             self._complete_stage(
                 revision,
                 stage,
                 {"panels": [asdict(item) for item in panels]},
-                "manufacturing panel records planned",
+                "physical panel roles, sizes, and placements planned",
             )
             return
 
         if stage == WorkflowStage.MANUFACTURING_PLANNED:
-            bom = plan_manufacturing(spec, self._panels_from_revision(revision))
+            bom = plan_manufacturing(spec, self._placements_from_revision(revision))
             self._complete_stage(
                 revision,
                 stage,
@@ -410,9 +413,10 @@ class FurnitureOrchestrator:
             return
 
         if stage == WorkflowStage.FEATURE_TREE_PLANNED:
-            panels = self._panels_from_revision(revision)
+            manufacturing = self._bom_from_revision(revision)
             feature_tree = panels_to_feature_tree(
-                panels,
+                manufacturing.panels,
+                manufacturing.operations,
                 furniture_type=spec.furniture_type,
                 parameters={
                     "width": spec.width,
@@ -426,7 +430,7 @@ class FurnitureOrchestrator:
                 revision,
                 stage,
                 feature_tree,
-                "box-based Feature Tree v1 planned",
+                "Feature Tree v2 with target-specific machining cuts planned",
             )
             return
 
@@ -518,17 +522,22 @@ class FurnitureOrchestrator:
             return None
         return CabinetPipelineResult(
             spec=self._to_spec(revision.intent),
+            layout=self._layout_from_revision(revision),
             placements=self._placements_from_revision(revision),
             panels=self._panels_from_revision(revision),
             bom=self._bom_from_revision(revision),
         )
 
-    def _placements_from_revision(self, revision: Revision) -> list[PanelPlacement]:
+    def _layout_from_revision(self, revision: Revision) -> CabinetLayout:
         output = revision.stage_outputs[WorkflowStage.LAYOUT_PLANNED.value]
-        return [PanelPlacement(**item) for item in output.get("placements", [])]
+        return CabinetLayout(**output["layout"])
+
+    def _placements_from_revision(self, revision: Revision) -> list[PanelPlacement]:
+        output = revision.stage_outputs[WorkflowStage.PANELS_PLANNED.value]
+        return [PanelPlacement(**item) for item in output.get("panels", [])]
 
     def _panels_from_revision(self, revision: Revision) -> list[PanelRecord]:
-        output = revision.stage_outputs[WorkflowStage.PANELS_PLANNED.value]
+        output = revision.stage_outputs[WorkflowStage.MANUFACTURING_PLANNED.value]
         return [PanelRecord(**item) for item in output.get("panels", [])]
 
     def _bom_from_revision(self, revision: Revision) -> BOMReport:
@@ -538,6 +547,9 @@ class FurnitureOrchestrator:
             dimensions=str(output["dimensions"]),
             panels=[PanelRecord(**item) for item in output.get("panels", [])],
             hardware=[HardwareRecord(**item) for item in output.get("hardware", [])],
+            operations=[
+                MachiningOperation(**item) for item in output.get("operations", [])
+            ],
             total_area_m2=float(output.get("total_area_m2", 0.0)),
         )
 
@@ -556,14 +568,17 @@ class FurnitureOrchestrator:
             if stage == WorkflowStage.LAYOUT_PLANNED:
                 return self._validate_layout(
                     self._to_spec(revision.intent),
-                    self._placements_from_revision(revision),
+                    self._layout_from_revision(revision),
                 )
             if stage == WorkflowStage.PANELS_PLANNED:
-                return self._validate_panels(self._panels_from_revision(revision))
+                return self._validate_panels(
+                    self._to_spec(revision.intent),
+                    self._placements_from_revision(revision),
+                )
             if stage == WorkflowStage.MANUFACTURING_PLANNED:
                 return self._validate_manufacturing(
                     self._bom_from_revision(revision),
-                    self._panels_from_revision(revision),
+                    self._placements_from_revision(revision),
                 )
             if stage == WorkflowStage.FEATURE_TREE_PLANNED:
                 return self._validate_feature_tree(
@@ -588,14 +603,70 @@ class FurnitureOrchestrator:
     def _validate_layout(
         self,
         spec: FurnitureSpec,
-        placements: list[PanelPlacement],
+        layout: CabinetLayout,
     ) -> ValidationReport:
         report = ValidationReport(stage=WorkflowStage.LAYOUT_PLANNED.value)
-        if not placements:
-            report.add_error("EMPTY_LAYOUT", "layout contains no placements")
+        if (layout.width, layout.depth, layout.height) != (
+            spec.width,
+            spec.depth,
+            spec.height,
+        ):
+            report.add_error(
+                "LAYOUT_ENVELOPE_MISMATCH",
+                "layout envelope does not match confirmed design intent",
+            )
+        if min(layout.internal_width, layout.internal_height, layout.side_depth) <= 0:
+            report.add_error(
+                "NON_POSITIVE_LAYOUT_REGION",
+                "layout internal regions must be positive",
+            )
+        if not (
+            0 <= layout.internal_x_start < layout.internal_x_end <= layout.width
+            and 0 <= layout.internal_z_start < layout.internal_z_end <= layout.height
+            and 0 <= layout.back_plane_y < layout.internal_y_end <= layout.side_depth
+        ):
+            report.add_error(
+                "LAYOUT_REGION_OUTSIDE_ENVELOPE",
+                "layout regions must remain inside the finished envelope",
+            )
+        if layout.toe_kick_height > 0 and not (
+            0 <= layout.toe_kick_rear_y < layout.toe_kick_front_y <= layout.side_depth
+        ):
+            report.add_error(
+                "INVALID_TOE_KICK_REGION",
+                "toe-kick region must have positive depth inside the cabinet",
+            )
+        for name, count in (
+            ("shelf_count", layout.shelf_count),
+            ("door_count", layout.door_count),
+        ):
+            if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+                report.add_error(
+                    "INVALID_LAYOUT_COUNT",
+                    f"{name} must be a non-negative integer",
+                    name,
+                )
+        return report
+
+    def _validate_panels(
+        self,
+        spec: FurnitureSpec,
+        panels: list[PanelPlacement],
+    ) -> ValidationReport:
+        report = ValidationReport(stage=WorkflowStage.PANELS_PLANNED.value)
+        if not panels:
+            report.add_error("EMPTY_PANEL_PLAN", "panel plan contains no panels")
             return report
-        ids = {item.id for item in placements}
-        for item in placements:
+        ids = {item.id for item in panels}
+        if len(ids) != len(panels):
+            report.add_error("DUPLICATE_PANEL_ID", "panel ids must be unique")
+        for item in panels:
+            if item.quantity <= 0:
+                report.add_error(
+                    "INVALID_PANEL_QUANTITY",
+                    f"{item.id} quantity must be positive",
+                    item.id,
+                )
             for axis, size, position, limit in (
                 ("x", item.size_x, item.pos_x, spec.width),
                 ("y", item.size_y, item.pos_y, spec.depth),
@@ -622,33 +693,13 @@ class FurnitureOrchestrator:
                     )
         return report
 
-    def _validate_panels(self, panels: list[PanelRecord]) -> ValidationReport:
-        report = ValidationReport(stage=WorkflowStage.PANELS_PLANNED.value)
-        if not panels:
-            report.add_error("EMPTY_PANEL_PLAN", "panel plan contains no panels")
-            return report
-        for panel in panels:
-            if panel.quantity <= 0:
-                report.add_error(
-                    "INVALID_PANEL_QUANTITY",
-                    f"{panel.label} quantity must be positive",
-                    panel.label,
-                )
-            if min(panel.length_mm, panel.width_mm, panel.thickness) <= 0:
-                report.add_error(
-                    "NON_POSITIVE_PANEL_SIZE",
-                    f"{panel.label} has a non-positive manufacturing size",
-                    panel.label,
-                )
-        return report
-
     def _validate_manufacturing(
         self,
         bom: BOMReport,
-        panels: list[PanelRecord],
+        placements: list[PanelPlacement],
     ) -> ValidationReport:
         report = ValidationReport(stage=WorkflowStage.MANUFACTURING_PLANNED.value)
-        if bom.panel_count != len(panels):
+        if bom.panel_count != len(placements):
             report.add_error(
                 "BOM_PANEL_MISMATCH",
                 "BOM panel count does not match the confirmed panel plan",
@@ -662,6 +713,63 @@ class FurnitureOrchestrator:
                     f"{item.name} quantity cannot be negative",
                     item.name,
                 )
+        placement_by_id = {item.id: item for item in placements}
+        placement_ids = set(placement_by_id)
+        manufacturing_ids = {item.label for item in bom.panels}
+        if placement_ids != manufacturing_ids:
+            report.add_error(
+                "MANUFACTURING_PANEL_ID_MISMATCH",
+                "manufacturing records must preserve every confirmed panel id",
+            )
+        operation_ids: set[str] = set()
+        for operation in bom.operations:
+            if operation.id in operation_ids:
+                report.add_error(
+                    "DUPLICATE_OPERATION_ID",
+                    f"duplicate machining operation: {operation.id}",
+                    operation.id,
+                )
+            operation_ids.add(operation.id)
+            if operation.target_panel not in placement_ids:
+                report.add_error(
+                    "UNKNOWN_OPERATION_TARGET",
+                    f"{operation.id} targets unknown panel {operation.target_panel}",
+                    operation.id,
+                )
+            else:
+                target = placement_by_id[operation.target_panel]
+                for axis, size, position, target_size, target_position in (
+                    ("x", operation.size_x, operation.pos_x, target.size_x, target.pos_x),
+                    ("y", operation.size_y, operation.pos_y, target.size_y, target.pos_y),
+                    ("z", operation.size_z, operation.pos_z, target.size_z, target.pos_z),
+                ):
+                    if (
+                        position < target_position - 1e-6
+                        or position + size > target_position + target_size + 1e-6
+                    ):
+                        report.add_error(
+                            "OPERATION_OUTSIDE_TARGET",
+                            f"{operation.id} exceeds {operation.target_panel} on {axis.upper()}",
+                            operation.id,
+                        )
+            if operation.operation_type != "cut_box":
+                report.add_error(
+                    "UNSUPPORTED_OPERATION",
+                    f"unsupported machining operation: {operation.operation_type}",
+                    operation.id,
+                )
+            if min(operation.size_x, operation.size_y, operation.size_z) <= 0:
+                report.add_error(
+                    "NON_POSITIVE_OPERATION_SIZE",
+                    f"{operation.id} must have positive cutter dimensions",
+                    operation.id,
+                )
+        if "back_panel" in placement_ids and len(bom.operations) != 4:
+            report.add_error(
+                "INCOMPLETE_BACK_GROOVES",
+                "grooved back strategy requires four target-specific groove cuts",
+                "operations",
+            )
         return report
 
     def _validate_cad(self, bridge: BridgeResult | None) -> ValidationReport:
@@ -700,6 +808,9 @@ class FurnitureOrchestrator:
                 "DesignIntent still contains unresolved decisions",
                 "unresolved",
             )
+        if intent.furniture_type in SUPPORTED_TYPES:
+            for error in self._to_spec(intent).validation_errors():
+                report.add_error("INVALID_CABINET_SPEC", error, "structure")
         return report
 
     def _to_spec(self, intent: DesignIntent) -> FurnitureSpec:

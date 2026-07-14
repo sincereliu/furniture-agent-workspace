@@ -1,73 +1,53 @@
-"""柜体 Emitter — 将 PanelRecord 列表转为 build123d 源码文件。
-
-流程: List[PanelRecord] → Feature Tree dict → build123d .py 源码 → Bridge → .step + .glb
-
-与现有的 emitter.py 配合使用：
-  - emitter.py 的 write_build123d_source() 接收 Feature Tree dict
-  - 本模块负责 PanelRecord → Feature Tree 的转换
-"""
+"""Build an executable feature tree from confirmed manufacturing records."""
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
-from furniture_panel_planning.panel_models import PanelRecord
+from furniture_manufacturing.manufacturing_models import MachiningOperation, PanelRecord
 
 
 def panels_to_feature_tree(
-    panels: List[PanelRecord],
+    panels: list[PanelRecord],
+    operations: list[MachiningOperation],
     furniture_type: str = "floor_cabinet",
-    parameters: Dict[str, Any] | None = None,
-) -> Dict[str, Any]:
-    """将 PanelRecord 列表转换为 Feature Tree dict。
-
-    Feature Tree 格式与现有 emitter.py 兼容：
-    {
-        "schema_version": 1,
-        "furniture_type": "floor_cabinet",
-        "coordinate_system": {...},
-        "parameters": {...},
-        "features": [
-            {
-                "id": "left_side_panel",
-                "type": "box",
-                "size": {"x": 18, "y": 580, "z": 1000},
-                "position": {"x": 0, "y": 0, "z": 0},
-                "depends_on": [],
-            },
-            ...
-        ],
-        "root": {
-            "id": "cabinet_assembly",
-            "type": "compound",
-            "children": [...]
-        }
-    }
-
-    Args:
-        panels: 拆单后的 PanelRecord 列表
-        furniture_type: 家具类型标签
-        parameters: 可选参数字典（如包含 width/depth/height）
-
-    Returns:
-        标准 Feature Tree dict
-    """
-    features = []
-    for panel in panels:
-        feature = {
+    parameters: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    features = [
+        {
             "id": panel.label,
             "type": "box",
             "size": {"x": panel.size_x, "y": panel.size_y, "z": panel.size_z},
             "position": {"x": panel.pos_x, "y": panel.pos_y, "z": panel.pos_z},
-            "depends_on": [],
+            "depends_on": list(panel.depends_on),
+            "tags": [panel.panel_type],
         }
-        features.append(feature)
-
-    feature_ids = [f["id"] for f in features]
-
+        for panel in panels
+    ]
+    operation_nodes = [
+        {
+            "id": operation.id,
+            "type": operation.operation_type,
+            "target": operation.target_panel,
+            "size": {
+                "x": operation.size_x,
+                "y": operation.size_y,
+                "z": operation.size_z,
+            },
+            "position": {
+                "x": operation.pos_x,
+                "y": operation.pos_y,
+                "z": operation.pos_z,
+            },
+            "depends_on": [operation.target_panel],
+            "note": operation.note,
+        }
+        for operation in operations
+    ]
+    feature_ids = [feature["id"] for feature in features]
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "furniture_type": furniture_type,
         "units": "mm",
         "coordinate_system": {
@@ -78,6 +58,7 @@ def panels_to_feature_tree(
         },
         "parameters": parameters or {},
         "features": features,
+        "operations": operation_nodes,
         "root": {
             "id": f"{furniture_type}_assembly",
             "type": "compound",
@@ -87,26 +68,15 @@ def panels_to_feature_tree(
 
 
 def emit_panels_to_source(
-    panels: List[PanelRecord],
+    panels: list[PanelRecord],
+    operations: list[MachiningOperation],
     source_path: str | Path,
     furniture_type: str = "floor_cabinet",
-    parameters: Dict[str, Any] | None = None,
+    parameters: dict[str, Any] | None = None,
 ) -> Path:
-    """将 PanelRecord 列表直接写入 build123d 源码文件。
-
-    这绕过了 emitter.py，直接生成可被 Bridge 消费的 .py 文件。
-
-    Args:
-        panels: 拆单后的 PanelRecord 列表
-        source_path: 输出 .py 文件路径
-        furniture_type: 家具类型标签
-        parameters: 可选参数字典
-
-    Returns:
-        写入后的 Path 对象
-    """
-    feature_tree = panels_to_feature_tree(panels, furniture_type, parameters)
-
     from .feature_tree_emitter import write_build123d_source
 
-    return write_build123d_source(feature_tree, source_path)
+    return write_build123d_source(
+        panels_to_feature_tree(panels, operations, furniture_type, parameters),
+        source_path,
+    )

@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 
-from furniture_panel_planning.panel_models import PanelRecord
+from .manufacturing_models import PanelRecord
 
 
 # ── 加载规格库 ──────────────────────────────────────────────
