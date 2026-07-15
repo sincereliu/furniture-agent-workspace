@@ -17,7 +17,9 @@ def write_build123d_source(
     _validate_feature_tree(feature_tree)
     resolved_source = Path(source_path).resolve()
     resolved_source.parent.mkdir(parents=True, exist_ok=True)
-    tree_literal = pprint.pformat(feature_tree, sort_dicts=False, width=100)
+    tree_literal = pprint.pformat(
+        _sanitize_for_source(feature_tree), sort_dicts=False, width=100
+    )
     source = f'''"""Generated from the furniture Feature Tree. Edit the intent, not this file."""
 
 from build123d import Align, Box, Compound, Location
@@ -142,3 +144,18 @@ def _validate_xyz(value: Any, field_name: str, *, positive: bool) -> None:
             raise ValueError(f"{field_name}.{axis} must be numeric")
         if positive and axis_value <= 0:
             raise ValueError(f"{field_name}.{axis} must be greater than zero")
+
+
+def _sanitize_for_source(obj: Any) -> Any:
+    """Recursively replace non-ASCII strings so the emitted source is ASCII-safe."""
+    if isinstance(obj, str):
+        try:
+            obj.encode("ascii")
+        except UnicodeEncodeError:
+            return obj.encode("ascii", errors="replace").decode("ascii")
+        return obj
+    if isinstance(obj, dict):
+        return {k: _sanitize_for_source(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_for_source(item) for item in obj]
+    return obj
