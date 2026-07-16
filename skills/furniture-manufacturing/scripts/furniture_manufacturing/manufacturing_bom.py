@@ -52,7 +52,7 @@ def plan_manufacturing(
         spec.back_mount, spec.back_thickness, spec.board_thickness
     )
     panels = [_manufacturing_panel(spec, back_mount, item) for item in placements]
-    operations = _back_groove_operations(spec, back_mount, placements) + _drill_operations(panels)
+    operations = _back_groove_operations(spec, back_mount, placements)
     dimensions = f"{spec.width:.0f}×{spec.height:.0f}×{spec.depth:.0f}mm"
     return BOMReport(
         furniture_name=FURNITURE_NAMES.get(spec.furniture_type, spec.furniture_type),
@@ -475,17 +475,13 @@ def _add_hinge_holes(
     for hole in drilling.get("holes", []):
         y_local = float(hole.get("y_mm", 0))
         x_offset = float(hole.get("x_offset_mm", 5))
-        # Door panel: x_offset from hinge-side edge
-        # For left door (pos_x near 0): hinge side is right edge, x = pos_x + size_x - x_offset
-        # For right door: hinge side is left edge, x = pos_x + x_offset
-        # Use bore_distance_mm to decide: the hole is on the door face at hinge side
-        side = hole.get("side", "hinge_side")
-        if side == "hinge_side":
-            # x_offset from the hinge-side edge; for our door panels the hinge side
-            # faces the cabinet interior. We use x_offset measured from panel edge.
+        # Door panel hinge-side edge:
+        #   left door hinge on left edge  → x = pos_x + x_offset
+        #   right door hinge on right edge → x = pos_x + size_x - x_offset
+        if panel.pos_x < panel.size_x:
             x_global = panel.pos_x + x_offset
         else:
-            x_global = panel.pos_x + x_offset
+            x_global = panel.pos_x + panel.size_x - x_offset
 
         z_global = panel.pos_z + y_local
         # Door face: Y is the panel's pos_y + size_y (front face)

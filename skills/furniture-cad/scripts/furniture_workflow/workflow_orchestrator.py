@@ -17,7 +17,13 @@ from furniture_feature_tree.feature_tree_builder import panels_to_feature_tree
 from furniture_feature_tree.feature_tree_emitter import write_build123d_source
 from furniture_layout.layout_pipeline import SUPPORTED_TYPES, plan_layout
 from furniture_layout.layout_planning import CabinetLayout
-from furniture_manufacturing.manufacturing_bom import BOMReport, format_bom_markdown, plan_manufacturing
+from furniture_manufacturing.manufacturing_bom import (
+    BOMReport,
+    emit_drilled_holes,
+    format_bom_markdown,
+    plan_manufacturing,
+)
+from furniture_manufacturing.drilled_holes_glb import export_drilled_holes_glb
 from furniture_manufacturing.manufacturing_models import (
     HardwareRecord,
     MachiningOperation,
@@ -928,6 +934,20 @@ class FurnitureOrchestrator:
         bom_path.write_text(format_bom_markdown(pipeline.bom), encoding="utf-8")
         write_build123d_source(revision.feature_tree or {}, source_path)
 
+        # ── Drilled-holes sidecar files ──────────────────────────────────
+        if artifact_name:
+            drilled_json_path = artifact_dir / f"{artifact_name}.drilled-holes.json"
+            drilled_glb_path = artifact_dir / f"{artifact_name}.drilled-holes.glb"
+        else:
+            drilled_json_path = artifact_dir / "drilled-holes.json"
+            drilled_glb_path = artifact_dir / "drilled-holes.glb"
+        drilled_data = emit_drilled_holes(pipeline.bom)
+        drilled_json_path.write_text(
+            json.dumps(drilled_data, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        export_drilled_holes_glb(drilled_data, drilled_glb_path)
+
         revision.manifest.add_file("design_intent", intent_path)
         revision.manifest.add_file("layout_plan", layout_path)
         revision.manifest.add_file("panel_plan", panel_path)
@@ -938,6 +958,8 @@ class FurnitureOrchestrator:
         )
         revision.manifest.add_file("feature_tree", feature_tree_path)
         revision.manifest.add_file("bom", bom_path, readiness="preliminary")
+        revision.manifest.add_file("drilled_holes", drilled_json_path)
+        revision.manifest.add_file("drilled_holes_glb", drilled_glb_path, derived=True)
         revision.manifest.add_file("cad_source", source_path, derived=True)
         return source_path, step_path
 
