@@ -26,6 +26,8 @@ class PanelRecord:
     pos_y: float = 0.0
     pos_z: float = 0.0
     depends_on: list[str] = field(default_factory=list)
+    door_hinge_side: str | None = None
+    door_overlay: str | None = None
 
     @property
     def area_m2(self) -> float:

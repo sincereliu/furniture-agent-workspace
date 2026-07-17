@@ -9,13 +9,8 @@ from furniture_design_intent.design_spec import FurnitureSpec, resolve_back_moun
 from furniture_panel_planning.panel_models import PanelPlacement
 
 from .manufacturing_edge_banding import get_edge_banding
-from .manufacturing_drilling import calc_system_32_holes
-from .manufacturing_hardware import (
-    match_drawer_slides,
-    match_hinges,
-    match_shelf_connectors,
-    match_three_in_one,
-)
+from .manufacturing_hardware import match_drawer_slides
+from .connectors import ALL_CONNECTORS
 from .manufacturing_models import HardwareRecord, MachiningOperation, PanelRecord
 
 
@@ -100,138 +95,9 @@ def _manufacturing_panel(spec: FurnitureSpec, back_mount: str, placement: PanelP
         pos_y=placement.pos_y,
         pos_z=placement.pos_z,
         depends_on=list(placement.depends_on),
+        door_hinge_side=placement.door_hinge_side,
+        door_overlay=placement.door_overlay,
     )
-
-
-def _drill_operations(panels: list[PanelRecord]) -> list[MachiningOperation]:
-    """Generate MachiningOperations for every drill hole.
-
-    Each hole is modelled as a square-section cut_box (diameter × diameter × depth)
-    placed at the global hole position. The cylindrical hole is approximated by
-    a square cross-section, which is visually sufficient for STEP geometry.
-    """
-    ops: list[MachiningOperation] = []
-    # Use the same coordinate conversion logic as emit_drilled_holes
-    panel_by_label = {p.label: p for p in panels}
-    hardware = estimate_hardware(panels)
-    hole_index = 0
-
-    for hw in hardware:
-        drilling = hw.drilling
-        if not drilling or not isinstance(drilling, dict):
-            continue
-        hole_type = drilling.get("hole_type", "")
-
-        if hole_type == "hinge":
-            panel_id = drilling.get("panel_id", "")
-            panel = panel_by_label.get(panel_id)
-            if not panel:
-                continue
-            for hole in drilling.get("holes", []):
-                y_local = float(hole.get("y_mm", 0))
-                x_offset = float(hole.get("x_offset_mm", 5))
-                diam = float(hole.get("cup_diameter_mm", 35))
-                depth = float(hole.get("cup_depth_mm", 13))
-                diam = float(hole.get("cup_diameter_mm", 35))
-                depth = float(hole.get("cup_depth_mm", 13))
-                # Place hole center at x_offset from panel edge, clip within panel
-                cx = max(panel.pos_x + diam / 2, min(panel.pos_x + panel.size_x - diam / 2, panel.pos_x + x_offset))
-                y_global = panel.pos_y + panel.size_y
-                z_global = panel.pos_z + y_local
-                hole_index += 1
-                ops.append(MachiningOperation(
-                    id=f"hinge_hole_{hole_index:03d}",
-                    operation_type="cut_box",
-                    target_panel=panel.label,
-                    size_x=diam,
-                    size_y=depth,
-                    size_z=diam,
-                    pos_x=cx - diam / 2,
-                    pos_y=y_global - depth,
-                    pos_z=z_global - diam / 2,
-                    note=f"铰链杯孔 φ{diam:g}",
-                ))
-
-        elif hole_type == "three_in_one":
-            wheel = drilling.get("eccentric_wheel", {})
-            rod = drilling.get("connecting_rod", {})
-            w_diam = float(wheel.get("diameter_mm", 12))
-            w_depth = float(wheel.get("hole_depth_mm", 13.5))
-            r_diam = float(rod.get("diameter_mm", 8))
-            r_depth = float(rod.get("insertion_depth_mm", 33))
-
-            for fd in drilling.get("female", []):
-                panel_id = fd.get("panel_id", "")
-                panel = panel_by_label.get(panel_id)
-                if not panel:
-                    continue
-                z_start = panel.pos_z
-                y_global = panel.pos_y + panel.size_y - wheel.get("center_offset_from_edge_mm", 33.5)
-                x_global = panel.pos_x + panel.size_x
-                for y_local in fd.get("hole_positions_y_mm", []):
-                    z_global = z_start + float(y_local)
-                    hole_index += 1
-                    ops.append(MachiningOperation(
-                        id=f"female_hole_{hole_index:03d}",
-                        operation_type="cut_box",
-                        target_panel=panel.label,
-                        size_x=w_depth,
-                        size_y=w_diam,
-                        size_z=w_diam,
-                        pos_x=x_global - w_depth,
-                        pos_y=y_global - w_diam / 2,
-                        pos_z=z_global - w_diam / 2,
-                        note=f"偏心轮孔 φ{w_diam:g}",
-                    ))
-
-            for md in drilling.get("male", []):
-                panel_id = md.get("panel_id", "")
-                panel = panel_by_label.get(panel_id)
-                if not panel:
-                    continue
-                panel_z = float(md.get("panel_z_mm", panel.pos_z))
-                y_global = panel.pos_y + panel.size_y - 33.5
-                for x_local in md.get("hole_positions_on_edge_mm", []):
-                    x_global = panel.pos_x + float(x_local)
-                    hole_index += 1
-                    ops.append(MachiningOperation(
-                        id=f"male_hole_{hole_index:03d}",
-                        operation_type="cut_box",
-                        target_panel=panel.label,
-                        size_x=r_depth,
-                        size_y=r_diam,
-                        size_z=r_diam,
-                        pos_x=x_global,
-                        pos_y=y_global - r_diam / 2,
-                        pos_z=panel_z + panel.size_z - r_diam,
-                        note=f"连接杆孔 φ{r_diam:g}",
-                    ))
-
-        elif hole_type == "shelf_connector":
-            for sp in drilling.get("panels", []):
-                panel_id = sp.get("panel_id", "")
-                panel = panel_by_label.get(panel_id)
-                if not panel:
-                    continue
-                y_global = panel.pos_y + panel.size_y - 32
-                for x_local in sp.get("hole_positions_on_edge_mm", []):
-                    x_global = panel.pos_x + float(x_local)
-                    z_global = panel.pos_z + panel.size_z / 2
-                    hole_index += 1
-                    ops.append(MachiningOperation(
-                        id=f"shelf_hole_{hole_index:03d}",
-                        operation_type="cut_box",
-                        target_panel=panel.label,
-                        size_x=10.0,
-                        size_y=12.0,
-                        size_z=10.0,
-                        pos_x=x_global - 5.0,
-                        pos_y=y_global,
-                        pos_z=z_global - 5.0,
-                        note="层板托孔 φ10",
-                    ))
-
-    return ops
 
 
 def _edge_banding_for(panel_type: str, back_mount: str) -> dict[str, str]:
@@ -303,62 +169,10 @@ def _back_groove_operations(
 
 def estimate_hardware(panels: List[PanelRecord]) -> List[HardwareRecord]:
     hardware: List[HardwareRecord] = []
-    three_in_one = match_three_in_one(panels)
-    if three_in_one:
-        match = three_in_one[0]
-        hardware.append(HardwareRecord(
-            name="三合一连接件",
-            spec="偏心轮φ12+预埋螺母φ10×11+连接杆φ8×33",
-            quantity=match["sets"],
-            unit="套",
-            brand=match["brand"],
-            model=match["model"],
-            drilling={
-                "hole_type": "three_in_one",
-                "female": match["female_details"],
-                "male": match["male_details"],
-                "eccentric_wheel": match["eccentric_wheel"],
-                "connecting_rod": match["connecting_rod"],
-            },
-        ))
-    shelf_matches = match_shelf_connectors(panels)
-    if shelf_matches:
-        hardware.append(HardwareRecord(
-            name=f"{shelf_matches[0]['connector_type']}连接件",
-            spec=f"{shelf_matches[0]['brand']} {shelf_matches[0]['model']}",
-            quantity=sum(item["sets"] for item in shelf_matches),
-            unit="套",
-            brand=shelf_matches[0]["brand"],
-            model=shelf_matches[0]["model"],
-            drilling={
-                "hole_type": "shelf_connector",
-                "panels": shelf_matches,
-            },
-        ))
-    doors = [panel for panel in panels if panel.panel_type == "door"]
-    if doors:
-        side = next((panel for panel in panels if panel.panel_type == "side"), None)
-        system_holes = calc_system_32_holes(side.drill_length) if side else None
-        shelf_zs = [
-            panel.pos_z
-            for panel in panels
-            if panel.panel_type in ("top", "bottom", "fixed_shelf")
-        ]
-        for match in match_hinges(doors, system_holes=system_holes, shelf_positions=shelf_zs):
-            hardware.append(HardwareRecord(
-                name="液压缓冲铰链",
-                spec=f"{match['brand']} {match['model']} {match['angle']}°{match['overlay']}",
-                quantity=match["quantity"],
-                brand=match["brand"],
-                model=match["model"],
-                note=f"门板: {match['panel_name']}",
-                drilling={
-                    "hole_type": "hinge",
-                    "panel_id": match["panel_id"],
-                    "holes": match["drilling"],
-                },
-            ))
-        hardware.append(HardwareRecord(name="弹压门碰", spec="推弹式", quantity=len(doors)))
+    for connector_cls in ALL_CONNECTORS:
+        connector = connector_cls()
+        hardware.extend(connector.boms(panels))
+
     if any(panel.panel_type == "toe_kick" for panel in panels):
         hardware.append(HardwareRecord(name="L型角码", spec="25×25mm镀锌", quantity=4))
     if any("drawer" in panel.panel_type for panel in panels):
@@ -368,11 +182,8 @@ def estimate_hardware(panels: List[PanelRecord]) -> List[HardwareRecord]:
             hardware.append(HardwareRecord(
                 name="抽屉滑轨",
                 spec=f"{slide['brand']} {slide['model']} {slide['length_mm']}mm {slide['load_rating']}",
-                quantity=slide["quantity"],
-                unit="副",
-                brand=slide["brand"],
-                model=slide["model"],
-            ))
+                quantity=slide["quantity"], unit="副",
+                brand=slide["brand"], model=slide["model"]))
     return hardware
 
 
@@ -421,28 +232,28 @@ _COLOR_LEGEND = {
 def emit_drilled_holes(bom: BOMReport) -> dict:
     """Generate a per-panel hole summary for Viewer overlay.
 
-    Walks BOMReport.hardware drilling data, groups holes by panel label,
-    converts local coordinates to global, and attaches hole_type + color.
+    Uses Connectors to produce HoleSpec records with both global and local
+    coordinates, then groups them by panel label.
     """
-    panel_by_label = {p.label: p for p in bom.panels}
     panel_holes: dict[str, list[dict]] = {}
 
-    for hw in bom.hardware:
-        drilling = hw.drilling
-        if not drilling or not isinstance(drilling, dict):
-            continue
-
-        hole_type = drilling.get("hole_type", "")
-
-        if hole_type == "hinge":
-            _add_hinge_holes(panel_holes, panel_by_label, drilling)
-
-        elif hole_type == "three_in_one":
-            _add_three_in_one_female(panel_holes, panel_by_label, drilling)
-            _add_three_in_one_male(panel_holes, panel_by_label, drilling)
-
-        elif hole_type == "shelf_connector":
-            _add_shelf_connector_holes(panel_holes, panel_by_label, drilling)
+    for connector_cls in ALL_CONNECTORS:
+        connector = connector_cls()
+        for panel in bom.panels:
+            for hole in connector.generate_holes(panel):
+                panel_holes.setdefault(panel.label, []).append({
+                    "hole_type": hole.hole_type,
+                    "color": _COLOR_LEGEND.get(hole.hole_type, {}).get("color", "#888888"),
+                    "x": round(hole.x_global, 2),
+                    "y": round(hole.y_global, 2),
+                    "z": round(hole.z_global, 2),
+                    "local_x": round(hole.x_local, 2),
+                    "local_y": round(hole.y_local, 2),
+                    "local_z": round(hole.z_local, 2),
+                    "diameter": hole.diameter,
+                    "depth": hole.depth,
+                    "direction": hole.direction,
+                })
 
     panels_out = []
     for panel in bom.panels:
@@ -463,133 +274,3 @@ def emit_drilled_holes(bom: BOMReport) -> dict:
         "color_legend": _COLOR_LEGEND,
         "panels": panels_out,
     }
-
-
-def _add_hinge_holes(
-    panel_holes: dict, panel_by_label: dict, drilling: dict,
-) -> None:
-    panel_id = drilling.get("panel_id", "")
-    panel = panel_by_label.get(panel_id)
-    if not panel:
-        return
-    for hole in drilling.get("holes", []):
-        y_local = float(hole.get("y_mm", 0))
-        x_offset = float(hole.get("x_offset_mm", 5))
-        # Door panel hinge-side edge:
-        #   left door hinge on left edge  → x = pos_x + x_offset
-        #   right door hinge on right edge → x = pos_x + size_x - x_offset
-        if panel.pos_x < panel.size_x:
-            x_global = panel.pos_x + x_offset
-        else:
-            x_global = panel.pos_x + panel.size_x - x_offset
-
-        z_global = panel.pos_z + y_local
-        # Door face: Y is the panel's pos_y + size_y (front face)
-        y_global = panel.pos_y + panel.size_y
-
-        panel_holes.setdefault(panel_id, []).append({
-            "hole_type": "hinge",
-            "color": _COLOR_LEGEND["hinge"]["color"],
-            "x": round(x_global, 2),
-            "y": round(y_global, 2),
-            "z": round(z_global, 2),
-            "diameter": float(hole.get("cup_diameter_mm", 35)),
-            "depth": float(hole.get("cup_depth_mm", 13)),
-            "direction": "+y",
-        })
-
-
-def _add_three_in_one_female(
-    panel_holes: dict, panel_by_label: dict, drilling: dict,
-) -> None:
-    """Eccentric wheel holes on side/divider panel inner faces."""
-    wheel = drilling.get("eccentric_wheel", {})
-    diam = float(wheel.get("diameter_mm", 12))
-    depth = float(wheel.get("hole_depth_mm", 13.5))
-    center_offset = float(wheel.get("center_offset_from_edge_mm", 33.5))
-
-    for fd in drilling.get("female", []):
-        panel_id = fd.get("panel_id", "")
-        panel = panel_by_label.get(panel_id)
-        if not panel:
-            continue
-        z_start = panel.pos_z
-        for y_local in fd.get("hole_positions_y_mm", []):
-            z_global = z_start + float(y_local)
-            # Face center: for left side panel inner face is at x = pos_x + size_x
-            # Y from front edge (panel.pos_y + panel.size_y - center_offset)
-            x_global = panel.pos_x + panel.size_x
-            y_global = panel.pos_y + panel.size_y - center_offset
-
-            panel_holes.setdefault(panel_id, []).append({
-                "hole_type": "system_32_female",
-                "color": _COLOR_LEGEND["system_32_female"]["color"],
-                "x": round(x_global, 2),
-                "y": round(y_global, 2),
-                "z": round(z_global, 2),
-                "diameter": diam,
-                "depth": depth,
-                "direction": "-x",
-            })
-
-
-def _add_three_in_one_male(
-    panel_holes: dict, panel_by_label: dict, drilling: dict,
-) -> None:
-    """Connecting rod holes on top/bottom/shelf panel edges."""
-    rod = drilling.get("connecting_rod", {})
-    diam = float(rod.get("diameter_mm", 8))
-    depth = float(rod.get("insertion_depth_mm", 33))
-
-    for md in drilling.get("male", []):
-        panel_id = md.get("panel_id", "")
-        panel = panel_by_label.get(panel_id)
-        if not panel:
-            continue
-        panel_z = float(md.get("panel_z_mm", panel.pos_z))
-        # Holes on both left and right edges of top/bottom/shelf panels
-        # Edge faces: left edge at x = pos_x, right edge at x = pos_x + size_x
-        for x_local in md.get("hole_positions_on_edge_mm", []):
-            x_global = panel.pos_x + float(x_local)
-            # Holes on both ends (left and right edges where panel meets side panels)
-            # Each hole position has two instances (one per edge)
-            for edge_x, sign in [(panel.pos_x, "-x"), (panel.pos_x + panel.size_x, "+x")]:
-                y_global = panel.pos_y + panel.size_y - 33.5  # same Y as eccentric wheel
-                panel_holes.setdefault(panel_id, []).append({
-                    "hole_type": "system_32_male",
-                    "color": _COLOR_LEGEND["system_32_male"]["color"],
-                    "x": round(edge_x, 2),
-                    "y": round(y_global, 2),
-                    "z": round(panel_z + panel.size_z, 2),
-                    "diameter": diam,
-                    "depth": depth,
-                    "direction": sign,
-                })
-
-
-def _add_shelf_connector_holes(
-    panel_holes: dict, panel_by_label: dict, drilling: dict,
-) -> None:
-    """Shelf pin holes on side panels for movable shelves."""
-    for sp in drilling.get("panels", []):
-        panel_id = sp.get("panel_id", "")
-        panel = panel_by_label.get(panel_id)
-        if not panel:
-            continue
-        for x_local in sp.get("hole_positions_on_edge_mm", []):
-            x_global = panel.pos_x + float(x_local)
-            # Shelf pin holes go on the inner face of side panels
-            # Y = pos_y + size_y - standard offset (~32mm)
-            y_global = panel.pos_y + panel.size_y - 32
-            z_global = panel.pos_z + panel.size_z / 2  # approximate
-
-            panel_holes.setdefault(panel_id, []).append({
-                "hole_type": "shelf_connector",
-                "color": _COLOR_LEGEND["shelf_connector"]["color"],
-                "x": round(x_global, 2),
-                "y": round(y_global, 2),
-                "z": round(z_global, 2),
-                "diameter": 10.0,
-                "depth": 12.0,
-                "direction": "-x",
-            })
