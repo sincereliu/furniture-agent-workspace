@@ -1,15 +1,16 @@
 ---
 name: furniture-agent
-description: 将家具工作路由到本仓库正确的本地域技能和 CAD 技能。适用于家具需求、设计意图、板件结构、BOM 或裁切清单、特征树、CAD 生成、STEP 检查、产物验证，以及 CAD Viewer 交接。
+description: 路由本仓库七阶段家具工作与所需 CAD 技能。适用于设计意图、布局、板件、制造/BOM、特征树、CAD/STEP、交付验证和 Viewer 交接。
 ---
 
 # 家具智能体
 
-将本技能作为家具工作的入口。所有路径从仓库根目录解析，本入口只负责路由。
+家具工作的薄路由入口；路径均相对仓库根目录。
 
-## 请求路由
+## 路由
 
-1. 每个家具请求只读取当前阶段对应的明确路径，不得提前加载后续技能：
+只读取当前阶段，不提前加载下游：
+
    - `design_intent`：`skills/furniture-design-intent/SKILL.md`
    - `layout_planned`：`skills/furniture-layout/SKILL.md`
    - `panels_planned`：`skills/furniture-panel-planning/SKILL.md`
@@ -17,29 +18,22 @@ description: 将家具工作路由到本仓库正确的本地域技能和 CAD �
    - `feature_tree_planned`：`skills/furniture-feature-tree/SKILL.md`
    - `cad_generated`：`skills/furniture-cad/SKILL.md`
    - `delivery_validated`：`skills/furniture-delivery-validation/SKILL.md`
-2. 讨论、设计意图、家具结构、板件拆分、BOM 或制造推理停在对应领域技能；可执行实现由各阶段 Skill 的 `scripts/` 拥有，执行顺序仍统一经过 `FurnitureOrchestrator`。
-3. 背板安装方式必须沿阶段传递：设计意图记录 `back_mount`，布局解析有效模式和深度区间，板件阶段生成对应背板/背拉条，制造阶段生成封边、连接、BOM 和孔位；不得只改其中一个阶段。
-4. 从权威目录 `external/text-to-cad/skills/` 中只加载所需的最小技能：
-   - CAD 生成、修改、STEP 检查、几何验证或快照：`cad/SKILL.md`。
-   - 可视化审查或产物链接：`cad-viewer/SKILL.md`。
-   - 有名称的可采购部件：`step-parts/SKILL.md`。
-   - 只有明确请求对应输出时，才加载其他引擎技能。
-5. 忽略 `external/text-to-cad/plugins/cad/skills/`，它是生成的生产副本。
-6. 声称具备可执行支持前，检查实时代码、测试和入口命令；源码缺失时如实报告。
-7. 执行规划或生成时统一经过 `FurnitureOrchestrator`。交互式 Agent 使用 `confirm_stage()` 和 `run_next()`：每次只确认当前阶段、执行下一个阶段、返回该阶段的 `stage_outputs`，然后停止并等待用户确认“继续”。不得使用 `execute_spec()` 绕过交互阶段确认；不得从 Agent 直接调用 `plan_cabinet()`、特征树发射器或 `CadBridge` 拼装第二条流水线。
-8. 用户修改设计意图时使用 `revise()` 从第 1 阶段创建新 Revision；用户修改布局、板件、制造策略或特征树时使用 `revise_stage_output()`。新 Revision 只继承被修改阶段之前已确认的输出，被修改阶段及全部下游必须重新确认或生成。
-9. 只有明确的一次性批处理请求才调用 `skills/furniture-cad/scripts/generate_furniture.py` 或 `execute_spec()`；API 入口 `skills/furniture-cad/scripts/server.py` 同样只做协议适配，执行仍由 Orchestrator 负责。
+
+规则：
+
+- 讨论或推理停在所属阶段；实现由该 Skill 的 `scripts/` 拥有，顺序统一由 `FurnitureOrchestrator` 管理。
+- 交互式 Agent 只用 `confirm_stage()`、`run_next()`：确认当前阶段、生成下一阶段、展示其 `stage_outputs`，然后等待“继续”。不得用 `execute_spec()` 越过确认；不得从 Agent 直接调用 `plan_cabinet()`、特征树发射器或 `CadBridge` 另建流水线。
+- 修改设计意图用 `revise()`；修改第 2～5 阶段用 `revise_stage_output()`。新 Revision 只继承修改点之前的已确认输出；修改阶段及下游重新确认/生成。
+- `back_mount` 必须贯穿：意图记录模式，布局解析有效模式和深度，板件生成对应背板/背拉条，制造生成封边、连接、BOM 和孔位；不得单点修改。
+- 外部技能只从 `external/text-to-cad/skills/` 按需加载：CAD/STEP/几何/快照用 `cad/SKILL.md`，审查/链接用 `cad-viewer/SKILL.md`，命名采购件用 `step-parts/SKILL.md`；忽略生成副本 `external/text-to-cad/plugins/cad/skills/`。
+- 仅明确的一次性批处理可用 `skills/furniture-cad/scripts/generate_furniture.py` 或 `execute_spec()`；`server.py` 只适配协议，仍调用 Orchestrator。
+- 声称可执行前检查实时代码、测试和入口；缺失则如实说明。
 
 ## 边界
 
-- 以已确认的家具意图为事实来源。
-- 七个本地技能与七个检查点一一对应，每个 Skill 拥有本阶段运行时代码；`skills/furniture-cad/scripts/furniture_workflow/` 中的 Orchestrator 是唯一应用层执行入口。
-- CLI、API 与 Agent 只是协议入口；执行顺序、意图确认、状态和产物谱系统一归 `FurnitureOrchestrator`。各阶段验证规则由所属 Skill 拥有，Orchestrator 只负责调用并记录验证结果。
-- 七个阶段都是用户可见的检查点。交互工作不得在同一轮越过多个未确认阶段；生成 CAD 前必须已确认设计意图、布局规划、板件规划、制造策略和特征树。
+- 以已确认意图为事实来源；七个 Skill 对应七个用户可见检查点。生成 CAD 前须确认前五阶段。
+- `skills/furniture-cad/scripts/furniture_workflow/` 是唯一应用层入口；CLI/API/Agent 仅适配协议。阶段规则归各 Skill，Orchestrator 只编排、记录状态/验证/产物谱系。
 - 可复用脚本和运行时模块放在所属阶段 Skill 的 `scripts/`；跨阶段入口与集成测试放在 `skills/furniture-cad/scripts/`；一次性脚本放在 `temp/`。
-- 禁止创建根级 `scripts/`、`packages/`、`tests/`、`scratch/` 或 `tmp/` 代码树；禁止把生成源码写入 `generated/`。
-- 代码布局变更后运行 `skills/furniture-cad/scripts/validate_workspace_layout.py` 并修复全部违规项。
-- 不得通过修改 `external/text-to-cad` 实现家具领域行为。
-- 存在上游意图或源文件时，不得手工修改派生 STEP、GLB、BOM、裁切清单或生成的 Python。
-- 不要加载整棵外部技能树，只选择最小相关集合。
+- 禁止根级 `scripts/`、`packages/`、`tests/`、`scratch/`、`tmp/`；生成源码不得进入 `generated/`。布局变更后运行 `skills/furniture-cad/scripts/validate_workspace_layout.py` 并清零违规。
+- 不修改 `external/text-to-cad` 实现家具逻辑；有上游意图/源码时不手改派生 STEP、GLB、BOM、裁切清单或 Python。
 - 只报告实际运行过的验证和实际存在的产物。

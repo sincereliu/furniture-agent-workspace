@@ -1,4 +1,4 @@
 interface:
   display_name: "家具交付验证"
-  short_description: "验证家具阶段谱系、STEP 文件、拓扑和实际交付产物"
-  default_prompt: "使用 $furniture-delivery-validation 验证家具 CAD 和交付产物。"
+  short_description: "验证阶段谱系、STEP、拓扑和交付产物"
+  default_prompt: "使用 $furniture-delivery-validation 验证当前家具交付。"
