@@ -36,8 +36,9 @@ description: 根据已确认特征树生成家具 CAD，并核对当前运行时
 2. 要求 `feature_tree_planned` 已确认；通过 `FurnitureOrchestrator.run_next()` 生成 CAD。
 3. CLI、API 和 Agent 必须统一经过 `FurnitureOrchestrator`；发射器和 CAD Bridge 只由 Orchestrator 调用。
 4. Feature Tree `cut_box` 由发射器对指定板件执行 build123d 布尔减料；不得用板件重叠冒充开槽。
-5. 展示 `stage_outputs.cad_generated` 后停止，不得同时完成交付验证。
-6. 只有明确的一次性 CLI/API 批处理才使用 `execute_spec()` 或 `scripts/generate_furniture.py`。
+5. API 必须接受 `back_mount/back_rail_height`，并返回解析后的模式、制造备注、加工操作和 drilled-holes；不得在协议层重新实现背板推导。
+6. 展示 `stage_outputs.cad_generated` 后停止，不得同时完成交付验证。
+7. 只有明确的一次性 CLI/API 批处理才使用 `execute_spec()` 或 `scripts/generate_furniture.py`。
 
 ## 领域参考文档
 
@@ -47,5 +48,5 @@ description: 根据已确认特征树生成家具 CAD，并核对当前运行时
 
 - 规范化输入和已确认的特征树来源。
 - CAD 命令结果以及 `stage_outputs.cad_generated`。
-- 实际存在的 STEP、Viewer 拓扑和产物路径。
+- 实际存在的 STEP、Viewer 拓扑、drilled-holes 和产物路径。
 - 下一阶段使用 `skills/furniture-delivery-validation/SKILL.md`，本阶段不报告最终交付通过。

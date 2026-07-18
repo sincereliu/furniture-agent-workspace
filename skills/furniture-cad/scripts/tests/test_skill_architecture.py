@@ -133,6 +133,53 @@ class SkillArchitectureTests(unittest.TestCase):
         self.assertFalse((panel_package / "manufacturing_edge_banding.py").exists())
         self.assertTrue((manufacturing_package / "manufacturing_edge_banding.py").is_file())
 
+    def test_back_mount_contract_is_synchronized_across_stage_skills(
+        self,
+    ) -> None:
+        expected_terms = {
+            ".agents/skills/furniture-agent/SKILL.md": (
+                "back_mount",
+                "背拉条",
+            ),
+            "skills/furniture-design-intent/SKILL.md": (
+                "auto/groove/insert/cover",
+                "back_rail_height",
+            ),
+            "skills/furniture-layout/SKILL.md": (
+                "back_mount",
+                "carcass_y_start/end",
+            ),
+            "skills/furniture-panel-planning/SKILL.md": (
+                "back_mount",
+                "背拉条",
+            ),
+            "skills/furniture-manufacturing/SKILL.md": (
+                "BackMountConnector",
+                "generate_holes_for_panels",
+            ),
+            "skills/furniture-feature-tree/SKILL.md": (
+                "insert/cover",
+                "drilled-holes",
+            ),
+            "skills/furniture-cad/SKILL.md": (
+                "back_mount/back_rail_height",
+                "drilled-holes",
+            ),
+            (
+                "skills/furniture-delivery-validation/"
+                "references/validation.md"
+            ): (
+                "back_mount",
+                "五金数量与主孔、配合孔数量一致",
+            ),
+        }
+
+        for relative_path, terms in expected_terms.items():
+            path = WORKSPACE_ROOT / relative_path
+            text = path.read_text(encoding="utf-8")
+            for term in terms:
+                self.assertIn(term, text, path)
+
 
 if __name__ == "__main__":
     unittest.main()

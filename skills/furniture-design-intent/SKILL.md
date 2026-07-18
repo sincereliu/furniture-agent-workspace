@@ -16,11 +16,13 @@ description: 将家具需求整理为可确认的设计意图。适用于讨论�
 3. 可执行输入默认值以 `scripts/furniture_design_intent/design_spec.py` 的实时定义为准，包括：
    - `board_thickness`（18mm）、`back_thickness`（9mm）、`door_thickness`（18mm）
    - `back_offset`（18mm）、`door_margin`（1.5mm）、`door_hinge_gap`（2mm）
+   - `back_mount`（`auto`）、`back_rail_height`（70mm）
 4. 本阶段只记录用户明确给出的结构偏好和参数覆盖，不计算板件或加工：
    - `toe_kick_reveal_front/back` 传递给布局阶段形成踢脚空间区域；
    - `toe_kick_support_count` 传递给板件阶段决定支撑板数量；
-   - `groove_depth/groove_clearance` 作为背板连接偏好，分别由板件阶段计算背板成品尺寸、制造阶段计算槽加工。
-5. 在确认前调用实时 `FurnitureSpec.validation_errors()`，拒绝非正尺寸、越界槽、无效支撑数量和没有净空的踢脚区域。
+   - `back_mount` 接受 `auto/groove/insert/cover`，`auto` 的解析结果必须作为假设展示；
+   - `groove_depth/groove_clearance/back_rail_height` 只约束入槽策略，下游分别负责板件和制造语义。
+5. 在确认前调用实时 `FurnitureSpec.validation_errors()`，按有效背板模式拒绝无效值、越界结构和没有净空的区域。
 6. 展示 `design_intent` 阶段输出并等待确认。不得自行进入布局、板件、制造、特征树或 CAD。
 
 ## 边界

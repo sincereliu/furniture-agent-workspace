@@ -11,7 +11,7 @@ description: 将已确认的家具布局拆分为有语义的实体板件。适�
 
 1. 要求 `design_intent` 与 `layout_planned` 已确认。
 2. 读取 [板件规则](references/panel-planning.md)，把 `CabinetLayout` 转换为明确的实体板件。
-3. 本阶段拥有背板四边入槽后的成品尺寸、前后踢脚板位置以及支撑板数量、尺寸和等距位置。
+3. 本阶段按有效 `back_mount` 生成入槽、内嵌或外盖背板；仅入槽模式生成背拉条。本阶段同时拥有前后踢脚板位置以及支撑板数量、尺寸和等距位置。
 4. 通过 `FurnitureOrchestrator.run_next()` 生成板件阶段输出。
 5. 展示 `stage_outputs.panels_planned.panels` 并暂停；不得同时生成制造策略。
 

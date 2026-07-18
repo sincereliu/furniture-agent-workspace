@@ -22,7 +22,17 @@
 
 ## 运行时输出
 
-`CabinetLayout` 只保存成品包络、侧板可用深度、内部净空、背板基准面、踢脚空间区域以及层板/门数量。它不包含 `PanelPlacement`、板件名称、板件数量或成品裁切尺寸。
+`CabinetLayout` 只保存成品包络、有效 `back_mount`、柜体深度区间、内部净空、背板基准面、踢脚空间区域以及层板/门数量。它不包含 `PanelPlacement`、板件名称、板件数量或成品裁切尺寸。
+
+背板模式的布局契约：
+
+| 模式 | `carcass_y_start` | 背板基准 | 内部空间起点 |
+|------|--------------------|----------|----------------|
+| `groove` | `0` | `back_offset` | 槽前侧，即 `back_offset + back_thickness` |
+| `insert` | `0` | `back_offset` | 内嵌背板前侧，即 `back_offset + back_thickness` |
+| `cover` | `back_thickness` | `0` | 柜体后侧，即 `back_thickness` |
+
+三种模式的柜体和门板都必须保持在同一成品深度包络内；外盖背板占用后侧厚度，不能与柜体板重叠。
 
 ## 类别指导
 

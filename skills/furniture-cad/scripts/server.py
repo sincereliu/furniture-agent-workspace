@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Literal
 
 # skill 自带运行包，服务入口与它位于同一个 scripts 目录。
 SCRIPT_ROOT = Path(__file__).resolve().parent
@@ -26,10 +27,15 @@ from pydantic import BaseModel, Field
 
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 
+API_VERSION = "0.2.0"
+
 app = FastAPI(
     title="Furniture Agent — 板式家具拆单服务",
-    version="0.1.0",
-    description="板式家具参数化拆单 API：落地柜/吊柜 规划、拆单、BOM 生成",
+    version=API_VERSION,
+    description=(
+        "板式家具参数化拆单 API：落地柜/吊柜规划、三种背板安装、"
+        "BOM、加工与孔位输出"
+    ),
 )
 ORCHESTRATOR = FurnitureOrchestrator(workspace_root=WORKSPACE_ROOT)
 
@@ -55,6 +61,17 @@ class CabinetRequest(BaseModel):
     n_doors: int | None = Field(default=None, ge=0, description="门板数量")
     groove_depth: float | None = Field(default=None, gt=0, description="背板入槽深度 mm")
     groove_clearance: float | None = Field(default=None, ge=0, description="槽宽相对背板厚度的余量 mm")
+    back_mount: Literal["auto", "groove", "insert", "cover"] | None = Field(
+        default=None,
+        description=(
+            "背板安装方式；auto 按背板厚度解析为 groove 或 insert"
+        ),
+    )
+    back_rail_height: float | None = Field(
+        default=None,
+        ge=0,
+        description="入槽模式背拉条高度 mm；0 表示不生成背拉条",
+    )
     toe_kick_reveal_front: float | None = Field(default=None, ge=0, description="前踢脚板后缩 mm")
     toe_kick_reveal_back: float | None = Field(default=None, ge=0, description="后踢脚板前移 mm")
     toe_kick_support_count: int | None = Field(default=None, ge=0, description="踢脚支撑板数量；空值为自动")
@@ -75,21 +92,78 @@ class PanelResponse(BaseModel):
     length_mm: float
     width_mm: float
     edge_banding: dict
+    note: str
+    back_mount: Literal["groove", "insert", "cover"]
+
+
+class HardwareDrillingResponse(BaseModel):
+    hole_type: str
+    quantity: int
+
+
+class HardwareResponse(BaseModel):
+    name: str
+    spec: str
+    quantity: int
+    unit: str
+    brand: str
+    model: str
+    note: str
+    drilling: list[HardwareDrillingResponse]
+
+
+class MachiningOperationResponse(BaseModel):
+    id: str
+    operation_type: str
+    target_panel: str
+    size_x: float
+    size_y: float
+    size_z: float
+    pos_x: float
+    pos_y: float
+    pos_z: float
+    note: str
+
+
+class HoleResponse(BaseModel):
+    hole_type: str
+    color: str
+    x: float
+    y: float
+    z: float
+    local_x: float
+    local_y: float
+    local_z: float
+    diameter: float
+    depth: float
+    direction: str
+    note: str
+
+
+class PanelDrillingResponse(BaseModel):
+    label: str
+    name: str
+    box: dict[str, float]
+    holes: list[HoleResponse]
 
 
 class BOMResponse(BaseModel):
     furniture_name: str
     dimensions: str
+    back_mount: Literal["groove", "insert", "cover"]
     panel_count: int
     total_area_m2: float
     panels: list[PanelResponse]
-    hardware: list[dict]
+    hardware: list[HardwareResponse]
+    operations: list[MachiningOperationResponse]
+    hole_color_legend: dict[str, dict[str, str]]
+    drilled_holes: list[PanelDrillingResponse]
 
 
 # ── 路由 ──
 @app.get("/health")
 async def health():
-    return {"status": "ok", "version": "0.1.0"}
+    return {"status": "ok", "version": API_VERSION}
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -127,10 +201,15 @@ async def plan_cabinet(req: CabinetRequest):
         )
 
     report = orchestration.pipeline.bom
+    drilled_holes = orchestration.drilled_holes or {
+        "color_legend": {},
+        "panels": [],
+    }
 
     return BOMResponse(
         furniture_name=report.furniture_name,
         dimensions=report.dimensions,
+        back_mount=orchestration.pipeline.layout.back_mount,
         panel_count=report.panel_count,
         total_area_m2=report.total_area_m2,
         panels=[
@@ -149,13 +228,41 @@ async def plan_cabinet(req: CabinetRequest):
                 length_mm=p.length_mm,
                 width_mm=p.width_mm,
                 edge_banding=p.edge_banding,
+                note=p.note,
+                back_mount=p.back_mount,
             )
             for p in report.panels
         ],
         hardware=[
-            {"name": h.name, "spec": h.spec, "quantity": h.quantity, "unit": h.unit}
+            HardwareResponse(
+                name=h.name,
+                spec=h.spec,
+                quantity=h.quantity,
+                unit=h.unit,
+                brand=h.brand,
+                model=h.model,
+                note=h.note,
+                drilling=h.drilling or [],
+            )
             for h in report.hardware
         ],
+        operations=[
+            MachiningOperationResponse(
+                id=operation.id,
+                operation_type=operation.operation_type,
+                target_panel=operation.target_panel,
+                size_x=operation.size_x,
+                size_y=operation.size_y,
+                size_z=operation.size_z,
+                pos_x=operation.pos_x,
+                pos_y=operation.pos_y,
+                pos_z=operation.pos_z,
+                note=operation.note,
+            )
+            for operation in report.operations
+        ],
+        hole_color_legend=drilled_holes["color_legend"],
+        drilled_holes=drilled_holes["panels"],
     )
 
 

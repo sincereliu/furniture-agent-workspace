@@ -58,6 +58,7 @@ class OrchestrationResult:
     revision: Revision
     pipeline: CabinetPipelineResult | None
     bridge: BridgeResult | None = None
+    drilled_holes: dict[str, Any] | None = None
 
 
 class FurnitureOrchestrator:
@@ -508,11 +509,17 @@ class FurnitureOrchestrator:
 
     def _result(self, project: Project) -> OrchestrationResult:
         revision = project.latest
+        pipeline = self._pipeline_from_revision(revision)
         return OrchestrationResult(
             project=project,
             revision=revision,
-            pipeline=self._pipeline_from_revision(revision),
+            pipeline=pipeline,
             bridge=self._bridge_from_revision(revision),
+            drilled_holes=(
+                emit_drilled_holes(pipeline.bom)
+                if pipeline is not None
+                else None
+            ),
         )
 
     def _pipeline_from_revision(

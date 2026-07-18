@@ -10,6 +10,7 @@
 
 - `floor_cabinet`：固定柜体模板，包含背板、踢脚板、层板和门板。
 - `wall_cabinet`：固定柜体模板，包含背板、层板和门板，不含踢脚板。
+- 两种柜体模板均支持 `groove`、`insert`、`cover` 三种有效背板安装方式；`auto` 只负责解析有效模式。
 
 这些是边界明确的模板，不是任意家具配置器。承诺布局变体前，必须检查 `planner.py` 及相应模板。其他家具类别在实现前只支持意图或建模方案。
 
@@ -73,6 +74,8 @@ result = orchestrator.run_next(
   "back_offset": 18,
   "door_margin": 1.5,
   "door_hinge_gap": 2,
+  "back_mount": "groove",
+  "back_rail_height": 70,
   "groove_depth": 6,
   "groove_clearance": 1,
   "toe_kick_reveal_front": 1,
@@ -89,7 +92,20 @@ result = orchestrator.run_next(
 
 可执行契约是扁平 JSON。
 
+`back_mount` 接受 `auto/groove/insert/cover`。`auto` 在背板薄于柜体板时解析为 `groove`，否则解析为 `insert`；响应和下游阶段只使用解析后的有效模式。`back_rail_height` 仅在 `groove` 模式生效，设为 `0` 可关闭背拉条。
+
 只有总体尺寸为数值且请求的变体与实时模板匹配时，才进入执行。否则停在合适的 DDD 规划层，并说明不支持的边界。
+
+## API 契约
+
+`skills/furniture-cad/scripts/server.py` 的 `POST /api/plan-cabinet` 是一次性批处理协议入口，内部只调用 `FurnitureOrchestrator.execute_spec()`。
+
+- 请求支持 `back_mount` 和 `back_rail_height`，非法模式由 Pydantic 拒绝，几何组合错误由 Orchestrator 返回 `422`。
+- 响应的 `back_mount` 是解析后的有效模式。
+- `panels` 保留板件备注、封边和有效模式。
+- `hardware` 保留品牌、型号、暂定说明及孔型数量摘要。
+- `operations` 返回入槽模式的目标板件切削；其他模式不得返回背板槽。
+- `drilled_holes` 返回按板件分组的全局/局部孔位，`hole_color_legend` 返回孔型图例。
 
 ## 生成
 
@@ -109,6 +125,8 @@ result = orchestrator.run_next(
 - `<artifact-name>.manufacturing-plan.json`
 - `<artifact-name>.feature-tree.json`
 - `<artifact-name>.bom.md`
+- `<artifact-name>.drilled-holes.json`
+- `<artifact-name>.drilled-holes.glb`
 - `<artifact-name>.step`
 - CAD 桥接器生成的相邻隐藏 Viewer 拓扑 GLB
 
@@ -130,7 +148,7 @@ Feature Tree v2 支持板件 `box` 和目标明确的 `cut_box` 减料操作。C
 
 - `skills/furniture-layout/scripts/furniture_layout/layout_pipeline.py` 的 `plan_layout()`：生成包络、净空和布局区域，不生成板件。
 - `skills/furniture-panel-planning/scripts/furniture_panel_planning/panel_planning.py` 的 `plan_panels()`：把布局转换成实体板件角色、尺寸和位置。
-- `skills/furniture-manufacturing/scripts/furniture_manufacturing/manufacturing_bom.py` 的 `plan_manufacturing()`：应用材料、封边、五金、BOM 和槽加工策略。
+- `skills/furniture-manufacturing/scripts/furniture_manufacturing/manufacturing_bom.py` 的 `plan_manufacturing()`：应用材料、封边、五金、BOM 和槽加工策略；`emit_drilled_holes()` 输出连接件配合孔。
 
 `skills/furniture-cad/scripts/furniture_workflow/cabinet_pipeline.py` 的 `plan_cabinet()` 保留为组合这些领域函数的无状态兼容门面；交互式工作流由 Orchestrator 分阶段调用三个函数，不通过 `plan_cabinet()` 把检查点合并掉。
 
