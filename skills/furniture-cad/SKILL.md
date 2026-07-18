@@ -23,7 +23,7 @@ description: 用于 cad_generated 阶段和 CLI/API 批处理；根据已确认�
 
 ## 工作流
 
-1. 声称支持、规范化 JSON、生成或报告产物前，读取 [工作区流水线](references/workspace-pipeline.md) 并核对实时入口。
+1. 声称支持、规范化 JSON、生成或报告产物前，读取 [运行时契约](references/runtime-contract.md) 并核对实时入口。
 2. 要求 `feature_tree_planned` 已确认；用 `FurnitureOrchestrator.run_next()` 生成。
 3. CLI/API/Agent 均经 Orchestrator；发射器和 CAD Bridge 仅由其调用，结果规则归 `scripts/furniture_cad/validation.py`。
 4. 发射器将 Feature Tree `cut_box` 对目标板件做 build123d 布尔减料；不得用重叠板件冒充槽。

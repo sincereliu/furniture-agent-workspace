@@ -20,15 +20,15 @@ STAGE_SKILLS = {
 
 STAGE_REFERENCES = {
     "furniture-design-intent": (
-        "references/design-intent.md",
+        "references/intent-capture-rules.md",
         "references/intake/catalog.yaml",
     ),
-    "furniture-layout": ("references/layout-planning.md",),
-    "furniture-panel-planning": ("references/panel-planning.md",),
-    "furniture-manufacturing": ("references/manufacturing-policy.md",),
-    "furniture-feature-tree": ("references/feature-tree.md",),
-    "furniture-cad": ("references/workspace-pipeline.md",),
-    "furniture-delivery-validation": ("references/validation.md",),
+    "furniture-layout": ("references/spatial-layout-rules.md",),
+    "furniture-panel-planning": ("references/panel-definition-rules.md",),
+    "furniture-manufacturing": ("references/manufacturing-rules.md",),
+    "furniture-feature-tree": ("references/feature-tree-rules.md",),
+    "furniture-cad": ("references/runtime-contract.md",),
+    "furniture-delivery-validation": ("references/delivery-checklist.md",),
 }
 
 STAGE_RUNTIME_PACKAGES = {
@@ -82,12 +82,12 @@ class SkillArchitectureTests(unittest.TestCase):
 
         cad_references = SKILLS_ROOT / "furniture-cad" / "references"
         for moved_reference in (
-            "design-intent.md",
-            "layout-planning.md",
-            "panel-planning.md",
-            "manufacturing-policy.md",
-            "feature-tree.md",
-            "validation.md",
+            "intent-capture-rules.md",
+            "spatial-layout-rules.md",
+            "panel-definition-rules.md",
+            "manufacturing-rules.md",
+            "feature-tree-rules.md",
+            "delivery-checklist.md",
         ):
             self.assertFalse((cad_references / moved_reference).exists())
 
@@ -214,7 +214,7 @@ class SkillArchitectureTests(unittest.TestCase):
             ),
             (
                 "skills/furniture-delivery-validation/"
-                "references/validation.md"
+                "references/delivery-checklist.md"
             ): (
                 "back_mount",
                 "五金数量与主孔、配合孔数量一致",

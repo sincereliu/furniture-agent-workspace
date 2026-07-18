@@ -10,7 +10,7 @@ description: 用于 delivery_validated 阶段；验证阶段谱系、STEP、View
 ## 工作流
 
 1. 要求 `cad_generated` 已确认且产物来自当前 Revision。
-2. 读取 [验证关卡](references/validation.md) 和 `../furniture-cad/references/workspace-pipeline.md` 的实时契约。
+2. 读取 [交付验证清单](references/delivery-checklist.md) 和 `../furniture-cad/references/runtime-contract.md`。
 3. 用 `FurnitureOrchestrator.run_next()` 调用 `scripts/furniture_delivery_validation/validation.py`，检查必需产物、存在性、大小、SHA-256、stale 状态和 Revision 谱系；展示后暂停。
 
 ## 边界

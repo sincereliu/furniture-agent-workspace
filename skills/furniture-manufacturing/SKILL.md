@@ -10,7 +10,7 @@ description: 用于 manufacturing_planned 阶段；根据已确认板件制定�
 ## 工作流
 
 1. 要求设计意图、布局和板件规划均已确认。
-2. 按 [制造策略](references/manufacturing-policy.md) 确定材料、封边、连接、五金、孔位、公差和 BOM 假设。
+2. 按 [制造规则](references/manufacturing-rules.md) 确定材料、封边、连接、五金、孔位、公差和 BOM 假设。
 3. 五金规格以 `scripts/furniture_manufacturing/hardware_catalog.yaml` 和 `hardware_rules.yaml` 为准。
 4. `connectors/` 集中连接/打孔逻辑：`Connector` 基类及 `TrinityConnector`、`HingeConnector`、`ShelfConnector`、`BackMountConnector`。新五金新增 Connector 并注册 `ALL_CONNECTORS`。
 5. 单板规则实现 `generate_holes()`；需配合板时覆盖 `generate_holes_for_panels()` 生成成对孔。`estimate_hardware()` 与 `emit_drilled_holes()` 遍历 `ALL_CONNECTORS` 生成 BOM 和含全局/local 坐标的 JSON；`drilled_holes_glb.py` 输出标记 GLB。

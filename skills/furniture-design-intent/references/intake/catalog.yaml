@@ -33,5 +33,5 @@ families:
       - furniture-delivery-validation
 
 fallback:
-  design_reference: references/design-intent.md
+  design_reference: references/intent-capture-rules.md
   verify_runtime_support: true
