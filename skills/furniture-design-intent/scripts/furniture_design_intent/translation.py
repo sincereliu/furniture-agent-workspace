@@ -79,6 +79,15 @@ def intent_from_spec(spec: dict[str, Any]) -> DesignIntent:
 
 def spec_from_intent(intent: DesignIntent) -> FurnitureSpec:
     """Build the executable specification from one confirmed design intent."""
+    dimensions = (
+        intent.overall_size.width_mm,
+        intent.overall_size.depth_mm,
+        intent.overall_size.height_mm,
+    )
+    if any(value is None for value in dimensions):
+        raise ValueError(
+            "confirmed DesignIntent requires width_mm, depth_mm, and height_mm"
+        )
     data: dict[str, Any] = {
         "type": intent.furniture_type,
         "width": intent.overall_size.width_mm,

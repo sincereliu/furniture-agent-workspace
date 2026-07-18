@@ -1,30 +1,35 @@
 # 交付验证清单
 
-回答“必须通过哪些关卡？”；在宣称规划、制造、几何或产物成功前使用。
+回答“当前 Revision 的交付文件是否完整且可追溯？”；区分内置自动验证、上游阶段验证和外部几何审查。
 
-## 跨层关卡
+## 内置自动硬关卡
 
-1. 意图含家具、尺寸、约束、显式假设/未决项，无隐藏默认。
-2. 区域、开口、净空和安装环境位于成品包络内。
-3. 每块板件有角色、正数尺寸、数量、朝向、位置和注释。
-4. 材料、封边、连接、五金、公差和 BOM 标明暂定/已接受状态。
-5. 特征树保留依赖，不虚构运行时能力；生成前核对实时规划器/发射器。
-6. 仅命令实际生成且文件存在时报告产物。
+1. 当前 Revision 必须包含并确认 `design_intent` 到 `cad_generated` 六个前置阶段，且每阶段最近一份 `ValidationReport` 通过。
+2. Manifest 与每个 Artifact 的 `source_revision_id` 必须等于当前 Revision；任何 `stale` 产物均失败。
+3. 必需产物种类齐全，文件存在、非空，实时大小与 SHA-256 和 Manifest 一致。
+4. `manufacturing_plan` 与 `bom` 的 Manifest `readiness` 必须等于 `manufacturing_planned.readiness`。
+5. `readiness=preliminary` 只产生警告：文件可以完整交付，但不得称为工厂已确认或可直接投产。
 
-## 柜体特定关卡
+## 已由上游阶段负责的语义关卡
 
-- 配合面和净空符合所选结构策略。
-- 层板和隔板不与所选背板策略或门板包络相交。
-- 设计意图、布局、板件、制造记录和 API 响应使用同一个解析后 `back_mount`。
-- `groove` 恰有四条目标明确的背板槽；`insert/cover` 没有背板槽。
-- 背板模式要求的五金数量与主孔、配合孔数量一致；局部孔坐标位于对应板件包络。
-- 入槽背板不封边；内嵌/外盖背板和背拉条遵循当前四边封边规则。
-- 门缝、门数量和开启策略已经确定。
-- 吊柜和高柜包含固定方式和荷载假设。
-- 板件、BOM、封边和五金输出来自同一份已确认方案。
-- 暂定的软件默认值已针对制造环境替换或获得接受。
+- 意图完整性和可执行类别归 `design_intent` 验证。
+- 包络、净空、背板模式和区域边界归 `layout_planned` 验证。
+- 板件标识、尺寸、位置、依赖和背板几何归 `panels_planned` 验证。
+- BOM、封边、解析后的 `back_mount`、`groove` 四条槽以及“背板五金数量与主孔、配合孔数量一致”归 `manufacturing_planned` 验证。
+- Feature Tree 标识、依赖、目标和切削包络归 `feature_tree_planned` 验证。
+- STEP 与 Viewer 拓扑是否由 CAD Bridge 成功生成归 `cad_generated` 验证。
+
+交付阶段核对这些验证属于当前 Revision 且已通过，不复制或重写各阶段算法。
+
+## 不属于内置通过条件
+
+- `validate_delivery()` 不导入 STEP、不测量几何、不生成快照，也不执行 Viewer 人工审查。
+- 需要 STEP 导入、几何尺寸、快照证据时，实际调用 `external/text-to-cad/skills/cad/SKILL.md`。
+- 需要可视化审查或链接时，实际调用 `external/text-to-cad/skills/cad-viewer/SKILL.md`。
+- 未执行上述外部步骤时，只能报告“未验证”，不得从文件存在或哈希一致推断几何正确。
 
 ## 报告边界
 
 - 只报告实际运行/存在的命令、验证和产物。
-- 制造策略和关卡获接受前，不得称 BOM、封边、五金或裁切清单可直接制造。
+- `delivery_validated.passed=true` 表示检查点谱系与文件完整性通过，不自动表示几何审查通过或制造状态达到 `factory_ready`。
+- 未达到 `factory_ready` 前，不得称 BOM、封边、五金或裁切清单可直接投产。

@@ -79,7 +79,7 @@ result = orchestrator.run_next(
 `server.py` 的 `POST /api/plan-cabinet` 只适配一次性批处理并调用 `FurnitureOrchestrator.execute_spec()`：
 
 - 请求含 `back_mount/back_rail_height`；Pydantic 拒绝非法模式，Orchestrator 对几何组合错误返回 `422`。
-- 响应 `back_mount` 为有效模式；`panels` 保留备注/封边/模式，`hardware` 保留品牌/型号/暂定说明/孔数摘要。
+- 响应 `back_mount` 为有效模式；`readiness` 返回整份制造方案的 `preliminary/accepted/factory_ready` 状态；`panels` 保留备注/封边/模式，`hardware` 保留品牌/型号/暂定说明/孔数摘要。
 - `operations` 仅为入槽模式返回目标切削；`drilled_holes` 按板件返回全局/local 孔位，`hole_color_legend` 返回孔型图例。
 
 ## 生成

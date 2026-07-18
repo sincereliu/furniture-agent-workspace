@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from hashlib import sha256
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping, Sequence
 
 
 REQUIRED_DELIVERY_KINDS = frozenset(
@@ -24,6 +24,15 @@ REQUIRED_DELIVERY_KINDS = frozenset(
         "step",
         "viewer_topology",
     }
+)
+
+PRE_DELIVERY_STAGES = (
+    "design_intent",
+    "layout_planned",
+    "panels_planned",
+    "manufacturing_planned",
+    "feature_tree_planned",
+    "cad_generated",
 )
 
 
@@ -92,9 +101,18 @@ def validate_delivery(
     manifest: Any,
     *,
     source_revision_id: str,
+    stage_outputs: Mapping[str, Any] | None = None,
+    approved_stages: Sequence[str] | None = None,
+    stage_validations: Sequence[ValidationReport] | None = None,
 ) -> ValidationReport:
-    """Validate artifact existence, integrity, lineage, and readiness."""
+    """Validate checkpoint lineage plus artifact existence and integrity."""
     report = ValidationReport(stage="delivery_validated")
+    _validate_checkpoint_lineage(
+        report,
+        stage_outputs=stage_outputs,
+        approved_stages=approved_stages,
+        stage_validations=stage_validations,
+    )
     if manifest is None:
         report.add_error("MISSING_MANIFEST", "delivery has no artifact manifest")
         return report
@@ -112,6 +130,14 @@ def validate_delivery(
             "MISSING_REQUIRED_ARTIFACT",
             f"required delivery artifact is missing: {kind}",
             kind,
+        )
+
+    manufacturing_readiness = _manufacturing_readiness(stage_outputs)
+    if manufacturing_readiness == "preliminary":
+        report.add_warning(
+            "MANUFACTURING_PRELIMINARY",
+            "manufacturing plan is still preliminary and is not factory-ready",
+            "manufacturing_planned.readiness",
         )
 
     for artifact in artifacts:
@@ -155,4 +181,71 @@ def validate_delivery(
                 f"{artifact.kind} content no longer matches its manifest",
                 artifact.kind,
             )
+        if (
+            manufacturing_readiness
+            and artifact.kind in {"manufacturing_plan", "bom"}
+            and artifact.metadata.get("readiness") != manufacturing_readiness
+        ):
+            report.add_error(
+                "ARTIFACT_READINESS_MISMATCH",
+                f"{artifact.kind} readiness does not match the manufacturing stage",
+                artifact.kind,
+            )
     return report
+
+
+def _validate_checkpoint_lineage(
+    report: ValidationReport,
+    *,
+    stage_outputs: Mapping[str, Any] | None,
+    approved_stages: Sequence[str] | None,
+    stage_validations: Sequence[ValidationReport] | None,
+) -> None:
+    if stage_outputs is not None:
+        for stage in PRE_DELIVERY_STAGES:
+            if stage not in stage_outputs:
+                report.add_error(
+                    "MISSING_STAGE_OUTPUT",
+                    f"current revision is missing stage output: {stage}",
+                    stage,
+                )
+
+    if approved_stages is not None:
+        approved = set(approved_stages)
+        for stage in PRE_DELIVERY_STAGES:
+            if stage not in approved:
+                report.add_error(
+                    "UNAPPROVED_DELIVERY_SOURCE_STAGE",
+                    f"delivery source stage is not approved: {stage}",
+                    stage,
+                )
+
+    if stage_validations is not None:
+        latest_by_stage: dict[str, ValidationReport] = {}
+        for validation in stage_validations:
+            latest_by_stage[validation.stage] = validation
+        for stage in PRE_DELIVERY_STAGES:
+            validation = latest_by_stage.get(stage)
+            if validation is None:
+                report.add_error(
+                    "MISSING_STAGE_VALIDATION",
+                    f"current revision has no validation report for: {stage}",
+                    stage,
+                )
+            elif not validation.passed:
+                report.add_error(
+                    "FAILED_STAGE_VALIDATION",
+                    f"current revision has a failed validation report for: {stage}",
+                    stage,
+                )
+
+
+def _manufacturing_readiness(
+    stage_outputs: Mapping[str, Any] | None,
+) -> str:
+    if stage_outputs is None:
+        return ""
+    manufacturing = stage_outputs.get("manufacturing_planned")
+    if not isinstance(manufacturing, Mapping):
+        return ""
+    return str(manufacturing.get("readiness", "preliminary"))

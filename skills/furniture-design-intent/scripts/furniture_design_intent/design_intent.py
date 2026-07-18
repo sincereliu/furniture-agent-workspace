@@ -12,14 +12,18 @@ from typing import Any
 
 @dataclass(frozen=True)
 class OverallSize:
-    width_mm: float
-    depth_mm: float
-    height_mm: float
+    width_mm: float | None
+    depth_mm: float | None
+    height_mm: float | None
 
     def validate(self) -> list[str]:
         errors: list[str] = []
         for name, value in asdict(self).items():
-            if isinstance(value, bool) or not isinstance(value, (int, float)):
+            if value is None:
+                errors.append(
+                    f"overall_size.{name} must be provided before confirmation"
+                )
+            elif isinstance(value, bool) or not isinstance(value, (int, float)):
                 errors.append(f"overall_size.{name} must be numeric")
             elif value <= 0:
                 errors.append(f"overall_size.{name} must be greater than zero")
@@ -61,9 +65,9 @@ class DesignIntent:
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
         data["overall_size"] = {
-            "width_mm": float(self.overall_size.width_mm),
-            "depth_mm": float(self.overall_size.depth_mm),
-            "height_mm": float(self.overall_size.height_mm),
+            "width_mm": _optional_float_value(self.overall_size.width_mm),
+            "depth_mm": _optional_float_value(self.overall_size.depth_mm),
+            "height_mm": _optional_float_value(self.overall_size.height_mm),
         }
         return data
 
@@ -73,9 +77,18 @@ class DesignIntent:
         return cls(
             furniture_type=str(data.get("furniture_type", data.get("type", ""))).strip().lower(),
             overall_size=OverallSize(
-                width_mm=float(size.get("width_mm", data.get("width", 0))),
-                depth_mm=float(size.get("depth_mm", data.get("depth", 0))),
-                height_mm=float(size.get("height_mm", data.get("height", 0))),
+                width_mm=_parse_optional_float(
+                    size.get("width_mm", data.get("width")),
+                    "overall_size.width_mm",
+                ),
+                depth_mm=_parse_optional_float(
+                    size.get("depth_mm", data.get("depth")),
+                    "overall_size.depth_mm",
+                ),
+                height_mm=_parse_optional_float(
+                    size.get("height_mm", data.get("height")),
+                    "overall_size.height_mm",
+                ),
             ),
             purpose=str(data.get("purpose", "")),
             layout=dict(data.get("layout", {})),
@@ -87,3 +100,18 @@ class DesignIntent:
             confirmed=bool(data.get("confirmed", False)),
             schema_version=int(data.get("schema_version", 1)),
         )
+
+
+def _optional_float_value(value: float | None) -> float | None:
+    return None if value is None else float(value)
+
+
+def _parse_optional_float(value: Any, field_name: str) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise ValueError(f"{field_name} must be numeric or null")
+    try:
+        return float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field_name} must be numeric or null") from exc

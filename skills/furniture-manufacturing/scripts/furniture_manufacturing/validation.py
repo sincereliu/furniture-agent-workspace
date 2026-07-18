@@ -6,7 +6,11 @@ from furniture_delivery_validation.validation import ValidationReport
 from furniture_design_intent.design_spec import FurnitureSpec, resolve_back_mount
 from furniture_panel_planning.panel_models import PanelPlacement
 
-from .manufacturing_bom import BOMReport, emit_drilled_holes
+from .manufacturing_bom import (
+    BOMReport,
+    VALID_MANUFACTURING_READINESS,
+    emit_drilled_holes,
+)
 
 
 def validate_manufacturing(
@@ -15,6 +19,13 @@ def validate_manufacturing(
     placements: list[PanelPlacement],
 ) -> ValidationReport:
     report = ValidationReport(stage="manufacturing_planned")
+    if bom.readiness not in VALID_MANUFACTURING_READINESS:
+        report.add_error(
+            "INVALID_MANUFACTURING_READINESS",
+            "manufacturing readiness must be one of: "
+            + ", ".join(sorted(VALID_MANUFACTURING_READINESS)),
+            "readiness",
+        )
     if bom.panel_count != len(placements):
         report.add_error(
             "BOM_PANEL_MISMATCH",

@@ -49,6 +49,7 @@ class ApiEntrypointTests(unittest.TestCase):
             openapi_schemas["CabinetRequest"]["properties"],
         )
         for response_field in (
+            "readiness",
             "back_mount",
             "hardware",
             "operations",
@@ -82,6 +83,7 @@ class ApiEntrypointTests(unittest.TestCase):
         )
 
         self.assertEqual(response.furniture_name, "吊柜")
+        self.assertEqual(response.readiness, "preliminary")
         self.assertEqual(response.back_mount, "groove")
         self.assertGreater(response.panel_count, 0)
 

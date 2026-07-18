@@ -19,6 +19,20 @@ FURNITURE_NAMES = {
     "wall_cabinet": "吊柜",
 }
 
+VALID_MANUFACTURING_READINESS = frozenset(
+    {
+        "preliminary",
+        "accepted",
+        "factory_ready",
+    }
+)
+
+MANUFACTURING_READINESS_LABELS = {
+    "preliminary": "暂定，软件默认值待确认",
+    "accepted": "方案已接受，仍需工厂工艺核对",
+    "factory_ready": "工厂已确认可投产",
+}
+
 
 @dataclass
 class BOMReport:
@@ -28,6 +42,7 @@ class BOMReport:
     hardware: list[HardwareRecord]
     operations: list[MachiningOperation]
     total_area_m2: float = 0.0
+    readiness: str = "preliminary"
 
     @property
     def panel_count(self) -> int:
@@ -56,6 +71,7 @@ def plan_manufacturing(
         hardware=estimate_hardware(panels),
         operations=operations,
         total_area_m2=sum(panel.area_m2 for panel in panels),
+        readiness="preliminary",
     )
 
 
@@ -193,6 +209,8 @@ def format_bom_markdown(report: BOMReport) -> str:
         f"## 拆单报告 - {report.furniture_name}",
         "",
         f"外形尺寸: **{report.dimensions}**",
+        f"制造状态: **{report.readiness}** — "
+        f"{MANUFACTURING_READINESS_LABELS.get(report.readiness, '未知状态')}",
         "",
         f"### 板件清单 ({report.panel_count} 块)",
         "",

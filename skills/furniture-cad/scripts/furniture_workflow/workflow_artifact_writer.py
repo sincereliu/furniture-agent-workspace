@@ -132,10 +132,14 @@ def write_artifacts(
     revision.manifest.add_file(
         "manufacturing_plan",
         manufacturing_path,
-        readiness="preliminary",
+        readiness=pipeline.bom.readiness,
     )
     revision.manifest.add_file("feature_tree", feature_tree_path)
-    revision.manifest.add_file("bom", bom_path, readiness="preliminary")
+    revision.manifest.add_file(
+        "bom",
+        bom_path,
+        readiness=pipeline.bom.readiness,
+    )
     revision.manifest.add_file("drilled_holes", drilled_json_path)
     revision.manifest.add_file("drilled_holes_glb", drilled_glb_path, derived=True)
     revision.manifest.add_file("cad_source", source_path, derived=True)

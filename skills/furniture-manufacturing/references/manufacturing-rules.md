@@ -8,7 +8,7 @@
 - 封边：边、厚度及余量状态；连接：螺钉、木榫、偏心件、槽/企口、胶合等。
 - 五金：铰链、滑轨、拉手、层板托、固定、防倾倒及荷载。
 - 公差/净空：门缝、安装/设备缝隙、地墙不平和安全余量。
-- BOM：初估、已接受采购记录或可制造记录。
+- BOM：整份方案记录 `readiness`；`preliminary` 为软件暂定，`accepted` 表示用户/设计方接受方案但仍需工艺核对，`factory_ready` 只在工厂明确确认后使用。
 
 ## 柜体指导
 
@@ -29,10 +29,11 @@
 
 - 板件记录保留有效 `back_mount`，不得由厚度/备注反推。
 - 成对孔由 `Connector.generate_holes_for_panels()` 基于完整装配生成，不伪装成单板规则；背拉条四边封边。
-- `hardware_catalog.yaml` 的外盖 `4×30mm`、背拉条 `4×40mm` 螺钉及 `hardware_rules.yaml` 孔距/预孔均为软件暂定值，不代表工厂批准。
+- `hardware_catalog.yaml` 的外盖 `4×30mm`、背拉条 `4×40mm` 螺钉及 `hardware_rules.yaml` 孔距/预孔均为软件暂定值，不代表工厂批准；因此自动规划始终从 `readiness=preliminary` 开始。
 - 五金数量等于主连接孔数量；同一连接的配合孔数量一致。
 
 ## 边界
 
-- 不创建/修改板件、布局、特征树、CAD/STEP、JSON、命令或产物路径。
-- 软件默认不等于工厂标准；用户接受前，五金、封边和公差均为暂定。
+- 不创建/修改板件、布局、特征树或 CAD/STEP，不定义命令和产物路径。
+- 本阶段拥有 BOM、加工操作和可序列化孔位语义；`.drilled-holes.json/.glb` 的文件名、路径和落盘由 CAD 阶段 `workflow_artifact_writer.py` 负责。
+- `readiness` 是整份制造方案的状态，不表示每条记录都经过单独审批；软件默认不等于工厂标准。

@@ -48,6 +48,7 @@ class CabinetPipelineTests(unittest.TestCase):
         self.assertEqual(self.result.bom.furniture_name, "落地柜")
         self.assertEqual(self.result.bom.dimensions, "800×1000×600mm")
         self.assertGreater(self.result.bom.total_area_m2, 0)
+        self.assertEqual(self.result.bom.readiness, "preliminary")
 
     def test_rejects_non_cabinet_type(self) -> None:
         with self.assertRaisesRegex(ValueError, "Unsupported cabinet type"):

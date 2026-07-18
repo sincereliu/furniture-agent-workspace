@@ -215,6 +215,49 @@ class FurnitureOrchestratorTests(unittest.TestCase):
                 )
                 self.assertIsNotNone(result.pipeline)
                 self.assertEqual(result.bridge.status, "ok")
+                delivery_output = result.revision.stage_outputs[
+                    WorkflowStage.DELIVERY_VALIDATED.value
+                ]
+                self.assertTrue(delivery_output["passed"])
+                self.assertIn(
+                    "MANUFACTURING_PRELIMINARY",
+                    {
+                        issue["code"]
+                        for issue in delivery_output["issues"]
+                    },
+                )
+                readiness_by_kind = {
+                    artifact.kind: artifact.metadata.get("readiness")
+                    for artifact in result.revision.manifest.artifacts
+                    if artifact.kind in {"manufacturing_plan", "bom"}
+                }
+                self.assertEqual(
+                    readiness_by_kind,
+                    {
+                        "manufacturing_plan": "preliminary",
+                        "bom": "preliminary",
+                    },
+                )
+
+                incomplete_lineage = validate_delivery(
+                    result.revision.manifest,
+                    source_revision_id=result.revision.id,
+                    stage_outputs=result.revision.stage_outputs,
+                    approved_stages=[],
+                    stage_validations=[],
+                )
+                self.assertFalse(incomplete_lineage.passed)
+                incomplete_codes = {
+                    issue.code for issue in incomplete_lineage.issues
+                }
+                self.assertIn(
+                    "UNAPPROVED_DELIVERY_SOURCE_STAGE",
+                    incomplete_codes,
+                )
+                self.assertIn(
+                    "MISSING_STAGE_VALIDATION",
+                    incomplete_codes,
+                )
 
                 design_artifact = next(
                     artifact
@@ -266,6 +309,40 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         self.assertEqual(revision.workflow.current, WorkflowStage.FAILED)
         self.assertIn(
             "OPERATION_OUTSIDE_TARGET",
+            {issue.code for issue in revision.validations[-1].issues},
+        )
+
+    def test_manufacturing_readiness_must_use_known_state(self) -> None:
+        result = self.orchestrator.execute_spec(
+            "制造状态验证",
+            {
+                "type": "floor_cabinet",
+                "width": 800,
+                "depth": 600,
+                "height": 1000,
+            },
+            through_stage=WorkflowStage.MANUFACTURING_PLANNED,
+        )
+        edited = deepcopy(
+            result.revision.stage_outputs[
+                WorkflowStage.MANUFACTURING_PLANNED.value
+            ]
+        )
+        edited["readiness"] = "claimed_ready"
+        revision = self.orchestrator.revise_stage_output(
+            result.project,
+            WorkflowStage.MANUFACTURING_PLANNED,
+            edited,
+        )
+
+        self.orchestrator.confirm_stage(
+            result.project,
+            WorkflowStage.MANUFACTURING_PLANNED,
+        )
+
+        self.assertEqual(revision.workflow.current, WorkflowStage.FAILED)
+        self.assertIn(
+            "INVALID_MANUFACTURING_READINESS",
             {issue.code for issue in revision.validations[-1].issues},
         )
 
@@ -322,6 +399,51 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         self.assertNotIn(
             WorkflowStage.LAYOUT_PLANNED.value,
             result.revision.stage_outputs,
+        )
+
+    def test_draft_intent_preserves_null_dimensions_and_cannot_confirm(self) -> None:
+        intent = DesignIntent.from_dict(
+            {
+                "furniture_type": "floor_cabinet",
+                "overall_size": {
+                    "width_mm": 800,
+                    "depth_mm": None,
+                    "height_mm": 1000,
+                },
+                "unresolved": ["depth_mm"],
+            }
+        )
+        project = self.orchestrator.create_project("未完整柜体", intent)
+
+        self.assertIsNone(
+            project.latest.stage_outputs["design_intent"]["overall_size"]["depth_mm"]
+        )
+        revision = self.orchestrator.confirm_intent(project)
+
+        self.assertEqual(revision.workflow.current, WorkflowStage.FAILED)
+        issue_codes = {issue.code for issue in revision.validations[-1].issues}
+        self.assertIn("INVALID_INTENT", issue_codes)
+        self.assertIn("UNRESOLVED_DECISIONS", issue_codes)
+
+    def test_unsupported_layout_decision_is_not_silently_discarded(self) -> None:
+        intent = cabinet_intent()
+        intent = DesignIntent.from_dict(
+            {
+                **intent.to_dict(),
+                "layout": {
+                    **intent.layout,
+                    "drawer_count": 2,
+                },
+            }
+        )
+        project = self.orchestrator.create_project("带抽屉柜体", intent)
+
+        revision = self.orchestrator.confirm_intent(project)
+
+        self.assertEqual(revision.workflow.current, WorkflowStage.FAILED)
+        self.assertIn(
+            "UNSUPPORTED_LAYOUT_DECISION",
+            {issue.code for issue in revision.validations[-1].issues},
         )
 
     def test_unsupported_family_fails_at_design_intent_confirmation(self) -> None:

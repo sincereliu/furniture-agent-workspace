@@ -227,6 +227,35 @@ class SkillArchitectureTests(unittest.TestCase):
             for term in terms:
                 self.assertIn(term, text, path)
 
+    def test_corrected_stage_boundaries_match_runtime_ownership(self) -> None:
+        expected_terms = {
+            "skills/furniture-design-intent/SKILL.md": (
+                "草稿尺寸可为 `null`",
+                "furniture_type",
+                "不能静默忽略",
+            ),
+            "skills/furniture-layout/SKILL.md": (
+                "当前固定地柜/吊柜模板",
+                "数量不等于分区、开口或开启策略",
+                "左后下落地角",
+            ),
+            "skills/furniture-manufacturing/SKILL.md": (
+                "readiness=preliminary/accepted/factory_ready",
+                "可序列化的全局/local 孔位数据",
+                "workflow_artifact_writer.py",
+            ),
+            "skills/furniture-delivery-validation/SKILL.md": (
+                "前六阶段",
+                "不解析 STEP 几何",
+                "未执行",
+            ),
+        }
+        for relative_path, terms in expected_terms.items():
+            path = WORKSPACE_ROOT / relative_path
+            text = path.read_text(encoding="utf-8")
+            for term in terms:
+                self.assertIn(term, text, path)
+
 
 if __name__ == "__main__":
     unittest.main()

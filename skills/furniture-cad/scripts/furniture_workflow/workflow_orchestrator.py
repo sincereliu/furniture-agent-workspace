@@ -190,10 +190,6 @@ class FurnitureOrchestrator:
         if requested.value not in revision.stage_outputs:
             raise ValueError(f"current stage has no output: {requested.value}")
 
-        if requested == WorkflowStage.DESIGN_INTENT:
-            revision.intent = revision.intent.confirm()
-            revision.stage_outputs[requested.value] = revision.intent.to_dict()
-
         report = self._latest_stage_validation(revision, requested)
         if report is None:
             report = self._validate_stage_output(revision, requested)
@@ -201,6 +197,10 @@ class FurnitureOrchestrator:
         if not report.passed:
             revision.workflow.fail(f"{requested.value} validation failed")
             return revision
+
+        if requested == WorkflowStage.DESIGN_INTENT:
+            revision.intent = revision.intent.confirm()
+            revision.stage_outputs[requested.value] = revision.intent.to_dict()
 
         revision.approve_stage(requested)
         revision.workflow.record(f"{requested.value} confirmed")
@@ -424,6 +424,9 @@ class FurnitureOrchestrator:
             report = validate_delivery(
                 revision.manifest,
                 source_revision_id=revision.id,
+                stage_outputs=revision.stage_outputs,
+                approved_stages=revision.approved_stages,
+                stage_validations=revision.validations,
             )
             revision.stage_outputs[stage.value] = report.to_dict()
             revision.validations.append(report)
@@ -525,6 +528,7 @@ class FurnitureOrchestrator:
                 MachiningOperation(**item) for item in output.get("operations", [])
             ],
             total_area_m2=float(output.get("total_area_m2", 0.0)),
+            readiness=str(output.get("readiness", "preliminary")),
         )
 
     @staticmethod

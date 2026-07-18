@@ -4,7 +4,7 @@
 
 ## 捕获内容
 
-- `type` 类别；`purpose` 用途/优先级。
+- `furniture_type` 类别；`purpose` 用途/优先级。扁平 CLI/API 请求才使用 `type`，进入 `DesignIntent` 后统一为 `furniture_type`。
 - `overall_size`：成品外包络 `width_mm/depth_mm/height_mm`，未知为 `null`。
 - `layout`：门、隔间、层板、抽屉、挂衣区等用户层组织。
 - `appearance` 风格/饰面；`structure` 高层结构偏好。
@@ -24,7 +24,9 @@
 
 ## 边界
 
-- 尺寸和类别关键决策已知或明确列为未决后，方可进入下一层。
+- 草稿可保留 `null`，但确认前 `width_mm/depth_mm/height_mm` 必须全部为正数，且 `unresolved` 必须为空。
+- 当前固定柜体运行时只执行 `layout.shelf_count/n_doors/toe_kick_height`；抽屉、隔板分区、滑门、开放格等要求须保留为未决项，不得在确认时静默丢弃。
+- 类别无匹配时只输出 fallback 草稿；当前运行时不会确认该类别或进入布局。
 - 在板件前停止；不得添加板件/坐标/裁切尺寸/五金/制造策略/特征树/CAD 调用或输出路径。
 - 对交互式设计讨论，除非用户要求规划或端到端生成，否则在意图阶段停止。
 

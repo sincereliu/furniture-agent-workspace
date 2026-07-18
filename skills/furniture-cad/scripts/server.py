@@ -150,6 +150,7 @@ class PanelDrillingResponse(BaseModel):
 class BOMResponse(BaseModel):
     furniture_name: str
     dimensions: str
+    readiness: Literal["preliminary", "accepted", "factory_ready"]
     back_mount: Literal["groove", "insert", "cover"]
     panel_count: int
     total_area_m2: float
@@ -209,6 +210,7 @@ async def plan_cabinet(req: CabinetRequest):
     return BOMResponse(
         furniture_name=report.furniture_name,
         dimensions=report.dimensions,
+        readiness=report.readiness,
         back_mount=orchestration.pipeline.layout.back_mount,
         panel_count=report.panel_count,
         total_area_m2=report.total_area_m2,

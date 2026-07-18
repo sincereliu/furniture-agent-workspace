@@ -1,4 +1,4 @@
 interface:
   display_name: "家具布局规划"
-  short_description: "规划家具分区、净空和定位"
-  default_prompt: "使用 $furniture-layout 规划已确认家具意图的布局。"
+  short_description: "计算固定柜体模板的包络、净空和背板基准"
+  default_prompt: "使用 $furniture-layout 计算已确认固定柜体意图的空间布局；遇到未支持的分区或开启策略时停止。"
