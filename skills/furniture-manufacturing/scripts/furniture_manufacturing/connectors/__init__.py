@@ -4,7 +4,20 @@ from .base import Connector, HoleSpec
 from .trinity import TrinityConnector
 from .hinge import HingeConnector
 from .shelf import ShelfConnector
+from .back_mount import BackMountConnector
 
-__all__ = ["Connector", "HoleSpec", "TrinityConnector", "HingeConnector", "ShelfConnector"]
+__all__ = [
+    "Connector",
+    "HoleSpec",
+    "TrinityConnector",
+    "HingeConnector",
+    "ShelfConnector",
+    "BackMountConnector",
+]
 
-ALL_CONNECTORS = [TrinityConnector, HingeConnector, ShelfConnector]
+ALL_CONNECTORS = [
+    TrinityConnector,
+    HingeConnector,
+    ShelfConnector,
+    BackMountConnector,
+]

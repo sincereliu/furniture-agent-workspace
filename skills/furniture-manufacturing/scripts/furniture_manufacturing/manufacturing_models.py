@@ -28,6 +28,7 @@ class PanelRecord:
     depends_on: list[str] = field(default_factory=list)
     door_hinge_side: str | None = None
     door_overlay: str | None = None
+    back_mount: str = ""
 
     @property
     def area_m2(self) -> float:

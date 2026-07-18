@@ -14,7 +14,8 @@ DEFAULT_EDGE_RULES: Dict[str, Dict[str, str]] = {
     "divider": {"四边": "ABS 1.0mm同色"},
     "toe_kick": {"四边": "ABS 1.0mm同色"},
     "door": {"四边": "ABS 1.0mm同色"},
-    "back": {},
+    "back": {"四边": "ABS 1.0mm同色"},
+    "back_rail": {"四边": "ABS 1.0mm同色"},
 }
 
 

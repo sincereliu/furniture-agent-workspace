@@ -97,6 +97,7 @@ def _manufacturing_panel(spec: FurnitureSpec, back_mount: str, placement: PanelP
         depends_on=list(placement.depends_on),
         door_hinge_side=placement.door_hinge_side,
         door_overlay=placement.door_overlay,
+        back_mount=back_mount,
     )
 
 
@@ -216,7 +217,10 @@ def format_bom_markdown(report: BOMReport) -> str:
     if report.hardware:
         lines.extend(["", f"### 五金清单 ({len(report.hardware)} 项)", ""])
         for item in report.hardware:
-            lines.append(f"- {item.name} {item.spec} ×{item.quantity}{item.unit}")
+            note = f"；{item.note}" if item.note else ""
+            lines.append(
+                f"- {item.name} {item.spec} ×{item.quantity}{item.unit}{note}"
+            )
     return "\n".join(lines)
 
 
@@ -224,8 +228,16 @@ _COLOR_LEGEND = {
     "hinge":           {"color": "#4A90D9", "label": "铰链杯孔 35mm"},
     "system_32_female": {"color": "#FF6B35", "label": "三合一偏心轮孔 12mm"},
     "system_32_male":  {"color": "#FF4500", "label": "三合一连接杆端孔 8mm"},
+    "system_32_pre_nut": {"color": "#D95F02", "label": "三合一预埋螺母孔 10mm"},
     "shelf_connector": {"color": "#00A86B", "label": "层板托孔"},
     "back_groove":     {"color": "#FFD700", "label": "背板槽"},
+    "back_insert_cam": {"color": "#8E44AD", "label": "内嵌背板偏心轮孔"},
+    "back_insert_rod": {"color": "#9B59B6", "label": "内嵌背板连接杆孔"},
+    "back_insert_pre_nut": {"color": "#6C3483", "label": "内嵌背板预埋螺母孔"},
+    "cover_back_clearance": {"color": "#16A085", "label": "外盖背板螺钉通孔"},
+    "cover_back_pilot": {"color": "#48C9B0", "label": "外盖背板螺钉预孔"},
+    "back_rail_side_clearance": {"color": "#2E86C1", "label": "背拉条侧板通孔"},
+    "back_rail_pilot": {"color": "#85C1E9", "label": "背拉条端部预孔"},
 }
 
 
@@ -239,21 +251,21 @@ def emit_drilled_holes(bom: BOMReport) -> dict:
 
     for connector_cls in ALL_CONNECTORS:
         connector = connector_cls()
-        for panel in bom.panels:
-            for hole in connector.generate_holes(panel):
-                panel_holes.setdefault(panel.label, []).append({
-                    "hole_type": hole.hole_type,
-                    "color": _COLOR_LEGEND.get(hole.hole_type, {}).get("color", "#888888"),
-                    "x": round(hole.x_global, 2),
-                    "y": round(hole.y_global, 2),
-                    "z": round(hole.z_global, 2),
-                    "local_x": round(hole.x_local, 2),
-                    "local_y": round(hole.y_local, 2),
-                    "local_z": round(hole.z_local, 2),
-                    "diameter": hole.diameter,
-                    "depth": hole.depth,
-                    "direction": hole.direction,
-                })
+        for hole in connector.generate_holes_for_panels(bom.panels):
+            panel_holes.setdefault(hole.panel_label, []).append({
+                "hole_type": hole.hole_type,
+                "color": _COLOR_LEGEND.get(hole.hole_type, {}).get("color", "#888888"),
+                "x": round(hole.x_global, 2),
+                "y": round(hole.y_global, 2),
+                "z": round(hole.z_global, 2),
+                "local_x": round(hole.x_local, 2),
+                "local_y": round(hole.y_local, 2),
+                "local_z": round(hole.z_local, 2),
+                "diameter": hole.diameter,
+                "depth": hole.depth,
+                "direction": hole.direction,
+                "note": hole.note,
+            })
 
     panels_out = []
     for panel in bom.panels:

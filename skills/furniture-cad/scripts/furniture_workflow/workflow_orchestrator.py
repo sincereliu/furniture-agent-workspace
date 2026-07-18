@@ -962,6 +962,111 @@ class FurnitureOrchestrator:
                 f"{back_mount} back strategy must not contain groove cuts",
                 "operations",
             )
+        manufacturing_by_id = {item.label: item for item in bom.panels}
+        recorded_mounts = {item.back_mount for item in bom.panels}
+        if recorded_mounts != {back_mount}:
+            report.add_error(
+                "BACK_MOUNT_CONTEXT_MISMATCH",
+                "every manufacturing panel must retain the resolved back_mount",
+                "panels",
+            )
+        back_panel = manufacturing_by_id.get("back_panel")
+        expected_back_edges = (
+            {} if back_mount == "groove"
+            else {"四边": "ABS 1.0mm同色"}
+        )
+        if (
+            back_panel is None
+            or back_panel.edge_banding != expected_back_edges
+        ):
+            report.add_error(
+                "BACK_EDGE_BANDING_MISMATCH",
+                f"{back_mount} back strategy has incorrect edge banding",
+                "back_panel",
+            )
+        rails = [
+            item for item in bom.panels if item.panel_type == "back_rail"
+        ]
+        if any(
+            rail.edge_banding != {"四边": "ABS 1.0mm同色"}
+            for rail in rails
+        ):
+            report.add_error(
+                "BACK_RAIL_EDGE_BANDING_MISMATCH",
+                "back rails must follow the repository four-edge rule",
+                "back_rail",
+            )
+
+        drilled = emit_drilled_holes(bom)
+        hole_types = [
+            hole["hole_type"]
+            for panel in drilled["panels"]
+            for hole in panel["holes"]
+        ]
+        hardware_by_name = {item.name: item for item in bom.hardware}
+        manufacturing_contracts: dict[
+            str,
+            tuple[str, tuple[str, ...]],
+        ] = {
+            "insert": (
+                "三合一连接件（内嵌背板）",
+                (
+                    "back_insert_cam",
+                    "back_insert_rod",
+                    "back_insert_pre_nut",
+                ),
+            ),
+            "cover": (
+                "沉头木螺钉（外盖背板）",
+                (
+                    "cover_back_clearance",
+                    "cover_back_pilot",
+                ),
+            ),
+        }
+        if back_mount == "groove" and rails:
+            manufacturing_contracts["groove"] = (
+                "沉头木螺钉（背拉条）",
+                (
+                    "back_rail_side_clearance",
+                    "back_rail_pilot",
+                ),
+            )
+        contract = manufacturing_contracts.get(back_mount)
+        if contract is not None:
+            hardware_name, required_hole_types = contract
+            hardware = hardware_by_name.get(hardware_name)
+            counts = {
+                hole_type: hole_types.count(hole_type)
+                for hole_type in required_hole_types
+            }
+            if hardware is None or hardware.quantity <= 0:
+                report.add_error(
+                    "MISSING_BACK_MOUNT_HARDWARE",
+                    f"{back_mount} back strategy is missing {hardware_name}",
+                    "hardware",
+                )
+            if any(count <= 0 for count in counts.values()):
+                report.add_error(
+                    "MISSING_BACK_MOUNT_HOLES",
+                    f"{back_mount} back strategy is missing matched hole records",
+                    "drilled_holes",
+                )
+            elif len(set(counts.values())) != 1:
+                report.add_error(
+                    "BACK_MOUNT_HOLE_COUNT_MISMATCH",
+                    f"{back_mount} mating hole counts do not match",
+                    "drilled_holes",
+                )
+            elif (
+                hardware is not None
+                and hardware.quantity != next(iter(counts.values()))
+            ):
+                report.add_error(
+                    "BACK_MOUNT_HARDWARE_COUNT_MISMATCH",
+                    f"{hardware_name} quantity does not match its hole pattern",
+                    "hardware",
+                )
         return report
 
     def _validate_cad(self, bridge: BridgeResult | None) -> ValidationReport:

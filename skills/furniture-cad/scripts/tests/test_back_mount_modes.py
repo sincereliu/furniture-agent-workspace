@@ -16,7 +16,10 @@ bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 from furniture_design_intent.design_spec import FurnitureSpec
 from furniture_layout.layout_pipeline import plan_layout
-from furniture_manufacturing.manufacturing_bom import plan_manufacturing
+from furniture_manufacturing.manufacturing_bom import (
+    emit_drilled_holes,
+    plan_manufacturing,
+)
 from furniture_panel_planning.panel_planning import plan_panels
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from furniture_workflow.workflow_state import WorkflowStage
@@ -152,6 +155,95 @@ class BackMountModeTests(unittest.TestCase):
                     self.assertEqual(operation_ids, expected_groove_ids)
                 else:
                     self.assertEqual(operation_ids, set())
+
+    def test_all_modes_emit_mount_specific_manufacturing_semantics(self) -> None:
+        expected_contracts = {
+            "groove": (
+                "沉头木螺钉（背拉条）",
+                ("back_rail_side_clearance", "back_rail_pilot"),
+            ),
+            "insert": (
+                "三合一连接件（内嵌背板）",
+                (
+                    "back_insert_cam",
+                    "back_insert_rod",
+                    "back_insert_pre_nut",
+                ),
+            ),
+            "cover": (
+                "沉头木螺钉（外盖背板）",
+                ("cover_back_clearance", "cover_back_pilot"),
+            ),
+        }
+
+        for back_mount, (hardware_name, required_holes) in (
+            expected_contracts.items()
+        ):
+            with self.subTest(back_mount=back_mount):
+                spec = self._spec(back_mount)
+                layout = plan_layout(spec)
+                placements = plan_panels(spec, layout)
+                bom = plan_manufacturing(spec, placements)
+                panels = {panel.label: panel for panel in bom.panels}
+
+                self.assertEqual(
+                    panels["back_panel"].edge_banding,
+                    {}
+                    if back_mount == "groove"
+                    else {"四边": "ABS 1.0mm同色"},
+                )
+                self.assertEqual(
+                    {panel.back_mount for panel in bom.panels},
+                    {back_mount},
+                )
+                for rail in (
+                    panel
+                    for panel in bom.panels
+                    if panel.panel_type == "back_rail"
+                ):
+                    self.assertEqual(
+                        rail.edge_banding,
+                        {"四边": "ABS 1.0mm同色"},
+                    )
+
+                hardware = next(
+                    item
+                    for item in bom.hardware
+                    if item.name == hardware_name
+                )
+                self.assertGreater(hardware.quantity, 0)
+                self.assertIn("投产前确认", hardware.note)
+
+                drilled = emit_drilled_holes(bom)
+                holes = [
+                    hole
+                    for panel in drilled["panels"]
+                    for hole in panel["holes"]
+                ]
+                counts = {
+                    hole_type: sum(
+                        hole["hole_type"] == hole_type for hole in holes
+                    )
+                    for hole_type in required_holes
+                }
+                self.assertEqual(set(counts.values()), {hardware.quantity})
+
+                for panel in drilled["panels"]:
+                    box = panel["box"]
+                    for hole in panel["holes"]:
+                        for local_key, size_key in (
+                            ("local_x", "x"),
+                            ("local_y", "y"),
+                            ("local_z", "z"),
+                        ):
+                            self.assertGreaterEqual(
+                                hole[local_key],
+                                -1e-6,
+                            )
+                            self.assertLessEqual(
+                                hole[local_key],
+                                box[size_key] + 1e-6,
+                            )
 
     def test_mount_specific_validation_ignores_unused_groove_fields(self) -> None:
         for back_mount in ("insert", "cover"):

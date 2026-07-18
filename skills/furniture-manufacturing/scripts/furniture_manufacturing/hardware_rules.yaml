@@ -21,6 +21,29 @@ system_32_drilling:
     bottom: width          # 底板沿宽度打孔
     fixed_shelf: width     # 固定层板沿宽度打孔
 
+# ── 背板安装打孔（软件暂定，投产前确认）──────────────────
+back_mount_drilling:
+  insert:
+    # 内嵌背板四边三合一连接点
+    first_hole_mm: 64
+    max_spacing_mm: 400
+
+  cover:
+    # 外盖背板沿左右侧板、顶板、底板周边固定
+    first_hole_mm: 50
+    max_spacing_mm: 200
+    clearance_hole_diameter_mm: 4.5
+    pilot_hole_diameter_mm: 3
+    pilot_depth_mm: 20
+
+  back_rail:
+    # 每根背拉条左右两端各设置 count_per_end 个连接点
+    count_per_end: 2
+    end_offset_mm: 20
+    clearance_hole_diameter_mm: 4.5
+    pilot_hole_diameter_mm: 3
+    pilot_depth_mm: 20
+
 # ── 铰链打孔 ──────────────────────────────────────────
 hinge_drilling:
   # ── 数量与偏移规则：按门板长度分档 ──

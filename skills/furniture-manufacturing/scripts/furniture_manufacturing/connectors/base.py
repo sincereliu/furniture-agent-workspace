@@ -60,6 +60,21 @@ class Connector:
     def generate_holes(self, panel: PanelRecord) -> List[HoleSpec]:
         raise NotImplementedError
 
+    def generate_holes_for_panels(
+        self,
+        panels: List[PanelRecord],
+    ) -> List[HoleSpec]:
+        """Generate holes with the full assembly available when needed.
+
+        Ordinary connectors remain panel-local. Assembly-aware connectors can
+        override this method to emit matched holes on both mating panels.
+        """
+        return [
+            hole
+            for panel in panels
+            for hole in self.generate_holes(panel)
+        ]
+
     def boms(self, panels: List[PanelRecord]) -> List[HardwareRecord]:
         raise NotImplementedError
 

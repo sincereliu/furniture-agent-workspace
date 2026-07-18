@@ -18,6 +18,8 @@ class HingeConnector(Connector):
 
     def generate_holes(self, panel: PanelRecord) -> List[HoleSpec]:
         result: List[HoleSpec] = []
+        if panel.panel_type != "door":
+            return result
         rules = self.rules.get(self.rules_section, {}) if self.rules_section else {}
         count, top_offset, bottom_offset = self._hinge_count(panel.size_z, rules)
         positions = self._distribute(panel.size_z, count, top_offset, bottom_offset)
@@ -40,15 +42,15 @@ class HingeConnector(Connector):
                 hole_type="hinge",
                 panel_label=panel.label,
                 x_global=panel.pos_x + x_local,
-                y_global=panel.pos_y + panel.size_y,
+                y_global=panel.pos_y,
                 z_global=panel.pos_z + y_local,
                 x_local=x_local,
-                y_local=panel.size_y,
+                y_local=0.0,
                 z_local=y_local,
                 diameter=float(cup_params.get("cup_diameter_mm", 35)),
                 depth=float(cup_params.get("cup_depth_mm", 13)),
                 direction="+y",
-                note="铰链杯孔"))
+                note="从门板内侧面钻入的铰链杯孔"))
 
         return result
 
