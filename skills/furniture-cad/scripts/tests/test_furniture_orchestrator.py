@@ -201,6 +201,8 @@ class FurnitureOrchestratorTests(unittest.TestCase):
                         "manufacturing_plan",
                         "feature_tree",
                         "bom",
+                        "drilled_holes",
+                        "drilled_holes_glb",
                         "cad_source",
                         "step",
                         "viewer_topology",

@@ -16,6 +16,8 @@ class CabinetLayout:
     depth: float
     height: float
     side_depth: float
+    carcass_y_start: float
+    carcass_y_end: float
     internal_width: float
     internal_height: float
     internal_x_start: float
@@ -39,16 +41,18 @@ class CabinetLayout:
             spec.back_mount, spec.back_thickness, spec.board_thickness
         )
 
+        carcass_y_end = (
+            spec.depth - spec.door_thickness - spec.door_hinge_gap
+        )
         if back_mount == "cover":
-            side_depth = (
-                spec.depth - spec.door_thickness - spec.door_hinge_gap - spec.back_thickness
-            )
+            carcass_y_start = spec.back_thickness
             back_plane_y = 0.0
-            internal_y_start = spec.back_thickness
+            internal_y_start = carcass_y_start
         else:
-            side_depth = spec.depth - spec.door_thickness - spec.door_hinge_gap
+            carcass_y_start = 0.0
             back_plane_y = spec.back_offset
             internal_y_start = spec.back_offset + spec.back_thickness
+        side_depth = carcass_y_end - carcass_y_start
 
         toe_kick = (
             spec.toe_kick_height if spec.furniture_type != "wall_cabinet" else 0.0
@@ -59,19 +63,21 @@ class CabinetLayout:
             depth=spec.depth,
             height=spec.height,
             side_depth=side_depth,
+            carcass_y_start=carcass_y_start,
+            carcass_y_end=carcass_y_end,
             internal_width=spec.width - 2 * board,
             internal_height=spec.height - toe_kick - 2 * board,
             internal_x_start=board,
             internal_x_end=spec.width - board,
             internal_y_start=internal_y_start,
-            internal_y_end=side_depth,
+            internal_y_end=carcass_y_end,
             internal_z_start=toe_kick + board,
             internal_z_end=spec.height - board,
             back_plane_y=back_plane_y,
             back_mount=back_mount,
             toe_kick_height=toe_kick,
-            toe_kick_rear_y=spec.toe_kick_reveal_back,
-            toe_kick_front_y=side_depth - spec.toe_kick_reveal_front,
+            toe_kick_rear_y=carcass_y_start + spec.toe_kick_reveal_back,
+            toe_kick_front_y=carcass_y_end - spec.toe_kick_reveal_front,
             shelf_count=spec.shelf_count,
             door_count=spec.n_doors,
         )

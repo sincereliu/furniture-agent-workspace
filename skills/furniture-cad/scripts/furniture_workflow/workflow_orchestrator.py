@@ -12,7 +12,7 @@ from typing import Any
 from furniture_cad.cad_bridge import BridgeResult, CadBridge
 from furniture_delivery_validation.validation import ValidationReport
 from furniture_design_intent.design_intent import DesignIntent
-from furniture_design_intent.design_spec import FurnitureSpec
+from furniture_design_intent.design_spec import FurnitureSpec, resolve_back_mount
 from furniture_feature_tree.feature_tree_builder import panels_to_feature_tree
 from furniture_feature_tree.feature_tree_emitter import write_build123d_source
 from furniture_layout.layout_pipeline import SUPPORTED_TYPES, plan_layout
@@ -579,10 +579,12 @@ class FurnitureOrchestrator:
             if stage == WorkflowStage.PANELS_PLANNED:
                 return self._validate_panels(
                     self._to_spec(revision.intent),
+                    self._layout_from_revision(revision),
                     self._placements_from_revision(revision),
                 )
             if stage == WorkflowStage.MANUFACTURING_PLANNED:
                 return self._validate_manufacturing(
+                    self._to_spec(revision.intent),
                     self._bom_from_revision(revision),
                     self._placements_from_revision(revision),
                 )
@@ -612,6 +614,17 @@ class FurnitureOrchestrator:
         layout: CabinetLayout,
     ) -> ValidationReport:
         report = ValidationReport(stage=WorkflowStage.LAYOUT_PLANNED.value)
+        back_mount = resolve_back_mount(
+            spec.back_mount,
+            spec.back_thickness,
+            spec.board_thickness,
+        )
+        expected_carcass_y_start = (
+            spec.back_thickness if back_mount == "cover" else 0.0
+        )
+        expected_carcass_y_end = (
+            spec.depth - spec.door_thickness - spec.door_hinge_gap
+        )
         if (layout.width, layout.depth, layout.height) != (
             spec.width,
             spec.depth,
@@ -621,6 +634,26 @@ class FurnitureOrchestrator:
                 "LAYOUT_ENVELOPE_MISMATCH",
                 "layout envelope does not match confirmed design intent",
             )
+        if layout.back_mount != back_mount:
+            report.add_error(
+                "BACK_MOUNT_MISMATCH",
+                "layout back mount does not match confirmed design intent",
+                "back_mount",
+            )
+        if (
+            abs(layout.carcass_y_start - expected_carcass_y_start) > 1e-6
+            or abs(layout.carcass_y_end - expected_carcass_y_end) > 1e-6
+            or abs(
+                layout.side_depth
+                - (layout.carcass_y_end - layout.carcass_y_start)
+            )
+            > 1e-6
+        ):
+            report.add_error(
+                "CARCASS_DEPTH_MISMATCH",
+                "layout carcass depth must preserve the finished depth envelope",
+                "side_depth",
+            )
         if min(layout.internal_width, layout.internal_height, layout.side_depth) <= 0:
             report.add_error(
                 "NON_POSITIVE_LAYOUT_REGION",
@@ -629,14 +662,25 @@ class FurnitureOrchestrator:
         if not (
             0 <= layout.internal_x_start < layout.internal_x_end <= layout.width
             and 0 <= layout.internal_z_start < layout.internal_z_end <= layout.height
-            and 0 <= layout.back_plane_y < layout.internal_y_end <= layout.side_depth
+            and 0
+            <= layout.carcass_y_start
+            < layout.carcass_y_end
+            <= layout.depth
+            and layout.carcass_y_start
+            <= layout.internal_y_start
+            < layout.internal_y_end
+            <= layout.carcass_y_end
+            and 0 <= layout.back_plane_y < layout.internal_y_start
         ):
             report.add_error(
                 "LAYOUT_REGION_OUTSIDE_ENVELOPE",
                 "layout regions must remain inside the finished envelope",
             )
         if layout.toe_kick_height > 0 and not (
-            0 <= layout.toe_kick_rear_y < layout.toe_kick_front_y <= layout.side_depth
+            layout.carcass_y_start
+            <= layout.toe_kick_rear_y
+            < layout.toe_kick_front_y
+            <= layout.carcass_y_end
         ):
             report.add_error(
                 "INVALID_TOE_KICK_REGION",
@@ -657,6 +701,7 @@ class FurnitureOrchestrator:
     def _validate_panels(
         self,
         spec: FurnitureSpec,
+        layout: CabinetLayout,
         panels: list[PanelPlacement],
     ) -> ValidationReport:
         report = ValidationReport(stage=WorkflowStage.PANELS_PLANNED.value)
@@ -666,6 +711,7 @@ class FurnitureOrchestrator:
         ids = {item.id for item in panels}
         if len(ids) != len(panels):
             report.add_error("DUPLICATE_PANEL_ID", "panel ids must be unique")
+        panel_by_id = {item.id: item for item in panels}
         for item in panels:
             if item.quantity <= 0:
                 report.add_error(
@@ -697,10 +743,122 @@ class FurnitureOrchestrator:
                         f"{item.id} depends on unknown placement {dependency}",
                         item.id,
                     )
+        carcass_ids = {
+            "left_side_panel",
+            "right_side_panel",
+            "top_panel",
+            "bottom_panel",
+        }
+        for panel_id in sorted(carcass_ids):
+            panel = panel_by_id.get(panel_id)
+            if panel is None:
+                report.add_error(
+                    "MISSING_CARCASS_PANEL",
+                    f"panel plan is missing {panel_id}",
+                    panel_id,
+                )
+                continue
+            if (
+                abs(panel.pos_y - layout.carcass_y_start) > 1e-6
+                or abs(
+                    panel.pos_y + panel.size_y - layout.carcass_y_end
+                )
+                > 1e-6
+            ):
+                report.add_error(
+                    "CARCASS_DEPTH_MISMATCH",
+                    f"{panel_id} must span the confirmed carcass depth",
+                    panel_id,
+                )
+
+        back = panel_by_id.get("back_panel")
+        if back is None:
+            report.add_error(
+                "MISSING_BACK_PANEL",
+                "supported cabinet panel plan requires a back panel",
+                "back_panel",
+            )
+        else:
+            if layout.back_mount == "groove":
+                expected_back = (
+                    layout.internal_x_start - spec.groove_depth,
+                    layout.back_plane_y,
+                    layout.internal_z_start - spec.groove_depth,
+                    layout.internal_width + 2 * spec.groove_depth,
+                    spec.back_thickness,
+                    layout.internal_height + 2 * spec.groove_depth,
+                )
+            elif layout.back_mount == "insert":
+                expected_back = (
+                    layout.internal_x_start,
+                    layout.back_plane_y,
+                    layout.internal_z_start,
+                    layout.internal_width,
+                    spec.back_thickness,
+                    layout.internal_height,
+                )
+            else:
+                expected_back = (
+                    0.0,
+                    0.0,
+                    0.0,
+                    layout.width,
+                    spec.back_thickness,
+                    layout.height,
+                )
+            actual_back = (
+                back.pos_x,
+                back.pos_y,
+                back.pos_z,
+                back.size_x,
+                back.size_y,
+                back.size_z,
+            )
+            if any(
+                abs(actual - expected) > 1e-6
+                for actual, expected in zip(actual_back, expected_back)
+            ):
+                report.add_error(
+                    "BACK_MOUNT_GEOMETRY_MISMATCH",
+                    "back panel geometry does not match the confirmed mount mode",
+                    "back_panel",
+                )
+            if layout.back_mount == "cover":
+                back_front_y = back.pos_y + back.size_y
+                if any(
+                    panel_by_id[panel_id].pos_y < back_front_y - 1e-6
+                    for panel_id in carcass_ids
+                    if panel_id in panel_by_id
+                ):
+                    report.add_error(
+                        "COVER_BACK_OVERLAP",
+                        "cover back must end before the cabinet carcass starts",
+                        "back_panel",
+                    )
+
+        for item in panels:
+            if item.panel_type in ("fixed_shelf", "movable_shelf") and (
+                abs(item.pos_y - layout.internal_y_start) > 1e-6
+                or abs(item.pos_y + item.size_y - layout.internal_y_end) > 1e-6
+            ):
+                report.add_error(
+                    "INTERNAL_DEPTH_MISMATCH",
+                    f"{item.id} must span the confirmed internal depth",
+                    item.id,
+                )
+            if item.panel_type == "door" and abs(
+                item.pos_y + item.size_y - spec.depth
+            ) > 1e-6:
+                report.add_error(
+                    "DOOR_DEPTH_MISMATCH",
+                    f"{item.id} must end at the finished depth",
+                    item.id,
+                )
         return report
 
     def _validate_manufacturing(
         self,
+        spec: FurnitureSpec,
         bom: BOMReport,
         placements: list[PanelPlacement],
     ) -> ValidationReport:
@@ -770,10 +928,38 @@ class FurnitureOrchestrator:
                     f"{operation.id} must have positive cutter dimensions",
                     operation.id,
                 )
-        if "back_panel" in placement_ids and len(bom.operations) != 4:
+        expected_back_groove_ids = {
+            "left_side_back_groove",
+            "right_side_back_groove",
+            "top_back_groove",
+            "bottom_back_groove",
+        }
+        back_groove_operations = [
+            operation
+            for operation in bom.operations
+            if "back_groove" in operation.id
+        ]
+        actual_back_groove_ids = {
+            operation.id for operation in back_groove_operations
+        }
+        back_mount = resolve_back_mount(
+            spec.back_mount,
+            spec.back_thickness,
+            spec.board_thickness,
+        )
+        if (
+            back_mount == "groove"
+            and actual_back_groove_ids != expected_back_groove_ids
+        ):
             report.add_error(
                 "INCOMPLETE_BACK_GROOVES",
                 "grooved back strategy requires four target-specific groove cuts",
+                "operations",
+            )
+        elif back_mount != "groove" and back_groove_operations:
+            report.add_error(
+                "UNEXPECTED_BACK_GROOVES",
+                f"{back_mount} back strategy must not contain groove cuts",
                 "operations",
             )
         return report
@@ -828,9 +1014,6 @@ class FurnitureOrchestrator:
         }
         data.update(intent.structure)
         data.update(intent.layout)
-        # pass back_mount through if present; otherwise let FurnitureSpec default to "auto"
-        if "back_mount" in intent.structure:
-            data["back_mount"] = intent.structure["back_mount"]
         return FurnitureSpec.from_dict(data)
 
     def _validate_feature_tree(self, feature_tree: dict[str, Any]) -> ValidationReport:

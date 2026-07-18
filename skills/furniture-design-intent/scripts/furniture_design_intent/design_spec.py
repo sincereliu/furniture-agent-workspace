@@ -8,6 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict
 
+VALID_BACK_MOUNTS = frozenset({"auto", "groove", "insert", "cover"})
+
 # ── 品类预设默认值 ──────────────────────────────────────────────
 # 所有品类的默认尺寸统一在此定义，AI Agent 和运行时共用。
 # 用户传入的 JSON 字段优先；缺失时从预设取值；预设缺字段时走 dataclass fallback。
@@ -103,7 +105,6 @@ class FurnitureSpec:
             "board_thickness": self.board_thickness,
             "back_thickness": self.back_thickness,
             "door_thickness": self.door_thickness,
-            "groove_depth": self.groove_depth,
         }
         for name, value in positive_fields.items():
             if value <= 0:
@@ -111,12 +112,11 @@ class FurnitureSpec:
 
         non_negative_fields = {
             "toe_kick_height": self.toe_kick_height,
-            "back_offset": self.back_offset,
             "door_margin": self.door_margin,
             "door_hinge_gap": self.door_hinge_gap,
-            "groove_clearance": self.groove_clearance,
             "toe_kick_reveal_front": self.toe_kick_reveal_front,
             "toe_kick_reveal_back": self.toe_kick_reveal_back,
+            "back_rail_height": self.back_rail_height,
         }
         for name, value in non_negative_fields.items():
             if value < 0:
@@ -129,31 +129,73 @@ class FurnitureSpec:
         if self.toe_kick_support_count is not None and self.toe_kick_support_count < 0:
             errors.append("toe_kick_support_count cannot be negative")
 
-        side_depth = self.depth - self.door_thickness - self.door_hinge_gap
+        try:
+            back_mount = resolve_back_mount(
+                self.back_mount,
+                self.back_thickness,
+                self.board_thickness,
+            )
+        except ValueError as exc:
+            errors.append(str(exc))
+            back_mount = None
+
+        carcass_y_start = self.back_thickness if back_mount == "cover" else 0.0
+        carcass_y_end = self.depth - self.door_thickness - self.door_hinge_gap
+        carcass_depth = carcass_y_end - carcass_y_start
         internal_width = self.width - 2 * self.board_thickness
         actual_toe_kick = (
             self.toe_kick_height if self.furniture_type != "wall_cabinet" else 0.0
         )
         internal_height = self.height - actual_toe_kick - 2 * self.board_thickness
-        groove_width = self.back_thickness + self.groove_clearance
-        groove_y = self.back_offset
 
-        if side_depth <= 0:
-            errors.append("depth must exceed door_thickness + door_hinge_gap")
+        if carcass_depth <= 0:
+            if back_mount == "cover":
+                errors.append(
+                    "depth must exceed back_thickness + door_thickness + "
+                    "door_hinge_gap for cover back mount"
+                )
+            else:
+                errors.append("depth must exceed door_thickness + door_hinge_gap")
         if internal_width <= 0:
             errors.append("width must exceed twice board_thickness")
         if internal_height <= 0:
             errors.append(
                 "height must exceed toe_kick_height + twice board_thickness"
             )
-        if self.groove_depth > self.board_thickness:
-            errors.append("groove_depth cannot exceed board_thickness")
-        if groove_y < 0 or groove_y + groove_width > side_depth:
-            errors.append("back groove must remain inside the cabinet side depth")
+
+        if back_mount == "groove":
+            if self.back_offset < carcass_y_start:
+                errors.append("back_offset cannot be behind the cabinet carcass")
+            if self.groove_depth <= 0:
+                errors.append("groove_depth must be greater than zero")
+            if self.groove_clearance < 0:
+                errors.append("groove_clearance cannot be negative")
+            if self.groove_depth > self.board_thickness:
+                errors.append("groove_depth cannot exceed board_thickness")
+            groove_width = self.back_thickness + self.groove_clearance
+            if (
+                self.back_offset < carcass_y_start
+                or self.back_offset + groove_width > carcass_y_end
+            ):
+                errors.append("back groove must remain inside the cabinet side depth")
+            rail_count = int(internal_height // 500) if internal_height > 0 else 0
+            if (
+                self.back_rail_height > 0
+                and rail_count > 0
+                and rail_count * self.back_rail_height > internal_height
+            ):
+                errors.append("back_rail_height leaves no positive rail spacing")
+        elif back_mount == "insert":
+            if self.back_offset < carcass_y_start:
+                errors.append("back_offset cannot be behind the cabinet carcass")
+            elif self.back_offset + self.back_thickness >= carcass_y_end:
+                errors.append(
+                    "inserted back must leave positive cabinet internal depth"
+                )
 
         if actual_toe_kick > 0:
             support_depth = (
-                side_depth
+                carcass_depth
                 - self.toe_kick_reveal_front
                 - self.toe_kick_reveal_back
                 - 2 * self.board_thickness
@@ -233,11 +275,13 @@ def resolve_back_mount(spec_back_mount: str, back_thickness: float, board_thickn
                "insert" for thick back (back_thickness >= board_thickness)
     "groove" / "insert" / "cover"  → as-is (explicit override)
     """
-    VALID = {"auto", "groove", "insert", "cover"}
-    if spec_back_mount not in VALID:
-        raise ValueError(f"back_mount must be one of: {', '.join(sorted(VALID))}")
-    if spec_back_mount != "auto":
-        return spec_back_mount
+    mode = str(spec_back_mount).strip().lower()
+    if mode not in VALID_BACK_MOUNTS:
+        raise ValueError(
+            f"back_mount must be one of: {', '.join(sorted(VALID_BACK_MOUNTS))}"
+        )
+    if mode != "auto":
+        return mode
     return "insert" if back_thickness >= board_thickness else "groove"
 
 

@@ -27,6 +27,7 @@ def build_cabinet_panels(
                 size_x=board,
                 size_y=layout.side_depth,
                 size_z=layout.height,
+                pos_y=layout.carcass_y_start,
                 material_role="carcass",
                 note=f"侧板，深{layout.side_depth:.0f}×高{layout.height:.0f}×厚{board:.0f}mm",
             ),
@@ -38,6 +39,7 @@ def build_cabinet_panels(
                 size_y=layout.side_depth,
                 size_z=layout.height,
                 pos_x=layout.width - board,
+                pos_y=layout.carcass_y_start,
                 material_role="carcass",
                 depends_on=["left_side_panel"],
                 note=f"侧板，深{layout.side_depth:.0f}×高{layout.height:.0f}×厚{board:.0f}mm",
@@ -50,6 +52,7 @@ def build_cabinet_panels(
                 size_y=layout.side_depth,
                 size_z=board,
                 pos_x=layout.internal_x_start,
+                pos_y=layout.carcass_y_start,
                 pos_z=layout.height - board,
                 material_role="carcass",
                 depends_on=["left_side_panel", "right_side_panel"],
@@ -63,6 +66,7 @@ def build_cabinet_panels(
                 size_y=layout.side_depth,
                 size_z=board,
                 pos_x=layout.internal_x_start,
+                pos_y=layout.carcass_y_start,
                 pos_z=layout.toe_kick_height,
                 material_role="carcass",
                 depends_on=["left_side_panel", "right_side_panel"],
@@ -114,7 +118,7 @@ def build_cabinet_panels(
                         size_y=board,
                         size_z=rail_h,
                         pos_x=layout.internal_x_start,
-                        pos_y=0.0,
+                        pos_y=layout.carcass_y_start,
                         pos_z=rail_z,
                         material_role="carcass",
                         depends_on=["left_side_panel", "right_side_panel"],
@@ -171,7 +175,7 @@ def build_cabinet_panels(
 
     if layout.shelf_count > 0:
         layer_height = layout.internal_height / (layout.shelf_count + 1)
-        shelf_depth = layout.side_depth - spec.back_offset - spec.back_thickness
+        shelf_depth = layout.internal_y_end - layout.internal_y_start
         for index in range(1, layout.shelf_count + 1):
             center_z = layout.internal_z_start + index * layer_height - board / 2
             panels.append(
@@ -183,7 +187,7 @@ def build_cabinet_panels(
                     size_y=shelf_depth,
                     size_z=board,
                     pos_x=layout.internal_x_start,
-                    pos_y=spec.back_offset + spec.back_thickness,
+                    pos_y=layout.internal_y_start,
                     pos_z=center_z - board / 2,
                     material_role="carcass",
                     depends_on=["left_side_panel", "right_side_panel"],
@@ -266,7 +270,7 @@ def _door_panels(
     margin = spec.door_margin
     door_width = (layout.width - margin * 2 * count) / count
     door_height = layout.height - layout.toe_kick_height - margin * 2
-    door_y = layout.side_depth + spec.door_hinge_gap
+    door_y = layout.carcass_y_end + spec.door_hinge_gap
     panels: list[PanelPlacement] = []
     for index in range(count):
         if count == 1:
