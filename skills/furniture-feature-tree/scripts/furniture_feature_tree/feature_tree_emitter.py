@@ -14,7 +14,7 @@ VALID_IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 def write_build123d_source(
     feature_tree: dict[str, Any], source_path: str | Path
 ) -> Path:
-    _validate_feature_tree(feature_tree)
+    validate_feature_tree(feature_tree)
     resolved_source = Path(source_path).resolve()
     resolved_source.parent.mkdir(parents=True, exist_ok=True)
     tree_literal = pprint.pformat(
@@ -60,7 +60,7 @@ def gen_step():
     return resolved_source
 
 
-def _validate_feature_tree(feature_tree: dict[str, Any]) -> None:
+def validate_feature_tree(feature_tree: dict[str, Any]) -> None:
     if feature_tree.get("schema_version") != 2:
         raise ValueError("Unsupported Feature Tree schema_version")
     features = feature_tree.get("features")
@@ -113,6 +113,10 @@ def _validate_feature_tree(feature_tree: dict[str, Any]) -> None:
     _validate_identifier(root_id, "root")
     if set(root.get("children", [])) != feature_ids:
         raise ValueError("Feature Tree root children must reference every feature exactly once")
+
+
+# Compatibility for callers created before validation became a public stage API.
+_validate_feature_tree = validate_feature_tree
 
 
 def _validate_identifier(value: str, kind: str) -> None:

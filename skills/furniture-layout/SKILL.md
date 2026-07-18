@@ -12,7 +12,7 @@ description: 根据已确认的家具设计意图规划空间组织、净空、�
 1. 要求当前 Revision 的 `design_intent` 已确认。
 2. 读取 [布局规则](references/layout-planning.md)，规划外包络、空间分区、净空和定位。
 3. `CabinetLayout` 解析并保留有效 `back_mount`，输出成品包络、`carcass_y_start/end`、内部净空、背板基准面、踢脚区域以及层板/门数量等空间决策。
-4. 通过 `FurnitureOrchestrator.run_next()` 生成布局阶段输出。
+4. 通过 `FurnitureOrchestrator.run_next()` 生成布局阶段输出，并由 `scripts/furniture_layout/validation.py` 校验包络、净空、背板模式和区域边界。
 5. 展示 `stage_outputs.layout_planned.layout` 并暂停；不得同时生成板件。
 
 ## 边界

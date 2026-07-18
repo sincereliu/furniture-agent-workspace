@@ -2,8 +2,8 @@
 
 此目录只保存 CAD 阶段和跨阶段应用层：
 
-- `furniture_workflow/`：唯一 Orchestrator、Project/Revision、阶段状态、产物谱系和持久化。
-- `furniture_cad/`：CAD Bridge。
+- `furniture_workflow/`：唯一 Orchestrator、Project/Revision、阶段状态、产物谱系、跨阶段产物写入和持久化。
+- `furniture_cad/`：CAD Bridge 和 CAD 结果校验。
 - `generate_furniture.py`、`server.py`：CLI/API 协议入口。
 - `runtime_paths.py`：加载七个阶段 Skill 的运行时包。
 - `tests/`、`validate_workspace_layout.py`：跨阶段集成测试和仓库布局守卫。

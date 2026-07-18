@@ -19,7 +19,7 @@ description: 根据已确认板件规划制定材料、封边、连接、五金�
 8. 非入槽背板和背拉条按仓库统一规则四边封边；入槽背板不封边。外盖螺钉、背拉条螺钉及默认孔距是软件暂定值，BOM 必须注明投产前确认。
 9. 材料厚度必须来自确认后的 `FurnitureSpec`，不得用硬编码厚度覆盖用户输入。
 10. 门板支持可选字段 `door_hinge_side`（"left"/"right"），未指定时由 `HingeConnector` 根据面板位置自动推断；铰链杯孔只生成在门板上，并从门板内侧面钻入。
-11. 通过 `FurnitureOrchestrator.run_next()` 生成制造阶段输出，展示后暂停。
+11. 通过 `FurnitureOrchestrator.run_next()` 生成制造阶段输出；`scripts/furniture_manufacturing/validation.py` 校验 BOM、加工边界、背板五金和配合孔契约，展示后暂停。
 
 ## 关键模块
 

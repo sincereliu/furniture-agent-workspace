@@ -34,7 +34,7 @@ description: 将家具工作路由到本仓库正确的本地域技能和 CAD �
 
 - 以已确认的家具意图为事实来源。
 - 七个本地技能与七个检查点一一对应，每个 Skill 拥有本阶段运行时代码；`skills/furniture-cad/scripts/furniture_workflow/` 中的 Orchestrator 是唯一应用层执行入口。
-- CLI、API 与 Agent 只是协议入口，执行顺序、意图确认、状态、验证和产物谱系统一归 `FurnitureOrchestrator`。
+- CLI、API 与 Agent 只是协议入口；执行顺序、意图确认、状态和产物谱系统一归 `FurnitureOrchestrator`。各阶段验证规则由所属 Skill 拥有，Orchestrator 只负责调用并记录验证结果。
 - 七个阶段都是用户可见的检查点。交互工作不得在同一轮越过多个未确认阶段；生成 CAD 前必须已确认设计意图、布局规划、板件规划、制造策略和特征树。
 - 可复用脚本和运行时模块放在所属阶段 Skill 的 `scripts/`；跨阶段入口与集成测试放在 `skills/furniture-cad/scripts/`；一次性脚本放在 `temp/`。
 - 禁止创建根级 `scripts/`、`packages/`、`tests/`、`scratch/` 或 `tmp/` 代码树；禁止把生成源码写入 `generated/`。

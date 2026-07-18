@@ -13,7 +13,7 @@ description: 将已确认的家具制造策略转换为可审查的特征树建�
 2. 读取 [特征树规则](references/feature-tree.md)，把制造部件转换为建模职责、依赖和操作顺序。
 3. Feature Tree v2 将板件保存为 `box` 特征，将制造加工记录保存为目标明确的 `cut_box` 操作；每个切削必须引用已存在的目标板件并完全位于其包络内。
 4. 仅 `groove` 背板的四条槽进入 `cut_box`；`insert/cover` 的连接孔和背拉条端孔保留在制造阶段的 drilled-holes 数据中，不虚构为方盒切削。
-5. 通过 `FurnitureOrchestrator.run_next()` 生成特征树阶段输出。
+5. 通过 `FurnitureOrchestrator.run_next()` 生成特征树阶段输出，由 `scripts/furniture_feature_tree/validation.py` 调用公开的 `validate_feature_tree()` 校验结构。
 6. 展示 `stage_outputs.feature_tree_planned` 并暂停；不得同时生成 CAD。
 
 ## 边界

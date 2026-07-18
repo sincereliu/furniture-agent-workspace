@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict
 
 VALID_BACK_MOUNTS = frozenset({"auto", "groove", "insert", "cover"})
+SUPPORTED_TYPES = frozenset({"floor_cabinet", "wall_cabinet"})
 
 # ── 品类预设默认值 ──────────────────────────────────────────────
 # 所有品类的默认尺寸统一在此定义，AI Agent 和运行时共用。

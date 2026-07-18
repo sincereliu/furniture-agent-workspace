@@ -6,7 +6,7 @@
 
 ## 当前能力
 
-唯一应用层入口是 `skills/furniture-cad/scripts/furniture_workflow/workflow_orchestrator.py`。它接受已确认的 `DesignIntent`，也通过 `execute_spec()` 接受 CLI/API 使用的扁平规格 JSON。各阶段实现由对应 Skill 的运行时包拥有。当前委托的领域规划器支持：
+唯一应用层入口是 `skills/furniture-cad/scripts/furniture_workflow/workflow_orchestrator.py`。它接受已确认的 `DesignIntent`，也通过 `execute_spec()` 接受 CLI/API 使用的扁平规格 JSON。字段转换、阶段实现和阶段验证规则由对应 Skill 的运行时包拥有，Orchestrator 只管理阶段生命周期并调用这些接口。当前委托的领域规划器支持：
 
 - `floor_cabinet`：固定柜体模板，包含背板、踢脚板、层板和门板。
 - `wall_cabinet`：固定柜体模板，包含背板、层板和门板，不含踢脚板。
@@ -132,7 +132,7 @@ result = orchestrator.run_next(
 
 派生的 build123d Python 源码是临时文件，只写入 `temp/cad-source/<artifact-name>/`，绝不能持久化到 `generated/`。
 
-CLI、API 与 Agent 均委托 `skills/furniture-cad/scripts/furniture_workflow/workflow_orchestrator.py`。Orchestrator 负责 Project/Revision、七阶段输出、逐阶段确认、验证、产物清单和可选 CAD 桥接。命名的一次性 CLI 运行写入 `generated/<artifact-name>/`；交互式 Project/Revision 工作流写入 `<output-root>/<project-id>/revision-<n>/`。派生 CAD 源码统一写入 `temp/cad-source/`。`skills/furniture-cad/scripts/furniture_workflow/workflow_store.py` 可将 Project/Revision、`stage_outputs` 和 `approved_stages` 持久化为 `project.json`。
+CLI、API 与 Agent 均委托 `skills/furniture-cad/scripts/furniture_workflow/workflow_orchestrator.py`。Orchestrator 负责 Project/Revision、七阶段输出、逐阶段确认、验证调用、报告记录、产物清单和可选 CAD 桥接；具体验证规则仍位于各阶段 Skill。跨阶段快照由 `workflow_artifact_writer.py` 写入。命名的一次性 CLI 运行写入 `generated/<artifact-name>/`；交互式 Project/Revision 工作流写入 `<output-root>/<project-id>/revision-<n>/`。派生 CAD 源码统一写入 `temp/cad-source/`。`skills/furniture-cad/scripts/furniture_workflow/workflow_store.py` 可将 Project/Revision、`stage_outputs` 和 `approved_stages` 持久化为 `project.json`。
 
 运行时流水线为：
 

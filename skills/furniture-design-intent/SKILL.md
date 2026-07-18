@@ -22,12 +22,13 @@ description: 将家具需求整理为可确认的设计意图。适用于讨论�
    - `toe_kick_support_count` 传递给板件阶段决定支撑板数量；
    - `back_mount` 接受 `auto/groove/insert/cover`，`auto` 的解析结果必须作为假设展示；
    - `groove_depth/groove_clearance/back_rail_height` 只约束入槽策略，下游分别负责板件和制造语义。
-5. 在确认前调用实时 `FurnitureSpec.validation_errors()`，按有效背板模式拒绝无效值、越界结构和没有净空的区域。
+5. 在确认前通过 `scripts/furniture_design_intent/validation.py` 调用实时 `FurnitureSpec.validation_errors()`，按有效背板模式拒绝无效值、越界结构和没有净空的区域。
 6. 展示 `design_intent` 阶段输出并等待确认。不得自行进入布局、板件、制造、特征树或 CAD。
 
 ## 边界
 
 - 本阶段运行时代码位于 `scripts/furniture_design_intent/`。
+- 扁平协议输入转换和本阶段校验分别由 `translation.py`、`validation.py` 拥有，Orchestrator 不重复实现字段归一化或意图规则。
 - 设计意图变化时，由 `FurnitureOrchestrator.revise()` 创建新 Revision。
 - 不在本技能中定义第二套规格、状态机或运行时入口。
 - 只问至多一个真正阻塞后续阶段的问题；其余不确定项作为显式假设返回。

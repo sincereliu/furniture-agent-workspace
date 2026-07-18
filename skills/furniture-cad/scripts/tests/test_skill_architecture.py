@@ -102,6 +102,53 @@ class SkillArchitectureTests(unittest.TestCase):
         )
         self.assertTrue((workflow_package / "workflow_orchestrator.py").is_file())
 
+    def test_stage_validation_rules_do_not_live_in_the_orchestrator(self) -> None:
+        validators = {
+            "furniture-design-intent": "furniture_design_intent/validation.py",
+            "furniture-layout": "furniture_layout/validation.py",
+            "furniture-panel-planning": "furniture_panel_planning/validation.py",
+            "furniture-manufacturing": "furniture_manufacturing/validation.py",
+            "furniture-feature-tree": "furniture_feature_tree/validation.py",
+            "furniture-cad": "furniture_cad/validation.py",
+            "furniture-delivery-validation": (
+                "furniture_delivery_validation/validation.py"
+            ),
+        }
+        for skill_name, relative_path in validators.items():
+            self.assertTrue(
+                (SKILLS_ROOT / skill_name / "scripts" / relative_path).is_file()
+            )
+
+        orchestrator = (
+            SKILLS_ROOT
+            / "furniture-cad"
+            / "scripts"
+            / "furniture_workflow"
+            / "workflow_orchestrator.py"
+        ).read_text(encoding="utf-8")
+        for forbidden_definition in (
+            "def _validate_intent(",
+            "def _validate_layout(",
+            "def _validate_panels(",
+            "def _validate_manufacturing(",
+            "def _validate_feature_tree(",
+            "def _validate_cad(",
+            "def _validate_artifacts(",
+            "def _write_artifacts(",
+        ):
+            self.assertNotIn(forbidden_definition, orchestrator)
+        self.assertIn("def _validate_stage_output(", orchestrator)
+        self.assertIn("from .workflow_artifact_writer import", orchestrator)
+
+        delivery_validation = (
+            SKILLS_ROOT
+            / "furniture-delivery-validation"
+            / "scripts"
+            / "furniture_delivery_validation"
+            / "validation.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("furniture_workflow", delivery_validation)
+
     def test_layout_does_not_own_panel_or_manufacturing_runtime(self) -> None:
         layout_package = (
             SKILLS_ROOT

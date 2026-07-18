@@ -21,6 +21,7 @@ from furniture_manufacturing.manufacturing_bom import (
     plan_manufacturing,
 )
 from furniture_panel_planning.panel_planning import plan_panels
+from furniture_panel_planning.validation import validate_panels
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from furniture_workflow.workflow_state import WorkflowStage
 
@@ -295,14 +296,11 @@ class BackMountModeTests(unittest.TestCase):
             )
 
     def test_panel_validation_rejects_cover_overlap(self) -> None:
-        orchestrator = FurnitureOrchestrator(workspace_root=WORKSPACE_ROOT)
         spec = self._spec("cover")
         layout = plan_layout(spec)
         placements = plan_panels(spec, layout)
 
-        self.assertTrue(
-            orchestrator._validate_panels(spec, layout, placements).passed
-        )
+        self.assertTrue(validate_panels(spec, layout, placements).passed)
 
         overlapping = [
             replace(panel, pos_y=0.0)
@@ -310,7 +308,7 @@ class BackMountModeTests(unittest.TestCase):
             else panel
             for panel in placements
         ]
-        report = orchestrator._validate_panels(spec, layout, overlapping)
+        report = validate_panels(spec, layout, overlapping)
         issue_codes = {issue.code for issue in report.issues}
 
         self.assertFalse(report.passed)

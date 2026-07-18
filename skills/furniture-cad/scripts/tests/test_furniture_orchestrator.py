@@ -18,6 +18,7 @@ from runtime_paths import bootstrap_runtime_paths
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 from furniture_cad.cad_bridge import CadBridge
+from furniture_delivery_validation.validation import validate_delivery
 from furniture_design_intent.design_intent import DesignIntent, OverallSize
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from furniture_workflow.workflow_state import STAGE_SEQUENCE, WorkflowStage
@@ -189,6 +190,10 @@ class FurnitureOrchestratorTests(unittest.TestCase):
                     [stage.value for stage in STAGE_SEQUENCE],
                 )
                 self.assertTrue(all(report.passed for report in result.revision.validations))
+                self.assertEqual(
+                    [report.stage for report in result.revision.validations],
+                    [stage.value for stage in STAGE_SEQUENCE],
+                )
                 artifact_kinds = {
                     artifact.kind for artifact in result.revision.manifest.artifacts
                 }
@@ -210,6 +215,25 @@ class FurnitureOrchestratorTests(unittest.TestCase):
                 )
                 self.assertIsNotNone(result.pipeline)
                 self.assertEqual(result.bridge.status, "ok")
+
+                design_artifact = next(
+                    artifact
+                    for artifact in result.revision.manifest.artifacts
+                    if artifact.kind == "design_intent"
+                )
+                Path(design_artifact.path).write_text(
+                    '{"tampered": true}',
+                    encoding="utf-8",
+                )
+                tampered_report = validate_delivery(
+                    result.revision.manifest,
+                    source_revision_id=result.revision.id,
+                )
+                self.assertFalse(tampered_report.passed)
+                self.assertIn(
+                    "ARTIFACT_HASH_MISMATCH",
+                    {issue.code for issue in tampered_report.issues},
+                )
         finally:
             shutil.rmtree(source_dir, ignore_errors=True)
 

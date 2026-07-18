@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-from furniture_design_intent.design_spec import FurnitureSpec
+from furniture_design_intent.design_spec import FurnitureSpec, SUPPORTED_TYPES
 
 from .layout_planning import CabinetLayout
-
-
-SUPPORTED_TYPES = {"floor_cabinet", "wall_cabinet"}
 
 
 def plan_layout(spec: FurnitureSpec) -> CabinetLayout:
