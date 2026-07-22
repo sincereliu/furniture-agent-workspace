@@ -7,7 +7,11 @@ from pathlib import Path
 import re
 
 from furniture_feature_tree.feature_tree_emitter import write_build123d_source
-from furniture_manufacturing.drilled_holes_glb import export_drilled_holes_glb
+from furniture_manufacturing.drilled_holes_glb import (
+    export_drilled_holes_glb,
+    export_drilled_holes_step,
+)
+from furniture_manufacturing.export_six_side_drill import drill_json_to_xml_files
 from furniture_manufacturing.manufacturing_bom import (
     emit_drilled_holes,
     format_bom_markdown,
@@ -116,15 +120,21 @@ def write_artifacts(
     if artifact_name:
         drilled_json_path = artifact_dir / f"{artifact_name}.drilled-holes.json"
         drilled_glb_path = artifact_dir / f"{artifact_name}.drilled-holes.glb"
+        drilled_step_path = artifact_dir / f"{artifact_name}.drilled-holes.step"
     else:
         drilled_json_path = artifact_dir / "drilled-holes.json"
         drilled_glb_path = artifact_dir / "drilled-holes.glb"
+        drilled_step_path = artifact_dir / "drilled-holes.step"
     drilled_data = emit_drilled_holes(pipeline.bom)
     drilled_json_path.write_text(
         json.dumps(drilled_data, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
     export_drilled_holes_glb(drilled_data, drilled_glb_path)
+    export_drilled_holes_step(drilled_data, drilled_step_path)
+    # 导出柜柜六面钻 XML 文件
+    drilled_xml_dir = artifact_dir / "六面钻文件"
+    drill_json_to_xml_files(drilled_json_path, drilled_xml_dir)
 
     revision.manifest.add_file("design_intent", intent_path)
     revision.manifest.add_file("layout_plan", layout_path)
@@ -142,5 +152,6 @@ def write_artifacts(
     )
     revision.manifest.add_file("drilled_holes", drilled_json_path)
     revision.manifest.add_file("drilled_holes_glb", drilled_glb_path, derived=True)
+    revision.manifest.add_file("drilled_holes_step", drilled_step_path, derived=True)
     revision.manifest.add_file("cad_source", source_path, derived=True)
     return source_path, step_path
