@@ -1,7 +1,7 @@
-"""Versioned user intent for a furniture project.
+"""家具项目的版本化用户意图。
 
-DesignIntent records what should be built.  It deliberately contains no panel
-placements, manufacturing operations, CAD primitives, or artifact paths.
+DesignIntent 记录应该建造什么。刻意不包含板件放置、制造加工、
+CAD 图元或产物路径。
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ from typing import Any
 
 @dataclass(frozen=True)
 class OverallSize:
+    """整体尺寸（草稿可空）。"""
     width_mm: float | None
     depth_mm: float | None
     height_mm: float | None
@@ -32,7 +33,7 @@ class OverallSize:
 
 @dataclass(frozen=True)
 class DesignIntent:
-    """Confirmed or draft source of truth for one project revision."""
+    """一个项目版本的已确认或草稿事实来源。"""
 
     furniture_type: str
     overall_size: OverallSize

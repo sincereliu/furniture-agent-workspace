@@ -1,1 +1,1 @@
-"""Design-intent stage runtime."""
+"""设计意图阶段运行时模块。"""

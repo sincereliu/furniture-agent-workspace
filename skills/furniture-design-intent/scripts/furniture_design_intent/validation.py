@@ -1,4 +1,4 @@
-"""Validation owned by the design-intent stage."""
+"""设计意图阶段的验证逻辑。"""
 
 from __future__ import annotations
 

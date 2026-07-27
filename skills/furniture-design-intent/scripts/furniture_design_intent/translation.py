@@ -1,4 +1,4 @@
-"""Translate between protocol-shaped input and the confirmed design contract."""
+"""在协议层输入与已确认的设计合约之间进行转换。"""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from .design_spec import FurnitureSpec
 
 
 def intent_from_spec(spec: dict[str, Any]) -> DesignIntent:
-    """Convert the maintained flat executable JSON into a DesignIntent."""
+    """将标准化的扁平可执行 JSON 转换为 DesignIntent。"""
     data = dict(spec)
     furniture_type = str(
         data.get("type", data.get("furniture_type", ""))
@@ -78,7 +78,7 @@ def intent_from_spec(spec: dict[str, Any]) -> DesignIntent:
 
 
 def spec_from_intent(intent: DesignIntent) -> FurnitureSpec:
-    """Build the executable specification from one confirmed design intent."""
+    """从已确认的设计意图构建可执行规格。"""
     dimensions = (
         intent.overall_size.width_mm,
         intent.overall_size.depth_mm,

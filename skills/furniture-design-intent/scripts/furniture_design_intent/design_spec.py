@@ -81,7 +81,7 @@ class FurnitureSpec:
     toe_kick_support_count: int | None = None
     back_mount: str = "auto"
     back_rail_height: float = 70.0
-    # 五金偏好 (Phase 2)
+    # 五金偏好（第二阶段）
     hinge_brand: str = ""           # 铰链品牌 ""=默认, "Blum", "DTC" 等
     hinge_variant: str = ""         # 铰链规格组 ""=自动, "进口35mm杯全盖" 等
     hinge_overlay: str = "full"     # 盖法: full=全盖, half=半盖, inset=内嵌
@@ -97,7 +97,7 @@ class FurnitureSpec:
         )
 
     def validation_errors(self) -> list[str]:
-        """Validate the executable cabinet contract before stage execution."""
+        """在阶段执行前校验可执行的柜体合约。"""
         errors: list[str] = []
         positive_fields = {
             "width": self.width,
@@ -270,11 +270,11 @@ def _optional_int(value: Any) -> int | None:
 
 
 def resolve_back_mount(spec_back_mount: str, back_thickness: float, board_thickness: float) -> str:
-    """Derive the effective back mount mode.
+    """推导有效的背板安装模式。
 
-    "auto"  → "groove" for thin back (back_thickness < board_thickness)
-               "insert" for thick back (back_thickness >= board_thickness)
-    "groove" / "insert" / "cover"  → as-is (explicit override)
+    "auto"  → 薄背板 (back_thickness < board_thickness) 时使用 "groove"（槽装）
+               厚背板 (back_thickness >= board_thickness) 时使用 "insert"（内嵌）
+    "groove" / "insert" / "cover"  → 保持原值（显式覆盖）
     """
     mode = str(spec_back_mount).strip().lower()
     if mode not in VALID_BACK_MOUNTS:
@@ -287,7 +287,7 @@ def resolve_back_mount(spec_back_mount: str, back_thickness: float, board_thickn
 
 
 def resolve_toe_kick_support_count(explicit: int | None, width: float) -> int:
-    """Resolve the maintained project default for toe-kick supports."""
+    """解析踢脚线支撑块数量的项目默认值。"""
     if explicit is not None:
         return explicit
     if width < 600:
