@@ -29,6 +29,9 @@ class PanelRecord:
     door_hinge_side: str | None = None
     door_overlay: str | None = None
     back_mount: str = ""
+    inner_face: str = ""
+    outer_face: str = ""
+    cam_face: str | None = None
 
     @property
     def area_m2(self) -> float:

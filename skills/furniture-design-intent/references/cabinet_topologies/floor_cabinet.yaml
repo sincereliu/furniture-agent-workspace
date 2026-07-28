@@ -1,0 +1,54 @@
+# 落地柜拓扑 — 标准落地柜/储物柜的柜体结构定义
+# 拓扑数据不包含任何坐标信息；坐标由 CabinetFrame + 空间求解器计算。
+
+name: 落地柜
+description: "标准落地柜（储物柜/底柜），前开门，背面靠墙，底部踢脚"
+frame:
+  front: "+y"
+  top: "+z"
+
+enclosure:
+  left_side:
+    type: panel
+    semantic_face: left
+    material: carcass
+  right_side:
+    type: panel
+    semantic_face: right
+    material: carcass
+  top:
+    type: panel
+    semantic_face: top
+    material: carcass
+    cam_face: bottom      # 偏心轮从底板方向操作
+  bottom:
+    type: panel
+    semantic_face: bottom
+    material: carcass
+    cam_face: bottom      # 偏心轮从底板方向操作
+  back:
+    type: back_panel
+    semantic_face: back
+    material: back
+    mount_modes: [groove, insert, cover]
+  front:
+    type: opening
+    semantic_face: front
+    subtypes: [doors]
+
+base:
+  type: toe_kick
+  height_field: toe_kick_height
+  faces: [front, back]
+  rear_offset_field: toe_kick_reveal_back
+  front_offset_field: toe_kick_reveal_front
+  support_count_field: toe_kick_support_count
+
+internals:
+  shelves:
+    type: fixed
+    orientation: horizontal
+    count_field: shelf_count
+    divides: [top, bottom]
+    snap: system_32
+  dividers: []

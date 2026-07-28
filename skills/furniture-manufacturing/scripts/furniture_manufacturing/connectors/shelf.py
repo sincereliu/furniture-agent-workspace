@@ -1,4 +1,13 @@
-"""Shelf connector -- pin holes on side panels for movable shelves."""
+"""Shelf connector — 活动层板连接件。
+
+层板托孔打在**侧板内侧面**，这是受力支撑点。
+层板本身只可选出小定位孔（暂未实现）。
+减尺间隙由层板托支撑面自动补偿。
+
+对于当前代码中 movable_shelf 未实际生成的情况，此连接件
+暂时留在活动层板面板规划加入后再启用全量逻辑。
+"""
+
 from typing import Any, Dict, List
 from furniture_manufacturing.connectors.base import Connector, HoleSpec
 from furniture_manufacturing.manufacturing_models import HardwareRecord, MachiningOperation, PanelRecord
@@ -16,19 +25,76 @@ class ShelfConnector(Connector):
         return {"shelves": movable, "sides": sides}
 
     def generate_holes(self, panel: PanelRecord) -> List[HoleSpec]:
+        """No single-panel holes — connector needs both shelf and side panels."""
+        return []
+
+    def generate_holes_for_panels(
+        self,
+        panels: List[PanelRecord],
+    ) -> List[HoleSpec]:
+        """Generate shelf-connector holes on side panel inner faces.
+
+        For each movable shelf, put paired holes on the left and right side
+        panels at the shelf's Z position.
+        """
         result: List[HoleSpec] = []
-        if panel.panel_type != "movable_shelf":
+        sides = [p for p in panels if p.panel_type == "side"]
+        shelves = [p for p in panels if p.panel_type == "movable_shelf"]
+        if not sides or not shelves:
             return result
-        positions = self._shelf_positions(panel.drill_length)
-        y_local = panel.size_y - 32
-        for x_local in positions:
-            result.append(HoleSpec(
-                hole_type="shelf_connector", panel_label=panel.label,
-                x_global=panel.pos_x + x_local,
-                y_global=panel.pos_y + y_local,
-                z_global=panel.pos_z + panel.size_z / 2,
-                x_local=x_local, y_local=y_local, z_local=panel.size_z / 2,
-                diameter=10.0, depth=12.0, direction="-x", note="层板托孔"))
+
+        for shelf in shelves:
+            x_positions = self._shelf_positions(shelf.drill_length)
+            for side in sides:
+                inner = side.inner_face or ""
+                # Determine the X position on the side panel's inner face
+                # and the drilling direction (into the side panel from its inner face)
+                nut_dir = _opposite(inner) if inner else "-x"
+
+                # Hole's local Z on the side panel = shelf's Z position relative to
+                # side panel's origin.  For standard vertical cabinets, shelf Z
+                # is roughly at mid-height of the shelf.
+                # We drill pairs at the front and back of the shelf depth.
+                shelf_z_centers = [shelf.pos_z + shelf.size_z / 2]  # one row for now
+
+                for z_center in shelf_z_centers:
+                    z_local_on_side = z_center - side.pos_z
+                    # Y position: near the front edge of the side panel
+                    y_local_on_side = side.size_y - 32  # 32mm from front
+
+                    for x_local_shelf in x_positions:
+                        # Map shelf-local X to side-panel-local Y or X
+                        # depending on inner_face direction
+                        # Standard cabinet: left side inner_face="+x", right side inner_face="-x"
+                        # We map the shelf's X position to the side panel's Y (depth) position
+                        y_local_on_side = side.size_y - x_local_shelf
+
+                        if inner == "+x":
+                            # left side: inner face = right face = pos_x + size_x
+                            x_global = side.pos_x + side.size_x
+                            x_local = side.size_x
+                        elif inner == "-x":
+                            # right side: inner face = left face = pos_x
+                            x_global = side.pos_x
+                            x_local = 0.0
+                        else:
+                            # fallback for legacy
+                            x_global = side.pos_x + side.size_x
+                            x_local = side.size_x
+
+                        result.append(HoleSpec(
+                            hole_type="shelf_connector",
+                            panel_label=side.label,
+                            x_global=x_global,
+                            y_global=side.pos_y + y_local_on_side,
+                            z_global=side.pos_z + z_local_on_side,
+                            x_local=x_local,
+                            y_local=y_local_on_side,
+                            z_local=z_local_on_side,
+                            diameter=10.0, depth=12.0,
+                            direction=nut_dir,
+                            note=f"层板托孔(对应{shelf.name})",
+                        ))
         return result
 
     def _shelf_positions(self, length: float) -> List[float]:
@@ -48,8 +114,9 @@ class ShelfConnector(Connector):
     def boms(self, panels: List[PanelRecord]) -> List[HardwareRecord]:
         entry = self.catalog.get(self.catalog_entry, {}).get("二合一", {})
         brand = (entry.get("brands", [{}]) or [{}])[0]
+        shelves = [p for p in panels if p.panel_type == "movable_shelf"]
         total = sum(len(self._shelf_positions(p.drill_length)) * 2
-                    for p in panels if p.panel_type == "movable_shelf")
+                    for p in shelves)
         return [HardwareRecord(
             name="二合一连接件",
             spec=f"{brand['name']} {brand['model']}",
@@ -57,13 +124,14 @@ class ShelfConnector(Connector):
             brand=brand.get("name", "默认"), model=brand.get("model", "EYJ-01"))]
 
     def machining_operations(self, panel: PanelRecord) -> List[MachiningOperation]:
-        ops: List[MachiningOperation] = []
-        for hole in self.generate_holes(panel):
-            ops.append(MachiningOperation(
-                id=f"shelf_hole_{panel.label}_{hole.x_local:.0f}",
-                operation_type="cut_box", target_panel=panel.label,
-                size_x=10.0, size_y=12.0, size_z=10.0,
-                pos_x=hole.x_global - 5.0, pos_y=hole.y_global,
-                pos_z=hole.z_global - 5.0,
-                note="层板托孔 φ10"))
-        return ops
+        # Shelf connector holes are round holes on side panels —
+        # no box-cut operations needed.  The feature tree handles them
+        # through HoleSpec from generate_holes_for_panels().
+        return []
+
+
+def _opposite(axis: str) -> str:
+    """Reverse a signed axis: "+x"→"-x", "-y"→"+y"."""
+    if not axis or axis[0] not in ("+", "-"):
+        return "-x"
+    return f"{'+' if axis[0] == '-' else '-'}{axis[1]}"

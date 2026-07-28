@@ -25,3 +25,6 @@ class PanelPlacement:
     note: str = ""
     door_hinge_side: str | None = None   # "left" / "right", only for door panels
     door_overlay: str | None = None      # "full" / "half" / "inset", only for door panels
+    inner_face: str = ""                 # panel face pointing toward cabinet interior
+    outer_face: str = ""                 # panel face pointing toward cabinet exterior
+    cam_face: str | None = None          # eccentric wheel accessible face, e.g. "-z"

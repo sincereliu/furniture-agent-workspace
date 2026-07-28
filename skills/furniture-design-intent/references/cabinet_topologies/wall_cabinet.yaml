@@ -1,0 +1,48 @@
+# 吊柜拓扑 — 壁挂式吊柜的柜体结构定义
+
+name: 吊柜
+description: "壁挂式吊柜，前开门，无踢脚，挂墙安装"
+frame:
+  front: "+y"
+  top: "+z"
+
+enclosure:
+  left_side:
+    type: panel
+    semantic_face: left
+    material: carcass
+  right_side:
+    type: panel
+    semantic_face: right
+    material: carcass
+  top:
+    type: panel
+    semantic_face: top
+    material: carcass
+    cam_face: bottom
+  bottom:
+    type: panel
+    semantic_face: bottom
+    material: carcass
+    cam_face: bottom
+  back:
+    type: back_panel
+    semantic_face: back
+    material: back
+    mount_modes: [groove, insert, cover]
+  front:
+    type: opening
+    semantic_face: front
+    subtypes: [doors]
+
+base:
+  type: none   # 吊柜无踢脚
+
+internals:
+  shelves:
+    type: fixed
+    orientation: horizontal
+    count_field: shelf_count
+    divides: [top, bottom]
+    snap: system_32
+  dividers: []

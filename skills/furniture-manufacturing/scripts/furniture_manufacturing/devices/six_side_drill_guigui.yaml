@@ -3,27 +3,27 @@
 # 恒等规则: PanelLength ≡ W (X轴方向), PanelWidth ≡ L (Y轴方向)
 
 panel_placement:
-  side:           # 侧板/立板/隔板/踢脚支撑 — 板面 X-Z
-    length_from_box: y    # PanelLength (X) ← box.y (深度)
-    width_from_box: z     # PanelWidth  (Y) ← box.z (高度)
+  side:           # 侧板/立板/隔板/踢脚支撑 — 板面 Y-Z (厚度方向=X)
+    length_from_box: y    # PanelLength (X轴) ← box.y (深度), 孔在深度方向的位置
+    width_from_box: z     # PanelWidth  (Y轴) ← box.z (高度), 孔在高度方向的位置
     x1_from_hole: local_y
     y1_from_hole: local_z
-  door:           # 门板 — 板面 X-Z (Y=厚度)
-    length_from_box: z    # PanelLength (X) ← box.z (门高)
-    width_from_box: x     # PanelWidth  (Y) ← box.x (门宽)
+  door:           # 门板 — 板面 X-Z (厚度方向=Y)
+    length_from_box: z    # PanelLength (X轴) ← box.z (门高 = 高度方向)
+    width_from_box: x     # PanelWidth  (Y轴) ← box.x (门宽 = 宽度方向)
     x1_from_hole: local_z
     y1_from_hole: local_x
-  horizontal:     # 顶板/底板/层板 — 板面 X-Y
-    length_from_box: y    # PanelLength (X) ← box.y (深度)
-    width_from_box: x     # PanelWidth  (Y) ← box.x (宽度)
+  horizontal:     # 顶板/底板/层板 — 板面 X-Y (厚度方向=Z)
+    length_from_box: y    # PanelLength (X轴) ← box.y (深度方向)
+    width_from_box: x     # PanelWidth  (Y轴) ← box.x (宽度方向)
     x1_from_hole: local_y
     y1_from_hole: local_x
-  toe_kick:       # 踢脚板 — 板面 X-Z (Y=厚度)
-    length_from_box: x    # PanelLength (X) ← box.x (宽度)
-    width_from_box: z     # PanelWidth  (Y) ← box.z (高度)
+  toe_kick:       # 踢脚板 — 板面 X-Z (厚度方向=Y)
+    length_from_box: x    # PanelLength (X轴) ← box.x (宽度方向)
+    width_from_box: z     # PanelWidth  (Y轴) ← box.z (高度方向)
     x1_from_hole: local_x
     y1_from_hole: local_z
-  default:        # 背板/背拉条等 — 板面 X-Z
+  default:        # 背板/背拉条等 — 板面 X-Z (厚度方向=Y)
     length_from_box: x
     width_from_box: z
     x1_from_hole: local_x

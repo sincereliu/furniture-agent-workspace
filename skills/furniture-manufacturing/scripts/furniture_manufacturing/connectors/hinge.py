@@ -1,4 +1,9 @@
-"""铰链连接件 — 门板杯孔打孔。"""
+"""铰链连接件 — 门板杯孔打孔。
+
+铰链杯孔从门板内侧面钻入。内侧面方向由 panel.inner_face 提供，
+不再硬编码 "+y"。
+"""
+
 from typing import Any, Dict, List
 from furniture_manufacturing.connectors.base import Connector, HoleSpec
 from furniture_manufacturing.manufacturing_models import HardwareRecord, MachiningOperation, PanelRecord
@@ -20,7 +25,10 @@ class HingeConnector(Connector):
         return {"doors": doors, "rules": rules, "catalog": catalog}
 
     def generate_holes(self, panel: PanelRecord) -> List[HoleSpec]:
-        """在一块门板上生成铰链杯孔。"""
+        """在一块门板上生成铰链杯孔。
+
+        杯孔沿门板高度方向分布，从 inner_face 方向钻入。
+        """
         result: List[HoleSpec] = []
         if panel.panel_type != "door":
             return result
@@ -29,6 +37,7 @@ class HingeConnector(Connector):
         positions = self._distribute(panel.size_z, count, top_offset, bottom_offset)
         edge_offset = float(rules.get("position", {}).get("edge_offset_mm", 5))
         cup_params = self._cup_params(rules)
+        inner = panel.inner_face or "+y"  # default for backward compat
 
         # 铰链侧：优先使用显式字段，否则根据 X 位置推断
         hinge_side = panel.door_hinge_side
@@ -41,22 +50,90 @@ class HingeConnector(Connector):
         else:
             x_local = panel.size_x - edge_offset  # 兜底：X 位置靠右 → 右铰链
 
+        # Drill direction = inner_face (cup drilled from inner face into the door)
+        cup_dir = inner
+
         for y_local in positions:
-            result.append(HoleSpec(
-                hole_type="hinge",
-                panel_label=panel.label,
-                x_global=panel.pos_x + x_local,
-                y_global=panel.pos_y,
-                z_global=panel.pos_z + y_local,
+            hole = self._make_hole(
+                panel=panel,
                 x_local=x_local,
                 y_local=0.0,
                 z_local=y_local,
                 diameter=float(cup_params.get("cup_diameter_mm", 35)),
                 depth=float(cup_params.get("cup_depth_mm", 13)),
-                direction="+y",
-                note="从门板内侧面钻入的铰链杯孔"))
+                direction=cup_dir,
+                note="从门板内侧面钻入的铰链杯孔",
+            )
+            result.append(hole)
 
         return result
+
+    def _make_hole(
+        self,
+        panel: PanelRecord,
+        x_local: float,
+        y_local: float,
+        z_local: float,
+        diameter: float,
+        depth: float,
+        direction: str,
+        note: str,
+    ) -> HoleSpec:
+        """Create a HoleSpec with correct global coordinates for the inner face."""
+        inner = panel.inner_face or "+y"
+
+        # Determine which axis is the inner face axis
+        # inner_face is one of: "+x", "-x", "+y", "-y", "+z", "-z"
+        if inner[1] == "x":
+            if inner[0] == "+":
+                x_global = panel.pos_x + panel.size_x  # inner at right face
+            else:
+                x_global = panel.pos_x                  # inner at left face
+            y_global = panel.pos_y + y_local
+            z_global = panel.pos_z + z_local
+            hole_x_local = panel.size_x if inner[0] == "+" else 0.0
+            hole_y_local = y_local
+            hole_z_local = z_local
+        elif inner[1] == "y":
+            # Door panels: inner_face = "-y" (inner face is the front face)
+            # or "+y" for back panels
+            x_global = panel.pos_x + x_local
+            if inner[0] == "+":
+                y_global = panel.pos_y + panel.size_y  # inner at front
+                hole_y_local = panel.size_y
+            else:
+                y_global = panel.pos_y                  # inner at back
+                hole_y_local = 0.0
+            z_global = panel.pos_z + z_local
+            hole_x_local = x_local
+            hole_z_local = z_local
+        else:
+            # "+z" or "-z"
+            x_global = panel.pos_x + x_local
+            y_global = panel.pos_y + y_local
+            if inner[0] == "+":
+                z_global = panel.pos_z + panel.size_z
+                hole_z_local = panel.size_z
+            else:
+                z_global = panel.pos_z
+                hole_z_local = 0.0
+            hole_x_local = x_local
+            hole_y_local = y_local
+
+        return HoleSpec(
+            hole_type="hinge",
+            panel_label=panel.label,
+            x_global=x_global,
+            y_global=y_global,
+            z_global=z_global,
+            x_local=hole_x_local,
+            y_local=hole_y_local,
+            z_local=hole_z_local,
+            diameter=diameter,
+            depth=depth,
+            direction=direction,
+            note=note,
+        )
 
     def _hinge_count(self, door_h: float, rules: Dict[str, Any]) -> tuple:
         """根据门板高度确定铰链数量和上下边距。"""
