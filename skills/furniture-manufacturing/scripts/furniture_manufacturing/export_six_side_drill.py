@@ -9,9 +9,51 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any
+
+import yaml
 from xml.dom import minidom
 from xml.etree import ElementTree as ET
 
+
+# ---------------------------------------------------------------------------
+# 设备配置
+# ---------------------------------------------------------------------------
+
+def _load_device_config() -> dict[str, Any]:
+    """加载 six_side_drill_guigui.yaml 中的 panel_placement 映射。"""
+    p = Path(__file__).resolve().parent / "devices" / "six_side_drill_guigui.yaml"
+    with open(p, encoding="utf-8") as f:
+        cfg = yaml.safe_load(f) or {}
+    return cfg.get("panel_placement", {})
+
+
+def _resolve_placement(
+    panel_type: str,
+) -> dict[str, str]:
+    """根据 panel_type 返回对应的 placement 规则。
+
+    未匹配到具体类型时回退到 default。
+    """
+    placement = _load_device_config()
+    if panel_type in ("divider",):
+        panel_type = "side"
+    if panel_type in ("top", "bottom", "fixed_shelf", "movable_shelf"):
+        panel_type = "horizontal"
+    return placement.get(panel_type, placement.get("default", {}))
+
+
+def _box_value(box: dict[str, Any], key: str) -> float:
+    return float(box.get(key, 0))
+
+
+def _hole_value(hole: dict[str, Any], local_key: str, global_key: str) -> float:
+    """优先取 local_*，回退到全局坐标。"""
+    return float(hole.get(local_key, hole.get(global_key, 0)))
+
+
+# ---------------------------------------------------------------------------
+# 主入口
+# ---------------------------------------------------------------------------
 
 def drill_json_to_xml_files(
     json_path: str | Path,
@@ -37,68 +79,27 @@ def drill_json_to_xml_files(
         panel_name = panel.get("name", panel.get("label", "unknown"))
         plank_num = panel.get("label", "unknown")
 
-        # 板件尺寸 (从 box 获取，由 pos+size 推算)
+        # 板件尺寸 (从 box 获取)
         box = panel.get("box", {})
-        sx = float(box.get("x", 0))
-        sy = float(box.get("y", 0))
-        sz = float(box.get("z", 0))
 
-        # 判断竖板/横板：竖板 Z 是高度 (面板面 = X-Z)，横板 Z 小(面板面 = X-Y)
-        # 但 XML 坐标系中竖直孔在 X=宽方向, Y=长方向
-        # guigui3 的 Length = 长(L) = 高度方向，Width = 宽(W) = 宽度方向
-        # 我们的 drilled-holes JSON 坐标约定：
-        #   - 侧板: size_x=18 (厚), size_y=深度, size_z=高度 → L=z=height, W=y=depth
-        #   - 横板: size_x=宽度, size_y=深度, size_z=18 (厚) → L=x=width, W=y=depth
+        # 类型推断
+        panel_type = _infer_panel_type(panel)
 
-        panel_type = panel.get("panel_type", "")
-        label = panel.get("label", "")
+        # 设备配置映射
+        placement = _resolve_placement(panel_type)
 
-        # panel_type 通常不在 drilled-holes JSON 中，从 label 或 name 推断
-        if not panel_type:
-            name = panel.get("name", "").lower()
-            if "侧板" in name or "立板" in name or "隔板" in name:
-                panel_type = "side"
-            elif "顶板" in name:
-                panel_type = "top"
-            elif "底板" in name:
-                panel_type = "bottom"
-            elif "层板" in name:
-                panel_type = "fixed_shelf"
-            elif "门板" in name or "门" in name:
-                panel_type = "door"
-            elif "背板" in name:
-                panel_type = "back"
-            elif "踢脚" in name:
-                panel_type = "toe_kick"
-            elif "拉条" in name:
-                panel_type = "back_rail"
+        length = _box_value(box, placement.get("length_from_box", "x"))
+        width_2d = _box_value(box, placement.get("width_from_box", "z"))
 
-        if panel_type in ("side", "divider"):
-            # 竖板：孔在侧板内侧面 (X-Z 平面)
-            # guigui3 XML: Length=高度方向(Z), Width=深度方向(Y), Thickness=厚度(X)
-            length = sz
-            width_2d = sy
-            thickness = sx
-            map_fn = _side_panel_mapping
-        elif panel_type == "door":
-            # 门板同竖板（门板 Y=厚度）
-            length = sz
-            width_2d = sx
-            thickness = sy
-            map_fn = _side_panel_mapping
-        elif panel_type in ("top", "bottom", "fixed_shelf", "movable_shelf"):
-            # 横板：孔在顶/底面 (X-Y 平面)
-            # guigui3 XML: Length=宽度方向(X), Width=深度方向(Y), Thickness=厚度(Z)
-            length = sx
-            width_2d = sy
-            thickness = sz
-            map_fn = _top_panel_mapping
-        else:
-            # 背板/背拉条/踢脚等默认处理
-            length = sx
-            width_2d = sy
-            thickness = sz
-            map_fn = _top_panel_mapping
+        # 厚度 = 第三个维度（未被 length/width 使用的 box 轴）
+        used_axes = {placement.get("length_from_box", "x"), placement.get("width_from_box", "z")}
+        all_axes = {"x", "y", "z"}
+        thickness_axis = (all_axes - used_axes).pop()
+        thickness = _box_value(box, thickness_axis)
+
+        # X1/Y1 映射键
+        x1_key = placement.get("x1_from_hole", "local_x")
+        y1_key = placement.get("y1_from_hole", "local_y")
 
         panel_xml = _make_panel_xml(
             name=panel_name,
@@ -107,7 +108,8 @@ def drill_json_to_xml_files(
             thickness=thickness,
             holes=panel.get("holes", []),
             slots=panel.get("slots", []),
-            map_fn=map_fn,
+            x1_key=x1_key,
+            y1_key=y1_key,
         )
 
         file_path = out_dir / f"{plank_num}.xml"
@@ -117,19 +119,69 @@ def drill_json_to_xml_files(
     return paths
 
 
-def _side_panel_mapping(hole: dict[str, Any]) -> tuple[float, float] | None:
-    """侧板/门板：hole.z → XML X (板长/高度方向)，hole.y → XML Y (板宽/深度方向)。"""
-    z = float(hole.get("z", 0))
-    y = float(hole.get("y", 0))
-    return (z, y)
+# ---------------------------------------------------------------------------
+# 面板类型推断
+# ---------------------------------------------------------------------------
+
+def _infer_panel_type(panel: dict[str, Any]) -> str:
+    """从 panel name/label 推断面板类型。"""
+    panel_type = panel.get("panel_type", "")
+    if panel_type:
+        return panel_type
+    name = panel.get("name", "").lower()
+    if "侧板" in name or "立板" in name or "隔板" in name:
+        return "side"
+    elif "顶板" in name:
+        return "top"
+    elif "底板" in name:
+        return "bottom"
+    elif "层板" in name:
+        return "fixed_shelf"
+    elif "门板" in name or "门" in name:
+        return "door"
+    elif "背板" in name:
+        return "back"
+    elif "踢脚" in name and "支撑" in name:
+        return "side"
+    elif "踢脚" in name:
+        return "toe_kick"
+    elif "拉条" in name:
+        return "back_rail"
+    return "default"
 
 
-def _top_panel_mapping(hole: dict[str, Any]) -> tuple[float, float] | None:
-    """横板：hole.x → XML X (按板长宽度方向)，hole.y → XML Y (板宽方向)。"""
-    x = float(hole.get("x", 0))
-    y = float(hole.get("y", 0))
-    return (x, y)
+# ---------------------------------------------------------------------------
+# 辅助函数
+# ---------------------------------------------------------------------------
 
+def _quadrant(direction: str) -> str:
+    """根据钻孔方向返回柜柜 Quadrant（1-4）。"""
+    return {"+x": "1", "-x": "2", "+y": "3", "-y": "4"}.get(direction, "1")
+
+
+def _z1_for_direction(
+    direction: str,
+    hole: dict[str, Any],
+) -> float:
+    """计算水平孔在板厚方向的 Z1 坐标。"""
+    if direction in ("+x", "-x"):
+        return float(hole.get("local_z", 0))
+    elif direction in ("+y", "-y"):
+        return float(hole.get("local_x", 0))
+    return 0.0
+
+
+def _flush_xml(text: str) -> str:
+    """移除 XML 声明行，与柜柜输出格式一致。"""
+    lines = text.splitlines(keepends=True)
+    if lines and lines[0].startswith("<?xml"):
+        return "".join(lines[1:])
+    return text
+
+
+# ---------------------------------------------------------------------------
+# XML 构造
+# ---------------------------------------------------------------------------
 
 def _make_panel_xml(
     name: str,
@@ -138,9 +190,15 @@ def _make_panel_xml(
     thickness: float,
     holes: list[dict[str, Any]],
     slots: list[dict[str, Any]],
-    map_fn,
+    x1_key: str,
+    y1_key: str,
 ) -> str:
-    """构造一块板件的 KDTPanelFormat XML 字符串。"""
+    """构造一块板件的 KDTPanelFormat XML 字符串。
+
+    length  / width_2d = PanelLength / PanelWidth（机器 X/Y 轴方向尺寸）
+    thickness          = PanelThickness
+    x1_key / y1_key    = 从 hole dict 取 X1/Y1 坐标的 key（如 local_x, local_y）
+    """
     root = ET.Element("KDTPanelFormat")
 
     panel_elem = ET.SubElement(root, "PANEL")
@@ -149,13 +207,13 @@ def _make_panel_xml(
     _add_text(panel_elem, "PanelThickness", str(thickness))
     _add_text(panel_elem, "PanelName", name)
 
-    params = ET.SubElement(root, "Params")
-    ET.SubElement(params, "Param", Key="L", Value=str(length), Comment="板长")
-    ET.SubElement(params, "Param", Key="W", Value=str(width_2d), Comment="板宽")
+    # Params L/W 与 PanelLength/PanelWidth 交换（柜柜规则）
+    params = ET.SubElement(panel_elem, "Params")
+    ET.SubElement(params, "Param", Key="L", Value=str(width_2d), Comment="板长")
+    ET.SubElement(params, "Param", Key="W", Value=str(length), Comment="板宽")
     ET.SubElement(params, "Param", Key="T", Value=str(thickness), Comment="板厚")
 
-    # 面板轮廓
-    outline = ET.SubElement(root, "PanelOutline")
+    outline = ET.SubElement(panel_elem, "PanelOutline")
     vertices = [
         (0, length), (0, 0), (width_2d, 0), (width_2d, length), (0, length), (0, length),
     ]
@@ -166,18 +224,30 @@ def _make_panel_xml(
 
     # 孔位
     for hole in holes:
-        mapped = map_fn(hole)
-        if mapped is None:
-            continue
-        xml_x, xml_y = mapped
+        xml_x = _hole_value(hole, x1_key, x1_key)
+        xml_y = _hole_value(hole, y1_key, y1_key)
         diam = float(hole.get("diameter", 10))
         depth_2d = float(hole.get("depth", 11))
+        direction = hole.get("direction", "+z")
+
+        # 区分板面钻孔(±z)和板边钻孔(±x, ±y)
+        if direction in ("+z", "-z"):
+            type_no = "1"
+            type_name = "Vertical Hole"
+        else:
+            type_no = "2"
+            type_name = "Horizontal Hole"
 
         cad = ET.SubElement(root, "CAD")
-        _add_text(cad, "TypeNo", "1")
-        _add_text(cad, "TypeName", "Vertical Hole")
+        _add_text(cad, "TypeNo", type_no)
+        _add_text(cad, "TypeName", type_name)
         _add_text(cad, "X1", f"{xml_x:.1f}")
         _add_text(cad, "Y1", f"{xml_y:.1f}")
+        if type_no == "2":
+            z1 = _z1_for_direction(direction, hole)
+            _add_text(cad, "Z1", f"{z1:.2f}")
+            _add_text(cad, "Quadrant", _quadrant(direction))
+            _add_text(cad, "IntervalZ", "0.00")
         _add_text(cad, "Depth", f"{depth_2d:.1f}")
         _add_text(cad, "Diameter", f"{diam:.1f}")
         _add_text(cad, "Enable", "1")
@@ -193,7 +263,7 @@ def _make_panel_xml(
 
     _rough = ET.tostring(root, encoding="unicode")
     dom = minidom.parseString(_rough)
-    return dom.toprettyxml(indent="    ")
+    return _flush_xml(dom.toprettyxml(indent="    "))
 
 
 def _add_text(parent: ET.Element, tag: str, text: str) -> ET.Element:

@@ -1,0 +1,30 @@
+# 六面钻设备配置 — 柜柜 guigui3 兼容格式
+# 机器坐标: 屏幕 ← X+, ↓ Y+
+# 恒等规则: PanelLength ≡ W (X轴方向), PanelWidth ≡ L (Y轴方向)
+
+panel_placement:
+  side:           # 侧板/立板/隔板/踢脚支撑 — 板面 X-Z
+    length_from_box: y    # PanelLength (X) ← box.y (深度)
+    width_from_box: z     # PanelWidth  (Y) ← box.z (高度)
+    x1_from_hole: local_y
+    y1_from_hole: local_z
+  door:           # 门板 — 板面 X-Z (Y=厚度)
+    length_from_box: z    # PanelLength (X) ← box.z (门高)
+    width_from_box: x     # PanelWidth  (Y) ← box.x (门宽)
+    x1_from_hole: local_z
+    y1_from_hole: local_x
+  horizontal:     # 顶板/底板/层板 — 板面 X-Y
+    length_from_box: y    # PanelLength (X) ← box.y (深度)
+    width_from_box: x     # PanelWidth  (Y) ← box.x (宽度)
+    x1_from_hole: local_y
+    y1_from_hole: local_x
+  toe_kick:       # 踢脚板 — 板面 X-Z (Y=厚度)
+    length_from_box: x    # PanelLength (X) ← box.x (宽度)
+    width_from_box: z     # PanelWidth  (Y) ← box.z (高度)
+    x1_from_hole: local_x
+    y1_from_hole: local_z
+  default:        # 背板/背拉条等 — 板面 X-Z
+    length_from_box: x
+    width_from_box: z
+    x1_from_hole: local_x
+    y1_from_hole: local_z
