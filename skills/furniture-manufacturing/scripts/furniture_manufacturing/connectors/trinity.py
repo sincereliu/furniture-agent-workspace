@@ -6,6 +6,9 @@
 
 顶板/底板/固定层板（横板）生成连接杆孔和偏心轮孔。
 偏心轮打在面板的可操作面（cam_face），由面板规划器标记。
+
+三合一在深度方向为双排：前后各一组，偏移量按 system-32 的 first/last 规则（默认 64mm）。
+偏心轮的深度偏移使用 center_offset_from_edge (默认 33.5mm，偏心轮圆心到板边缘的距离)。
 """
 
 from typing import Any, Dict, List
@@ -19,6 +22,10 @@ class TrinityConnector(Connector):
     偏心轮位于横板的 cam_face，从可操作面钻入。
     连接杆从横板端面穿入，指向竖板的预埋螺母。
     预埋螺母在竖板内侧面，朝柜内方向钻入。
+
+    深度方向：前后双排，分别距前/后边 first_hole_mm（默认 64mm）。
+    偏心轮：深度方向用 center_offset_from_edge（默认 33.5mm），
+    这是偏心轮圆心到板边缘的距离，跟预埋螺母的 64mm 不同。
     """
 
     name = "三合一连接件"
@@ -41,9 +48,10 @@ class TrinityConnector(Connector):
     def generate_holes(self, panel: PanelRecord) -> List[HoleSpec]:
         """在一块板件上生成三合一孔位。
 
-        竖板：仅预埋螺母，沿系统 32 排钻孔位分布，
-              打在 panel 的 inner_face 面上，朝柜内方向钻入。
-        横板：连接杆孔（端面）+ 偏心轮孔（cam_face），左右端各一组。
+        竖板：预埋螺母，沿高度方向(Z)和深度方向(Y)双排分布，
+              打在 panel 的 inner_face 面上。
+        横板：连接杆孔（端面，深度方向双排）+ 偏心轮孔（cam_face，深度方向双排），
+              左右端各一组。
         """
         result: List[HoleSpec] = []
         matched = self.match([panel])
@@ -54,42 +62,43 @@ class TrinityConnector(Connector):
         nut = spec.get("pre_embedded_nut", {})
         is_female = panel.panel_type in ("side", "divider")
         is_male = panel.panel_type in ("top", "bottom", "fixed_shelf")
-        positions = self._system_32_positions(panel, rules)
+        z_positions = self._system_32_positions(panel, rules)
 
-        center_offset = float(wheel.get("center_offset_from_edge_mm", 33.5))
+        nut_first = float(rules.get("first_hole_mm", 64))
+        nut_last = float(rules.get("last_hole_mm", 64))
+        cam_offset = float(wheel.get("center_offset_from_edge_mm", 33.5))
 
         if is_female:
             # ── 竖板：预埋螺母打在 inner_face ──
+            # 深度方向双排：距前边 nut_first, 距后边 nut_last
             n_diam = float(nut.get("diameter_mm", 10))
             n_depth = float(nut.get("depth_mm", 11))
-            inner = panel.inner_face or ""  # e.g. left side: "+x", right side: "-x"
-            nut_dir = _opposite(inner)       # drill direction into the panel from inner face
+            inner = panel.inner_face or ""
+            nut_dir = _opposite(inner)
 
-            # x_global = inner face position
             if inner == "+x":
-                # Left side: inner face is at pos_x + size_x (right face of left panel)
                 x_global = panel.pos_x + panel.size_x
                 x_local = panel.size_x
             elif inner == "-x":
-                # Right side: inner face is at pos_x (left face of right panel)
                 x_global = panel.pos_x
                 x_local = 0.0
             else:
-                # Fallback for panels without inner_face set (legacy)
                 x_global = panel.pos_x + panel.size_x
                 x_local = panel.size_x
 
-            for z_local in positions:
-                result.append(HoleSpec(
-                    hole_type="system_32_pre_nut", panel_label=panel.label,
-                    x_global=x_global,
-                    y_global=panel.pos_y + panel.size_y - center_offset,
-                    z_global=panel.pos_z + z_local,
-                    x_local=x_local,
-                    y_local=panel.size_y - center_offset,
-                    z_local=z_local,
-                    diameter=n_diam, depth=n_depth, direction=nut_dir,
-                    note="预埋螺母孔"))
+            for z_local in z_positions:
+                for y_local in [nut_first, panel.size_y - nut_last]:
+                    result.append(HoleSpec(
+                        hole_type="system_32_pre_nut", panel_label=panel.label,
+                        x_global=x_global,
+                        y_global=panel.pos_y + y_local,
+                        z_global=panel.pos_z + z_local,
+                        x_local=x_local,
+                        y_local=y_local,
+                        z_local=z_local,
+                        diameter=n_diam, depth=n_depth, direction=nut_dir,
+                        is_face_hole=True,
+                        note="预埋螺母孔"))
 
         if is_male:
             # ── 横板：连接杆孔（端面）+ 偏心轮孔（cam_face）──
@@ -97,50 +106,53 @@ class TrinityConnector(Connector):
             w_depth = float(wheel.get("hole_depth_mm", 13.5))
             r_diam = float(rod.get("diameter_mm", 8))
             r_depth = float(rod.get("insertion_depth_mm", 33))
-            y_center = panel.pos_y + panel.size_y - center_offset
-            z_top = panel.pos_z + panel.size_z   # top face for rod positioning
-            cam = panel.cam_face or ""            # e.g. "+z" for upward drilling
+            z_top = panel.pos_z + panel.size_z
+            cam = panel.cam_face or ""
 
-            # Cam hole: at cam_face position
-            # If cam_direction is "+z" (drill up from bottom): z at panel.pos_z
-            # If cam_direction is "-z" (drill down from top): z at panel.pos_z + panel.size_z
             if cam == "+z":
-                cam_z = panel.pos_z            # drill from bottom face upward
+                cam_z = panel.pos_z
                 cam_zl = 0.0
             elif cam == "-z":
-                cam_z = panel.pos_z + panel.size_z  # drill from top face downward
+                cam_z = panel.pos_z + panel.size_z
                 cam_zl = panel.size_z
             else:
-                # Legacy fallback if cam_face not set
                 cam_z = panel.pos_z + panel.size_z
                 cam_zl = panel.size_z
                 cam = "+z"
+
+            # 深度方向：连接杆和偏心轮各有不同的 Y 偏移
+            # 连接杆：前后各一（距板前边 nut_first, 距板后边 nut_last）
+            # 偏心轮：前后各一（距板前边 cam_offset, 距板后边 cam_offset）
+            rod_y_offsets = [nut_first, panel.size_y - nut_last]
+            cam_y_offsets = [cam_offset, panel.size_y - cam_offset]
 
             for edge_x, rod_sign in [(0, "+x"), (panel.size_x, "-x")]:
                 x_global = panel.pos_x + edge_x
                 x_local = edge_x
 
-                # 连接杆孔 — 从板件端面钻入（方向指向竖板）
-                result.append(HoleSpec(
-                    hole_type="system_32_male", panel_label=panel.label,
-                    x_global=x_global,
-                    y_global=y_center,
-                    z_global=z_top,
-                    x_local=x_local, y_local=panel.size_y - center_offset,
-                    z_local=panel.size_z,
-                    diameter=r_diam, depth=r_depth, direction=rod_sign,
-                    note="连接杆孔"))
+                for y_offset in rod_y_offsets:
+                    result.append(HoleSpec(
+                        hole_type="system_32_male", panel_label=panel.label,
+                        x_global=x_global,
+                        y_global=panel.pos_y + y_offset,
+                        z_global=z_top,
+                        x_local=x_local, y_local=y_offset,
+                        z_local=panel.size_z,
+                        diameter=r_diam, depth=r_depth, direction=rod_sign,
+                        is_face_hole=False,
+                        note="连接杆孔"))
 
-                # 偏心轮孔 — 从 cam_face 钻入
-                result.append(HoleSpec(
-                    hole_type="system_32_female", panel_label=panel.label,
-                    x_global=x_global,
-                    y_global=y_center,
-                    z_global=cam_z,
-                    x_local=x_local, y_local=panel.size_y - center_offset,
-                    z_local=cam_zl,
-                    diameter=w_diam, depth=w_depth, direction=cam,
-                    note="偏心轮孔"))
+                for y_offset in cam_y_offsets:
+                    result.append(HoleSpec(
+                        hole_type="system_32_female", panel_label=panel.label,
+                        x_global=x_global,
+                        y_global=panel.pos_y + y_offset,
+                        z_global=cam_z,
+                        x_local=x_local, y_local=y_offset,
+                        z_local=cam_zl,
+                        diameter=w_diam, depth=w_depth, direction=cam,
+                        is_face_hole=True,
+                        note="偏心轮孔"))
 
         return result
 
@@ -152,7 +164,7 @@ class TrinityConnector(Connector):
 
         基础孔位由 ``generate_holes()`` 逐板生成。此方法利用全板件列表
         交叉参照：对每块横板的顶面 Z 坐标，检查竖板上是否已有对应的
-        预埋螺母；若没有则补充。
+        预埋螺母；若没有则补充（深度方向双排）。
         """
         assigned_panels = {p.label for p in panels}
         result: List[HoleSpec] = [
@@ -161,7 +173,6 @@ class TrinityConnector(Connector):
             for hole in self.generate_holes(panel)
         ]
 
-        # 单板调用无交叉参照上下文，直接返回
         if len(assigned_panels) <= 1:
             return result
 
@@ -177,57 +188,58 @@ class TrinityConnector(Connector):
         spec_entry = self.catalog.get(self.catalog_entry, {})
         first_key = next(iter(spec_entry)) if spec_entry else None
         spec = spec_entry.get(first_key, {}) if first_key else {}
-        wheel = spec.get("eccentric_wheel", {})
         nut = spec.get("pre_embedded_nut", {})
-        center_offset = float(
-            wheel.get("center_offset_from_edge_mm", 33.5)
-        )
         n_diam = float(nut.get("diameter_mm", 10))
         n_depth = float(nut.get("depth_mm", 11))
 
-        # 收集每块竖板上已有的 Z 坐标（用于去重）
-        existing: dict[str, set[float]] = {}
+        # 深度方向偏移
+        rules = self.rules.get(self.rules_section, {}) if self.rules_section else {}
+        nut_first = float(rules.get("first_hole_mm", 64))
+        nut_last = float(rules.get("last_hole_mm", 64))
+
+        # 收集每块竖板上已有的 (z, y_local) 组合（用于去重）
+        existing: dict[str, set[tuple[float, float]]] = {}
         for hole in result:
             if hole.panel_label in {f.label for f in female_panels}:
                 existing.setdefault(hole.panel_label, set()).add(
-                    round(hole.z_global, 3)
+                    (round(hole.z_global, 3), round(hole.y_local, 3))
                 )
 
         for male in male_panels:
             z_global = round(male.pos_z + male.size_z, 3)
 
             for female in female_panels:
-                # Determine cross-reference nut position
                 inner = female.inner_face or ""
                 if inner == "-x":
                     x_global_nut = female.pos_x
                     x_local_nut = 0.0
                 else:
-                    # "+x" or fallback
                     x_global_nut = female.pos_x + female.size_x
                     x_local_nut = female.size_x
                 nut_dir = _opposite(inner) if inner else "-x"
 
-                if (
-                    z_global not in existing.get(female.label, set())
-                    and female.pos_z <= z_global <= female.pos_z + female.size_z
-                ):
-                    x_center = round(x_global_nut, 3)
-                    y_center = round(
-                        female.pos_y + female.size_y - center_offset, 3
-                    )
+                if not (female.pos_z <= z_global <= female.pos_z + female.size_z):
+                    continue
+
+                z_local = z_global - female.pos_z
+                for y_local in [nut_first, female.size_y - nut_last]:
+                    key = (round(z_global, 3), round(y_local, 3))
+                    if key in existing.get(female.label, set()):
+                        continue
+                    existing.setdefault(female.label, set()).add(key)
                     result.append(HoleSpec(
                         hole_type="system_32_pre_nut",
                         panel_label=female.label,
-                        x_global=x_center,
-                        y_global=y_center,
+                        x_global=x_global_nut,
+                        y_global=female.pos_y + y_local,
                         z_global=z_global,
                         x_local=x_local_nut,
-                        y_local=female.size_y - center_offset,
-                        z_local=z_global - female.pos_z,
+                        y_local=y_local,
+                        z_local=z_local,
                         diameter=n_diam,
                         depth=n_depth,
                         direction=nut_dir,
+                        is_face_hole=True,
                         note=f"预埋螺母孔(对应{male.name})",
                     ))
 
@@ -269,7 +281,7 @@ class TrinityConnector(Connector):
             name=self.name,
             spec="偏心轮φ12+预埋螺母φ10×11+连接杆φ8×33",
             quantity=sum(len(self._system_32_positions(p, matched["rules"]))
-                         for p in matched["female"]),
+                         for p in matched["female"]) * 2,
             unit="套", brand=brand.get("name", "默认"), model=brand.get("model", "SJY-01"))]
 
     def machining_operations(self, panel: PanelRecord) -> List[MachiningOperation]:
@@ -278,7 +290,7 @@ class TrinityConnector(Connector):
         for hole in self.generate_holes(panel):
             d = hole.diameter
             ops.append(MachiningOperation(
-                id=f"{hole.hole_type}_{panel.label}_{hole.z_local:.0f}",
+                id=f"{hole.hole_type}_{panel.label}_{hole.z_local:.0f}_{hole.y_local:.0f}",
                 operation_type="cut_box", target_panel=panel.label,
                 size_x=hole.depth if hole.direction in ("+x", "-x") else d,
                 size_y=hole.depth if hole.direction in ("+y", "-y") else d,
@@ -290,7 +302,7 @@ class TrinityConnector(Connector):
 
 
 def _opposite(axis: str) -> str:
-    """Reverse a signed axis: "+x"→"-x", "-y"→"+y"."""
+    """反转带符号轴方向："+x"→"-x"，"-y"→"+y"。"""
     if not axis or axis[0] not in ("+", "-"):
         return "-x"
     return f"{'+' if axis[0] == '-' else '-'}{axis[1]}"

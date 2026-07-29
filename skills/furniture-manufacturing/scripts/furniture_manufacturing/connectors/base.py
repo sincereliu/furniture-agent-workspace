@@ -1,4 +1,7 @@
-"""Abstract base for hardware connectors."""
+"""五金连接件抽象基类。
+
+提供所有连接件的公共接口：孔位描述、规则加载、BOM 生成。
+"""
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List
@@ -19,6 +22,7 @@ class HoleSpec:
     diameter: float = 0.0
     depth: float = 0.0
     direction: str = "+y"
+    is_face_hole: bool = True  # True=板面钻孔(TypeNo=1), False=板边钻孔(TypeNo=2)
     note: str = ""
 
 

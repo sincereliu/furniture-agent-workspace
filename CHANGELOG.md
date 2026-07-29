@@ -1,5 +1,64 @@
 # 更新日志
 
+## 20260729.2 — 六面钻 XML 导出修正 + 三合一打孔逻辑修复
+
+### 六面钻 XML 导出 (export_six_side_drill.py)
+
+**修正 1：TypeNo 判定基准修正**
+- 原因: 原先用世界坐标 ±z 区分垂直/水平孔 (TypeNo=1/2)，但板件在机床上的放置方向可能使 ±x 方向变为垂直孔
+- 修复: 引入 `is_face_hole` 属性到 `HoleSpec`，由连接件生成孔时直接标记面孔/边孔，XML 导出层直接读取
+- 涉及文件: `connectors/base.py` (新增字段), `connectors/trinity.py`, `connectors/hinge.py`, `connectors/back_mount.py`, `connectors/shelf.py`, `manufacturing_bom.py`, `export_six_side_drill.py`
+
+**修正 2：PanelOutline 顶点 X/Y 写反（板子转了 90°）**
+- 原因: `_make_panel_xml` 中 outline 用 `(width_2d, length)` 当作 X/Y，实际 PanelLength 是 X 轴
+- 修复: 变量改为六面钻语义 `sixd_x`(机床X轴), `sixd_y`(机床Y轴), `sixd_z`(板厚)，outline 顶点改为 `(sixd_x, sixd_y)` 顺序
+
+**修正 3：语义重命名**
+- `hardware_catalog.yaml` 和 `devices/six_side_drill_guigui.yaml` 全部增加中文注释
+- YAML key: `length_from_box` → `sixd_x_from_box`, `width_from_box` → `sixd_y_from_box`
+- Python 变量: `length` → `sixd_x`, `width_2d` → `sixd_y`, `thickness` → `sixd_z`
+
+### 三合一打孔逻辑修复 (connectors/trinity.py)
+
+**修正 4：深度方向单排→双排**
+- 原因: 原先每个高度层只打 1 个预埋螺母 (Y 固定在 depth-33.5)，三合一应该是前后各一个
+- 修复: 预埋螺母/连接杆 Y 位置改为 `[first_hole_mm, depth - last_hole_mm]` 双排（默认 [64, depth-64]）
+- 偏心轮 Y 位置改为 `[center_offset_from_edge, depth - center_offset_from_edge]` 双排
+
+**修正 5：交叉补充预埋螺母也改为双排**
+- `generate_holes_for_panels` 的去重逻辑从 1D (仅 Z) 改为 2D (Z + y_local)，每处补两个
+
+### 铰链孔位修正 (connectors/hinge.py)
+
+**修正 6：铰链 Y1 用杯心距边**
+- 原因: 原先 Y1=edge_offset=5mm（铰链臂侧边距），柜柜 Y1=22.5mm
+- 修复: Y1 = `edge_offset + cup_diameter/2 = 5 + 17.5 = 22.5`，杯孔中心到门边的真实距离
+
+### 五金规则检查
+
+全面校验了 3 个 YAML 文件中所有 21 个规则值，全部正确：
+- `system_32_drilling`: first/last 64mm, max 512mm, min 32mm ✅
+- `hinge_drilling`: edge_offset 5mm, cup φ35×13 (国产全盖) ✅
+- `back_mount_drilling`: insert/cover/back_rail 三模式正确 ✅
+- `catalog/three_in_one`: φ12 偏心轮, φ8 连接杆, φ10 预埋螺母 ✅
+- `devices/six_side_drill_guigui`: side/horizontal/door/toe_kick/default 面板放置正确 ✅
+
+### 与柜柜的差异分析（仅记录，本次未修改）
+
+| 差异 | 原因 | 说明 |
+|---|---|---|
+| 背板安装模式 | `resolve_back_mount()` auto→groove | 柜柜用 insert |
+| 背拉条连接件 | groove 模式用螺钉 | 柜柜用三合一 |
+| 踢脚板无三合一 | TrinityConnector 不匹配 toe_kick | 规则值正确，代码匹配范围可扩展 |
+| 背板槽未导出 | export_six_side_drill 不处理 TypeNo=3 | 未来可加 |
+
+### SKILL 文档更新
+
+- `SKILL.md`: 更新连接件和六面钻导出描述
+- `references/manufacturing-rules.md`: 更新孔位生成规则说明
+
+---
+
 ## 20260729.1 — 拓扑驱动重构 + 方向错误修复
 
 ### 架构变更：拓扑数据 + 通用求解器

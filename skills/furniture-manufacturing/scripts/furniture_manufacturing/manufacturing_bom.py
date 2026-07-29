@@ -285,6 +285,7 @@ def emit_drilled_holes(bom: BOMReport) -> dict:
                 "diameter": hole.diameter,
                 "depth": hole.depth,
                 "direction": hole.direction,
+                "is_face_hole": hole.is_face_hole,
                 "note": hole.note,
             })
 

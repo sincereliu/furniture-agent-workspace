@@ -1,4 +1,9 @@
-"""Assembly-aware connectors for the three cabinet back mounting modes."""
+"""背板安装连接件 — 支持内嵌、外盖、槽装三种模式。
+
+内嵌模式：背板四边三合一（偏心轮 + 连接杆 + 预埋螺母）。
+外盖模式：背板沿周边用沉头木螺钉固定。
+槽装模式：背板拉条端部用螺钉连接侧板。
+"""
 
 from __future__ import annotations
 
@@ -14,11 +19,12 @@ from furniture_manufacturing.manufacturing_models import (
 
 
 class BackMountConnector(Connector):
-    """Generate matched holes and hardware for back panels and back rails.
+    """背板安装连接件。
 
-    Inserted backs use three-in-one fittings, cover backs use perimeter
-    countersunk screws, and groove-mode back rails use end screws. The latter
-    two are repository defaults and remain subject to factory confirmation.
+    根据 back_mount 模式生成对应的成对连接孔：
+    - insert: 四边三合一（背板偏心轮孔 + 连接杆通道 + 柜体预埋螺母孔）
+    - cover: 周边沉头螺钉（背板通孔 + 柜体预孔）
+    - groove: 背拉条端部螺钉（侧板通孔 + 拉条预孔）
     """
 
     name = "背板安装连接件"
@@ -163,6 +169,7 @@ class BackMountConnector(Connector):
         return []
 
     def _insert_holes(self, panels: List[PanelRecord]) -> List[HoleSpec]:
+        """内嵌背板：四边三合一成对孔。"""
         by_label = {panel.label: panel for panel in panels}
         back = by_label.get("back_panel")
         if back is None:
@@ -216,6 +223,7 @@ class BackMountConnector(Connector):
                     cam_depth,
                     "-y",
                     f"内嵌背板{edge_name}偏心轮孔",
+                    is_face_hole=True,
                 )
             )
             result.append(
@@ -229,6 +237,7 @@ class BackMountConnector(Connector):
                     rod_depth,
                     rod_direction,
                     f"内嵌背板{edge_name}连接杆通道",
+                    is_face_hole=False,
                 )
             )
             result.append(
@@ -242,6 +251,7 @@ class BackMountConnector(Connector):
                     nut_depth,
                     target_direction,
                     f"{target.name}与内嵌背板的预埋螺母孔",
+                    is_face_hole=True,
                 )
             )
 
@@ -300,6 +310,7 @@ class BackMountConnector(Connector):
         return result
 
     def _cover_holes(self, panels: List[PanelRecord]) -> List[HoleSpec]:
+        """外盖背板：周边沉头螺钉成对孔。"""
         by_label = {panel.label: panel for panel in panels}
         back = by_label.get("back_panel")
         if back is None:
@@ -338,6 +349,7 @@ class BackMountConnector(Connector):
                     back.size_y,
                     "+y",
                     f"外盖背板至{target.name}的螺钉通孔",
+                    is_face_hole=True,
                 )
             )
             result.append(
@@ -351,6 +363,7 @@ class BackMountConnector(Connector):
                     min(pilot_depth, target.size_y),
                     "+y",
                     f"{target.name}外盖背板螺钉预孔",
+                    is_face_hole=True,
                 )
             )
 
@@ -380,6 +393,10 @@ class BackMountConnector(Connector):
         self,
         panels: List[PanelRecord],
     ) -> List[HoleSpec]:
+        """槽装背板：背拉条端部螺钉成对孔。
+
+        左右侧板通孔 + 拉条两端预孔，每端 count_per_end 个。
+        """
         by_label = {panel.label: panel for panel in panels}
         left = by_label.get("left_side_panel")
         right = by_label.get("right_side_panel")
@@ -417,6 +434,7 @@ class BackMountConnector(Connector):
                         left.size_x,
                         "+x",
                         f"左侧板至{rail.name}的螺钉通孔",
+                        is_face_hole=True,
                     )
                 )
                 result.append(
@@ -430,6 +448,7 @@ class BackMountConnector(Connector):
                         min(pilot_depth, rail.size_x / 2),
                         "+x",
                         f"{rail.name}左端预孔",
+                        is_face_hole=False,
                     )
                 )
                 result.append(
@@ -443,6 +462,7 @@ class BackMountConnector(Connector):
                         right.size_x,
                         "-x",
                         f"右侧板至{rail.name}的螺钉通孔",
+                        is_face_hole=True,
                     )
                 )
                 result.append(
@@ -456,17 +476,20 @@ class BackMountConnector(Connector):
                         min(pilot_depth, rail.size_x / 2),
                         "-x",
                         f"{rail.name}右端预孔",
+                        is_face_hole=False,
                     )
                 )
         return result
 
     @staticmethod
     def _mode(panels: List[PanelRecord]) -> str:
+        """从面板列表中提取统一的背板安装模式。"""
         modes = {panel.back_mount for panel in panels if panel.back_mount}
         return next(iter(modes)) if len(modes) == 1 else ""
 
     @staticmethod
     def _hole_count(holes: List[HoleSpec], hole_type: str) -> int:
+        """统计某类孔的数量。"""
         return sum(hole.hole_type == hole_type for hole in holes)
 
     @staticmethod
@@ -475,6 +498,7 @@ class BackMountConnector(Connector):
         edge_offset: float,
         max_spacing: float,
     ) -> List[float]:
+        """沿指定长度均匀分布连接点，首末距边 edge_offset。"""
         if length <= 0:
             return []
         if length <= 2 * edge_offset:
@@ -518,6 +542,7 @@ class BackMountConnector(Connector):
         depth: float,
         direction: str,
         note: str,
+        is_face_hole: bool = True,
     ) -> HoleSpec:
         return HoleSpec(
             hole_type=hole_type,
@@ -531,5 +556,6 @@ class BackMountConnector(Connector):
             diameter=diameter,
             depth=depth,
             direction=direction,
+            is_face_hole=is_face_hole,
             note=note,
         )

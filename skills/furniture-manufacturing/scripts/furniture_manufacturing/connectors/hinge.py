@@ -37,18 +37,21 @@ class HingeConnector(Connector):
         positions = self._distribute(panel.size_z, count, top_offset, bottom_offset)
         edge_offset = float(rules.get("position", {}).get("edge_offset_mm", 5))
         cup_params = self._cup_params(rules)
+        cup_diameter = float(cup_params.get("cup_diameter_mm", 35))
+        # 杯孔中心距门边 = 边距 + 杯孔半径
+        cup_center_from_edge = edge_offset + cup_diameter / 2
         inner = panel.inner_face or "+y"  # default for backward compat
 
         # 铰链侧：优先使用显式字段，否则根据 X 位置推断
         hinge_side = panel.door_hinge_side
         if hinge_side == "left":
-            x_local = edge_offset
+            x_local = cup_center_from_edge
         elif hinge_side == "right":
-            x_local = panel.size_x - edge_offset
+            x_local = panel.size_x - cup_center_from_edge
         elif panel.pos_x < panel.size_x:
-            x_local = edge_offset  # 兜底：X 位置靠左 → 左铰链
+            x_local = cup_center_from_edge  # 兜底：X 位置靠左 → 左铰链
         else:
-            x_local = panel.size_x - edge_offset  # 兜底：X 位置靠右 → 右铰链
+            x_local = panel.size_x - cup_center_from_edge  # 兜底：X 位置靠右 → 右铰链
 
         # Drill direction = inner_face (cup drilled from inner face into the door)
         cup_dir = inner
@@ -79,7 +82,7 @@ class HingeConnector(Connector):
         direction: str,
         note: str,
     ) -> HoleSpec:
-        """Create a HoleSpec with correct global coordinates for the inner face."""
+        """根据面板内侧面方向，计算正确的全局坐标并创建杯孔 HoleSpec。"""
         inner = panel.inner_face or "+y"
 
         # Determine which axis is the inner face axis
@@ -132,6 +135,7 @@ class HingeConnector(Connector):
             diameter=diameter,
             depth=depth,
             direction=direction,
+            is_face_hole=True,
             note=note,
         )
 
@@ -172,7 +176,7 @@ class HingeConnector(Connector):
         return records
 
     def _pick_hinge_entry(self, catalog: Dict[str, Any]) -> Dict[str, Any] | None:
-        """从目录中选择全盖 100° 铰链。"""
+        """从目录中选择全盖 100° 铰链条目。"""
         candidates = [v for v in catalog.values() if v.get("overlay") == "full" and v.get("angle") == 100]
         return candidates[0] if candidates else None
 

@@ -93,6 +93,7 @@ class ShelfConnector(Connector):
                             z_local=z_local_on_side,
                             diameter=10.0, depth=12.0,
                             direction=nut_dir,
+                            is_face_hole=True,
                             note=f"层板托孔(对应{shelf.name})",
                         ))
         return result
@@ -131,7 +132,7 @@ class ShelfConnector(Connector):
 
 
 def _opposite(axis: str) -> str:
-    """Reverse a signed axis: "+x"→"-x", "-y"→"+y"."""
+    """反转带符号轴方向："+x"→"-x"，"-y"→"+y"。"""
     if not axis or axis[0] not in ("+", "-"):
         return "-x"
     return f"{'+' if axis[0] == '-' else '-'}{axis[1]}"

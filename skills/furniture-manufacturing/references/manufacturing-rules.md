@@ -10,9 +10,17 @@
 - 公差/净空：门缝、安装/设备缝隙、地墙不平和安全余量。
 - BOM：整份方案记录 `readiness`；`preliminary` 为软件暂定，`accepted` 表示用户/设计方接受方案但仍需工艺核对，`factory_ready` 只在工厂明确确认后使用。
 
-## 柜体指导
+## 三合一打孔规则
 
-- 背板策略必须明确；地柜明确踢脚/底座/柜脚及底部五金；吊柜在称为可制造前明确固定、基层、荷载和安装。
+- 竖板（侧板/隔板）预埋螺母在高度方向按系统 32 排钻分布（首/末孔 64mm，间距≤512mm），深度方向前后双排（`[first_hole_mm, depth - last_hole_mm]`）。
+- 横板（顶板/底板/固定层板）连接杆在深度方向同样前后双排；偏心轮深度方向双排用 `center_offset_from_edge`（默认 33.5mm）。
+- 所有孔位由 `Connector.generate_holes()` 生成 `HoleSpec`，标记 `is_face_hole=True`（板面钻孔）或 `False`（板边钻孔）。
+
+## 铰链打孔规则
+
+- 铰链数量按门板高度分 5 档（≤480→2, ≤980→2, ≤1500→3, ≤2100→4, ≤2750→5）。
+- 铰链杯孔 Y1 = `edge_offset_mm + cup_diameter/2`，为杯孔中心到门边的距离（国产全盖 5+17.5=22.5mm）。
+- 杯孔从门板内侧钻入，方向 = `panel.inner_face`。
 
 ## 背板槽加工契约
 
@@ -32,8 +40,14 @@
 - `hardware_catalog.yaml` 的外盖 `4×30mm`、背拉条 `4×40mm` 螺钉及 `hardware_rules.yaml` 孔距/预孔均为软件暂定值，不代表工厂批准；因此自动规划始终从 `readiness=preliminary` 开始。
 - 五金数量等于主连接孔数量；同一连接的配合孔数量一致。
 
+## 六面钻 XML 导出
+
+- `export_six_side_drill.py` 从 `drilled-holes.json` 反推板件和孔位，生成 `KDTPanelFormat` XML。
+- 机床坐标 X=PanelLength, Y=PanelWidth, Z=PanelThickness。
+- TypeNo 由 `HoleSpec.is_face_hole` 决定，不再从世界坐标推导。
+- 板件轮廓 `PanelOutline` 按逆时针列出顶点：`(0, PanelWidth) → (0, 0) → (PanelLength, 0) → (PanelLength, PanelWidth)` 加闭合点。
+- `devices/six_side_drill_guigui.yaml` 按面板类型配置 `sixd_x_from_box`/`sixd_y_from_box` 和孔位坐标映射键。
+
 ## 边界
 
 - 不创建/修改板件、布局、特征树或 CAD/STEP，不定义命令和产物路径。
-- 本阶段拥有 BOM、加工操作和可序列化孔位语义；`.drilled-holes.json/.glb` 的文件名、路径和落盘由 CAD 阶段 `workflow_artifact_writer.py` 负责。
-- `readiness` 是整份制造方案的状态，不表示每条记录都经过单独审批；软件默认不等于工厂标准。

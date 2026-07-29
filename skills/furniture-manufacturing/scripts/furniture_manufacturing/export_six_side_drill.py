@@ -88,14 +88,15 @@ def drill_json_to_xml_files(
         # 设备配置映射
         placement = _resolve_placement(panel_type)
 
-        length = _box_value(box, placement.get("length_from_box", "x"))
-        width_2d = _box_value(box, placement.get("width_from_box", "z"))
+        # 六面钻坐标: 根据 panel_type 从 box 的三轴映射到机床 X/Y 轴
+        sixd_x = _box_value(box, placement.get("sixd_x_from_box", "x"))
+        sixd_y = _box_value(box, placement.get("sixd_y_from_box", "z"))
 
-        # 厚度 = 第三个维度（未被 length/width 使用的 box 轴）
-        used_axes = {placement.get("length_from_box", "x"), placement.get("width_from_box", "z")}
+        # 板厚轴 = 剩余未被使用的那根轴
+        used_axes = {placement.get("sixd_x_from_box", "x"), placement.get("sixd_y_from_box", "z")}
         all_axes = {"x", "y", "z"}
-        thickness_axis = (all_axes - used_axes).pop()
-        thickness = _box_value(box, thickness_axis)
+        sixd_z_axis = (all_axes - used_axes).pop()
+        sixd_z = _box_value(box, sixd_z_axis)
 
         # X1/Y1 映射键
         x1_key = placement.get("x1_from_hole", "local_x")
@@ -103,9 +104,9 @@ def drill_json_to_xml_files(
 
         panel_xml = _make_panel_xml(
             name=panel_name,
-            length=length,
-            width_2d=width_2d,
-            thickness=thickness,
+            sixd_x=sixd_x,
+            sixd_y=sixd_y,
+            sixd_z=sixd_z,
             holes=panel.get("holes", []),
             slots=panel.get("slots", []),
             x1_key=x1_key,
@@ -185,9 +186,9 @@ def _flush_xml(text: str) -> str:
 
 def _make_panel_xml(
     name: str,
-    length: float,
-    width_2d: float,
-    thickness: float,
+    sixd_x: float,
+    sixd_y: float,
+    sixd_z: float,
     holes: list[dict[str, Any]],
     slots: list[dict[str, Any]],
     x1_key: str,
@@ -195,27 +196,30 @@ def _make_panel_xml(
 ) -> str:
     """构造一块板件的 KDTPanelFormat XML 字符串。
 
-    length  / width_2d = PanelLength / PanelWidth（机器 X/Y 轴方向尺寸）
-    thickness          = PanelThickness
-    x1_key / y1_key    = 从 hole dict 取 X1/Y1 坐标的 key（如 local_x, local_y）
+    sixd_x = PanelLength（机床 X 轴方向尺寸）
+    sixd_y = PanelWidth （机床 Y 轴方向尺寸）
+    sixd_z = PanelThickness（板厚，机床 Z 轴）
+    x1_key / y1_key = 从 hole dict 取 X1/Y1 坐标的 key
     """
     root = ET.Element("KDTPanelFormat")
 
     panel_elem = ET.SubElement(root, "PANEL")
-    _add_text(panel_elem, "PanelLength", str(length))
-    _add_text(panel_elem, "PanelWidth", str(width_2d))
-    _add_text(panel_elem, "PanelThickness", str(thickness))
+    _add_text(panel_elem, "PanelLength", str(sixd_x))
+    _add_text(panel_elem, "PanelWidth", str(sixd_y))
+    _add_text(panel_elem, "PanelThickness", str(sixd_z))
     _add_text(panel_elem, "PanelName", name)
 
-    # Params L/W 与 PanelLength/PanelWidth 交换（柜柜规则）
+    # 柜柜 Params: L/W 与 PanelLength/PanelWidth 交换
+    # L(板长) = PanelWidth(sixd_y), W(板宽) = PanelLength(sixd_x)
     params = ET.SubElement(panel_elem, "Params")
-    ET.SubElement(params, "Param", Key="L", Value=str(width_2d), Comment="板长")
-    ET.SubElement(params, "Param", Key="W", Value=str(length), Comment="板宽")
-    ET.SubElement(params, "Param", Key="T", Value=str(thickness), Comment="板厚")
+    ET.SubElement(params, "Param", Key="L", Value=str(sixd_y), Comment="板长")
+    ET.SubElement(params, "Param", Key="W", Value=str(sixd_x), Comment="板宽")
+    ET.SubElement(params, "Param", Key="T", Value=str(sixd_z), Comment="板厚")
 
     outline = ET.SubElement(panel_elem, "PanelOutline")
     vertices = [
-        (0, length), (0, 0), (width_2d, 0), (width_2d, length), (0, length), (0, length),
+        (0, sixd_y), (0, 0), (sixd_x, 0), (sixd_x, sixd_y),
+        (0, sixd_y), (0, sixd_y),
     ]
     for vx, vy in vertices:
         vt = ET.SubElement(outline, "Vertex")
@@ -230,8 +234,8 @@ def _make_panel_xml(
         depth_2d = float(hole.get("depth", 11))
         direction = hole.get("direction", "+z")
 
-        # 区分板面钻孔(±z)和板边钻孔(±x, ±y)
-        if direction in ("+z", "-z"):
+        # 从孔自身属性读取：is_face_hole → TypeNo=1(Vertical), 否则 TypeNo=2(Horizontal)
+        if hole.get("is_face_hole", True):
             type_no = "1"
             type_name = "Vertical Hole"
         else:
