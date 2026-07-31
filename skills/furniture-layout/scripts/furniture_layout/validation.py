@@ -10,6 +10,7 @@ from furniture_design_intent.design_spec import FurnitureSpec, resolve_back_moun
 
 from .layout_preview import render_layout_preview
 from .layout_planning import CabinetLayout
+from .layout_viewer import render_layout_viewer
 from .room_planning import (
     EPSILON,
     PLACEMENT_MODES,
@@ -196,14 +197,42 @@ def validate_layout_output(
     cabinet_report = validate_layout(spec, layout)
     report.issues.extend(cabinet_report.issues)
 
+    raw_context = output.get("layout_context")
+    if not isinstance(raw_context, Mapping):
+        report.add_error(
+            "MISSING_LAYOUT_CONTEXT",
+            "layout stage output requires layout_context source markers",
+            "layout_context",
+        )
+    else:
+        for key, allowed in (
+            ("room_source", {"provided", "default_bedroom"}),
+            (
+                "placement_source",
+                {"provided", "default_south_wall_centered"},
+            ),
+        ):
+            if raw_context.get(key) not in allowed:
+                report.add_error(
+                    "INVALID_LAYOUT_CONTEXT",
+                    f"layout_context.{key} has an unsupported value",
+                    f"layout_context.{key}",
+                )
+
     has_room_placement = "room_placement" in output
     has_preview = "preview" in output
-    if not has_room_placement and not has_preview:
+    has_viewer = "viewer" in output
+    if not has_room_placement and not has_preview and not has_viewer:
+        report.add_error(
+            "MISSING_ROOM_LAYOUT_OUTPUT",
+            "room placement, SVG preview, and interactive viewer are required",
+            "room_placement",
+        )
         return report
-    if has_room_placement != has_preview:
+    if not (has_room_placement and has_preview and has_viewer):
         report.add_error(
             "INCOMPLETE_ROOM_LAYOUT_OUTPUT",
-            "room placement and SVG preview must be emitted together",
+            "room placement, SVG preview, and interactive viewer must be emitted together",
             "room_placement",
         )
         return report
@@ -243,6 +272,19 @@ def validate_layout_output(
             "LAYOUT_PREVIEW_MISMATCH",
             "SVG preview must match the current room and furniture placement",
             "preview",
+        )
+    raw_viewer = output.get("viewer")
+    if not isinstance(raw_viewer, Mapping):
+        report.add_error(
+            "INVALID_LAYOUT_VIEWER",
+            "viewer must be an object",
+            "viewer",
+        )
+    elif dict(raw_viewer) != render_layout_viewer(expected_plan, layout):
+        report.add_error(
+            "LAYOUT_VIEWER_MISMATCH",
+            "interactive viewer must match the current room and furniture placement",
+            "viewer",
         )
     return report
 

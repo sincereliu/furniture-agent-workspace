@@ -11,7 +11,13 @@
 
 ## 房间定位输入
 
-房间定位是可选能力，但 `layout.room` 和 `layout.placement` 必须同时存在。
+成功的布局阶段始终包含房间定位和 SVG 预览。用户未指定时使用以下可见默认假设：
+
+- 房间：`4200×3600×2800 mm` 的矩形“默认卧室（系统假设）”，门窗和障碍物为空；
+- 位置：沿南墙居中，落地柜标高为 `0`；
+- 吊柜：沿南墙居中，默认保留 `450 mm` 顶部净距；空间不足时降至不低于地面。
+
+只提供 `layout.room` 或 `layout.placement` 时，仅补齐缺失项。`layout_context.room_source` 与 `layout_context.placement_source` 必须说明数据来自用户还是系统默认；默认场景不是现场实测数据，用户可在确认前修改。
 
 `room`：
 
@@ -44,15 +50,17 @@
 
 `CabinetLayout` 只保存成品包络、有效 `back_mount`、`carcass_y_start/end`、`internal_x/y/z_start/end`、柜体深度、背板基准、踢脚区和 `shelf_count/door_count`；不含分区/开口集合、开启策略、`PanelPlacement`、板件记录或裁切尺寸。
 
-完整 `layout_planned` 输出保持 `layout` 向后兼容；有房间定位时增加：
+完整 `layout_planned` 输出保持 `layout` 向后兼容，并增加：
 
+- `layout_context`：房间和摆放位置的来源，明确标记系统默认假设；
 - `room_placement.room`：标准化房间、门窗和障碍物；
 - `room_placement.placement`：已解析的房间原点、标高、旋转及宿主墙；
 - `room_placement.furniture_footprint`：房间平面坐标中的四角占地；
 - `room_placement.clearances_mm`：西、东、南、北、地面和顶面的净距；
-- `preview`：`image/svg+xml` 内联平面预览、尺寸和替代文本。
+- `preview`：`image/svg+xml` 内联透视三维包络预览、视图类型、尺寸和替代文本。投影必须表现近大远小和空间边线汇聚；房间为透明六面体，家具为不透明成品包络，门窗和障碍物仍按房间坐标展示。
+- `viewer`：`text/html` 自包含互动三维包络 Viewer，不依赖外网；支持鼠标/触摸拖拽环绕、滚轮缩放、透视/正视/左视/右视/俯视和重置。Viewer 必须由当前房间、家具包络、门窗及障碍物实时重建。
 
-预览必须由当前房间、柜体包络和定位实时重建；修改定位后不得沿用旧占地或旧 SVG。
+静态预览与 Viewer 必须由当前房间、柜体包络和定位实时重建；修改定位后不得沿用旧占地、旧 SVG 或旧 Viewer。
 
 背板模式的布局契约：
 

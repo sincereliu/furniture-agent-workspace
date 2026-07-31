@@ -28,7 +28,7 @@ from pydantic import BaseModel, Field
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from furniture_workflow.workflow_state import WorkflowStage
 
-API_VERSION = "0.3.0"
+API_VERSION = "0.5.0"
 
 app = FastAPI(
     title="Furniture Agent — 板式家具拆单服务",
@@ -213,8 +213,10 @@ class BOMResponse(BaseModel):
 
 class LayoutPlanResponse(BaseModel):
     layout: dict[str, Any]
+    layout_context: dict[str, str] | None = None
     room_placement: dict[str, Any] | None = None
     preview: dict[str, Any] | None = None
+    viewer: dict[str, Any] | None = None
 
 
 # ── 路由 ──
@@ -354,17 +356,33 @@ async def plan_layout(req: CabinetRequest):
     responses={200: {"content": {"image/svg+xml": {}}}},
 )
 async def plan_layout_preview(req: CabinetRequest) -> Response:
-    """返回可直接在浏览器中显示的第 2 阶段 SVG 平面预览。"""
+    """返回可直接在浏览器中显示的第 2 阶段 SVG 透视三维包络预览。"""
     result = await plan_layout(req)
     if result.preview is None:
         raise HTTPException(
             status_code=422,
-            detail="room and placement are required for a layout preview",
+            detail="layout preview was not generated",
         )
     return Response(
         content=str(result.preview["svg"]),
         media_type="image/svg+xml",
     )
+
+
+@app.post(
+    "/api/plan-layout/viewer",
+    response_class=HTMLResponse,
+    responses={200: {"content": {"text/html": {}}}},
+)
+async def plan_layout_viewer(req: CabinetRequest) -> HTMLResponse:
+    """返回可拖拽旋转、缩放和切换标准视角的第 2 阶段 Viewer。"""
+    result = await plan_layout(req)
+    if result.viewer is None:
+        raise HTTPException(
+            status_code=422,
+            detail="interactive layout viewer was not generated",
+        )
+    return HTMLResponse(content=str(result.viewer["html"]))
 
 
 # ── 启动入口 ──

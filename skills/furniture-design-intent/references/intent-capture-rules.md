@@ -7,6 +7,7 @@
 - `furniture_type` 类别；`purpose` 用途/优先级。扁平 CLI/API 请求才使用 `type`，进入 `DesignIntent` 后统一为 `furniture_type`。
 - `overall_size`：成品外包络 `width_mm/depth_mm/height_mm`，未知为 `null`。
 - `layout`：门、隔间、层板、抽屉、挂衣区等用户层组织。
+- `layout.room/layout.placement` 可分别省略；布局阶段会为缺失项补入可见的默认卧室或沿南墙居中位置，并标记数据来源。
 - `appearance` 风格/饰面；`structure` 高层结构偏好。
 - `constraints`：房间、人体工学、安全、安装、制造和材料要求。
 - `assumptions` 暂定默认；`unresolved` 待确认决策。假设写在受影响字段旁。

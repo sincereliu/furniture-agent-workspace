@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from math import hypot
 import sys
 import unittest
 from pathlib import Path
@@ -17,6 +18,7 @@ bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from furniture_workflow.workflow_state import WorkflowStage
+from furniture_layout.layout_preview import _build_projector
 
 
 def wardrobe_spec(
@@ -71,6 +73,112 @@ class RoomLayoutPreviewTests(unittest.TestCase):
     def setUp(self) -> None:
         self.orchestrator = FurnitureOrchestrator(workspace_root=WORKSPACE_ROOT)
 
+    def test_preview_projection_makes_near_geometry_larger(self) -> None:
+        project = _build_projector(4200, 3600, 2800)
+
+        near_bottom = project((4200, 0, 0))
+        near_top = project((4200, 0, 1000))
+        far_bottom = project((0, 3600, 0))
+        far_top = project((0, 3600, 1000))
+        near_height = hypot(
+            near_top[0] - near_bottom[0],
+            near_top[1] - near_bottom[1],
+        )
+        far_height = hypot(
+            far_top[0] - far_bottom[0],
+            far_top[1] - far_bottom[1],
+        )
+
+        self.assertGreater(near_height, far_height * 1.5)
+
+    def test_missing_room_context_uses_visible_default_bedroom(self) -> None:
+        result = self.orchestrator.execute_spec(
+            "1600衣柜",
+            {
+                "type": "floor_cabinet",
+                "width": 1600,
+                "depth": 600,
+                "height": 2400,
+            },
+            through_stage=WorkflowStage.LAYOUT_PLANNED,
+        )
+
+        output = result.revision.stage_outputs["layout_planned"]
+        self.assertEqual(
+            output["layout_context"],
+            {
+                "room_source": "default_bedroom",
+                "placement_source": "default_south_wall_centered",
+            },
+        )
+        self.assertEqual(
+            output["room_placement"]["room"],
+            {
+                "id": "default_bedroom",
+                "name": "默认卧室（系统假设）",
+                "width_mm": 4200.0,
+                "depth_mm": 3600.0,
+                "height_mm": 2800.0,
+                "openings": [],
+                "obstacles": [],
+            },
+        )
+        self.assertEqual(
+            output["room_placement"]["placement"]["origin_x_mm"],
+            1300,
+        )
+        self.assertEqual(
+            output["room_placement"]["placement"]["host_wall"],
+            "south",
+        )
+        self.assertEqual(
+            output["preview"]["view_kind"],
+            "perspective_envelope",
+        )
+        self.assertEqual(output["viewer"]["media_type"], "text/html")
+        self.assertEqual(
+            output["viewer"]["view_kind"],
+            "interactive_orbit_envelope",
+        )
+        self.assertIn("drag_orbit", output["viewer"]["controls"])
+        self.assertIn('data-view="top"', output["viewer"]["html"])
+        self.assertIn('addEventListener("pointermove"', output["viewer"]["html"])
+        self.assertIn('addEventListener("wheel"', output["viewer"]["html"])
+        self.assertIn("透明为房间", output["preview"]["svg"])
+        self.assertIn("默认卧室（系统假设）", output["preview"]["svg"])
+        self.assertTrue(
+            all(report.passed for report in result.revision.validations)
+        )
+
+    def test_missing_placement_centers_furniture_in_provided_room(self) -> None:
+        spec = wardrobe_spec()
+        del spec["placement"]
+        result = self.orchestrator.execute_spec(
+            "主卧衣柜",
+            spec,
+            through_stage=WorkflowStage.LAYOUT_PLANNED,
+        )
+
+        self.assertIn(
+            "layout_planned",
+            result.revision.stage_outputs,
+            [
+                (issue.code, issue.message)
+                for report in result.revision.validations
+                for issue in report.issues
+            ],
+        )
+        output = result.revision.stage_outputs["layout_planned"]
+        self.assertEqual(output["layout_context"]["room_source"], "provided")
+        self.assertEqual(
+            output["layout_context"]["placement_source"],
+            "default_south_wall_centered",
+        )
+        self.assertEqual(
+            output["room_placement"]["placement"]["origin_x_mm"],
+            1200,
+        )
+
     def test_layout_stage_emits_room_position_footprint_and_svg(self) -> None:
         result = self.orchestrator.execute_spec(
             "主卧衣柜",
@@ -103,7 +211,12 @@ class RoomLayoutPreviewTests(unittest.TestCase):
         )
         self.assertEqual(room_placement["clearances_mm"]["north"], 3000)
         self.assertEqual(output["preview"]["media_type"], "image/svg+xml")
+        self.assertEqual(
+            output["preview"]["view_kind"],
+            "perspective_envelope",
+        )
         self.assertIn("<svg", output["preview"]["svg"])
+        self.assertIn("三维包络预览", output["preview"]["svg"])
         self.assertIn("主卧衣柜", output["preview"]["svg"])
         self.assertEqual(
             ElementTree.fromstring(output["preview"]["svg"]).tag,
@@ -264,6 +377,7 @@ class RoomLayoutPreviewTests(unittest.TestCase):
         issue_codes = {issue.code for issue in revision.validations[-1].issues}
         self.assertIn("WALL_PLACEMENT_TRANSFORM_MISMATCH", issue_codes)
         self.assertIn("LAYOUT_PREVIEW_MISMATCH", issue_codes)
+        self.assertIn("LAYOUT_VIEWER_MISMATCH", issue_codes)
 
 
 if __name__ == "__main__":

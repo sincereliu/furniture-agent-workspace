@@ -129,11 +129,53 @@ class ApiEntrypointTests(unittest.TestCase):
             270,
         )
         self.assertEqual(response.preview["media_type"], "image/svg+xml")
+        self.assertEqual(
+            response.preview["view_kind"],
+            "perspective_envelope",
+        )
         self.assertIn("<svg", response.preview["svg"])
+        self.assertEqual(response.viewer["media_type"], "text/html")
+        self.assertEqual(
+            response.viewer["view_kind"],
+            "interactive_orbit_envelope",
+        )
 
         svg_response = asyncio.run(server.plan_layout_preview(request))
         self.assertEqual(svg_response.media_type, "image/svg+xml")
         self.assertIn(b"<svg", svg_response.body)
+
+        viewer_response = asyncio.run(server.plan_layout_viewer(request))
+        self.assertEqual(viewer_response.media_type, "text/html")
+        self.assertIn(b'<canvas id="scene"', viewer_response.body)
+        self.assertIn(b'data-view="top"', viewer_response.body)
+
+    def test_layout_endpoint_uses_default_bedroom_without_room_input(self) -> None:
+        request = server.CabinetRequest(
+            type="floor_cabinet",
+            width=1600,
+            depth=600,
+            height=2400,
+        )
+
+        response = asyncio.run(server.plan_layout(request))
+
+        self.assertEqual(
+            response.layout_context,
+            {
+                "room_source": "default_bedroom",
+                "placement_source": "default_south_wall_centered",
+            },
+        )
+        self.assertEqual(
+            response.room_placement["room"]["name"],
+            "默认卧室（系统假设）",
+        )
+        self.assertEqual(
+            response.room_placement["placement"]["origin_x_mm"],
+            1300,
+        )
+        self.assertIn("<svg", response.preview["svg"])
+        self.assertIn("pointermove", response.viewer["html"])
 
     def test_plan_endpoint_returns_each_back_mount_manufacturing_contract(
         self,

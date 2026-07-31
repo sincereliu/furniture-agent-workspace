@@ -9,7 +9,14 @@ from furniture_design_intent.design_spec import FurnitureSpec, SUPPORTED_TYPES
 
 from .layout_preview import render_layout_preview
 from .layout_planning import CabinetLayout
-from .room_planning import plan_room_placement
+from .layout_viewer import render_layout_viewer
+from .room_planning import RoomModel, plan_room_placement
+
+
+DEFAULT_BEDROOM_WIDTH_MM = 4200.0
+DEFAULT_BEDROOM_DEPTH_MM = 3600.0
+DEFAULT_BEDROOM_HEIGHT_MM = 2800.0
+DEFAULT_WALL_CABINET_CEILING_CLEARANCE_MM = 450.0
 
 
 def plan_layout(spec: FurnitureSpec) -> CabinetLayout:
@@ -31,27 +38,72 @@ def plan_layout_stage(
 ) -> dict[str, Any]:
     """Build the complete serializable stage-2 output.
 
-    Room context is optional for compatibility. When present, both the room and
-    placement are required so the checkpoint never pretends that an unresolved
-    site position is a completed layout.
+    Missing room context is filled with an explicit default bedroom and a
+    centered south-wall placement so every successful checkpoint has a visible
+    3D envelope preview. The output records which values were assumed.
     """
     layout = plan_layout(spec)
     output: dict[str, Any] = {"layout": asdict(layout)}
-    if room is None and placement is None:
-        return output
-    if room is None or placement is None:
-        raise ValueError(
-            "room-aware layout requires both layout.room and layout.placement"
-        )
-    if not isinstance(room, Mapping) or not isinstance(placement, Mapping):
-        raise ValueError("layout.room and layout.placement must be objects")
+    if room is not None and not isinstance(room, Mapping):
+        raise ValueError("layout.room must be an object")
+    if placement is not None and not isinstance(placement, Mapping):
+        raise ValueError("layout.placement must be an object")
+
+    room_source = "provided"
+    placement_source = "provided"
+    resolved_room = room
+    if resolved_room is None:
+        resolved_room = _default_bedroom()
+        room_source = "default_bedroom"
+    resolved_placement = placement
+    if resolved_placement is None:
+        resolved_placement = _default_placement(layout, resolved_room)
+        placement_source = "default_south_wall_centered"
 
     room_placement = plan_room_placement(
         layout,
-        room,
-        placement,
+        resolved_room,
+        resolved_placement,
         furniture_label=furniture_label or spec.furniture_type,
     )
+    output["layout_context"] = {
+        "room_source": room_source,
+        "placement_source": placement_source,
+    }
     output["room_placement"] = room_placement.to_dict()
     output["preview"] = render_layout_preview(room_placement, layout)
+    output["viewer"] = render_layout_viewer(room_placement, layout)
     return output
+
+
+def _default_bedroom() -> dict[str, Any]:
+    return {
+        "id": "default_bedroom",
+        "name": "默认卧室（系统假设）",
+        "width_mm": DEFAULT_BEDROOM_WIDTH_MM,
+        "depth_mm": DEFAULT_BEDROOM_DEPTH_MM,
+        "height_mm": DEFAULT_BEDROOM_HEIGHT_MM,
+        "openings": [],
+        "obstacles": [],
+    }
+
+
+def _default_placement(
+    layout: CabinetLayout,
+    room: Mapping[str, Any],
+) -> dict[str, Any]:
+    room_model = RoomModel.from_dict(room)
+    origin_z_mm = 0.0
+    if layout.furniture_type == "wall_cabinet":
+        origin_z_mm = max(
+            0.0,
+            room_model.height_mm
+            - layout.height
+            - DEFAULT_WALL_CABINET_CEILING_CLEARANCE_MM,
+        )
+    return {
+        "mode": "wall",
+        "host_wall": "south",
+        "offset_mm": max((room_model.width_mm - layout.width) / 2.0, 0.0),
+        "origin_z_mm": origin_z_mm,
+    }

@@ -31,7 +31,7 @@ FurnitureOrchestrator
 7. delivery_validated
 ```
 
-第 2 阶段可选接收房间和家具位置。提供二者后，`stage_outputs.layout_planned` 会增加房间坐标、家具四角占地、六向净距和内联 SVG 平面预览；越界、遮挡门窗或碰撞障碍物时不能确认：
+第 2 阶段接收房间和家具位置。未提供时使用 `4200×3600×2800 mm` 的“默认卧室（系统假设）”，并将柜体沿南墙居中摆放；只提供一项时补齐另一项。`stage_outputs.layout_planned` 会输出 `layout_context` 来源标记、房间坐标、家具四角占地、六向净距、内联 SVG 透视图和自包含 HTML 互动 Viewer；客户可拖拽旋转、滚轮缩放并选择标准视角。房间透明、家具包络不透明，越界、遮挡门窗或碰撞障碍物时不能确认：
 
 ```json
 {
@@ -71,6 +71,6 @@ FurnitureOrchestrator
 .\.venv\Scripts\python.exe skills\furniture-cad\scripts\server.py
 ```
 
-`POST /api/plan-layout` 返回第 2 阶段 JSON；`POST /api/plan-layout/preview` 直接返回 `image/svg+xml` 平面预览。
+`POST /api/plan-layout` 返回第 2 阶段 JSON；`POST /api/plan-layout/preview` 直接返回 `image/svg+xml` 静态预览；`POST /api/plan-layout/viewer` 返回可直接打开的 `text/html` 互动 Viewer。
 
 可复用阶段代码放在对应的 `skills/furniture-*/scripts/`；统一 Orchestrator、CLI/API 和集成测试放在 `skills/furniture-cad/scripts/`；一次性脚本和派生 CAD 源码放在 `temp/`；最终产物放在 `generated/`。
