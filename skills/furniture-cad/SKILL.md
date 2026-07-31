@@ -34,5 +34,5 @@ description: 用于 cad_generated 阶段和 CLI/API 批处理；根据已确认�
 ## 返回内容
 
 - 规范化输入、已确认特征树来源、CAD 命令结果和 `stage_outputs.cad_generated`。
-- 实际存在的 STEP、Viewer 拓扑、drilled-holes 及路径。
+- 实际存在的 STEP、Viewer 拓扑、drilled-holes、孔位 STEP 及逐板六面钻 XML 路径。
 - 下一阶段：`skills/furniture-delivery-validation/SKILL.md`；本阶段不宣称最终通过。

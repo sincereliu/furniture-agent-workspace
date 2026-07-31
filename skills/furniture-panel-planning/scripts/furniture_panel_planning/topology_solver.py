@@ -5,7 +5,7 @@ Reads a cabinet topology YAML and a FurnitureSpec, then computes every panel's
 
 The solver is universal — it does not branch on furniture_type.  All
 cabinet-specific knowledge lives in the topology YAML files under
-references/cabinet_topologies/.
+references/cabinet-topologies/.
 """
 
 from __future__ import annotations
@@ -25,10 +25,9 @@ from .panel_models import PanelPlacement
 def _load_topology(furniture_type: str) -> dict[str, Any]:
     """Load a topology YAML file for the given furniture type."""
     topo_dir = (
-        Path(__file__).resolve().parents[3]
-        / "furniture-design-intent"
+        Path(__file__).resolve().parents[2]
         / "references"
-        / "cabinet_topologies"
+        / "cabinet-topologies"
     )
     path = topo_dir / f"{furniture_type}.yaml"
     if not path.exists():
@@ -291,14 +290,17 @@ def _door_panels(
         if count == 1:
             pid, pname = "single_door", "门板"
             x = layout.width / 2 - dw / 2
+            hinge_side = "left"
         elif count == 2:
             pid = "left_door" if index == 0 else "right_door"
             pname = "左门板" if index == 0 else "右门板"
             x = margin if index == 0 else layout.width - margin - dw
+            hinge_side = "left" if index == 0 else "right"
         else:
             pid = f"door_{index + 1}_door"
             pname = f"门板{index + 1}"
             x = margin * (2 * (index + 1) - 1) + dw * index
+            hinge_side = None
 
         panels.append(PanelPlacement(
             id=pid, name=pname, panel_type="door",
@@ -306,6 +308,7 @@ def _door_panels(
             pos_x=x, pos_y=dy, pos_z=layout.toe_kick_height + margin,
             material_role="door",
             depends_on=["left_side_panel", "right_side_panel"],
+            door_hinge_side=hinge_side,
             inner_face=inner, outer_face=outer, cam_face=None,
             note=f"门板，{dw:.0f}×{dh:.0f}×{spec.door_thickness:.0f}mm",
         ))

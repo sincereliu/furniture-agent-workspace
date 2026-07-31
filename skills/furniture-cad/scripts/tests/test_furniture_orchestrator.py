@@ -208,6 +208,9 @@ class FurnitureOrchestratorTests(unittest.TestCase):
                         "bom",
                         "drilled_holes",
                         "drilled_holes_glb",
+                        "drilled_holes_step",
+                        "drilled_holes_step_glb",
+                        "six_side_drill_xml",
                         "cad_source",
                         "step",
                         "viewer_topology",
@@ -237,6 +240,22 @@ class FurnitureOrchestratorTests(unittest.TestCase):
                         "manufacturing_plan": "preliminary",
                         "bom": "preliminary",
                     },
+                )
+                six_side_artifacts = [
+                    artifact
+                    for artifact in result.revision.manifest.artifacts
+                    if artifact.kind == "six_side_drill_xml"
+                ]
+                self.assertEqual(
+                    len(six_side_artifacts),
+                    len(result.pipeline.panels),
+                )
+                self.assertTrue(
+                    all(
+                        artifact.metadata.get("panel_label")
+                        and artifact.metadata.get("readiness") == "preliminary"
+                        for artifact in six_side_artifacts
+                    )
                 )
 
                 incomplete_lineage = validate_delivery(

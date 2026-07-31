@@ -132,9 +132,12 @@ def write_artifacts(
     )
     export_drilled_holes_glb(drilled_data, drilled_glb_path)
     export_drilled_holes_step(drilled_data, drilled_step_path)
-    # 导出柜柜六面钻 XML 文件
+    drilled_step_glb_path = Path(f"{drilled_step_path}.glb")
     drilled_xml_dir = artifact_dir / "六面钻文件"
-    drill_json_to_xml_files(drilled_json_path, drilled_xml_dir)
+    drilled_xml_paths = drill_json_to_xml_files(
+        drilled_json_path,
+        drilled_xml_dir,
+    )
 
     revision.manifest.add_file("design_intent", intent_path)
     revision.manifest.add_file("layout_plan", layout_path)
@@ -153,5 +156,18 @@ def write_artifacts(
     revision.manifest.add_file("drilled_holes", drilled_json_path)
     revision.manifest.add_file("drilled_holes_glb", drilled_glb_path, derived=True)
     revision.manifest.add_file("drilled_holes_step", drilled_step_path, derived=True)
+    revision.manifest.add_file(
+        "drilled_holes_step_glb",
+        drilled_step_glb_path,
+        derived=True,
+    )
+    for drilled_xml_path in drilled_xml_paths:
+        revision.manifest.add_file(
+            "six_side_drill_xml",
+            drilled_xml_path,
+            derived=True,
+            panel_label=drilled_xml_path.stem,
+            readiness=pipeline.bom.readiness,
+        )
     revision.manifest.add_file("cad_source", source_path, derived=True)
     return source_path, step_path

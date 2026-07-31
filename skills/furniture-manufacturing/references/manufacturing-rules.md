@@ -38,6 +38,8 @@
 - 板件记录保留有效 `back_mount`，不得由厚度/备注反推。
 - 成对孔由 `Connector.generate_holes_for_panels()` 基于完整装配生成，不伪装成单板规则；背拉条四边封边。
 - `hardware_catalog.yaml` 的外盖 `4×30mm`、背拉条 `4×40mm` 螺钉及 `hardware_rules.yaml` 孔距/预孔均为软件暂定值，不代表工厂批准；因此自动规划始终从 `readiness=preliminary` 开始。
+- 上述 4mm 螺钉的直通孔默认直径为 4.5mm；沉头锥面的直径、角度和深度尚未建模，
+  不得把 9mm 沉头外径直接当作 9mm 直通孔输出。
 - 五金数量等于主连接孔数量；同一连接的配合孔数量一致。
 
 ## 六面钻 XML 导出
@@ -46,7 +48,9 @@
 - 机床坐标 X=PanelLength, Y=PanelWidth, Z=PanelThickness。
 - TypeNo 由 `HoleSpec.is_face_hole` 决定，不再从世界坐标推导。
 - 板件轮廓 `PanelOutline` 按逆时针列出顶点：`(0, PanelWidth) → (0, 0) → (PanelLength, 0) → (PanelLength, PanelWidth)` 加闭合点。
-- `devices/six_side_drill_guigui.yaml` 按面板类型配置 `sixd_x_from_box`/`sixd_y_from_box` 和孔位坐标映射键。
+- `devices/six_side_drill_guigui.yaml` 按面板类型配置
+  `sixd_x_from_box`/`sixd_y_from_box` 与 `x1/y1/z1_from_hole`；水平孔的
+  世界方向必须随板件摆放转换成机床 X/Y 方向后再生成 Quadrant。
 
 ## 边界
 

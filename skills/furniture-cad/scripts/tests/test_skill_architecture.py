@@ -91,6 +91,23 @@ class SkillArchitectureTests(unittest.TestCase):
         ):
             self.assertFalse((cad_references / moved_reference).exists())
 
+        topology_root = (
+            SKILLS_ROOT
+            / "furniture-panel-planning"
+            / "references"
+            / "cabinet-topologies"
+        )
+        self.assertTrue((topology_root / "floor_cabinet.yaml").is_file())
+        self.assertTrue((topology_root / "wall_cabinet.yaml").is_file())
+        self.assertFalse(
+            (
+                SKILLS_ROOT
+                / "furniture-design-intent"
+                / "references"
+                / "cabinet_topologies"
+            ).exists()
+        )
+
     def test_each_stage_skill_owns_its_runtime_package(self) -> None:
         for skill_name, package_name in STAGE_RUNTIME_PACKAGES.items():
             package_root = SKILLS_ROOT / skill_name / "scripts" / package_name

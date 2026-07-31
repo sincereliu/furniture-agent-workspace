@@ -32,7 +32,8 @@ back_mount_drilling:
     # 外盖背板沿左右侧板、顶板、底板周边固定
     first_hole_mm: 50
     max_spacing_mm: 200
-    clearance_hole_diameter_mm: 9
+    # 4mm 螺钉通孔；沉头锥面须由设备/工厂另行确认，不能用 9mm 直通孔代替
+    clearance_hole_diameter_mm: 4.5
     pilot_hole_diameter_mm: 3
     pilot_depth_mm: 20
 
@@ -40,7 +41,8 @@ back_mount_drilling:
     # 每根背拉条左右两端各设置 count_per_end 个连接点
     count_per_end: 2
     end_offset_mm: 20
-    clearance_hole_diameter_mm: 9
+    # 4mm 螺钉通孔；沉头锥面须由设备/工厂另行确认，不能用 9mm 直通孔代替
+    clearance_hole_diameter_mm: 4.5
     pilot_hole_diameter_mm: 3
     pilot_depth_mm: 20
 

@@ -6,9 +6,12 @@
 
 1. 当前 Revision 必须包含并确认 `design_intent` 到 `cad_generated` 六个前置阶段，且每阶段最近一份 `ValidationReport` 通过。
 2. Manifest 与每个 Artifact 的 `source_revision_id` 必须等于当前 Revision；任何 `stale` 产物均失败。
-3. 必需产物种类齐全，文件存在、非空，实时大小与 SHA-256 和 Manifest 一致。
+3. 必需产物种类齐全，文件存在、非空，实时大小与 SHA-256 和 Manifest 一致；
+   孔位 JSON/GLB/STEP、STEP Viewer 侧车和逐板六面钻 XML 均须登记。
 4. `manufacturing_plan` 与 `bom` 的 Manifest `readiness` 必须等于 `manufacturing_planned.readiness`。
 5. `readiness=preliminary` 只产生警告：文件可以完整交付，但不得称为工厂已确认或可直接投产。
+6. 六面钻 XML 的 Manifest 记录携带板件标识和制造 `readiness`；哈希完整只
+   证明文件未被篡改，不证明机床坐标已经过工厂首件确认。
 
 ## 已由上游阶段负责的语义关卡
 

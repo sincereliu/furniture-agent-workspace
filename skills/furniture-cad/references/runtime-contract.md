@@ -102,6 +102,9 @@ result = orchestrator.run_next(
 - `<artifact-name>.bom.md`
 - `<artifact-name>.drilled-holes.json`
 - `<artifact-name>.drilled-holes.glb`
+- `<artifact-name>.drilled-holes.step`
+- `<artifact-name>.drilled-holes.step.glb`
+- `六面钻文件/<panel-label>.xml`
 - `<artifact-name>.step`
 - 相邻隐藏 Viewer 拓扑 GLB
 

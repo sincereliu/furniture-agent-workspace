@@ -8,23 +8,28 @@ panel_placement:
     sixd_y_from_box: z    # PanelWidth  (机床Y轴) ← box.z (高度), 孔在高度方向的位置
     x1_from_hole: local_y
     y1_from_hole: local_z
+    z1_from_hole: local_x
   door:           # 门板 — 板面 X-Z (板厚方向=Y)
     sixd_x_from_box: z    # PanelLength (机床X轴) ← box.z (门高 = 高度方向)
     sixd_y_from_box: x    # PanelWidth  (机床Y轴) ← box.x (门宽 = 宽度方向)
     x1_from_hole: local_z
     y1_from_hole: local_x
+    z1_from_hole: local_y
   horizontal:     # 顶板/底板/层板 — 板面 X-Y (板厚方向=Z)
     sixd_x_from_box: y    # PanelLength (机床X轴) ← box.y (深度方向)
     sixd_y_from_box: x    # PanelWidth  (机床Y轴) ← box.x (宽度方向)
     x1_from_hole: local_y
     y1_from_hole: local_x
+    z1_from_hole: local_z
   toe_kick:       # 踢脚板 — 板面 X-Z (板厚方向=Y)
     sixd_x_from_box: x    # PanelLength (机床X轴) ← box.x (宽度方向)
     sixd_y_from_box: z    # PanelWidth  (机床Y轴) ← box.z (高度方向)
     x1_from_hole: local_x
     y1_from_hole: local_z
+    z1_from_hole: local_y
   default:        # 背板/背拉条等 — 板面 X-Z (板厚方向=Y)
     sixd_x_from_box: x
     sixd_y_from_box: z
     x1_from_hole: local_x
     y1_from_hole: local_z
+    z1_from_hole: local_y

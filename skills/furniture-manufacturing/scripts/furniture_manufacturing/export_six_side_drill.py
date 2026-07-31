@@ -1,7 +1,9 @@
 """导出柜柜六面钻 XML 文件（KDTPanelFormat）。
 
-从 drilled-holes JSON 反推板件上的所有孔位和槽位，
+从 drilled-holes JSON 反推板件上的孔位，
 生成与 guigui3 兼容的六面钻加工文件。
+
+槽位尚无设备侧数据契约；输入包含槽位时明确拒绝，避免静默漏加工。
 """
 
 from __future__ import annotations
@@ -46,9 +48,47 @@ def _box_value(box: dict[str, Any], key: str) -> float:
     return float(box.get(key, 0))
 
 
-def _hole_value(hole: dict[str, Any], local_key: str, global_key: str) -> float:
-    """优先取 local_*，回退到全局坐标。"""
-    return float(hole.get(local_key, hole.get(global_key, 0)))
+def _hole_value(hole: dict[str, Any], local_key: str) -> float:
+    """Read a required panel-local hole coordinate."""
+    if local_key not in hole:
+        raise ValueError(f"hole is missing required coordinate {local_key!r}")
+    return float(hole[local_key])
+
+
+def _localize_holes(
+    holes: list[dict[str, Any]],
+    box: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Fill missing local coordinates from global coordinates and panel origin."""
+    localized: list[dict[str, Any]] = []
+    for hole in holes:
+        item = dict(hole)
+        for axis in ("x", "y", "z"):
+            local_key = f"local_{axis}"
+            if local_key in item:
+                continue
+            if axis not in item:
+                raise ValueError(
+                    f"hole is missing both {local_key!r} and global {axis!r}"
+                )
+            item[local_key] = float(item[axis]) - float(
+                box.get(f"pos_{axis}", 0)
+            )
+        localized.append(item)
+    return localized
+
+
+def _machine_axes(placement: dict[str, str]) -> tuple[str, str, str]:
+    """Resolve and validate the box axes mapped to machine X/Y/Z."""
+    sixd_x_axis = placement.get("sixd_x_from_box", "x")
+    sixd_y_axis = placement.get("sixd_y_from_box", "z")
+    valid_axes = {"x", "y", "z"}
+    if sixd_x_axis not in valid_axes or sixd_y_axis not in valid_axes:
+        raise ValueError("six-side drill placement uses an unknown box axis")
+    if sixd_x_axis == sixd_y_axis:
+        raise ValueError("six-side drill X/Y axes must use different box axes")
+    sixd_z_axis = (valid_axes - {sixd_x_axis, sixd_y_axis}).pop()
+    return sixd_x_axis, sixd_y_axis, sixd_z_axis
 
 
 # ---------------------------------------------------------------------------
@@ -88,29 +128,33 @@ def drill_json_to_xml_files(
         # 设备配置映射
         placement = _resolve_placement(panel_type)
 
-        # 六面钻坐标: 根据 panel_type 从 box 的三轴映射到机床 X/Y 轴
-        sixd_x = _box_value(box, placement.get("sixd_x_from_box", "x"))
-        sixd_y = _box_value(box, placement.get("sixd_y_from_box", "z"))
-
-        # 板厚轴 = 剩余未被使用的那根轴
-        used_axes = {placement.get("sixd_x_from_box", "x"), placement.get("sixd_y_from_box", "z")}
-        all_axes = {"x", "y", "z"}
-        sixd_z_axis = (all_axes - used_axes).pop()
+        # 六面钻坐标: 根据 panel_type 从 box 的三轴映射到机床 X/Y/Z 轴
+        sixd_x_axis, sixd_y_axis, sixd_z_axis = _machine_axes(placement)
+        sixd_x = _box_value(box, sixd_x_axis)
+        sixd_y = _box_value(box, sixd_y_axis)
         sixd_z = _box_value(box, sixd_z_axis)
+        if min(sixd_x, sixd_y, sixd_z) <= 0:
+            raise ValueError(
+                f"panel {plank_num!r} has non-positive six-side drill dimensions"
+            )
 
-        # X1/Y1 映射键
+        # 机床 X/Y/Z 局部坐标映射键
         x1_key = placement.get("x1_from_hole", "local_x")
         y1_key = placement.get("y1_from_hole", "local_y")
+        z1_key = placement.get("z1_from_hole", f"local_{sixd_z_axis}")
 
         panel_xml = _make_panel_xml(
             name=panel_name,
             sixd_x=sixd_x,
             sixd_y=sixd_y,
             sixd_z=sixd_z,
-            holes=panel.get("holes", []),
+            holes=_localize_holes(panel.get("holes", []), box),
             slots=panel.get("slots", []),
             x1_key=x1_key,
             y1_key=y1_key,
+            z1_key=z1_key,
+            machine_x_axis=sixd_x_axis,
+            machine_y_axis=sixd_y_axis,
         )
 
         file_path = out_dir / f"{plank_num}.xml"
@@ -155,21 +199,33 @@ def _infer_panel_type(panel: dict[str, Any]) -> str:
 # 辅助函数
 # ---------------------------------------------------------------------------
 
-def _quadrant(direction: str) -> str:
-    """根据钻孔方向返回柜柜 Quadrant（1-4）。"""
-    return {"+x": "1", "-x": "2", "+y": "3", "-y": "4"}.get(direction, "1")
-
-
-def _z1_for_direction(
+def _machine_direction(
     direction: str,
-    hole: dict[str, Any],
-) -> float:
-    """计算水平孔在板厚方向的 Z1 坐标。"""
-    if direction in ("+x", "-x"):
-        return float(hole.get("local_z", 0))
-    elif direction in ("+y", "-y"):
-        return float(hole.get("local_x", 0))
-    return 0.0
+    machine_x_axis: str,
+    machine_y_axis: str,
+) -> str:
+    """Transform a signed world direction into the panel's machine X/Y axes."""
+    if len(direction) != 2 or direction[0] not in "+-":
+        raise ValueError(f"invalid hole direction: {direction!r}")
+    sign, world_axis = direction
+    if world_axis == machine_x_axis:
+        return f"{sign}x"
+    if world_axis == machine_y_axis:
+        return f"{sign}y"
+    raise ValueError(
+        f"edge-hole direction {direction!r} points through panel thickness"
+    )
+
+
+def _quadrant(machine_direction: str) -> str:
+    """根据机床方向返回柜柜 Quadrant（1-4）。"""
+    quadrants = {"+x": "1", "-x": "2", "+y": "3", "-y": "4"}
+    try:
+        return quadrants[machine_direction]
+    except KeyError as exc:
+        raise ValueError(
+            f"unsupported machine hole direction: {machine_direction!r}"
+        ) from exc
 
 
 def _flush_xml(text: str) -> str:
@@ -193,13 +249,16 @@ def _make_panel_xml(
     slots: list[dict[str, Any]],
     x1_key: str,
     y1_key: str,
+    z1_key: str,
+    machine_x_axis: str,
+    machine_y_axis: str,
 ) -> str:
     """构造一块板件的 KDTPanelFormat XML 字符串。
 
     sixd_x = PanelLength（机床 X 轴方向尺寸）
     sixd_y = PanelWidth （机床 Y 轴方向尺寸）
     sixd_z = PanelThickness（板厚，机床 Z 轴）
-    x1_key / y1_key = 从 hole dict 取 X1/Y1 坐标的 key
+    x1_key / y1_key / z1_key = 从 hole dict 取机床 X/Y/Z 坐标的 key
     """
     root = ET.Element("KDTPanelFormat")
 
@@ -218,8 +277,11 @@ def _make_panel_xml(
 
     outline = ET.SubElement(panel_elem, "PanelOutline")
     vertices = [
-        (0, sixd_y), (0, 0), (sixd_x, 0), (sixd_x, sixd_y),
-        (0, sixd_y), (0, sixd_y),
+        (0, sixd_y),
+        (0, 0),
+        (sixd_x, 0),
+        (sixd_x, sixd_y),
+        (0, sixd_y),
     ]
     for vx, vy in vertices:
         vt = ET.SubElement(outline, "Vertex")
@@ -228,8 +290,8 @@ def _make_panel_xml(
 
     # 孔位
     for hole in holes:
-        xml_x = _hole_value(hole, x1_key, x1_key)
-        xml_y = _hole_value(hole, y1_key, y1_key)
+        xml_x = _hole_value(hole, x1_key)
+        xml_y = _hole_value(hole, y1_key)
         diam = float(hole.get("diameter", 10))
         depth_2d = float(hole.get("depth", 11))
         direction = hole.get("direction", "+z")
@@ -248,9 +310,14 @@ def _make_panel_xml(
         _add_text(cad, "X1", f"{xml_x:.1f}")
         _add_text(cad, "Y1", f"{xml_y:.1f}")
         if type_no == "2":
-            z1 = _z1_for_direction(direction, hole)
+            z1 = _hole_value(hole, z1_key)
+            machine_direction = _machine_direction(
+                direction,
+                machine_x_axis,
+                machine_y_axis,
+            )
             _add_text(cad, "Z1", f"{z1:.2f}")
-            _add_text(cad, "Quadrant", _quadrant(direction))
+            _add_text(cad, "Quadrant", _quadrant(machine_direction))
             _add_text(cad, "IntervalZ", "0.00")
         _add_text(cad, "Depth", f"{depth_2d:.1f}")
         _add_text(cad, "Diameter", f"{diam:.1f}")
@@ -259,11 +326,10 @@ def _make_panel_xml(
         _add_text(cad, "IntervalX", "0.00")
         _add_text(cad, "IntervalY", "0.00")
 
-    # 槽位
-    for slot in slots:
-        # 槽在 drilled-holes JSON 中尚未存槽位
-        # TODO: 当 emit_drilled_holes 含槽位后实现
-        pass
+    if slots:
+        raise ValueError(
+            "six-side drill slot export is not implemented; refusing to omit slots"
+        )
 
     _rough = ET.tostring(root, encoding="unicode")
     dom = minidom.parseString(_rough)

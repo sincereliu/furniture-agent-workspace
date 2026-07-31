@@ -294,6 +294,7 @@ def emit_drilled_holes(bom: BOMReport) -> dict:
         entry: dict = {
             "label": panel.label,
             "name": panel.name,
+            "panel_type": panel.panel_type,
             "box": {
                 "x": panel.size_x, "y": panel.size_y, "z": panel.size_z,
                 "pos_x": panel.pos_x, "pos_y": panel.pos_y, "pos_z": panel.pos_z,

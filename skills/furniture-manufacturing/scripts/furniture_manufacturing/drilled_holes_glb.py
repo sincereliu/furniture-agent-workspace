@@ -7,7 +7,6 @@ GLB 文件为向后兼容保留，含板件+孔位的 Compound 合并体。
 from __future__ import annotations
 
 import json
-import math
 from pathlib import Path
 from typing import Any
 
@@ -72,15 +71,6 @@ def export_drilled_holes_glb(
     return output_path
 
 
-# ── 板件 label 集合（用于区分板件 vs 孔位）─────────────────────
-_PANEL_LABELS = frozenset({
-    "left_side_panel", "right_side_panel", "top_panel",
-    "bottom_panel", "back_panel", "back_rail_1", "back_rail_2",
-    "toe_kick_back", "toe_kick_front", "toe_kick_support_1",
-    "toe_kick_support_2", "shelf_z316", "left_door", "right_door",
-})
-
-
 def export_drilled_holes_step(
     drilled_holes: dict[str, Any],
     output_path: str | Path,
@@ -95,15 +85,7 @@ def export_drilled_holes_step(
     output_path = Path(output_path).resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # 先收集所有几何并按组归类
-    group_solids: dict[str, list[bd.Solid]] = {}
-    for solid in _build_geometry(drilled_holes, marker_thickness):
-        label = solid.label
-        if label in _PANEL_LABELS:
-            group_solids.setdefault("板件", []).append(solid)
-        else:
-            group_name = HOLE_GROUP_MAP.get(label, "其他孔位")
-            group_solids.setdefault(group_name, []).append(solid)
+    group_solids = _build_grouped_geometry(drilled_holes, marker_thickness)
 
     # 每组建一个 Compound，包进根 Compound
     children: list[bd.Compound] = []
@@ -115,15 +97,96 @@ def export_drilled_holes_step(
 
     try:
         bd.export_step(root, str(output_path))
-        # 生成 STEP 的 GLB 侧车文件供 Viewer 渲染装配树
         glb_sidecar = Path(str(output_path) + ".glb")
         bd.export_gltf(root, str(glb_sidecar), binary=True)
-    except Exception:
-        # 如果 STEP 导出失败（build123d 不支持嵌套 Compound 层级），
-        # 保留 GLB 文件作为兜底
-        bd.export_gltf(root, str(output_path.with_suffix(".glb")), binary=True)
+    except Exception as exc:
+        raise RuntimeError(
+            f"unable to export drilled-hole STEP assembly: {output_path}"
+        ) from exc
+
+    for artifact in (output_path, glb_sidecar):
+        if not artifact.is_file() or artifact.stat().st_size == 0:
+            raise RuntimeError(f"drilled-hole artifact is missing or empty: {artifact}")
 
     return output_path
+
+
+def _panel_solid(panel: dict[str, Any]) -> bd.Solid | None:
+    """Build one panel solid, independent of its dynamic label."""
+    box_info = panel.get("box", {})
+    if not box_info:
+        return None
+    sx = float(box_info.get("x", 0))
+    sy = float(box_info.get("y", 0))
+    sz = float(box_info.get("z", 0))
+    if min(sx, sy, sz) <= 0:
+        return None
+    px = float(box_info.get("pos_x", 0))
+    py = float(box_info.get("pos_y", 0))
+    pz = float(box_info.get("pos_z", 0))
+    box = bd.Box(sx, sy, sz)
+    box.color = _panel_color(panel)
+    box.label = str(panel.get("label", "panel"))
+    box.move(
+        bd.Location(
+            (
+                px + sx / 2.0,
+                py + sy / 2.0,
+                pz + sz / 2.0,
+            )
+        )
+    )
+    return box
+
+
+def _hole_solids(
+    panel: dict[str, Any],
+    marker_thickness: float,
+) -> list[bd.Solid]:
+    """Build the visual solids for every hole on one panel."""
+    solids: list[bd.Solid] = []
+    for hole in panel.get("holes", []):
+        diam = float(hole.get("diameter", 8))
+        color_hex = hole.get("color", "#888888")
+        direction = str(hole.get("direction", "+z"))
+        hole_type = str(hole.get("hole_type", "hole"))
+        x = float(hole.get("x", 0))
+        y = float(hole.get("y", 0))
+        z = float(hole.get("z", 0))
+
+        cyl = bd.Cylinder(
+            radius=diam / 2.0,
+            height=marker_thickness,
+            align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.CENTER),
+        )
+        cyl.color = _hex_to_color(color_hex)
+        cyl.label = hole_type
+
+        rot = _DIRECTION_ROT.get(direction)
+        transform = bd.Location((x, y, z))
+        if rot is not None:
+            transform = transform * bd.Rotation(*rot)
+        cyl.move(transform)
+        solids.append(cyl)
+    return solids
+
+
+def _build_grouped_geometry(
+    drilled_holes: dict[str, Any],
+    marker_thickness: float,
+) -> dict[str, list[bd.Solid]]:
+    """Group panels by source role and holes by machining type."""
+    groups: dict[str, list[bd.Solid]] = {}
+    for panel in drilled_holes.get("panels", []):
+        panel_solid = _panel_solid(panel)
+        if panel_solid is not None:
+            groups.setdefault("板件", []).append(panel_solid)
+        for solid in _hole_solids(panel, marker_thickness):
+            groups.setdefault(
+                HOLE_GROUP_MAP.get(solid.label, "其他孔位"),
+                [],
+            ).append(solid)
+    return groups
 
 
 def _build_geometry(
@@ -134,50 +197,10 @@ def _build_geometry(
     geometry: list[bd.Solid] = []
 
     for panel in drilled_holes.get("panels", []):
-        # ── 板件方块 ──────────────────────────────────────────
-        box_info = panel.get("box", {})
-        if box_info:
-            sx = float(box_info.get("x", 0))
-            sy = float(box_info.get("y", 0))
-            sz = float(box_info.get("z", 0))
-            px = float(box_info.get("pos_x", 0))
-            py = float(box_info.get("pos_y", 0))
-            pz = float(box_info.get("pos_z", 0))
-            if sx > 0 and sy > 0 and sz > 0:
-                cx = px + sx / 2.0
-                cy = py + sy / 2.0
-                cz = pz + sz / 2.0
-                box = bd.Box(sx, sy, sz)
-                box.color = _panel_color(panel)
-                box.label = panel.get("label", "panel")
-                box.move(bd.Location((cx, cy, cz)))
-                geometry.append(box)
-
-        # ── 孔位标记 ─────────────────────────────────────────
-        for hole in panel.get("holes", []):
-            diam = float(hole.get("diameter", 8))
-            color_hex = hole.get("color", "#888888")
-            direction = str(hole.get("direction", "+z"))
-            hole_type = str(hole.get("hole_type", "hole"))
-            x = float(hole.get("x", 0))
-            y = float(hole.get("y", 0))
-            z = float(hole.get("z", 0))
-
-            radius = diam / 2.0
-            cyl = bd.Cylinder(
-                radius=radius,
-                height=marker_thickness,
-                align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.CENTER),
-            )
-            cyl.color = _hex_to_color(color_hex)
-            cyl.label = hole_type
-
-            rot = _DIRECTION_ROT.get(direction)
-            transform = bd.Location((x, y, z))
-            if rot is not None:
-                transform = transform * bd.Rotation(*rot)
-            cyl.move(transform)
-            geometry.append(cyl)
+        panel_solid = _panel_solid(panel)
+        if panel_solid is not None:
+            geometry.append(panel_solid)
+        geometry.extend(_hole_solids(panel, marker_thickness))
 
     return geometry
 
