@@ -20,6 +20,7 @@ bootstrap_runtime_paths(WORKSPACE_ROOT)
 from furniture_cad.cad_bridge import CadBridge
 from furniture_delivery_validation.validation import validate_delivery
 from furniture_design_intent.design_intent import DesignIntent, OverallSize
+from furniture_workflow.input_adapter import spec_from_intent
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from furniture_workflow.workflow_state import STAGE_SEQUENCE, WorkflowStage
 from furniture_workflow.workflow_store import JsonProjectStore
@@ -465,6 +466,23 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             {issue.code for issue in revision.validations[-1].issues},
         )
 
+    def test_unsupported_structure_decision_is_not_silently_discarded(self) -> None:
+        intent = DesignIntent.from_dict(
+            {
+                **cabinet_intent().to_dict(),
+                "structure": {"mystery_joint": "unknown"},
+            }
+        )
+        project = self.orchestrator.create_project("未知连接柜体", intent)
+
+        revision = self.orchestrator.confirm_intent(project)
+
+        self.assertEqual(revision.workflow.current, WorkflowStage.FAILED)
+        self.assertIn(
+            "UNSUPPORTED_STRUCTURE_DECISION",
+            {issue.code for issue in revision.validations[-1].issues},
+        )
+
     def test_unsupported_family_fails_at_design_intent_confirmation(self) -> None:
         project = self.orchestrator.create_project(
             "床", cabinet_intent(furniture_type="bed")
@@ -505,6 +523,24 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         self.assertEqual(intent.overall_size.width_mm, 800)
         self.assertEqual(intent.overall_size.depth_mm, 350)
         self.assertEqual(intent.overall_size.height_mm, 900)
+
+    def test_input_adapter_preserves_hinge_preferences(self) -> None:
+        intent = self.orchestrator.intent_from_spec(
+            {
+                "type": "floor_cabinet",
+                "hinge_brand": "DTC",
+                "hinge_variant": "国产35mm杯全盖",
+                "hinge_overlay": "half",
+                "hinge_angle": 110,
+            }
+        )
+
+        spec = spec_from_intent(intent)
+
+        self.assertEqual(spec.hinge_brand, "DTC")
+        self.assertEqual(spec.hinge_variant, "国产35mm杯全盖")
+        self.assertEqual(spec.hinge_overlay, "half")
+        self.assertEqual(spec.hinge_angle, 110)
 
 
 if __name__ == "__main__":

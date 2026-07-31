@@ -16,6 +16,7 @@ bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 from furniture_design_intent.design_spec import FurnitureSpec
 from furniture_layout.layout_pipeline import plan_layout
+from furniture_layout.validation import validate_layout
 from furniture_manufacturing.manufacturing_bom import (
     emit_drilled_holes,
     plan_manufacturing,
@@ -259,41 +260,61 @@ class BackMountModeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "back_mount"):
             plan_layout(self._spec("unsupported"))
 
-        with self.assertRaisesRegex(ValueError, "cover back mount"):
-            plan_layout(
-                FurnitureSpec(
-                    furniture_type="floor_cabinet",
-                    width=800,
-                    depth=25,
-                    height=1000,
-                    back_mount="cover",
-                )
-            )
+        cover_spec = FurnitureSpec(
+            furniture_type="floor_cabinet",
+            width=800,
+            depth=25,
+            height=1000,
+            back_mount="cover",
+        )
+        cover_report = validate_layout(
+            cover_spec,
+            plan_layout(cover_spec),
+        )
+        self.assertFalse(cover_report.passed)
+        self.assertIn(
+            "NON_POSITIVE_INTERNAL_CLEARANCE",
+            {issue.code for issue in cover_report.issues},
+        )
 
-        with self.assertRaisesRegex(ValueError, "inserted back"):
-            plan_layout(
-                FurnitureSpec(
-                    furniture_type="floor_cabinet",
-                    width=800,
-                    depth=600,
-                    height=1000,
-                    back_mount="insert",
-                    back_thickness=18,
-                    back_offset=570,
-                )
-            )
+        insert_spec = FurnitureSpec(
+            furniture_type="floor_cabinet",
+            width=800,
+            depth=600,
+            height=1000,
+            back_mount="insert",
+            back_thickness=18,
+            back_offset=570,
+        )
+        insert_report = validate_layout(
+            insert_spec,
+            plan_layout(insert_spec),
+        )
+        self.assertFalse(insert_report.passed)
+        self.assertIn(
+            "INVALID_BACK_LAYOUT",
+            {issue.code for issue in insert_report.issues},
+        )
 
-        with self.assertRaisesRegex(ValueError, "back_rail_height"):
-            plan_layout(
-                FurnitureSpec(
-                    furniture_type="floor_cabinet",
-                    width=800,
-                    depth=600,
-                    height=600,
-                    back_mount="groove",
-                    back_rail_height=600,
-                )
-            )
+        rail_spec = FurnitureSpec(
+            furniture_type="floor_cabinet",
+            width=800,
+            depth=600,
+            height=1000,
+            back_mount="groove",
+            back_rail_height=1000,
+        )
+        rail_layout = plan_layout(rail_spec)
+        rail_report = validate_panels(
+            rail_spec,
+            rail_layout,
+            plan_panels(rail_spec, rail_layout),
+        )
+        self.assertFalse(rail_report.passed)
+        self.assertIn(
+            "NON_POSITIVE_BACK_RAIL_SPACING",
+            {issue.code for issue in rail_report.issues},
+        )
 
     def test_panel_validation_rejects_cover_overlap(self) -> None:
         spec = self._spec("cover")

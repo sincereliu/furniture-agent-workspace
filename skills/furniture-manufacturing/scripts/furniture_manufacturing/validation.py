@@ -65,6 +65,7 @@ def validate_manufacturing(
             )
         else:
             target = placement_by_id[operation.target_panel]
+            outside_target = False
             for axis, size, position, target_size, target_position in (
                 ("x", operation.size_x, operation.pos_x, target.size_x, target.pos_x),
                 ("y", operation.size_y, operation.pos_y, target.size_y, target.pos_y),
@@ -79,6 +80,13 @@ def validate_manufacturing(
                         f"{operation.id} exceeds {operation.target_panel} on {axis.upper()}",
                         operation.id,
                     )
+                    outside_target = True
+            if "back_groove" in operation.id and outside_target:
+                report.add_error(
+                    "GROOVE_OUTSIDE_TARGET",
+                    f"{operation.id} must remain inside its target panel envelope",
+                    operation.id,
+                )
         if operation.operation_type != "cut_box":
             report.add_error(
                 "UNSUPPORTED_OPERATION",
@@ -119,6 +127,35 @@ def validate_manufacturing(
             "grooved back strategy requires four target-specific groove cuts",
             "operations",
         )
+    if back_mount == "groove":
+        if spec.groove_depth <= 0:
+            report.add_error(
+                "INVALID_GROOVE_DEPTH",
+                "groove_depth must be greater than zero",
+                "groove_depth",
+            )
+        elif spec.groove_depth > spec.board_thickness:
+            report.add_error(
+                "GROOVE_DEPTH_EXCEEDS_PANEL_THICKNESS",
+                "groove_depth cannot exceed board_thickness",
+                "groove_depth",
+            )
+        if spec.groove_clearance < 0:
+            report.add_error(
+                "INVALID_GROOVE_CLEARANCE",
+                "groove_clearance cannot be negative",
+                "groove_clearance",
+            )
+        expected_groove_width = (
+            spec.back_thickness + spec.groove_clearance
+        )
+        for operation in back_groove_operations:
+            if abs(operation.size_y - expected_groove_width) > 1e-6:
+                report.add_error(
+                    "GROOVE_WIDTH_MISMATCH",
+                    f"{operation.id} does not preserve the specified groove width",
+                    operation.id,
+                )
     elif back_mount != "groove" and back_groove_operations:
         report.add_error(
             "UNEXPECTED_BACK_GROOVES",
@@ -158,12 +195,96 @@ def validate_manufacturing(
         )
 
     drilled = emit_drilled_holes(bom)
+    drilled_by_panel = {
+        panel["label"]: panel["holes"]
+        for panel in drilled["panels"]
+    }
     hole_types = [
         hole["hole_type"]
         for panel in drilled["panels"]
         for hole in panel["holes"]
     ]
     hardware_by_name = {item.name: item for item in bom.hardware}
+    door_panels = [
+        item for item in bom.panels if item.panel_type == "door"
+    ]
+    hinge_holes = [
+        (panel, hole)
+        for panel in door_panels
+        for hole in drilled_by_panel.get(panel.label, [])
+        if hole["hole_type"] == "hinge"
+    ]
+    for panel in door_panels:
+        panel_hinges = [
+            hole
+            for hole in drilled_by_panel.get(panel.label, [])
+            if hole["hole_type"] == "hinge"
+        ]
+        if not panel_hinges:
+            report.add_error(
+                "MISSING_HINGE_HOLES",
+                f"{panel.label} requires hinge cup holes",
+                panel.label,
+            )
+        for hole in panel_hinges:
+            radius = hole["diameter"] / 2
+            if (
+                hole["diameter"] <= 0
+                or hole["local_x"] - radius < -1e-6
+                or hole["local_x"] + radius > panel.size_x + 1e-6
+                or hole["local_z"] - radius < -1e-6
+                or hole["local_z"] + radius > panel.size_z + 1e-6
+            ):
+                report.add_error(
+                    "HINGE_HOLE_OUTSIDE_DOOR",
+                    f"hinge cup on {panel.label} exceeds the door envelope",
+                    panel.label,
+                )
+            expected_face_coordinate = (
+                panel.size_y
+                if panel.inner_face == "+y"
+                else 0.0
+            )
+            if (
+                panel.inner_face not in {"+y", "-y"}
+                or abs(hole["local_y"] - expected_face_coordinate) > 1e-6
+                or hole["direction"] != panel.inner_face
+                or not hole["is_face_hole"]
+            ):
+                report.add_error(
+                    "HINGE_HOLE_FACE_MISMATCH",
+                    f"hinge cup on {panel.label} must enter from its inner face",
+                    panel.label,
+                )
+            if hole["depth"] <= 0 or hole["depth"] > panel.size_y + 1e-6:
+                report.add_error(
+                    "INVALID_HINGE_HOLE_DEPTH",
+                    f"hinge cup depth on {panel.label} exceeds door thickness",
+                    panel.label,
+                )
+            if (
+                panel.door_hinge_side == "left"
+                and hole["local_x"] >= panel.size_x / 2
+            ) or (
+                panel.door_hinge_side == "right"
+                and hole["local_x"] <= panel.size_x / 2
+            ):
+                report.add_error(
+                    "HINGE_SIDE_MISMATCH",
+                    f"hinge cup on {panel.label} is on the wrong door edge",
+                    panel.label,
+                )
+    expected_hinge_count = sum(
+        item.quantity
+        for item in bom.hardware
+        if item.name == "液压缓冲铰链"
+    )
+    if len(hinge_holes) != expected_hinge_count:
+        report.add_error(
+            "HINGE_HARDWARE_COUNT_MISMATCH",
+            "hinge cup count must match hinge hardware quantity",
+            "hardware",
+        )
     manufacturing_contracts: dict[
         str,
         tuple[str, tuple[str, ...]],

@@ -15,10 +15,6 @@ from furniture_delivery_validation.validation import (
 )
 from furniture_design_intent.design_intent import DesignIntent
 from furniture_design_intent.design_spec import FurnitureSpec
-from furniture_design_intent.translation import (
-    intent_from_spec as translate_intent_from_spec,
-    spec_from_intent,
-)
 from furniture_design_intent.validation import validate_intent
 from furniture_feature_tree.feature_tree_builder import panels_to_feature_tree
 from furniture_feature_tree.validation import validate_feature_tree
@@ -41,6 +37,10 @@ from furniture_panel_planning.panel_planning import plan_panels
 from furniture_panel_planning.validation import validate_panels
 
 from .cabinet_pipeline import CabinetPipelineResult
+from .input_adapter import (
+    intent_from_spec as translate_intent_from_spec,
+    spec_from_intent,
+)
 from .workflow_artifact_writer import prepare_artifact_dir, write_artifacts
 from .workflow_project import Project, Revision
 from .workflow_state import (

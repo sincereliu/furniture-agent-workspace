@@ -1,7 +1,4 @@
-"""家具规格 — FurnitureSpec 和 Feature Tree 类型定义
-
-所有下游模块共享的输入/输出契约。
-"""
+"""Confirmed cabinet inputs shared by the stage runtimes."""
 
 from __future__ import annotations
 
@@ -89,129 +86,6 @@ class FurnitureSpec:
     # 扩展
     options: Dict[str, Any] = field(default_factory=dict)
 
-    @property
-    def is_cabinet(self) -> bool:
-        return self.furniture_type in (
-            "floor_cabinet",
-            "wall_cabinet",
-        )
-
-    def validation_errors(self) -> list[str]:
-        """在阶段执行前校验可执行的柜体合约。"""
-        errors: list[str] = []
-        positive_fields = {
-            "width": self.width,
-            "depth": self.depth,
-            "height": self.height,
-            "board_thickness": self.board_thickness,
-            "back_thickness": self.back_thickness,
-            "door_thickness": self.door_thickness,
-        }
-        for name, value in positive_fields.items():
-            if value <= 0:
-                errors.append(f"{name} must be greater than zero")
-
-        non_negative_fields = {
-            "toe_kick_height": self.toe_kick_height,
-            "door_margin": self.door_margin,
-            "door_hinge_gap": self.door_hinge_gap,
-            "toe_kick_reveal_front": self.toe_kick_reveal_front,
-            "toe_kick_reveal_back": self.toe_kick_reveal_back,
-            "back_rail_height": self.back_rail_height,
-        }
-        for name, value in non_negative_fields.items():
-            if value < 0:
-                errors.append(f"{name} cannot be negative")
-
-        if self.shelf_count < 0:
-            errors.append("shelf_count cannot be negative")
-        if self.n_doors < 0:
-            errors.append("n_doors cannot be negative")
-        if self.toe_kick_support_count is not None and self.toe_kick_support_count < 0:
-            errors.append("toe_kick_support_count cannot be negative")
-
-        try:
-            back_mount = resolve_back_mount(
-                self.back_mount,
-                self.back_thickness,
-                self.board_thickness,
-            )
-        except ValueError as exc:
-            errors.append(str(exc))
-            back_mount = None
-
-        carcass_y_start = self.back_thickness if back_mount == "cover" else 0.0
-        carcass_y_end = self.depth - self.door_thickness - self.door_hinge_gap
-        carcass_depth = carcass_y_end - carcass_y_start
-        internal_width = self.width - 2 * self.board_thickness
-        actual_toe_kick = (
-            self.toe_kick_height if self.furniture_type != "wall_cabinet" else 0.0
-        )
-        internal_height = self.height - actual_toe_kick - 2 * self.board_thickness
-
-        if carcass_depth <= 0:
-            if back_mount == "cover":
-                errors.append(
-                    "depth must exceed back_thickness + door_thickness + "
-                    "door_hinge_gap for cover back mount"
-                )
-            else:
-                errors.append("depth must exceed door_thickness + door_hinge_gap")
-        if internal_width <= 0:
-            errors.append("width must exceed twice board_thickness")
-        if internal_height <= 0:
-            errors.append(
-                "height must exceed toe_kick_height + twice board_thickness"
-            )
-
-        if back_mount == "groove":
-            if self.back_offset < carcass_y_start:
-                errors.append("back_offset cannot be behind the cabinet carcass")
-            if self.groove_depth <= 0:
-                errors.append("groove_depth must be greater than zero")
-            if self.groove_clearance < 0:
-                errors.append("groove_clearance cannot be negative")
-            if self.groove_depth > self.board_thickness:
-                errors.append("groove_depth cannot exceed board_thickness")
-            groove_width = self.back_thickness + self.groove_clearance
-            if (
-                self.back_offset < carcass_y_start
-                or self.back_offset + groove_width > carcass_y_end
-            ):
-                errors.append("back groove must remain inside the cabinet side depth")
-            rail_count = int(internal_height // 500) if internal_height > 0 else 0
-            if (
-                self.back_rail_height > 0
-                and rail_count > 0
-                and rail_count * self.back_rail_height > internal_height
-            ):
-                errors.append("back_rail_height leaves no positive rail spacing")
-        elif back_mount == "insert":
-            if self.back_offset < carcass_y_start:
-                errors.append("back_offset cannot be behind the cabinet carcass")
-            elif self.back_offset + self.back_thickness >= carcass_y_end:
-                errors.append(
-                    "inserted back must leave positive cabinet internal depth"
-                )
-
-        if actual_toe_kick > 0:
-            support_depth = (
-                carcass_depth
-                - self.toe_kick_reveal_front
-                - self.toe_kick_reveal_back
-                - 2 * self.board_thickness
-            )
-            if support_depth <= 0:
-                errors.append("toe-kick reveals leave no positive support depth")
-            support_count = resolve_toe_kick_support_count(
-                self.toe_kick_support_count,
-                self.width,
-            )
-            if support_count * self.board_thickness >= internal_width:
-                errors.append("toe_kick_support_count leaves no positive clear spacing")
-
-        return errors
-
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "FurnitureSpec":
         """从字典构建规格，自动做单位转换和默认值填充。
@@ -249,6 +123,10 @@ class FurnitureSpec:
             toe_kick_support_count=_optional_int(data.get("toe_kick_support_count")),
             back_mount=str(_get("back_mount", "auto")),
             back_rail_height=float(_get("back_rail_height", 70.0)),
+            hinge_brand=str(_get("hinge_brand", "")),
+            hinge_variant=str(_get("hinge_variant", "")),
+            hinge_overlay=str(_get("hinge_overlay", "full")),
+            hinge_angle=int(_get("hinge_angle", 100)),
             options=data.get("options", {}),
         )
 
@@ -284,12 +162,3 @@ def resolve_back_mount(spec_back_mount: str, back_thickness: float, board_thickn
     if mode != "auto":
         return mode
     return "insert" if back_thickness >= board_thickness else "groove"
-
-
-def resolve_toe_kick_support_count(explicit: int | None, width: float) -> int:
-    """解析踢脚线支撑块数量的项目默认值。"""
-    if explicit is not None:
-        return explicit
-    if width < 600:
-        return 0
-    return 1 + int((width - 600) // 300)

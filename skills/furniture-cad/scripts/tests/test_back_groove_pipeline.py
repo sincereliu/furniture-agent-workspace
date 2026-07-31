@@ -21,7 +21,9 @@ from furniture_feature_tree.feature_tree_builder import panels_to_feature_tree
 from furniture_feature_tree.feature_tree_emitter import write_build123d_source
 from furniture_layout.layout_pipeline import plan_layout
 from furniture_manufacturing.manufacturing_bom import plan_manufacturing
+from furniture_manufacturing.validation import validate_manufacturing
 from furniture_panel_planning.panel_planning import plan_panels
+from furniture_panel_planning.validation import validate_panels
 
 
 class BackGroovePipelineTests(unittest.TestCase):
@@ -102,16 +104,26 @@ class BackGroovePipelineTests(unittest.TestCase):
         )
         self.assertAlmostEqual(shape.volume, uncut_volume - removed_volume, places=3)
 
-    def test_invalid_groove_and_support_inputs_fail_before_layout(self) -> None:
+    def test_invalid_groove_and_support_inputs_fail_in_owning_stages(self) -> None:
         invalid_groove = FurnitureSpec(
             furniture_type="floor_cabinet",
             width=800,
             depth=600,
             height=1000,
-            groove_depth=19,
+            groove_clearance=600,
         )
-        with self.assertRaisesRegex(ValueError, "groove_depth"):
-            plan_layout(invalid_groove)
+        groove_layout = plan_layout(invalid_groove)
+        groove_panels = plan_panels(invalid_groove, groove_layout)
+        groove_report = validate_manufacturing(
+            invalid_groove,
+            plan_manufacturing(invalid_groove, groove_panels),
+            groove_panels,
+        )
+        self.assertFalse(groove_report.passed)
+        self.assertIn(
+            "GROOVE_OUTSIDE_TARGET",
+            {issue.code for issue in groove_report.issues},
+        )
 
         invalid_supports = FurnitureSpec(
             furniture_type="floor_cabinet",
@@ -121,8 +133,18 @@ class BackGroovePipelineTests(unittest.TestCase):
             board_thickness=18,
             toe_kick_support_count=4,
         )
-        with self.assertRaisesRegex(ValueError, "toe_kick_support_count"):
-            plan_layout(invalid_supports)
+        support_layout = plan_layout(invalid_supports)
+        support_panels = plan_panels(invalid_supports, support_layout)
+        support_report = validate_panels(
+            invalid_supports,
+            support_layout,
+            support_panels,
+        )
+        self.assertFalse(support_report.passed)
+        self.assertIn(
+            "NON_POSITIVE_TOE_KICK_SUPPORT_SPACING",
+            {issue.code for issue in support_report.issues},
+        )
 
         with self.assertRaisesRegex(ValueError, "must be an integer"):
             FurnitureSpec.from_dict(
@@ -135,4 +157,3 @@ class BackGroovePipelineTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

@@ -1,11 +1,11 @@
-"""在协议层输入与已确认的设计合约之间进行转换。"""
+"""Translate protocol inputs to and from the confirmed design contract."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from .design_intent import DesignIntent
-from .design_spec import FurnitureSpec
+from furniture_design_intent.design_intent import DesignIntent
+from furniture_design_intent.design_spec import FurnitureSpec
 
 
 def intent_from_spec(spec: dict[str, Any]) -> DesignIntent:

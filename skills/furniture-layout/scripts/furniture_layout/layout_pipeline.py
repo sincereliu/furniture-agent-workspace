@@ -14,7 +14,4 @@ def plan_layout(spec: FurnitureSpec) -> CabinetLayout:
         raise ValueError(
             f"Unsupported cabinet type: {spec.furniture_type!r}; supported: {supported}"
         )
-    errors = spec.validation_errors()
-    if errors:
-        raise ValueError("; ".join(errors))
     return CabinetLayout.from_spec(spec)

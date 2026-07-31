@@ -7,6 +7,12 @@ from furniture_design_intent.design_spec import FurnitureSpec
 from furniture_layout.layout_planning import CabinetLayout
 
 from .panel_models import PanelPlacement
+from .panel_rules import (
+    back_rail_clear_spacing,
+    resolve_back_rail_count,
+    resolve_toe_kick_support_count,
+    toe_kick_support_clear_spacing,
+)
 
 
 def validate_panels(
@@ -142,6 +148,73 @@ def validate_panels(
                     "cover back must end before the cabinet carcass starts",
                     "back_panel",
                 )
+
+    support_panels = [
+        item
+        for item in panels
+        if item.id.startswith("toe_kick_support_")
+    ]
+    expected_support_count = (
+        resolve_toe_kick_support_count(
+            spec.toe_kick_support_count,
+            layout.width,
+        )
+        if layout.toe_kick_height > 0
+        else 0
+    )
+    if expected_support_count < 0:
+        report.add_error(
+            "INVALID_TOE_KICK_SUPPORT_COUNT",
+            "toe-kick support count cannot be negative",
+            "toe_kick_support_count",
+        )
+    if len(support_panels) != max(expected_support_count, 0):
+        report.add_error(
+            "TOE_KICK_SUPPORT_COUNT_MISMATCH",
+            "generated toe-kick support count does not match the panel rule",
+            "toe_kick_support_count",
+        )
+    if expected_support_count > 0 and toe_kick_support_clear_spacing(
+        layout.internal_width,
+        expected_support_count,
+        spec.board_thickness,
+    ) <= 0:
+        report.add_error(
+            "NON_POSITIVE_TOE_KICK_SUPPORT_SPACING",
+            "toe-kick supports leave no positive clear spacing",
+            "toe_kick_support_count",
+        )
+
+    rail_panels = [
+        item for item in panels if item.panel_type == "back_rail"
+    ]
+    expected_rail_count = resolve_back_rail_count(
+        layout.back_mount,
+        layout.internal_height,
+        spec.back_rail_height,
+    )
+    if spec.back_rail_height < 0:
+        report.add_error(
+            "INVALID_BACK_RAIL_HEIGHT",
+            "back_rail_height cannot be negative",
+            "back_rail_height",
+        )
+    if len(rail_panels) != expected_rail_count:
+        report.add_error(
+            "BACK_RAIL_COUNT_MISMATCH",
+            "generated back-rail count does not match the panel rule",
+            "back_rail",
+        )
+    if expected_rail_count > 0 and back_rail_clear_spacing(
+        layout.internal_height,
+        expected_rail_count,
+        spec.back_rail_height,
+    ) <= 0:
+        report.add_error(
+            "NON_POSITIVE_BACK_RAIL_SPACING",
+            "back rails leave no positive clear spacing",
+            "back_rail",
+        )
 
     for item in panels:
         if item.panel_type in ("fixed_shelf", "movable_shelf") and (

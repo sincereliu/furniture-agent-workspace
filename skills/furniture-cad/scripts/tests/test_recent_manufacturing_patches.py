@@ -29,6 +29,7 @@ from furniture_manufacturing.manufacturing_bom import (
     plan_manufacturing,
 )
 from furniture_manufacturing.manufacturing_models import PanelRecord
+from furniture_manufacturing.validation import validate_manufacturing
 from furniture_panel_planning.panel_planning import plan_panels
 
 
@@ -144,6 +145,35 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
         self.assertEqual({hole.x_local for hole in holes}, {22.5})
         self.assertTrue(all(hole.direction == "-y" for hole in holes))
         self.assertTrue(all(hole.is_face_hole for hole in holes))
+
+    def test_manufacturing_validation_rejects_hinge_outside_door(self) -> None:
+        spec = FurnitureSpec(
+            furniture_type="floor_cabinet",
+            width=800,
+            depth=600,
+            height=1000,
+            n_doors=2,
+        )
+        placements = plan_panels(spec, plan_layout(spec))
+        manufacturing = plan_manufacturing(spec, placements)
+        left_door = next(
+            panel
+            for panel in manufacturing.panels
+            if panel.label == "left_door"
+        )
+        left_door.size_x = 30
+
+        report = validate_manufacturing(
+            spec,
+            manufacturing,
+            placements,
+        )
+
+        self.assertFalse(report.passed)
+        self.assertIn(
+            "HINGE_HOLE_OUTSIDE_DOOR",
+            {issue.code for issue in report.issues},
+        )
 
     def test_emitted_panels_include_type_and_safe_screw_clearance(self) -> None:
         spec = FurnitureSpec(

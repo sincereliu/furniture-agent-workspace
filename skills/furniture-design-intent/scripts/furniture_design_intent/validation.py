@@ -5,8 +5,7 @@ from __future__ import annotations
 from furniture_delivery_validation.validation import ValidationReport
 
 from .design_intent import DesignIntent
-from .design_spec import SUPPORTED_TYPES
-from .translation import spec_from_intent
+from .design_spec import SUPPORTED_TYPES, VALID_BACK_MOUNTS
 
 
 EXECUTABLE_LAYOUT_FIELDS = frozenset(
@@ -14,6 +13,29 @@ EXECUTABLE_LAYOUT_FIELDS = frozenset(
         "shelf_count",
         "n_doors",
         "toe_kick_height",
+    }
+)
+
+EXECUTABLE_STRUCTURE_FIELDS = frozenset(
+    {
+        "board_thickness",
+        "back_thickness",
+        "door_thickness",
+        "back_offset",
+        "door_margin",
+        "door_hinge_gap",
+        "groove_depth",
+        "groove_clearance",
+        "toe_kick_reveal_front",
+        "toe_kick_reveal_back",
+        "toe_kick_support_count",
+        "back_mount",
+        "back_rail_height",
+        "hinge_brand",
+        "hinge_variant",
+        "hinge_overlay",
+        "hinge_angle",
+        "options",
     }
 )
 
@@ -45,11 +67,46 @@ def validate_intent(intent: DesignIntent) -> ValidationReport:
             + ", ".join(unsupported_layout_fields),
             "layout",
         )
-    if (
-        intent.furniture_type in SUPPORTED_TYPES
-        and not intent_errors
-        and not unsupported_layout_fields
-    ):
-        for error in spec_from_intent(intent).validation_errors():
-            report.add_error("INVALID_CABINET_SPEC", error, "structure")
+    unsupported_structure_fields = sorted(
+        set(intent.structure) - EXECUTABLE_STRUCTURE_FIELDS
+    )
+    if intent.furniture_type in SUPPORTED_TYPES and unsupported_structure_fields:
+        report.add_error(
+            "UNSUPPORTED_STRUCTURE_DECISION",
+            "current cabinet runtime does not execute: "
+            + ", ".join(unsupported_structure_fields),
+            "structure",
+        )
+    for name in ("board_thickness", "back_thickness", "door_thickness"):
+        value = intent.structure.get(name)
+        if value is not None and (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or value <= 0
+        ):
+            report.add_error(
+                "INVALID_INTENT_VALUE",
+                f"{name} must be a positive number",
+                f"structure.{name}",
+            )
+    back_mount = intent.structure.get("back_mount")
+    if back_mount is not None and str(back_mount).strip().lower() not in VALID_BACK_MOUNTS:
+        report.add_error(
+            "INVALID_INTENT_VALUE",
+            "back_mount must be one of: "
+            + ", ".join(sorted(VALID_BACK_MOUNTS)),
+            "structure.back_mount",
+        )
+    for name in ("shelf_count", "n_doors"):
+        value = intent.layout.get(name)
+        if value is not None and (
+            isinstance(value, bool)
+            or not isinstance(value, int)
+            or value < 0
+        ):
+            report.add_error(
+                "INVALID_INTENT_VALUE",
+                f"{name} must be a non-negative integer",
+                f"layout.{name}",
+            )
     return report

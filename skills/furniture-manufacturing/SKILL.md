@@ -25,7 +25,7 @@ description: 用于 manufacturing_planned 阶段；根据已确认板件制定�
    显式写入 `door_hinge_side="left"/"right"`；旧数据缺省时
    `HingeConnector` 才按位置回退。杯孔只从门板内侧钻入，Y1 =
    `edge_offset + cup_diameter/2`，为杯孔中心到门边的距离。
-10. 用 `FurnitureOrchestrator.run_next()` 生成；`scripts/furniture_manufacturing/validation.py` 校验 BOM、加工边界、背板五金和配合孔，展示后暂停。
+10. 用 `FurnitureOrchestrator.run_next()` 生成；`scripts/furniture_manufacturing/validation.py` 校验 BOM、每条槽是否落在目标板件包络内、铰链孔位置/进刀面/深度、背板五金和配合孔，展示后暂停。
 
 ## 边界
 

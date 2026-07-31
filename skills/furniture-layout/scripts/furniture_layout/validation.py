@@ -24,6 +24,23 @@ def validate_layout(
     expected_carcass_y_end = (
         spec.depth - spec.door_thickness - spec.door_hinge_gap
     )
+    expected_toe_kick = (
+        spec.toe_kick_height
+        if spec.furniture_type != "wall_cabinet"
+        else 0.0
+    )
+    expected_internal_width = spec.width - 2 * spec.board_thickness
+    expected_internal_height = (
+        spec.height - expected_toe_kick - 2 * spec.board_thickness
+    )
+    expected_side_depth = (
+        expected_carcass_y_end - expected_carcass_y_start
+    )
+    expected_internal_y_start = (
+        expected_carcass_y_start
+        if back_mount == "cover"
+        else spec.back_offset + spec.back_thickness
+    )
     if (layout.width, layout.depth, layout.height) != (
         spec.width,
         spec.depth,
@@ -58,6 +75,27 @@ def validate_layout(
             "NON_POSITIVE_LAYOUT_REGION",
             "layout internal regions must be positive",
         )
+    if min(
+        expected_internal_width,
+        expected_internal_height,
+        expected_side_depth,
+    ) <= 0:
+        report.add_error(
+            "NON_POSITIVE_INTERNAL_CLEARANCE",
+            "confirmed dimensions leave no positive cabinet clearance",
+            "internal_clearance",
+        )
+    if (
+        abs(layout.internal_width - expected_internal_width) > 1e-6
+        or abs(layout.internal_height - expected_internal_height) > 1e-6
+        or abs(layout.internal_y_start - expected_internal_y_start) > 1e-6
+        or abs(layout.internal_y_end - expected_carcass_y_end) > 1e-6
+    ):
+        report.add_error(
+            "INTERNAL_CLEARANCE_MISMATCH",
+            "layout must own and preserve the final internal clearances",
+            "internal_clearance",
+        )
     if not (
         0 <= layout.internal_x_start < layout.internal_x_end <= layout.width
         and 0 <= layout.internal_z_start < layout.internal_z_end <= layout.height
@@ -84,6 +122,27 @@ def validate_layout(
         report.add_error(
             "INVALID_TOE_KICK_REGION",
             "toe-kick region must have positive depth inside the cabinet",
+        )
+    for name, value in (
+        ("toe_kick_height", spec.toe_kick_height),
+        ("door_hinge_gap", spec.door_hinge_gap),
+        ("toe_kick_reveal_front", spec.toe_kick_reveal_front),
+        ("toe_kick_reveal_back", spec.toe_kick_reveal_back),
+    ):
+        if value < 0:
+            report.add_error(
+                "INVALID_LAYOUT_INPUT",
+                f"{name} cannot be negative",
+                name,
+            )
+    if back_mount in {"groove", "insert"} and (
+        spec.back_offset < expected_carcass_y_start
+        or spec.back_offset + spec.back_thickness >= expected_carcass_y_end
+    ):
+        report.add_error(
+            "INVALID_BACK_LAYOUT",
+            f"{back_mount} back must leave positive internal depth",
+            "back_offset",
         )
     for name, count in (
         ("shelf_count", layout.shelf_count),

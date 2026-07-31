@@ -2,6 +2,7 @@ version: 1
 
 families:
   floor_cabinet:
+    executable: true
     aliases:
       - floor cabinet
       - base cabinet
@@ -10,27 +11,14 @@ families:
       - 底柜
       - 落地柜
       - 储物柜
-    stage_skills:
-      - furniture-layout
-      - furniture-panel-planning
-      - furniture-manufacturing
-      - furniture-feature-tree
-      - furniture-cad
-      - furniture-delivery-validation
 
   wall_cabinet:
+    executable: true
     aliases:
       - wall cabinet
       - hanging cabinet
       - 吊柜
       - 壁柜
-    stage_skills:
-      - furniture-layout
-      - furniture-panel-planning
-      - furniture-manufacturing
-      - furniture-feature-tree
-      - furniture-cad
-      - furniture-delivery-validation
 
 fallback:
   design_reference: references/intent-capture-rules.md

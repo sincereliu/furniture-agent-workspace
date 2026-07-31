@@ -7,10 +7,7 @@ the solver computes exact positions, sizes, and face directions.
 
 from __future__ import annotations
 
-from furniture_design_intent.design_spec import (
-    FurnitureSpec,
-    resolve_toe_kick_support_count,
-)
+from furniture_design_intent.design_spec import FurnitureSpec
 from furniture_layout.layout_planning import CabinetLayout
 
 from .panel_models import PanelPlacement

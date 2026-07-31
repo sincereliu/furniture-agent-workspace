@@ -197,6 +197,70 @@ class SkillArchitectureTests(unittest.TestCase):
         self.assertFalse((panel_package / "manufacturing_edge_banding.py").exists())
         self.assertTrue((manufacturing_package / "manufacturing_edge_banding.py").is_file())
 
+    def test_geometric_rules_live_in_their_owning_stages(self) -> None:
+        intent_package = (
+            SKILLS_ROOT
+            / "furniture-design-intent"
+            / "scripts"
+            / "furniture_design_intent"
+        )
+        design_spec = (intent_package / "design_spec.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("def validation_errors(", design_spec)
+        self.assertFalse((intent_package / "translation.py").exists())
+
+        input_adapter = (
+            SKILLS_ROOT
+            / "furniture-cad"
+            / "scripts"
+            / "furniture_workflow"
+            / "input_adapter.py"
+        )
+        self.assertTrue(input_adapter.is_file())
+
+        layout_validation = (
+            SKILLS_ROOT
+            / "furniture-layout"
+            / "scripts"
+            / "furniture_layout"
+            / "validation.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("NON_POSITIVE_INTERNAL_CLEARANCE", layout_validation)
+        self.assertIn("INTERNAL_CLEARANCE_MISMATCH", layout_validation)
+
+        panel_validation = (
+            SKILLS_ROOT
+            / "furniture-panel-planning"
+            / "scripts"
+            / "furniture_panel_planning"
+            / "validation.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "NON_POSITIVE_TOE_KICK_SUPPORT_SPACING",
+            panel_validation,
+        )
+        self.assertIn("BACK_RAIL_COUNT_MISMATCH", panel_validation)
+
+        manufacturing_validation = (
+            SKILLS_ROOT
+            / "furniture-manufacturing"
+            / "scripts"
+            / "furniture_manufacturing"
+            / "validation.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("GROOVE_OUTSIDE_TARGET", manufacturing_validation)
+        self.assertIn("HINGE_HOLE_OUTSIDE_DOOR", manufacturing_validation)
+
+        feature_tree_emitter = (
+            SKILLS_ROOT
+            / "furniture-feature-tree"
+            / "scripts"
+            / "furniture_feature_tree"
+            / "feature_tree_emitter.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("_validate_operation_bounds", feature_tree_emitter)
+
     def test_back_mount_contract_is_synchronized_across_stage_skills(
         self,
     ) -> None:

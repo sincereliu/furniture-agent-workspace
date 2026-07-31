@@ -15,11 +15,17 @@ from typing import Any
 
 import yaml
 
-from furniture_design_intent.design_spec import FurnitureSpec, resolve_toe_kick_support_count
+from furniture_design_intent.design_spec import FurnitureSpec
 from furniture_layout.layout_planning import CabinetLayout
 
 from .cabinet_frame import CabinetFrame
 from .panel_models import PanelPlacement
+from .panel_rules import (
+    back_rail_clear_spacing,
+    resolve_back_rail_count,
+    resolve_toe_kick_support_count,
+    toe_kick_support_clear_spacing,
+)
 
 
 def _load_topology(furniture_type: str) -> dict[str, Any]:
@@ -225,9 +231,17 @@ def _back_panel_variants(
         ))
         # back rails
         rail_h = spec.back_rail_height
-        rail_count = int(layout.internal_height // 500)
+        rail_count = resolve_back_rail_count(
+            back_mount,
+            layout.internal_height,
+            rail_h,
+        )
         if rail_h > 0 and rail_count > 0:
-            step = (layout.internal_height - rail_count * rail_h) / rail_count
+            step = back_rail_clear_spacing(
+                layout.internal_height,
+                rail_count,
+                rail_h,
+            )
             for i in range(rail_count):
                 rz = layout.internal_z_start + step + i * (rail_h + step)
                 result.append(PanelPlacement(
@@ -351,7 +365,7 @@ def _toe_kick_panels(
 
     sy = layout.toe_kick_rear_y + board
     sd = layout.toe_kick_front_y - board - sy
-    gap = (kw - count * board) / (count + 1)
+    gap = toe_kick_support_clear_spacing(kw, count, board)
     for i in range(count):
         panels.append(PanelPlacement(
             id=f"toe_kick_support_{i + 1}", name=f"踢脚支撑{i + 1}",
