@@ -33,7 +33,7 @@ description: 路由本仓库七阶段家具工作与所需 CAD 技能。适用�
 
 - 以已确认意图为事实来源；七个 Skill 对应七个用户可见检查点。生成 CAD 前须确认前五阶段。
 - `skills/furniture-cad/scripts/furniture_workflow/` 是唯一应用层入口；CLI/API/Agent 仅适配协议。阶段规则归各 Skill，Orchestrator 只编排、记录状态/验证/产物谱系。
-- 可复用脚本和运行时模块放在所属阶段 Skill 的 `scripts/`；跨阶段入口与集成测试放在 `skills/furniture-cad/scripts/`；一次性脚本放在 `temp/`。
+- 可复用脚本和运行时模块放在所属阶段 Skill 的 `scripts/`；跨阶段入口与集成测试放在 `skills/furniture-cad/scripts/`。一次性检查、迁移、调试和实验统一放在已忽略的 `temp/<project-slug>/`，每个项目或任务独占一个目录，使脚本与派生产物可按目录整体识别和删除；任务结束即清理。生成 CAD 源码使用保留路径 `temp/cad-source/<artifact-name>/`。
 - 禁止根级 `scripts/`、`packages/`、`tests/`、`scratch/`、`tmp/`；生成源码不得进入 `generated/`。布局变更后运行 `skills/furniture-cad/scripts/validate_workspace_layout.py` 并清零违规。
 - 不修改 `external/text-to-cad` 实现家具逻辑；有上游意图/源码时不手改派生 STEP、GLB、BOM、裁切清单或 Python。
 - 只报告实际运行过的验证和实际存在的产物。
