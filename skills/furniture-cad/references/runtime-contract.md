@@ -68,9 +68,11 @@ result = orchestrator.run_next(
 }
 ```
 
-`wall_cabinet` 默认 `width=800,height=900,depth=350,toe_kick_height=0,shelf_count=1`。其余默认见 `furniture_design_intent/design_spec.py`：`CABINET_PRESETS` 存类型默认，数据类字段存全局默认；无需逐项询问。
+`wall_cabinet` 默认 `width=800,height=900,depth=350,toe_kick_height=0,shelf_count=1`。其余默认见 `furniture_design_intent/design_spec.py`：`CABINET_PRESETS` 存类型默认，数据类字段存全局默认；无需逐项询问。确认意图前，所有下游会消费的默认值都会写入 `DesignIntent`，并在 `assumptions` 以字段路径记录来源。
 
-契约为扁平 JSON。`back_mount` 接受 `auto/groove/insert/cover`；`auto` 在背板薄于柜体板时取 `groove`，否则取 `insert`。下游只用有效模式；`back_rail_height` 仅对 `groove` 生效，`0` 关闭背拉条。
+契约为扁平 JSON。可选的 `constraints` 必须同时提供 `constraint_mappings`：映射到可执行的 `layout.*`、`structure.*`、`overall_size.*`/`furniture_type`，或显式写为 `informational`；未分类约束不能确认。
+
+`back_mount` 接受 `auto/groove/insert/cover`；意图确认保留 `auto`，布局阶段在背板薄于柜体板时解析为 `groove`，否则解析为 `insert`。下游只用有效模式；`back_rail_height/groove_depth/groove_clearance` 仅对 `groove` 生效，非入槽模式不得被这些休眠参数阻塞，`back_rail_height=0` 关闭背拉条。
 
 仅总体尺寸为数值且变体匹配实时模板时执行；否则停在相应规划层并说明边界。
 
@@ -79,6 +81,7 @@ result = orchestrator.run_next(
 `server.py` 的 `POST /api/plan-cabinet` 只适配一次性批处理并调用 `FurnitureOrchestrator.execute_spec()`：
 
 - 请求含 `back_mount/back_rail_height`；Pydantic 拒绝非法模式，Orchestrator 对几何组合错误返回 `422`。
+- 请求可含 `constraints/constraint_mappings/assumptions/unresolved`；API 必须原样传入设计意图验证，不得在协议层丢弃约束。
 - 响应 `back_mount` 为有效模式；`readiness` 返回整份制造方案的 `preliminary/accepted/factory_ready` 状态；`panels` 保留备注/封边/模式，`hardware` 保留品牌/型号/暂定说明/孔数摘要。
 - `operations` 仅为入槽模式返回目标切削；`drilled_holes` 按板件返回全局/local 孔位，`hole_color_legend` 返回孔型图例。
 

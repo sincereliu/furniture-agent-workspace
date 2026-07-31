@@ -5,7 +5,7 @@ from __future__ import annotations
 from furniture_delivery_validation.validation import ValidationReport
 
 from .design_intent import DesignIntent
-from .design_spec import SUPPORTED_TYPES, VALID_BACK_MOUNTS
+from .design_spec import FurnitureSpec, SUPPORTED_TYPES, VALID_BACK_MOUNTS
 
 
 EXECUTABLE_LAYOUT_FIELDS = frozenset(
@@ -38,6 +38,22 @@ EXECUTABLE_STRUCTURE_FIELDS = frozenset(
         "hinge_overlay",
         "hinge_angle",
         "options",
+    }
+)
+
+INFORMATIONAL_CONSTRAINT = "informational"
+EXECUTABLE_CONSTRAINT_TARGETS = frozenset(
+    {
+        "furniture_type",
+        "overall_size.width_mm",
+        "overall_size.depth_mm",
+        "overall_size.height_mm",
+        *(f"layout.{name}" for name in EXECUTABLE_LAYOUT_FIELDS),
+        *(
+            f"structure.{name}"
+            for name in EXECUTABLE_STRUCTURE_FIELDS
+            if name != "options"
+        ),
     }
 )
 
@@ -79,6 +95,7 @@ def validate_intent(intent: DesignIntent) -> ValidationReport:
             + ", ".join(unsupported_structure_fields),
             "structure",
         )
+    _validate_constraint_mappings(intent, report)
     for name in ("board_thickness", "back_thickness", "door_thickness"):
         value = intent.structure.get(name)
         if value is not None and (
@@ -119,4 +136,76 @@ def validate_intent(intent: DesignIntent) -> ValidationReport:
                 f"{name} must be an object",
                 f"layout.{name}",
             )
+    if report.passed and intent.furniture_type in SUPPORTED_TYPES:
+        data = {
+            "type": intent.furniture_type,
+            "width": intent.overall_size.width_mm,
+            "depth": intent.overall_size.depth_mm,
+            "height": intent.overall_size.height_mm,
+            **intent.structure,
+            **intent.layout,
+        }
+        try:
+            FurnitureSpec.from_dict(data)
+        except (TypeError, ValueError) as exc:
+            report.add_error(
+                "INVALID_INTENT_VALUE",
+                str(exc),
+                "structure",
+            )
     return report
+
+
+def _validate_constraint_mappings(
+    intent: DesignIntent,
+    report: ValidationReport,
+) -> None:
+    constraints: set[str] = set()
+    for index, constraint in enumerate(intent.constraints):
+        if not isinstance(constraint, str) or not constraint.strip():
+            report.add_error(
+                "INVALID_CONSTRAINT",
+                "constraints must contain non-empty strings",
+                f"constraints[{index}]",
+            )
+            continue
+        constraints.add(constraint)
+        target = intent.constraint_mappings.get(constraint)
+        if target is None:
+            report.add_error(
+                "UNCLASSIFIED_CONSTRAINT",
+                "constraint must map to an executable intent field or be explicitly informational",
+                f"constraints[{index}]",
+            )
+            continue
+        if target == INFORMATIONAL_CONSTRAINT:
+            continue
+        if target not in EXECUTABLE_CONSTRAINT_TARGETS:
+            report.add_error(
+                "INVALID_CONSTRAINT_TARGET",
+                f"constraint target is not executable: {target}",
+                f"constraint_mappings.{constraint}",
+            )
+            continue
+        if not _constraint_target_is_explicit(intent, target):
+            report.add_error(
+                "MISSING_CONSTRAINT_TARGET",
+                f"constraint target must be explicit in DesignIntent: {target}",
+                f"constraint_mappings.{constraint}",
+            )
+
+    stale_constraints = set(intent.constraint_mappings) - constraints
+    for constraint in sorted(stale_constraints):
+        report.add_error(
+            "STALE_CONSTRAINT_MAPPING",
+            "constraint mapping has no matching constraint",
+            f"constraint_mappings.{constraint}",
+        )
+
+
+def _constraint_target_is_explicit(intent: DesignIntent, target: str) -> bool:
+    if target == "furniture_type" or target.startswith("overall_size."):
+        return True
+    section, field = target.split(".", 1)
+    values = intent.layout if section == "layout" else intent.structure
+    return field in values

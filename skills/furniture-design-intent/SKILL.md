@@ -11,8 +11,8 @@ description: 用于 design_intent 阶段；将家具需求整理为可确认的�
 
 1. 用 [家具目录](references/intake/catalog.yaml) 匹配类别；无匹配则只生成草稿 fallback，不确认、不进入可执行流水线。
 2. 按 [意图采集规则](references/intent-capture-rules.md) 生成 `DesignIntent`。阶段字段名为 `furniture_type`；只有扁平 CLI/API 输入使用 `type`。
-3. 默认值以 `scripts/furniture_design_intent/design_spec.py` 为准；`back_mount` 接受 `auto/groove/insert/cover`，`back_rail_height` 等字段只作为已确认输入保存，不在此处执行布局、板件或制造校验。
-4. 草稿尺寸可为 `null`，缺项写入 `unresolved`；确认前只校验类别、三维尺寸、支持字段及基础类型。`layout.room` 与 `layout.placement` 可分别省略，由布局阶段补齐并标记默认来源。抽屉、隔板分区、滑门、开放格等不能静默忽略，须保留为未决项。
+3. 默认值以 `scripts/furniture_design_intent/design_spec.py` 为准；确认前须把下游会消费的默认值写入 `DesignIntent`，并在 `assumptions` 记录字段路径和来源。`back_mount` 接受 `auto/groove/insert/cover`，`back_rail_height` 等字段只作为已确认输入保存，不在此处执行布局、板件或制造校验。
+4. 草稿尺寸可为 `null`，缺项写入 `unresolved`；确认前只校验类别、三维尺寸、支持字段及基础类型。每条 `constraints` 必须通过 `constraint_mappings` 映射到当前可执行字段，或明确标记为 `informational`；未分类约束不得确认。`layout.room` 与 `layout.placement` 可分别省略，由布局阶段补齐并标记默认来源。抽屉、隔板分区、滑门、开放格等不能静默忽略，须保留为未决项。
 5. 只记录偏好和覆盖值并等待确认：最终内部净空归布局；踢脚支撑间距和背拉条数量归板件；槽包络和铰链孔位归制造；特征树只做防御性复核。
 
 ## 边界

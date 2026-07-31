@@ -483,6 +483,88 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             {issue.code for issue in revision.validations[-1].issues},
         )
 
+    def test_unclassified_constraint_cannot_be_confirmed(self) -> None:
+        intent = DesignIntent.from_dict(
+            {
+                **cabinet_intent().to_dict(),
+                "constraints": ["必须提供防倾倒固定"],
+            }
+        )
+        project = self.orchestrator.create_project("未分类约束柜体", intent)
+
+        revision = self.orchestrator.confirm_intent(project)
+
+        self.assertEqual(revision.workflow.current, WorkflowStage.FAILED)
+        self.assertIn(
+            "UNCLASSIFIED_CONSTRAINT",
+            {issue.code for issue in revision.validations[-1].issues},
+        )
+
+    def test_constraints_require_explicit_executable_or_informational_destinations(
+        self,
+    ) -> None:
+        intent = self.orchestrator.intent_from_spec(
+            {
+                "type": "floor_cabinet",
+                "back_mount": "cover",
+                "constraints": ["背板必须外盖", "仅供卧室方案比较"],
+                "constraint_mappings": {
+                    "背板必须外盖": "structure.back_mount",
+                    "仅供卧室方案比较": "informational",
+                },
+            }
+        )
+        project = self.orchestrator.create_project("已分类约束柜体", intent)
+
+        revision = self.orchestrator.confirm_intent(project)
+
+        self.assertTrue(revision.is_stage_approved(WorkflowStage.DESIGN_INTENT))
+        self.assertEqual(
+            revision.intent.constraint_mappings["背板必须外盖"],
+            "structure.back_mount",
+        )
+
+    def test_inactive_groove_parameters_do_not_block_non_groove_layout(self) -> None:
+        intent = self.orchestrator.intent_from_spec(
+            {
+                "type": "floor_cabinet",
+                "back_mount": "cover",
+                "groove_depth": "unused",
+                "groove_clearance": "unused",
+                "back_rail_height": "unused",
+            }
+        )
+        project = self.orchestrator.create_project("外盖背板柜体", intent)
+
+        self.orchestrator.confirm_intent(project)
+        result = self.orchestrator.run_next(project)
+
+        self.assertEqual(result.revision.workflow.current, WorkflowStage.LAYOUT_PLANNED)
+        self.assertEqual(
+            result.revision.stage_outputs["layout_planned"]["layout"]["back_mount"],
+            "cover",
+        )
+
+    def test_active_groove_parameters_are_validated_before_confirmation(self) -> None:
+        intent = DesignIntent.from_dict(
+            {
+                **cabinet_intent().to_dict(),
+                "structure": {
+                    "back_mount": "groove",
+                    "groove_depth": "invalid",
+                },
+            }
+        )
+        project = self.orchestrator.create_project("错误入槽参数柜体", intent)
+
+        revision = self.orchestrator.confirm_intent(project)
+
+        self.assertEqual(revision.workflow.current, WorkflowStage.FAILED)
+        self.assertIn(
+            "INVALID_INTENT_VALUE",
+            {issue.code for issue in revision.validations[-1].issues},
+        )
+
     def test_unsupported_family_fails_at_design_intent_confirmation(self) -> None:
         project = self.orchestrator.create_project(
             "床", cabinet_intent(furniture_type="bed")
@@ -523,6 +605,31 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         self.assertEqual(intent.overall_size.width_mm, 800)
         self.assertEqual(intent.overall_size.depth_mm, 350)
         self.assertEqual(intent.overall_size.height_mm, 900)
+        self.assertEqual(intent.layout["toe_kick_height"], 0)
+        self.assertEqual(intent.structure["board_thickness"], 18.0)
+        self.assertEqual(intent.structure["back_mount"], "auto")
+        self.assertIn("overall_size.width_mm", intent.assumptions)
+        self.assertIn("layout.shelf_count", intent.assumptions)
+        self.assertIn("structure.board_thickness", intent.assumptions)
+
+    def test_confirmation_materializes_defaults_for_direct_intents(self) -> None:
+        project = self.orchestrator.create_project("直接意图柜体", cabinet_intent())
+
+        revision = self.orchestrator.confirm_intent(project)
+
+        self.assertEqual(revision.intent.structure["back_mount"], "auto")
+        self.assertEqual(revision.intent.structure["board_thickness"], 18.0)
+        self.assertIn("structure.back_mount", revision.intent.assumptions)
+        self.assertEqual(
+            revision.stage_outputs["design_intent"]["structure"]["back_mount"],
+            "auto",
+        )
+
+        result = self.orchestrator.run_next(project)
+        self.assertEqual(
+            result.revision.stage_outputs["layout_planned"]["layout"]["back_mount"],
+            "groove",
+        )
 
     def test_input_adapter_preserves_hinge_preferences(self) -> None:
         intent = self.orchestrator.intent_from_spec(

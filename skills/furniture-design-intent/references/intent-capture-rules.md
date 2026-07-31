@@ -9,8 +9,14 @@
 - `layout`：门、隔间、层板、抽屉、挂衣区等用户层组织。
 - `layout.room/layout.placement` 可分别省略；布局阶段会为缺失项补入可见的默认卧室或沿南墙居中位置，并标记数据来源。
 - `appearance` 风格/饰面；`structure` 高层结构偏好。
-- `constraints`：房间、人体工学、安全、安装、制造和材料要求。
-- `assumptions` 暂定默认；`unresolved` 待确认决策。假设写在受影响字段旁。
+- `constraints`：房间、人体工学、安全、安装、制造和材料要求；每条要求必须在 `constraint_mappings` 中映射到当前可执行字段，或显式标为 `informational`。
+- `assumptions` 暂定默认；键使用受影响字段路径，值说明来源。`unresolved` 保存尚不能映射或不能作为纯信息接受的待确认决策。
+
+## 约束去向
+
+- 映射值为 `layout.*`、`structure.*`、`overall_size.*` 或 `furniture_type` 时，目标字段必须显式存在于同一份 `DesignIntent`，由对应下游阶段消费。
+- 映射值为 `informational` 表示用户明确接受它只随意图留档，不会改变当前运行时输出。
+- 未分类、映射到未支持字段，或者必须影响输出但当前无可执行字段的约束不得确认；后者同时写入 `unresolved`。不得仅把安全、安装、制造或材料要求留在自由文本中继续流水线。
 
 ## 尺寸约定
 
@@ -19,13 +25,13 @@
 
 ## 背板安装意图
 
-- `back_mount`：`groove` 四边入槽、`insert` 内嵌、`cover` 外盖、`auto`。`auto` 在背板薄于柜体板时取 `groove`，否则取 `insert`；确认时展示结果。
-- `groove_depth/groove_clearance/back_rail_height` 仅对有效 `groove` 生效，其他模式不受其阻塞。
+- `back_mount`：`groove` 四边入槽、`insert` 内嵌、`cover` 外盖、`auto`。意图确认保留用户请求的 `auto`；布局阶段在背板薄于柜体板时解析为 `groove`，否则解析为 `insert`，并展示有效模式。
+- `groove_depth/groove_clearance/back_rail_height` 仅对布局阶段解析后的有效 `groove` 生效；`insert/cover` 模式不得因这些休眠参数的格式或取值而阻塞。
 - 只确认偏好/参数，不计算最终内部净空、背板尺寸、踢脚支撑间距、背拉条数量、槽包络、连接件或铰链孔位。
 
 ## 边界
 
-- 草稿可保留 `null`，但确认前 `width_mm/depth_mm/height_mm` 必须全部为正数，且 `unresolved` 必须为空。
+- 草稿可保留 `null`，但确认前 `width_mm/depth_mm/height_mm` 必须全部为正数，`unresolved` 必须为空，且每条约束必须有合法去向。
 - 当前固定柜体运行时只执行 `layout.shelf_count/n_doors/toe_kick_height`；抽屉、隔板分区、滑门、开放格等要求须保留为未决项，不得在确认时静默丢弃。
 - 类别无匹配时只输出 fallback 草稿；当前运行时不会确认该类别或进入布局。
 - 在板件前停止；不得添加板件/坐标/裁切尺寸/五金/制造策略/特征树/CAD 调用或输出路径。

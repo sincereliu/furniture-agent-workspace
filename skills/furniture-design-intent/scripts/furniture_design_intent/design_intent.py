@@ -42,6 +42,7 @@ class DesignIntent:
     appearance: dict[str, Any] = field(default_factory=dict)
     structure: dict[str, Any] = field(default_factory=dict)
     constraints: list[str] = field(default_factory=list)
+    constraint_mappings: dict[str, str] = field(default_factory=dict)
     assumptions: dict[str, str] = field(default_factory=dict)
     unresolved: list[str] = field(default_factory=list)
     confirmed: bool = False
@@ -96,6 +97,7 @@ class DesignIntent:
             appearance=dict(data.get("appearance", {})),
             structure=dict(data.get("structure", {})),
             constraints=list(data.get("constraints", [])),
+            constraint_mappings=dict(data.get("constraint_mappings", {})),
             assumptions=dict(data.get("assumptions", {})),
             unresolved=list(data.get("unresolved", [])),
             confirmed=bool(data.get("confirmed", False)),

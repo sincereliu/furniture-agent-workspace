@@ -39,6 +39,7 @@ from furniture_panel_planning.validation import validate_panels
 from .cabinet_pipeline import CabinetPipelineResult
 from .input_adapter import (
     intent_from_spec as translate_intent_from_spec,
+    materialize_intent_defaults,
     spec_from_intent,
 )
 from .workflow_artifact_writer import prepare_artifact_dir, write_artifacts
@@ -189,6 +190,10 @@ class FurnitureOrchestrator:
             )
         if requested.value not in revision.stage_outputs:
             raise ValueError(f"current stage has no output: {requested.value}")
+
+        if requested == WorkflowStage.DESIGN_INTENT:
+            revision.intent = materialize_intent_defaults(revision.intent)
+            revision.stage_outputs[requested.value] = revision.intent.to_dict()
 
         report = self._latest_stage_validation(revision, requested)
         if report is None:

@@ -125,6 +125,22 @@ class CabinetRequest(BaseModel):
         default=None,
         description="家具在房间中的沿墙或自由摆放位置",
     )
+    constraints: list[str] = Field(
+        default_factory=list,
+        description="需要映射或明确标为 informational 的设计约束",
+    )
+    constraint_mappings: dict[str, str] = Field(
+        default_factory=dict,
+        description="约束到可执行 DesignIntent 字段或 informational 的映射",
+    )
+    assumptions: dict[str, str] = Field(
+        default_factory=dict,
+        description="字段路径到假设来源的映射",
+    )
+    unresolved: list[str] = Field(
+        default_factory=list,
+        description="未解决决策；非空时不能确认设计意图",
+    )
 
 
 class PanelResponse(BaseModel):

@@ -102,13 +102,33 @@ class FurnitureSpec:
                 return preset[key]
             return fallback
 
+        board_thickness = float(_get("board_thickness", 18.0))
+        back_thickness = float(_get("back_thickness", 9.0))
+        back_mount = str(_get("back_mount", "auto"))
+        effective_back_mount = resolve_back_mount(
+            back_mount,
+            back_thickness,
+            board_thickness,
+        )
+
+        def _groove_float(key: str, fallback: float) -> float:
+            value = _get(key, fallback)
+            if effective_back_mount == "groove":
+                return float(value)
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                # Dormant groove-only inputs remain in DesignIntent, but must
+                # not block insert/cover execution.
+                return fallback
+
         return cls(
             furniture_type=furniture_type,
             width=float(_get("width", 0)),
             depth=float(_get("depth", 0)),
             height=float(_get("height", 0)),
-            board_thickness=float(_get("board_thickness", 18.0)),
-            back_thickness=float(_get("back_thickness", 9.0)),
+            board_thickness=board_thickness,
+            back_thickness=back_thickness,
             door_thickness=float(_get("door_thickness", 18.0)),
             toe_kick_height=float(_get("toe_kick_height", 50.0)),
             back_offset=float(_get("back_offset", 18.0)),
@@ -116,13 +136,13 @@ class FurnitureSpec:
             door_hinge_gap=float(_get("door_hinge_gap", 2.0)),
             shelf_count=int(_get("shelf_count", 4)),
             n_doors=int(_get("n_doors", 2)),
-            groove_depth=float(_get("groove_depth", 6.0)),
-            groove_clearance=float(_get("groove_clearance", 1.0)),
+            groove_depth=_groove_float("groove_depth", 6.0),
+            groove_clearance=_groove_float("groove_clearance", 1.0),
             toe_kick_reveal_front=float(_get("toe_kick_reveal_front", 1.0)),
             toe_kick_reveal_back=float(_get("toe_kick_reveal_back", 30.0)),
             toe_kick_support_count=_optional_int(data.get("toe_kick_support_count")),
-            back_mount=str(_get("back_mount", "auto")),
-            back_rail_height=float(_get("back_rail_height", 70.0)),
+            back_mount=back_mount,
+            back_rail_height=_groove_float("back_rail_height", 70.0),
             hinge_brand=str(_get("hinge_brand", "")),
             hinge_variant=str(_get("hinge_variant", "")),
             hinge_overlay=str(_get("hinge_overlay", "full")),

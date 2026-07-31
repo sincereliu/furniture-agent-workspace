@@ -31,6 +31,8 @@ class ApiEntrypointTests(unittest.TestCase):
             toe_kick_reveal_front=2,
             toe_kick_reveal_back=25,
             toe_kick_support_count=2,
+            constraints=["背板必须入槽"],
+            constraint_mappings={"背板必须入槽": "structure.back_mount"},
         )
 
         payload = request.model_dump(exclude_none=True)
@@ -39,10 +41,15 @@ class ApiEntrypointTests(unittest.TestCase):
         self.assertEqual(payload["groove_depth"], 8)
         self.assertEqual(payload["groove_clearance"], 0.5)
         self.assertEqual(payload["toe_kick_support_count"], 2)
+        self.assertEqual(
+            payload["constraint_mappings"]["背板必须入槽"],
+            "structure.back_mount",
+        )
 
         properties = server.CabinetRequest.model_json_schema()["properties"]
         self.assertIn("back_mount", properties)
         self.assertIn("back_rail_height", properties)
+        self.assertIn("constraint_mappings", properties)
         openapi_schemas = server.app.openapi()["components"]["schemas"]
         self.assertIn(
             "back_mount",
