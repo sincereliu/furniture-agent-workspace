@@ -31,6 +31,32 @@ FurnitureOrchestrator
 7. delivery_validated
 ```
 
+第 2 阶段可选接收房间和家具位置。提供二者后，`stage_outputs.layout_planned` 会增加房间坐标、家具四角占地、六向净距和内联 SVG 平面预览；越界、遮挡门窗或碰撞障碍物时不能确认：
+
+```json
+{
+  "type": "floor_cabinet",
+  "width": 1800,
+  "depth": 600,
+  "height": 2400,
+  "room": {
+    "id": "bedroom",
+    "name": "主卧",
+    "width_mm": 4200,
+    "depth_mm": 3600,
+    "height_mm": 2800,
+    "openings": [],
+    "obstacles": []
+  },
+  "placement": {
+    "mode": "wall",
+    "host_wall": "south",
+    "offset_mm": 500,
+    "origin_z_mm": 0
+  }
+}
+```
+
 设计意图变化使用 `revise()` 从第 1 阶段建立新 Revision。修改第 2～5 阶段时使用 `revise_stage_output()`：新 Revision 只保留修改点之前已确认的结果，修改点及全部下游重新确认或生成。`stage_outputs`、`approved_stages` 和工作流历史会随 Project JSON 一起保存。
 
 `generate_furniture.py` 和 `execute_spec()` 是明确的一次性批处理入口，可以自动确认已通过验证的中间阶段；它们不用于交互式逐步设计。
@@ -44,5 +70,7 @@ FurnitureOrchestrator
 # API：只负责 HTTP 协议，内部同样调用 FurnitureOrchestrator
 .\.venv\Scripts\python.exe skills\furniture-cad\scripts\server.py
 ```
+
+`POST /api/plan-layout` 返回第 2 阶段 JSON；`POST /api/plan-layout/preview` 直接返回 `image/svg+xml` 平面预览。
 
 可复用阶段代码放在对应的 `skills/furniture-*/scripts/`；统一 Orchestrator、CLI/API 和集成测试放在 `skills/furniture-cad/scripts/`；一次性脚本和派生 CAD 源码放在 `temp/`；最终产物放在 `generated/`。

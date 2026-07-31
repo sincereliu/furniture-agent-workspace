@@ -18,9 +18,9 @@ from furniture_design_intent.design_spec import FurnitureSpec
 from furniture_design_intent.validation import validate_intent
 from furniture_feature_tree.feature_tree_builder import panels_to_feature_tree
 from furniture_feature_tree.validation import validate_feature_tree
-from furniture_layout.layout_pipeline import plan_layout
+from furniture_layout.layout_pipeline import plan_layout_stage
 from furniture_layout.layout_planning import CabinetLayout
-from furniture_layout.validation import validate_layout
+from furniture_layout.validation import validate_layout_output
 from furniture_manufacturing.manufacturing_bom import (
     BOMReport,
     emit_drilled_holes,
@@ -325,7 +325,12 @@ class FurnitureOrchestrator:
         spec = spec_from_intent(revision.intent)
 
         if stage == WorkflowStage.LAYOUT_PLANNED:
-            output = {"layout": asdict(plan_layout(spec))}
+            output = plan_layout_stage(
+                spec,
+                room=revision.intent.layout.get("room"),
+                placement=revision.intent.layout.get("placement"),
+                furniture_label=project.name,
+            )
             self._complete_stage(
                 revision,
                 stage,
@@ -545,9 +550,9 @@ class FurnitureOrchestrator:
             if stage == WorkflowStage.DESIGN_INTENT:
                 return validate_intent(revision.intent)
             if stage == WorkflowStage.LAYOUT_PLANNED:
-                return validate_layout(
+                return validate_layout_output(
                     spec_from_intent(revision.intent),
-                    self._layout_from_revision(revision),
+                    revision.stage_outputs[stage.value],
                 )
             if stage == WorkflowStage.PANELS_PLANNED:
                 return validate_panels(

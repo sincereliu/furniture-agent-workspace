@@ -1,5 +1,15 @@
 # 更新日志
 
+## 20260731.2 — 房间定位与第 2 阶段 SVG 预览
+
+- `furniture-layout` 增加矩形房间、门窗和长方体障碍物模型。
+- 支持按南/东/北/西墙与沿墙偏移自动定位，也支持自由坐标和旋转定位。
+- `layout_planned` 增加标准化房间变换、四角占地、六向净距和内联 SVG 平面预览。
+- 布局校验增加房间越界、层高、门窗遮挡、障碍物碰撞及预览谱系检查。
+- FastAPI 增加 `/api/plan-layout` 和 `/api/plan-layout/preview`。
+
+---
+
 ## 20260731.1 — 最近制造/六面钻更新的稳定性补丁
 
 - 柜型拓扑移回 `furniture-panel-planning/references/cabinet-topologies/`，

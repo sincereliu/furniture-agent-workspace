@@ -22,7 +22,13 @@ def intent_from_spec(spec: dict[str, Any]) -> DesignIntent:
         return fallback if value is None else value
 
     layout = dict(data.get("layout", {}))
-    for key in ("shelf_count", "n_doors", "toe_kick_height"):
+    for key in (
+        "shelf_count",
+        "n_doors",
+        "toe_kick_height",
+        "room",
+        "placement",
+    ):
         if key in data:
             layout[key] = data[key]
 
@@ -46,6 +52,8 @@ def intent_from_spec(spec: dict[str, Any]) -> DesignIntent:
         "shelf_count",
         "n_doors",
         "toe_kick_height",
+        "room",
+        "placement",
     }
     for key, value in data.items():
         if key not in reserved:

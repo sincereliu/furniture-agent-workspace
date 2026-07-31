@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 # skill 自带运行包，服务入口与它位于同一个 scripts 目录。
 SCRIPT_ROOT = Path(__file__).resolve().parent
@@ -21,20 +21,21 @@ from runtime_paths import bootstrap_runtime_paths
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
+from furniture_workflow.workflow_state import WorkflowStage
 
-API_VERSION = "0.2.0"
+API_VERSION = "0.3.0"
 
 app = FastAPI(
     title="Furniture Agent — 板式家具拆单服务",
     version=API_VERSION,
     description=(
-        "板式家具参数化拆单 API：落地柜/吊柜规划、三种背板安装、"
-        "BOM、加工与孔位输出"
+        "板式家具参数化拆单 API：房间定位与 SVG 预览、"
+        "落地柜/吊柜规划、三种背板安装、BOM、加工与孔位输出"
     ),
 )
 ORCHESTRATOR = FurnitureOrchestrator(workspace_root=WORKSPACE_ROOT)
@@ -45,6 +46,47 @@ app.mount("/generated", StaticFiles(directory=str(OUTPUT_ROOT)), name="generated
 
 
 # ── 请求/响应模型 ──
+class RoomOpeningRequest(BaseModel):
+    id: str = Field(default="", description="门窗标识")
+    kind: str = Field(default="opening", description="opening / door / window")
+    wall: Literal["south", "east", "north", "west"]
+    offset_mm: float = Field(default=0, ge=0, description="沿墙顺时针起点的偏移")
+    width_mm: float = Field(..., gt=0)
+    height_mm: float = Field(..., gt=0)
+    sill_height_mm: float = Field(default=0, ge=0)
+
+
+class RoomObstacleRequest(BaseModel):
+    id: str = Field(default="", description="障碍物标识")
+    kind: str = Field(default="obstacle", description="column / pipe / obstacle")
+    x_mm: float = Field(default=0, ge=0)
+    y_mm: float = Field(default=0, ge=0)
+    z_mm: float = Field(default=0, ge=0)
+    width_mm: float = Field(..., gt=0)
+    depth_mm: float = Field(..., gt=0)
+    height_mm: float = Field(..., gt=0)
+
+
+class RoomRequest(BaseModel):
+    id: str = Field(default="room")
+    name: str = Field(default="房间")
+    width_mm: float = Field(..., gt=0)
+    depth_mm: float = Field(..., gt=0)
+    height_mm: float = Field(..., gt=0)
+    openings: list[RoomOpeningRequest] = Field(default_factory=list)
+    obstacles: list[RoomObstacleRequest] = Field(default_factory=list)
+
+
+class FurniturePlacementRequest(BaseModel):
+    mode: Literal["wall", "free"] = Field(default="wall")
+    host_wall: Literal["south", "east", "north", "west"] | None = None
+    offset_mm: float | None = Field(default=None, ge=0)
+    origin_x_mm: float | None = None
+    origin_y_mm: float | None = None
+    origin_z_mm: float = Field(default=0, ge=0)
+    rotation_z_deg: float | None = None
+
+
 class CabinetRequest(BaseModel):
     type: str = Field(default="floor_cabinet", description="家具类型: floor_cabinet / wall_cabinet")
     width: float = Field(..., gt=0, description="总宽 mm (X)")
@@ -75,6 +117,14 @@ class CabinetRequest(BaseModel):
     toe_kick_reveal_front: float | None = Field(default=None, ge=0, description="前踢脚板后缩 mm")
     toe_kick_reveal_back: float | None = Field(default=None, ge=0, description="后踢脚板前移 mm")
     toe_kick_support_count: int | None = Field(default=None, ge=0, description="踢脚支撑板数量；空值为自动")
+    room: RoomRequest | None = Field(
+        default=None,
+        description="第 2 阶段使用的房间模型",
+    )
+    placement: FurniturePlacementRequest | None = Field(
+        default=None,
+        description="家具在房间中的沿墙或自由摆放位置",
+    )
 
 
 class PanelResponse(BaseModel):
@@ -159,6 +209,12 @@ class BOMResponse(BaseModel):
     operations: list[MachiningOperationResponse]
     hole_color_legend: dict[str, dict[str, str]]
     drilled_holes: list[PanelDrillingResponse]
+
+
+class LayoutPlanResponse(BaseModel):
+    layout: dict[str, Any]
+    room_placement: dict[str, Any] | None = None
+    preview: dict[str, Any] | None = None
 
 
 # ── 路由 ──
@@ -265,6 +321,49 @@ async def plan_cabinet(req: CabinetRequest):
         ],
         hole_color_legend=drilled_holes["color_legend"],
         drilled_holes=drilled_holes["panels"],
+    )
+
+
+@app.post("/api/plan-layout", response_model=LayoutPlanResponse)
+async def plan_layout(req: CabinetRequest):
+    """只运行到第 2 阶段，返回房间定位、占地和 SVG 预览。"""
+    orchestration = ORCHESTRATOR.execute_spec(
+        f"layout-{req.type}",
+        req.model_dump(exclude_none=True),
+        through_stage=WorkflowStage.LAYOUT_PLANNED,
+    )
+    output = orchestration.revision.stage_outputs.get(
+        WorkflowStage.LAYOUT_PLANNED.value
+    )
+    if output is None or orchestration.revision.workflow.current == WorkflowStage.FAILED:
+        errors = [
+            issue.message
+            for validation in orchestration.revision.validations
+            for issue in validation.issues
+        ]
+        raise HTTPException(
+            status_code=422,
+            detail="; ".join(errors) or "layout planning failed",
+        )
+    return LayoutPlanResponse(**output)
+
+
+@app.post(
+    "/api/plan-layout/preview",
+    response_class=Response,
+    responses={200: {"content": {"image/svg+xml": {}}}},
+)
+async def plan_layout_preview(req: CabinetRequest) -> Response:
+    """返回可直接在浏览器中显示的第 2 阶段 SVG 平面预览。"""
+    result = await plan_layout(req)
+    if result.preview is None:
+        raise HTTPException(
+            status_code=422,
+            detail="room and placement are required for a layout preview",
+        )
+    return Response(
+        content=str(result.preview["svg"]),
+        media_type="image/svg+xml",
     )
 
 

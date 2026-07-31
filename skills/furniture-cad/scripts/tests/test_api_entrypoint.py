@@ -101,6 +101,40 @@ class ApiEntrypointTests(unittest.TestCase):
         )
         self.assertEqual(auto_insert.back_mount, "insert")
 
+    def test_layout_endpoint_returns_room_position_and_svg_preview(self) -> None:
+        request = server.CabinetRequest(
+            type="floor_cabinet",
+            width=1800,
+            depth=600,
+            height=2400,
+            room=server.RoomRequest(
+                id="bedroom",
+                name="卧室",
+                width_mm=4200,
+                depth_mm=3600,
+                height_mm=2800,
+            ),
+            placement=server.FurniturePlacementRequest(
+                mode="wall",
+                host_wall="west",
+                offset_mm=300,
+            ),
+        )
+
+        response = asyncio.run(server.plan_layout(request))
+
+        self.assertEqual(response.room_placement["room"]["name"], "卧室")
+        self.assertEqual(
+            response.room_placement["placement"]["rotation_z_deg"],
+            270,
+        )
+        self.assertEqual(response.preview["media_type"], "image/svg+xml")
+        self.assertIn("<svg", response.preview["svg"])
+
+        svg_response = asyncio.run(server.plan_layout_preview(request))
+        self.assertEqual(svg_response.media_type, "image/svg+xml")
+        self.assertIn(b"<svg", svg_response.body)
+
     def test_plan_endpoint_returns_each_back_mount_manufacturing_contract(
         self,
     ) -> None:

@@ -13,6 +13,8 @@ EXECUTABLE_LAYOUT_FIELDS = frozenset(
         "shelf_count",
         "n_doors",
         "toe_kick_height",
+        "room",
+        "placement",
     }
 )
 
@@ -107,6 +109,22 @@ def validate_intent(intent: DesignIntent) -> ValidationReport:
             report.add_error(
                 "INVALID_INTENT_VALUE",
                 f"{name} must be a non-negative integer",
+                f"layout.{name}",
+            )
+    has_room = "room" in intent.layout
+    has_placement = "placement" in intent.layout
+    if has_room != has_placement:
+        report.add_error(
+            "INCOMPLETE_ROOM_PLACEMENT_INTENT",
+            "room-aware layout requires both room and placement",
+            "layout",
+        )
+    for name in ("room", "placement"):
+        value = intent.layout.get(name)
+        if value is not None and not isinstance(value, dict):
+            report.add_error(
+                "INVALID_INTENT_VALUE",
+                f"{name} must be an object",
                 f"layout.{name}",
             )
     return report
