@@ -13,7 +13,7 @@ from runtime_paths import bootstrap_runtime_paths
 
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
-from furniture_design_intent.design_spec import FurnitureSpec
+from furniture_panel_planning.panel_spec import FurnitureSpec
 from furniture_workflow.cabinet_pipeline import plan_cabinet
 
 

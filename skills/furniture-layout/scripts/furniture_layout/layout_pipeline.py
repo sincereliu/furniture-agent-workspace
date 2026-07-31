@@ -5,10 +5,9 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any, Mapping
 
-from furniture_design_intent.design_spec import FurnitureSpec, SUPPORTED_TYPES
-
 from .layout_preview import render_layout_preview
 from .layout_planning import CabinetLayout
+from .layout_spec import LayoutSpec
 from .layout_viewer import render_layout_viewer
 from .room_planning import RoomModel, plan_room_placement
 
@@ -19,18 +18,22 @@ DEFAULT_BEDROOM_HEIGHT_MM = 2800.0
 DEFAULT_WALL_CABINET_CEILING_CLEARANCE_MM = 450.0
 
 
-def plan_layout(spec: FurnitureSpec) -> CabinetLayout:
-    """Stage 2: resolve cabinet envelope, clear regions, and layout counts."""
-    if spec.furniture_type not in SUPPORTED_TYPES:
-        supported = ", ".join(sorted(SUPPORTED_TYPES))
-        raise ValueError(
-            f"Unsupported cabinet type: {spec.furniture_type!r}; supported: {supported}"
+def plan_layout(spec: LayoutSpec | Any) -> CabinetLayout:
+    """Stage 2: preserve the envelope and plan customer-visible counts."""
+    if not isinstance(spec, LayoutSpec):
+        spec = LayoutSpec(
+            furniture_type=str(spec.furniture_type),
+            width=float(spec.width),
+            depth=float(spec.depth),
+            height=float(spec.height),
+            shelf_count=int(spec.shelf_count),
+            door_count=int(getattr(spec, "door_count", spec.n_doors)),
         )
     return CabinetLayout.from_spec(spec)
 
 
 def plan_layout_stage(
-    spec: FurnitureSpec,
+    spec: LayoutSpec,
     *,
     room: Mapping[str, Any] | None = None,
     placement: Mapping[str, Any] | None = None,
@@ -40,7 +43,9 @@ def plan_layout_stage(
 
     Missing room context is filled with an explicit default bedroom and a
     centered south-wall placement so every successful checkpoint has a visible
-    3D envelope preview. The output records which values were assumed.
+    3D envelope preview. The output records which values were assumed.  No
+    board thickness, back construction, or final internal clearance is
+    introduced at this checkpoint.
     """
     layout = plan_layout(spec)
     output: dict[str, Any] = {"layout": asdict(layout)}

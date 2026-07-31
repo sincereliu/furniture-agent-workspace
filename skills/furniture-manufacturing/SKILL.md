@@ -21,7 +21,7 @@ description: 用于 manufacturing_planned 阶段；根据已确认板件制定�
    4.5mm，沉头锥面尚未建模；螺钉和默认孔距均为软件暂定值。未经明确
    接受不得把 `readiness` 提升为 `accepted`，未经工厂确认不得提升为
    `factory_ready`。
-9. 厚度来自已确认 `FurnitureSpec`，不得硬编码覆盖。单门和标准双门由板件规划
+9. 厚度来自 `panels_planned.spec` 中已确认的 `FurnitureSpec`，不得从意图重建或硬编码覆盖。单门和标准双门由板件规划
    显式写入 `door_hinge_side="left"/"right"`；旧数据缺省时
    `HingeConnector` 才按位置回退。杯孔只从门板内侧钻入，Y1 =
    `edge_offset + cup_diameter/2`，为杯孔中心到门边的距离。

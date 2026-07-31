@@ -4,7 +4,7 @@
 
 ## 当前能力
 
-唯一应用层入口：`skills/furniture-cad/scripts/furniture_workflow/workflow_orchestrator.py`。它接受已确认 `DesignIntent`；`execute_spec()` 接受 CLI/API 的扁平 JSON。字段转换、阶段实现和校验归各 Skill，Orchestrator 只管理生命周期。
+唯一应用层入口：`skills/furniture-cad/scripts/furniture_workflow/workflow_orchestrator.py`。它接受只含类别与成品外包络的已确认 `DesignIntent`；`execute_spec()` 接受 CLI/API 扁平 JSON，并把其他字段路由到 `Revision.stage_inputs` 的所属阶段。字段转换、阶段实现和校验归各 Skill，Orchestrator 只管理生命周期。
 
 - `floor_cabinet`：固定模板，含背板、踢脚板、层板、门板。
 - `wall_cabinet`：固定模板，含背板、层板、门板，无踢脚板。
@@ -24,7 +24,7 @@
 6. `cad_generated`
 7. `delivery_validated`
 
-输出在 `revision.stage_outputs[stage.value]`，确认在 `approved_stages`，历史在 `workflow.history`；`JsonProjectStore` 一并持久化。
+输出在 `revision.stage_outputs[stage.value]`，待后续处理的参数在 `revision.stage_inputs`，确认在 `approved_stages`，历史在 `workflow.history`；`JsonProjectStore` 一并持久化。
 
 交互调用：
 
@@ -68,11 +68,11 @@ result = orchestrator.run_next(
 }
 ```
 
-`wall_cabinet` 默认 `width=800,height=900,depth=350,toe_kick_height=0,shelf_count=1`。其余默认见 `furniture_design_intent/design_spec.py`：`CABINET_PRESETS` 存类型默认，数据类字段存全局默认；无需逐项询问。确认意图前，所有下游会消费的默认值都会写入 `DesignIntent`，并在 `assumptions` 以字段路径记录来源。
+`width/depth/height` 必须在意图确认前明确提供；不再用类别预设替代客户确认的外包络。`shelf_count/n_doors` 在布局阶段物化；板厚、背板、踢脚和门缝默认值在 `panels_planned.spec` 首次物化。
 
-契约为扁平 JSON。可选的 `constraints` 必须同时提供 `constraint_mappings`：映射到可执行的 `layout.*`、`structure.*`、`overall_size.*`/`furniture_type`，或显式写为 `informational`；未分类约束不能确认。
+契约为扁平 JSON。适配器只把 `type/width/depth/height` 转成 `DesignIntent`，将 `shelf_count/n_doors/room/placement` 路由到布局，将结构字段路由到板件，将铰链/外观等路由到制造。可选 `constraints` 必须有阶段映射；未分类约束在协议路由时拒绝。
 
-`back_mount` 接受 `auto/groove/insert/cover`；意图确认保留 `auto`，布局阶段在背板薄于柜体板时解析为 `groove`，否则解析为 `insert`。下游只用有效模式；`back_rail_height/groove_depth/groove_clearance` 仅对 `groove` 生效，非入槽模式不得被这些休眠参数阻塞，`back_rail_height=0` 关闭背拉条。
+`back_mount` 接受 `auto/groove/insert/cover`，但不进入意图或布局输出。板件阶段在背板薄于柜体板时把 `auto` 解析为 `groove`，否则为 `insert`，并输出 requested/effective；`back_rail_height/groove_depth/groove_clearance` 仅对有效 `groove` 生效，`back_rail_height=0` 关闭背拉条。
 
 仅总体尺寸为数值且变体匹配实时模板时执行；否则停在相应规划层并说明边界。
 
@@ -81,7 +81,7 @@ result = orchestrator.run_next(
 `server.py` 的 `POST /api/plan-cabinet` 只适配一次性批处理并调用 `FurnitureOrchestrator.execute_spec()`：
 
 - 请求含 `back_mount/back_rail_height`；Pydantic 拒绝非法模式，Orchestrator 对几何组合错误返回 `422`。
-- 请求可含 `constraints/constraint_mappings/assumptions/unresolved`；API 必须原样传入设计意图验证，不得在协议层丢弃约束。
+- 请求可含 `constraints/constraint_mappings`；协议层按目标阶段路由，不得写入 `DesignIntent` 或静默丢弃。
 - 响应 `back_mount` 为有效模式；`readiness` 返回整份制造方案的 `preliminary/accepted/factory_ready` 状态；`panels` 保留备注/封边/模式，`hardware` 保留品牌/型号/暂定说明/孔数摘要。
 - `operations` 仅为入槽模式返回目标切削；`drilled_holes` 按板件返回全局/local 孔位，`hole_color_legend` 返回孔型图例。
 
@@ -123,8 +123,8 @@ Feature Tree v2 支持板件 `box` 和定向 `cut_box`；发射器先建板、�
 
 ## 运行时板件与 BOM 路径
 
-- `furniture_layout/layout_pipeline.py::plan_layout()`：包络、净空、区域，不生成板件。
-- `furniture_panel_planning/panel_planning.py::plan_panels()`：实体板件角色、尺寸、位置。
+- `furniture_layout/layout_pipeline.py::plan_layout()`：成品包络、功能数量和房间定位，不计算结构净空。
+- `furniture_panel_planning/panel_pipeline.py::plan_panel_stage()`：首次物化结构规格、精确净空、背板方案，并生成实体板件角色、尺寸和位置。
 - `furniture_manufacturing/manufacturing_bom.py::plan_manufacturing()`：材料、封边、五金、BOM、槽；`emit_drilled_holes()` 输出配合孔。
 
 `cabinet_pipeline.py::plan_cabinet()` 仅是无状态兼容门面；交互流程由 Orchestrator 分阶段调用，不合并检查点。

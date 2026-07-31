@@ -20,7 +20,7 @@ bootstrap_runtime_paths(WORKSPACE_ROOT)
 from furniture_cad.cad_bridge import CadBridge
 from furniture_delivery_validation.validation import validate_delivery
 from furniture_design_intent.design_intent import DesignIntent, OverallSize
-from furniture_workflow.input_adapter import spec_from_intent
+from furniture_workflow.input_adapter import stage_inputs_from_spec
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from furniture_workflow.workflow_state import STAGE_SEQUENCE, WorkflowStage
 from furniture_workflow.workflow_store import JsonProjectStore
@@ -29,9 +29,7 @@ from furniture_workflow.workflow_store import JsonProjectStore
 def cabinet_intent(*, furniture_type: str = "floor_cabinet") -> DesignIntent:
     return DesignIntent(
         furniture_type=furniture_type,
-        purpose="测试柜体七阶段工作流",
         overall_size=OverallSize(width_mm=800, depth_mm=600, height_mm=1000),
-        layout={"shelf_count": 2, "n_doors": 2},
     )
 
 
@@ -430,7 +428,6 @@ class FurnitureOrchestratorTests(unittest.TestCase):
                     "depth_mm": None,
                     "height_mm": 1000,
                 },
-                "unresolved": ["depth_mm"],
             }
         )
         project = self.orchestrator.create_project("未完整柜体", intent)
@@ -443,69 +440,46 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         self.assertEqual(revision.workflow.current, WorkflowStage.FAILED)
         issue_codes = {issue.code for issue in revision.validations[-1].issues}
         self.assertIn("INVALID_INTENT", issue_codes)
-        self.assertIn("UNRESOLVED_DECISIONS", issue_codes)
 
-    def test_unsupported_layout_decision_is_not_silently_discarded(self) -> None:
-        intent = cabinet_intent()
-        intent = DesignIntent.from_dict(
-            {
-                **intent.to_dict(),
-                "layout": {
-                    **intent.layout,
-                    "drawer_count": 2,
-                },
-            }
+    def test_unsupported_layout_decision_fails_at_layout_stage(self) -> None:
+        project = self.orchestrator.create_project(
+            "带抽屉柜体",
+            cabinet_intent(),
+            stage_inputs=stage_inputs_from_spec(
+                {"layout": {"drawer_count": 2}}
+            ),
         )
-        project = self.orchestrator.create_project("带抽屉柜体", intent)
-
-        revision = self.orchestrator.confirm_intent(project)
+        self.orchestrator.confirm_intent(project)
+        revision = self.orchestrator.run_next(project).revision
 
         self.assertEqual(revision.workflow.current, WorkflowStage.FAILED)
-        self.assertIn(
-            "UNSUPPORTED_LAYOUT_DECISION",
-            {issue.code for issue in revision.validations[-1].issues},
-        )
+        self.assertIn("layout stage does not support", revision.validations[-1].issues[0].message)
 
-    def test_unsupported_structure_decision_is_not_silently_discarded(self) -> None:
-        intent = DesignIntent.from_dict(
-            {
-                **cabinet_intent().to_dict(),
-                "structure": {"mystery_joint": "unknown"},
-            }
+    def test_unsupported_structure_decision_fails_at_panel_stage(self) -> None:
+        project = self.orchestrator.create_project(
+            "未知连接柜体",
+            cabinet_intent(),
+            stage_inputs=stage_inputs_from_spec(
+                {"structure": {"mystery_joint": "unknown"}}
+            ),
         )
-        project = self.orchestrator.create_project("未知连接柜体", intent)
-
-        revision = self.orchestrator.confirm_intent(project)
+        self.orchestrator.confirm_intent(project)
+        self.orchestrator.run_next(project)
+        self.orchestrator.confirm_stage(project, WorkflowStage.LAYOUT_PLANNED)
+        revision = self.orchestrator.run_next(project).revision
 
         self.assertEqual(revision.workflow.current, WorkflowStage.FAILED)
-        self.assertIn(
-            "UNSUPPORTED_STRUCTURE_DECISION",
-            {issue.code for issue in revision.validations[-1].issues},
-        )
+        self.assertIn("panel stage does not support", revision.validations[-1].issues[0].message)
 
-    def test_unclassified_constraint_cannot_be_confirmed(self) -> None:
-        intent = DesignIntent.from_dict(
-            {
-                **cabinet_intent().to_dict(),
-                "constraints": ["必须提供防倾倒固定"],
-            }
-        )
-        project = self.orchestrator.create_project("未分类约束柜体", intent)
-
-        revision = self.orchestrator.confirm_intent(project)
-
-        self.assertEqual(revision.workflow.current, WorkflowStage.FAILED)
-        self.assertIn(
-            "UNCLASSIFIED_CONSTRAINT",
-            {issue.code for issue in revision.validations[-1].issues},
-        )
+    def test_unclassified_constraint_is_rejected_by_protocol_routing(self) -> None:
+        with self.assertRaisesRegex(ValueError, "has no stage mapping"):
+            stage_inputs_from_spec({"constraints": ["必须提供防倾倒固定"]})
 
     def test_constraints_require_explicit_executable_or_informational_destinations(
         self,
     ) -> None:
-        intent = self.orchestrator.intent_from_spec(
+        inputs = stage_inputs_from_spec(
             {
-                "type": "floor_cabinet",
                 "back_mount": "cover",
                 "constraints": ["背板必须外盖", "仅供卧室方案比较"],
                 "constraint_mappings": {
@@ -514,56 +488,48 @@ class FurnitureOrchestratorTests(unittest.TestCase):
                 },
             }
         )
-        project = self.orchestrator.create_project("已分类约束柜体", intent)
-
-        revision = self.orchestrator.confirm_intent(project)
-
-        self.assertTrue(revision.is_stage_approved(WorkflowStage.DESIGN_INTENT))
         self.assertEqual(
-            revision.intent.constraint_mappings["背板必须外盖"],
+            inputs["panels"]["constraints"][0]["target"],
             "structure.back_mount",
         )
+        self.assertEqual(inputs["informational_constraints"], ["仅供卧室方案比较"])
 
     def test_inactive_groove_parameters_do_not_block_non_groove_layout(self) -> None:
-        intent = self.orchestrator.intent_from_spec(
+        result = self.orchestrator.execute_spec(
+            "外盖背板柜体",
             {
                 "type": "floor_cabinet",
+                "width": 800,
+                "depth": 600,
+                "height": 1000,
                 "back_mount": "cover",
                 "groove_depth": "unused",
                 "groove_clearance": "unused",
                 "back_rail_height": "unused",
-            }
+            },
+            through_stage=WorkflowStage.PANELS_PLANNED,
         )
-        project = self.orchestrator.create_project("外盖背板柜体", intent)
-
-        self.orchestrator.confirm_intent(project)
-        result = self.orchestrator.run_next(project)
-
-        self.assertEqual(result.revision.workflow.current, WorkflowStage.LAYOUT_PLANNED)
+        self.assertNotIn("back_mount", result.revision.stage_outputs["layout_planned"]["layout"])
         self.assertEqual(
-            result.revision.stage_outputs["layout_planned"]["layout"]["back_mount"],
+            result.revision.stage_outputs["panels_planned"]["structure"]["back_mount"],
             "cover",
         )
 
-    def test_active_groove_parameters_are_validated_before_confirmation(self) -> None:
-        intent = DesignIntent.from_dict(
+    def test_active_groove_parameters_are_validated_at_panel_stage(self) -> None:
+        result = self.orchestrator.execute_spec(
+            "错误入槽参数柜体",
             {
-                **cabinet_intent().to_dict(),
-                "structure": {
-                    "back_mount": "groove",
-                    "groove_depth": "invalid",
-                },
-            }
+                "type": "floor_cabinet",
+                "width": 800,
+                "depth": 600,
+                "height": 1000,
+                "back_mount": "groove",
+                "groove_depth": "invalid",
+            },
+            through_stage=WorkflowStage.PANELS_PLANNED,
         )
-        project = self.orchestrator.create_project("错误入槽参数柜体", intent)
-
-        revision = self.orchestrator.confirm_intent(project)
-
-        self.assertEqual(revision.workflow.current, WorkflowStage.FAILED)
-        self.assertIn(
-            "INVALID_INTENT_VALUE",
-            {issue.code for issue in revision.validations[-1].issues},
-        )
+        self.assertEqual(result.revision.workflow.current, WorkflowStage.FAILED)
+        self.assertIn("could not convert string to float", result.revision.validations[-1].issues[0].message)
 
     def test_unsupported_family_fails_at_design_intent_confirmation(self) -> None:
         project = self.orchestrator.create_project(
@@ -581,7 +547,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
     def test_project_store_round_trips_stage_outputs_and_approvals(self) -> None:
         result = self.orchestrator.execute_spec(
             "可恢复项目",
-            {"type": "floor_cabinet"},
+            {"type": "floor_cabinet", "width": 800, "depth": 600, "height": 1000},
             through_stage=WorkflowStage.FEATURE_TREE_PLANNED,
         )
         project = result.project
@@ -592,6 +558,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             restored = store.load(project.id)
 
         self.assertEqual(restored.id, project.id)
+        self.assertEqual(restored.latest.stage_inputs, project.latest.stage_inputs)
         self.assertEqual(restored.latest.stage_outputs, project.latest.stage_outputs)
         self.assertEqual(restored.latest.approved_stages, project.latest.approved_stages)
         self.assertEqual(
@@ -599,55 +566,76 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             WorkflowStage.FEATURE_TREE_PLANNED,
         )
 
-    def test_intent_from_spec_preserves_category_dimension_defaults(self) -> None:
-        intent = self.orchestrator.intent_from_spec({"type": "wall_cabinet"})
-
+    def test_intent_from_spec_contains_only_category_and_envelope(self) -> None:
+        request = {
+            "type": "wall_cabinet",
+            "width": 800,
+            "depth": 350,
+            "height": 900,
+            "shelf_count": 1,
+            "back_mount": "cover",
+        }
+        intent = self.orchestrator.intent_from_spec(request)
         self.assertEqual(intent.overall_size.width_mm, 800)
         self.assertEqual(intent.overall_size.depth_mm, 350)
         self.assertEqual(intent.overall_size.height_mm, 900)
-        self.assertEqual(intent.layout["toe_kick_height"], 0)
-        self.assertEqual(intent.structure["board_thickness"], 18.0)
-        self.assertEqual(intent.structure["back_mount"], "auto")
-        self.assertIn("overall_size.width_mm", intent.assumptions)
-        self.assertIn("layout.shelf_count", intent.assumptions)
-        self.assertIn("structure.board_thickness", intent.assumptions)
+        self.assertEqual(
+            set(intent.to_dict()),
+            {"furniture_type", "overall_size", "confirmed", "schema_version"},
+        )
+        inputs = stage_inputs_from_spec(request)
+        self.assertEqual(inputs["layout"]["parameters"]["shelf_count"], 1)
+        self.assertEqual(inputs["panels"]["parameters"]["back_mount"], "cover")
 
-    def test_confirmation_materializes_defaults_for_direct_intents(self) -> None:
+    def test_design_intent_rejects_new_downstream_fields(self) -> None:
+        with self.assertRaisesRegex(ValueError, "route later decisions"):
+            DesignIntent.from_dict(
+                {
+                    "furniture_type": "floor_cabinet",
+                    "overall_size": {
+                        "width_mm": 800,
+                        "depth_mm": 600,
+                        "height_mm": 1000,
+                    },
+                    "structure": {"back_mount": "cover"},
+                }
+            )
+
+    def test_panel_stage_materializes_construction_defaults(self) -> None:
         project = self.orchestrator.create_project("直接意图柜体", cabinet_intent())
 
         revision = self.orchestrator.confirm_intent(project)
-
-        self.assertEqual(revision.intent.structure["back_mount"], "auto")
-        self.assertEqual(revision.intent.structure["board_thickness"], 18.0)
-        self.assertIn("structure.back_mount", revision.intent.assumptions)
-        self.assertEqual(
-            revision.stage_outputs["design_intent"]["structure"]["back_mount"],
-            "auto",
-        )
-
+        self.assertNotIn("structure", revision.stage_outputs["design_intent"])
+        self.orchestrator.run_next(project)
+        self.orchestrator.confirm_stage(project, WorkflowStage.LAYOUT_PLANNED)
         result = self.orchestrator.run_next(project)
-        self.assertEqual(
-            result.revision.stage_outputs["layout_planned"]["layout"]["back_mount"],
-            "groove",
-        )
+        panel_output = result.revision.stage_outputs["panels_planned"]
+        self.assertEqual(panel_output["spec"]["board_thickness"], 18.0)
+        self.assertEqual(panel_output["structure"]["back_mount"], "groove")
 
-    def test_input_adapter_preserves_hinge_preferences(self) -> None:
-        intent = self.orchestrator.intent_from_spec(
+    def test_input_adapter_routes_hinge_preferences_to_manufacturing(self) -> None:
+        request = {
+            "type": "floor_cabinet",
+            "width": 800,
+            "depth": 600,
+            "height": 1000,
+            "hinge_brand": "DTC",
+            "hinge_variant": "国产35mm杯全盖",
+            "hinge_overlay": "half",
+            "hinge_angle": 110,
+        }
+        inputs = stage_inputs_from_spec(request)
+        self.assertEqual(inputs["manufacturing"]["parameters"]["hinge_brand"], "DTC")
+        result = self.orchestrator.execute_spec(
+            "五金偏好柜体",
             {
-                "type": "floor_cabinet",
-                "hinge_brand": "DTC",
-                "hinge_variant": "国产35mm杯全盖",
-                "hinge_overlay": "half",
-                "hinge_angle": 110,
-            }
+                **request,
+            },
+            through_stage=WorkflowStage.MANUFACTURING_PLANNED,
         )
-
-        spec = spec_from_intent(intent)
-
-        self.assertEqual(spec.hinge_brand, "DTC")
-        self.assertEqual(spec.hinge_variant, "国产35mm杯全盖")
-        self.assertEqual(spec.hinge_overlay, "half")
-        self.assertEqual(spec.hinge_angle, 110)
+        requested = result.revision.stage_outputs["manufacturing_planned"]["requested_options"]
+        self.assertEqual(requested["hinge_brand"], "DTC")
+        self.assertEqual(requested["hinge_overlay"], "half")
 
 
 if __name__ == "__main__":

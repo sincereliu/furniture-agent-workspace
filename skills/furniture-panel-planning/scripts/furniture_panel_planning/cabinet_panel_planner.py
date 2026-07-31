@@ -7,16 +7,15 @@ the solver computes exact positions, sizes, and face directions.
 
 from __future__ import annotations
 
-from furniture_design_intent.design_spec import FurnitureSpec
-from furniture_layout.layout_planning import CabinetLayout
-
 from .panel_models import PanelPlacement
+from .panel_spec import FurnitureSpec
+from .structure_planning import CabinetStructure
 from .topology_solver import solve_panel_placements
 
 
 def build_cabinet_panels(
     spec: FurnitureSpec,
-    layout: CabinetLayout,
+    layout: CabinetStructure,
 ) -> list[PanelPlacement]:
     """Stage 3: create physical panel roles, sizes, and placements.
 

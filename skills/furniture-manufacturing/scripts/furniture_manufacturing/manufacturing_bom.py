@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import List
+from dataclasses import dataclass, field
+from typing import Any, List, Mapping
 
-from furniture_design_intent.design_spec import FurnitureSpec, resolve_back_mount
+from furniture_panel_planning.panel_spec import FurnitureSpec, resolve_back_mount
 from furniture_panel_planning.panel_models import PanelPlacement
 
 from .manufacturing_edge_banding import get_edge_banding
@@ -33,6 +33,16 @@ MANUFACTURING_READINESS_LABELS = {
     "factory_ready": "工厂已确认可投产",
 }
 
+MANUFACTURING_OPTION_FIELDS = frozenset(
+    {
+        "hinge_brand",
+        "hinge_variant",
+        "hinge_overlay",
+        "hinge_angle",
+        "options",
+    }
+)
+
 
 @dataclass
 class BOMReport:
@@ -43,6 +53,8 @@ class BOMReport:
     operations: list[MachiningOperation]
     total_area_m2: float = 0.0
     readiness: str = "preliminary"
+    requested_options: dict[str, Any] = field(default_factory=dict)
+    appearance: dict[str, Any] = field(default_factory=dict)
 
     @property
     def panel_count(self) -> int:
@@ -56,8 +68,17 @@ class BOMReport:
 def plan_manufacturing(
     spec: FurnitureSpec,
     placements: list[PanelPlacement],
+    *,
+    requested_options: Mapping[str, Any] | None = None,
+    appearance: Mapping[str, Any] | None = None,
 ) -> BOMReport:
     """Stage 4: apply materials and emit explicit machining operations."""
+    options = dict(requested_options or {})
+    unknown = sorted(set(options) - MANUFACTURING_OPTION_FIELDS)
+    if unknown:
+        raise ValueError(
+            "manufacturing stage does not support: " + ", ".join(unknown)
+        )
     back_mount = resolve_back_mount(
         spec.back_mount, spec.back_thickness, spec.board_thickness
     )
@@ -72,6 +93,8 @@ def plan_manufacturing(
         operations=operations,
         total_area_m2=sum(panel.area_m2 for panel in panels),
         readiness="preliminary",
+        requested_options=options,
+        appearance=dict(appearance or {}),
     )
 
 

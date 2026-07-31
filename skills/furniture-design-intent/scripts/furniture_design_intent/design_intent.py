@@ -1,13 +1,17 @@
-"""家具项目的版本化用户意图。
+"""Furniture category and finished-envelope intent.
 
-DesignIntent 记录应该建造什么。刻意不包含板件放置、制造加工、
-CAD 图元或产物路径。
+DesignIntent is deliberately small: it records only the cabinet family and
+the customer-confirmed finished envelope.  Functional layout, construction,
+manufacturing, CAD, and artifact choices belong to later stage contracts.
 """
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import asdict, dataclass, replace
 from typing import Any
+
+
+SUPPORTED_TYPES = frozenset({"floor_cabinet", "wall_cabinet"})
 
 
 @dataclass(frozen=True)
@@ -33,32 +37,22 @@ class OverallSize:
 
 @dataclass(frozen=True)
 class DesignIntent:
-    """一个项目版本的已确认或草稿事实来源。"""
+    """One revision's customer-confirmed finished-envelope source of truth."""
 
     furniture_type: str
     overall_size: OverallSize
-    purpose: str = ""
-    layout: dict[str, Any] = field(default_factory=dict)
-    appearance: dict[str, Any] = field(default_factory=dict)
-    structure: dict[str, Any] = field(default_factory=dict)
-    constraints: list[str] = field(default_factory=list)
-    constraint_mappings: dict[str, str] = field(default_factory=dict)
-    assumptions: dict[str, str] = field(default_factory=dict)
-    unresolved: list[str] = field(default_factory=list)
     confirmed: bool = False
-    schema_version: int = 1
+    schema_version: int = 2
 
     def validate(self) -> list[str]:
         errors = self.overall_size.validate()
         if not self.furniture_type.strip():
             errors.append("furniture_type is required")
-        if self.schema_version != 1:
+        if self.schema_version != 2:
             errors.append(f"unsupported DesignIntent schema_version: {self.schema_version}")
         return errors
 
     def confirm(self) -> "DesignIntent":
-        if self.unresolved:
-            raise ValueError("DesignIntent cannot be confirmed while unresolved decisions remain")
         errors = self.validate()
         if errors:
             raise ValueError("; ".join(errors))
@@ -75,6 +69,27 @@ class DesignIntent:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "DesignIntent":
+        source_schema_version = int(data.get("schema_version", 2))
+        legacy_schema = source_schema_version == 1
+        downstream_fields = {
+            "purpose",
+            "layout",
+            "appearance",
+            "structure",
+            "constraints",
+            "constraint_mappings",
+            "assumptions",
+            "unresolved",
+        }
+        populated_downstream = sorted(
+            key for key in downstream_fields if data.get(key)
+        )
+        if populated_downstream and not legacy_schema:
+            raise ValueError(
+                "DesignIntent only accepts furniture_type and overall_size; "
+                "route later decisions through stage_inputs: "
+                + ", ".join(populated_downstream)
+            )
         size = data.get("overall_size", {})
         return cls(
             furniture_type=str(data.get("furniture_type", data.get("type", ""))).strip().lower(),
@@ -92,16 +107,11 @@ class DesignIntent:
                     "overall_size.height_mm",
                 ),
             ),
-            purpose=str(data.get("purpose", "")),
-            layout=dict(data.get("layout", {})),
-            appearance=dict(data.get("appearance", {})),
-            structure=dict(data.get("structure", {})),
-            constraints=list(data.get("constraints", [])),
-            constraint_mappings=dict(data.get("constraint_mappings", {})),
-            assumptions=dict(data.get("assumptions", {})),
-            unresolved=list(data.get("unresolved", [])),
             confirmed=bool(data.get("confirmed", False)),
-            schema_version=int(data.get("schema_version", 1)),
+            # Schema v1 carried downstream layout and construction fields.
+            # Reading it into the current model intentionally drops those
+            # fields; workflow project loading migrates them to stage_inputs.
+            schema_version=(2 if legacy_schema else source_schema_version),
         )
 
 

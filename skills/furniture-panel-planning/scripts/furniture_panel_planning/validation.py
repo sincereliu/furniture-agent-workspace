@@ -2,25 +2,191 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
+from typing import Any, Mapping
+
 from furniture_delivery_validation.validation import ValidationReport
-from furniture_design_intent.design_spec import FurnitureSpec
 from furniture_layout.layout_planning import CabinetLayout
 
 from .panel_models import PanelPlacement
+from .panel_spec import FurnitureSpec
 from .panel_rules import (
     back_rail_clear_spacing,
     resolve_back_rail_count,
     resolve_toe_kick_support_count,
     toe_kick_support_clear_spacing,
 )
+from .structure_planning import CabinetStructure
+
+
+def validate_panel_output(
+    confirmed_layout: CabinetLayout,
+    output: Mapping[str, Any],
+) -> ValidationReport:
+    """Validate the complete construction-and-panels stage checkpoint."""
+    report = ValidationReport(stage="panels_planned")
+    try:
+        raw_spec = output.get("spec")
+        raw_structure = output.get("structure")
+        raw_panels = output.get("panels")
+        if not isinstance(raw_spec, Mapping):
+            raise ValueError("panel stage output requires spec")
+        if not isinstance(raw_structure, Mapping):
+            raise ValueError("panel stage output requires structure")
+        if not isinstance(raw_panels, list):
+            raise ValueError("panel stage output requires panels")
+        spec = FurnitureSpec(**raw_spec)
+        structure = CabinetStructure(**raw_structure)
+        panels = [PanelPlacement(**item) for item in raw_panels]
+    except (TypeError, ValueError) as exc:
+        report.add_error("INVALID_PANEL_STAGE_OUTPUT", str(exc))
+        return report
+
+    structure_report = validate_structure(confirmed_layout, spec, structure)
+    panel_report = validate_panels(spec, structure, panels)
+    report.issues.extend(structure_report.issues)
+    report.issues.extend(panel_report.issues)
+
+    resolution = output.get("back_mount_resolution")
+    if not isinstance(resolution, Mapping):
+        report.add_error(
+            "MISSING_BACK_MOUNT_RESOLUTION",
+            "panel stage must show requested and effective back mount",
+            "back_mount_resolution",
+        )
+    elif resolution.get("effective") != spec.back_mount:
+        report.add_error(
+            "BACK_MOUNT_RESOLUTION_MISMATCH",
+            "effective back mount must match the confirmed construction spec",
+            "back_mount_resolution.effective",
+        )
+    return report
+
+
+def validate_structure(
+    confirmed_layout: CabinetLayout,
+    spec: FurnitureSpec,
+    structure: CabinetStructure,
+) -> ValidationReport:
+    """Validate exact geometry only after the customer approved layout."""
+    report = ValidationReport(stage="panels_planned")
+    if (
+        spec.furniture_type,
+        spec.width,
+        spec.depth,
+        spec.height,
+        spec.shelf_count,
+        spec.n_doors,
+    ) != (
+        confirmed_layout.furniture_type,
+        confirmed_layout.width,
+        confirmed_layout.depth,
+        confirmed_layout.height,
+        confirmed_layout.shelf_count,
+        confirmed_layout.door_count,
+    ):
+        report.add_error(
+            "PANEL_SPEC_LAYOUT_MISMATCH",
+            "panel construction must preserve the approved layout",
+        )
+
+    for name in ("board_thickness", "back_thickness", "door_thickness"):
+        if getattr(spec, name) <= 0:
+            report.add_error(
+                "INVALID_PANEL_THICKNESS",
+                f"{name} must be positive",
+                name,
+            )
+    for name in (
+        "toe_kick_height",
+        "back_offset",
+        "door_margin",
+        "door_hinge_gap",
+        "toe_kick_reveal_front",
+        "toe_kick_reveal_back",
+    ):
+        if getattr(spec, name) < 0:
+            report.add_error(
+                "INVALID_PANEL_INPUT",
+                f"{name} cannot be negative",
+                name,
+            )
+    if spec.back_mount == "groove":
+        if spec.groove_depth <= 0:
+            report.add_error(
+                "INVALID_GROOVE_DEPTH",
+                "groove_depth must be positive",
+                "groove_depth",
+            )
+        if spec.groove_clearance < 0:
+            report.add_error(
+                "INVALID_GROOVE_CLEARANCE",
+                "groove_clearance cannot be negative",
+                "groove_clearance",
+            )
+    if spec.back_rail_height < 0:
+        report.add_error(
+            "INVALID_BACK_RAIL_HEIGHT",
+            "back_rail_height cannot be negative",
+            "back_rail_height",
+        )
+
+    expected = CabinetStructure.from_spec(spec)
+    if asdict(structure) != asdict(expected):
+        report.add_error(
+            "STRUCTURE_GEOMETRY_MISMATCH",
+            "exact structure must be derived from the confirmed panel spec",
+            "structure",
+        )
+    if min(
+        structure.internal_width,
+        structure.internal_height,
+        structure.side_depth,
+        structure.internal_y_end - structure.internal_y_start,
+    ) <= 0:
+        report.add_error(
+            "NON_POSITIVE_INTERNAL_CLEARANCE",
+            "panel construction leaves no positive internal clearance",
+            "structure",
+        )
+    if not (
+        0 <= structure.internal_x_start < structure.internal_x_end <= structure.width
+        and 0 <= structure.internal_z_start < structure.internal_z_end <= structure.height
+        and 0 <= structure.carcass_y_start < structure.carcass_y_end <= structure.depth
+        and structure.carcass_y_start
+        <= structure.internal_y_start
+        < structure.internal_y_end
+        <= structure.carcass_y_end
+        and 0 <= structure.back_plane_y < structure.internal_y_start
+    ):
+        report.add_error(
+            "STRUCTURE_REGION_OUTSIDE_ENVELOPE",
+            "construction regions must stay inside the finished envelope",
+            "structure",
+        )
+    if structure.toe_kick_height > 0 and not (
+        structure.carcass_y_start
+        <= structure.toe_kick_rear_y
+        < structure.toe_kick_front_y
+        <= structure.carcass_y_end
+    ):
+        report.add_error(
+            "INVALID_TOE_KICK_REGION",
+            "toe-kick region must have positive depth inside the cabinet",
+            "structure",
+        )
+    return report
 
 
 def validate_panels(
     spec: FurnitureSpec,
-    layout: CabinetLayout,
+    layout: CabinetLayout | CabinetStructure,
     panels: list[PanelPlacement],
 ) -> ValidationReport:
     report = ValidationReport(stage="panels_planned")
+    if isinstance(layout, CabinetLayout):
+        spec = FurnitureSpec.from_dict(asdict(spec))
+        layout = CabinetStructure.from_spec(spec)
     if not panels:
         report.add_error("EMPTY_PANEL_PLAN", "panel plan contains no panels")
         return report

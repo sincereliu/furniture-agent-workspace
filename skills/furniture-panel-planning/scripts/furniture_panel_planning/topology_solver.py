@@ -15,17 +15,16 @@ from typing import Any
 
 import yaml
 
-from furniture_design_intent.design_spec import FurnitureSpec
-from furniture_layout.layout_planning import CabinetLayout
-
 from .cabinet_frame import CabinetFrame
 from .panel_models import PanelPlacement
+from .panel_spec import FurnitureSpec
 from .panel_rules import (
     back_rail_clear_spacing,
     resolve_back_rail_count,
     resolve_toe_kick_support_count,
     toe_kick_support_clear_spacing,
 )
+from .structure_planning import CabinetStructure
 
 
 def _load_topology(furniture_type: str) -> dict[str, Any]:
@@ -55,7 +54,7 @@ def _resolve_semantic_face(face_name: str, frame: CabinetFrame) -> str:
 
 def solve_panel_placements(
     spec: FurnitureSpec,
-    layout: CabinetLayout,
+    layout: CabinetStructure,
 ) -> list[PanelPlacement]:
     """Compute all panel placements from topology + spec + layout.
 
@@ -63,8 +62,8 @@ def solve_panel_placements(
     ----------
     spec : FurnitureSpec
         Normalized cabinet dimensions and parameter choices.
-    layout : CabinetLayout
-        Pre-computed spatial contract (envelope, clear regions, counts).
+    layout : CabinetStructure
+        Panel-stage construction geometry and exact clear regions.
 
     Returns
     -------
@@ -122,7 +121,7 @@ def solve_panel_placements(
 
 def _build_enclosure_panel(
     spec: FurnitureSpec,
-    layout: CabinetLayout,
+    layout: CabinetStructure,
     side_name: str,
     side_def: dict[str, Any],
     face_dir: str,
@@ -200,7 +199,7 @@ def _build_enclosure_panel(
 
 def _back_panel_variants(
     spec: FurnitureSpec,
-    layout: CabinetLayout,
+    layout: CabinetStructure,
     side_name: str,
     side_def: dict[str, Any],
     face_dir: str,
@@ -282,7 +281,7 @@ def _back_panel_variants(
 
 def _door_panels(
     spec: FurnitureSpec,
-    layout: CabinetLayout,
+    layout: CabinetStructure,
     frame: CabinetFrame,
 ) -> list[PanelPlacement]:
     """Generate door panels on the front face of the cabinet."""
@@ -331,7 +330,7 @@ def _door_panels(
 
 def _toe_kick_panels(
     spec: FurnitureSpec,
-    layout: CabinetLayout,
+    layout: CabinetStructure,
     base_def: dict[str, Any],
     frame: CabinetFrame,
 ) -> list[PanelPlacement]:
@@ -381,7 +380,7 @@ def _toe_kick_panels(
 
 def _fixed_shelves(
     spec: FurnitureSpec,
-    layout: CabinetLayout,
+    layout: CabinetStructure,
     shelves_def: dict[str, Any],
     frame: CabinetFrame,
 ) -> list[PanelPlacement]:

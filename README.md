@@ -31,6 +31,8 @@ FurnitureOrchestrator
 7. delivery_validated
 ```
 
+阶段确认顺序遵循客户决策：`design_intent` 只确认家具类别与宽深高成品外包络；`layout_planned` 确认功能数量和房间位置；`panels_planned` 才首次确认板厚、背板、踢脚、精确净空和实体板件；`manufacturing_planned` 再确定材料、封边、连接、五金与加工。
+
 第 2 阶段接收房间和家具位置。未提供时使用 `4200×3600×2800 mm` 的“默认卧室（系统假设）”，并将柜体沿南墙居中摆放；只提供一项时补齐另一项。`stage_outputs.layout_planned` 会输出 `layout_context` 来源标记、房间坐标、家具四角占地、六向净距、内联 SVG 透视图和自包含 HTML 互动 Viewer；客户可拖拽旋转、滚轮缩放并选择标准视角。房间透明、家具包络不透明，越界、遮挡门窗或碰撞障碍物时不能确认：
 
 ```json
@@ -57,7 +59,7 @@ FurnitureOrchestrator
 }
 ```
 
-设计意图变化使用 `revise()` 从第 1 阶段建立新 Revision。修改第 2～5 阶段时使用 `revise_stage_output()`：新 Revision 只保留修改点之前已确认的结果，修改点及全部下游重新确认或生成。`stage_outputs`、`approved_stages` 和工作流历史会随 Project JSON 一起保存。
+设计意图变化使用 `revise()` 从第 1 阶段建立新 Revision。修改第 2～5 阶段时使用 `revise_stage_output()`：新 Revision 只保留修改点之前已确认的结果，修改点及全部下游重新确认或生成。完整批处理请求中的后续参数保存在 `stage_inputs`，不会污染 `DesignIntent`；`stage_inputs`、`stage_outputs`、`approved_stages` 和工作流历史会随 Project JSON 一起保存。
 
 `generate_furniture.py` 和 `execute_spec()` 是明确的一次性批处理入口，可以自动确认已通过验证的中间阶段；它们不用于交互式逐步设计。
 

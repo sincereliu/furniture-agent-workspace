@@ -1,4 +1,4 @@
 interface:
   display_name: "家具布局规划"
   short_description: "计算柜体包络、房间位置、碰撞和 SVG 预览"
-  default_prompt: "使用 $furniture-layout 计算已确认固定柜体意图的局部布局与可选房间定位；展示 SVG 预览，遇到越界、碰撞或未支持的分区/开启策略时停止。"
+  default_prompt: "使用 $furniture-layout 在已确认外包络内规划客户可见的功能数量和房间定位；展示预览，遇到越界、碰撞或未支持布局时停止，不提前决定板厚、背板或净空。"

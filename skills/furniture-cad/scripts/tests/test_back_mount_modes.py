@@ -14,7 +14,7 @@ from runtime_paths import bootstrap_runtime_paths
 
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
-from furniture_design_intent.design_spec import FurnitureSpec
+from furniture_panel_planning.panel_spec import FurnitureSpec
 from furniture_layout.layout_pipeline import plan_layout
 from furniture_layout.validation import validate_layout
 from furniture_manufacturing.manufacturing_bom import (
@@ -22,7 +22,8 @@ from furniture_manufacturing.manufacturing_bom import (
     plan_manufacturing,
 )
 from furniture_panel_planning.panel_planning import plan_panels
-from furniture_panel_planning.validation import validate_panels
+from furniture_panel_planning.structure_planning import CabinetStructure
+from furniture_panel_planning.validation import validate_panels, validate_structure
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from furniture_workflow.workflow_state import WorkflowStage
 
@@ -51,18 +52,19 @@ class BackMountModeTests(unittest.TestCase):
             with self.subTest(back_mount=back_mount):
                 spec = self._spec(back_mount)
                 layout = plan_layout(spec)
+                structure = CabinetStructure.from_spec(spec)
                 placements = plan_panels(spec, layout)
                 panels = {panel.id: panel for panel in placements}
                 carcass_y_start, carcass_y_end, internal_y_start = expected
 
-                self.assertEqual(layout.carcass_y_start, carcass_y_start)
-                self.assertEqual(layout.carcass_y_end, carcass_y_end)
+                self.assertEqual(structure.carcass_y_start, carcass_y_start)
+                self.assertEqual(structure.carcass_y_end, carcass_y_end)
                 self.assertEqual(
-                    layout.side_depth,
+                    structure.side_depth,
                     carcass_y_end - carcass_y_start,
                 )
-                self.assertEqual(layout.internal_y_start, internal_y_start)
-                self.assertEqual(layout.internal_y_end, carcass_y_end)
+                self.assertEqual(structure.internal_y_start, internal_y_start)
+                self.assertEqual(structure.internal_y_end, carcass_y_end)
 
                 for panel_id in (
                     "left_side_panel",
@@ -103,8 +105,8 @@ class BackMountModeTests(unittest.TestCase):
                         back.pos_y + back.size_y,
                         panels["left_side_panel"].pos_y,
                     )
-                    self.assertEqual(layout.toe_kick_rear_y, 39.0)
-                    self.assertEqual(layout.toe_kick_front_y, 579.0)
+                    self.assertEqual(structure.toe_kick_rear_y, 39.0)
+                    self.assertEqual(structure.toe_kick_front_y, 579.0)
                 else:
                     self.assertEqual(back.pos_y, spec.back_offset)
 
@@ -258,7 +260,8 @@ class BackMountModeTests(unittest.TestCase):
                 plan_layout(spec)
 
         with self.assertRaisesRegex(ValueError, "back_mount"):
-            plan_layout(self._spec("unsupported"))
+            invalid = self._spec("unsupported")
+            plan_panels(invalid, plan_layout(invalid))
 
         cover_spec = FurnitureSpec(
             furniture_type="floor_cabinet",
@@ -267,9 +270,11 @@ class BackMountModeTests(unittest.TestCase):
             height=1000,
             back_mount="cover",
         )
-        cover_report = validate_layout(
+        cover_layout = plan_layout(cover_spec)
+        cover_report = validate_structure(
+            cover_layout,
             cover_spec,
-            plan_layout(cover_spec),
+            CabinetStructure.from_spec(cover_spec),
         )
         self.assertFalse(cover_report.passed)
         self.assertIn(
@@ -286,13 +291,15 @@ class BackMountModeTests(unittest.TestCase):
             back_thickness=18,
             back_offset=570,
         )
-        insert_report = validate_layout(
+        insert_layout = plan_layout(insert_spec)
+        insert_report = validate_structure(
+            insert_layout,
             insert_spec,
-            plan_layout(insert_spec),
+            CabinetStructure.from_spec(insert_spec),
         )
         self.assertFalse(insert_report.passed)
         self.assertIn(
-            "INVALID_BACK_LAYOUT",
+            "NON_POSITIVE_INTERNAL_CLEARANCE",
             {issue.code for issue in insert_report.issues},
         )
 

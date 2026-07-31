@@ -27,7 +27,7 @@ description: 用于 cad_generated 阶段和 CLI/API 批处理；根据已确认�
 2. 要求 `feature_tree_planned` 已确认；用 `FurnitureOrchestrator.run_next()` 生成。
 3. CLI/API/Agent 均经 Orchestrator；发射器和 CAD Bridge 仅由其调用，结果规则归 `scripts/furniture_cad/validation.py`。
 4. 发射器将 Feature Tree `cut_box` 对目标板件做 build123d 布尔减料；不得用重叠板件冒充槽。
-5. API 接受 `back_mount/back_rail_height`，返回有效模式、制造备注、加工操作和 drilled-holes；协议层不重做背板推导。
+5. API 接受 `back_mount/back_rail_height`，但协议层只把它们路由到板件阶段输入；有效模式由 `panels_planned` 解析，API 返回制造备注、加工操作和 drilled-holes。
 6. `workflow_artifact_writer.py` 写跨阶段快照；Orchestrator 不实现 JSON、BOM、孔位或 CAD 源码序列化。
 7. 展示 `stage_outputs.cad_generated` 后暂停，不做交付验证。仅明确一次性 CLI/API 批处理可用 `execute_spec()` 或 `scripts/generate_furniture.py`。
 

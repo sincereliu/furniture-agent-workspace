@@ -23,6 +23,7 @@ def _id(prefix: str) -> str:
 class Revision:
     number: int
     intent: DesignIntent
+    stage_inputs: dict[str, Any] = field(default_factory=dict)
     id: str = field(default_factory=lambda: _id("rev"))
     parent_revision_id: str | None = None
     created_at: str = field(default_factory=utc_now)
@@ -68,6 +69,7 @@ class Revision:
             "created_at": self.created_at,
             "intent_sha256": self.intent_sha256,
             "intent": self.intent.to_dict(),
+            "stage_inputs": self.stage_inputs,
             "workflow": self.workflow.to_dict(),
             "validations": [report.to_dict() for report in self.validations],
             "manifest": self.manifest.to_dict() if self.manifest else None,
@@ -78,12 +80,17 @@ class Revision:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Revision":
+        raw_intent = dict(data["intent"])
+        stage_inputs = data.get("stage_inputs")
+        if not isinstance(stage_inputs, dict):
+            stage_inputs = _legacy_stage_inputs(raw_intent)
         return cls(
             id=str(data["id"]),
             number=int(data["number"]),
             parent_revision_id=data.get("parent_revision_id"),
             created_at=str(data["created_at"]),
-            intent=DesignIntent.from_dict(data["intent"]),
+            intent=DesignIntent.from_dict(raw_intent),
+            stage_inputs=stage_inputs,
             workflow=WorkflowState.from_dict(data["workflow"]),
             validations=[
                 ValidationReport.from_dict(item) for item in data.get("validations", [])
@@ -115,13 +122,18 @@ class Project:
             raise ValueError("project has no revisions")
         return self.revisions[-1]
 
-    def add_revision(self, intent: DesignIntent) -> Revision:
+    def add_revision(
+        self,
+        intent: DesignIntent,
+        stage_inputs: dict[str, Any] | None = None,
+    ) -> Revision:
         parent = self.revisions[-1] if self.revisions else None
         if parent and parent.manifest:
             parent.manifest.mark_stale()
         revision = Revision(
             number=len(self.revisions) + 1,
             intent=intent,
+            stage_inputs=dict(stage_inputs or {}),
             parent_revision_id=parent.id if parent else None,
         )
         self.revisions.append(revision)
@@ -143,3 +155,52 @@ class Project:
             created_at=str(data["created_at"]),
             revisions=[Revision.from_dict(item) for item in data.get("revisions", [])],
         )
+
+
+def _legacy_stage_inputs(raw_intent: dict[str, Any]) -> dict[str, Any]:
+    """Move schema-v1 downstream fields out of DesignIntent when loading."""
+    layout = dict(raw_intent.get("layout", {}))
+    structure = dict(raw_intent.get("structure", {}))
+    manufacturing_keys = {
+        "hinge_brand",
+        "hinge_variant",
+        "hinge_overlay",
+        "hinge_angle",
+        "options",
+    }
+    manufacturing = {
+        key: structure.pop(key)
+        for key in list(structure)
+        if key in manufacturing_keys
+    }
+    room = layout.pop("room", None)
+    placement = layout.pop("placement", None)
+    result: dict[str, Any] = {
+        "layout": {
+            "parameters": layout,
+            "room": room,
+            "placement": placement,
+        },
+        "panels": {"parameters": structure},
+        "manufacturing": {
+            "parameters": manufacturing,
+            "appearance": dict(raw_intent.get("appearance", {})),
+        },
+    }
+    purpose = str(raw_intent.get("purpose", "")).strip()
+    if purpose:
+        result["layout"]["purpose"] = purpose
+    constraints = list(raw_intent.get("constraints", []))
+    mappings = dict(raw_intent.get("constraint_mappings", {}))
+    for constraint in constraints:
+        target = str(mappings.get(constraint, "informational"))
+        record = {"text": constraint, "target": target}
+        if target.startswith("layout."):
+            result["layout"].setdefault("constraints", []).append(record)
+        elif target.startswith("structure."):
+            result["panels"].setdefault("constraints", []).append(record)
+        elif target == "informational":
+            result.setdefault("informational_constraints", []).append(constraint)
+        else:
+            result.setdefault("envelope_constraints", []).append(record)
+    return result

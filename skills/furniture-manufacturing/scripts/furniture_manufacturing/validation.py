@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from furniture_delivery_validation.validation import ValidationReport
-from furniture_design_intent.design_spec import FurnitureSpec, resolve_back_mount
+from furniture_panel_planning.panel_spec import FurnitureSpec, resolve_back_mount
 from furniture_panel_planning.panel_models import PanelPlacement
 
 from .manufacturing_bom import (
@@ -19,6 +19,18 @@ def validate_manufacturing(
     placements: list[PanelPlacement],
 ) -> ValidationReport:
     report = ValidationReport(stage="manufacturing_planned")
+    if bom.requested_options:
+        report.add_warning(
+            "REQUESTED_MANUFACTURING_OPTIONS_PENDING",
+            "requested manufacturing options are recorded but remain preliminary",
+            "requested_options",
+        )
+    if bom.appearance:
+        report.add_warning(
+            "REQUESTED_APPEARANCE_PENDING",
+            "appearance preferences are recorded for manufacturing review",
+            "appearance",
+        )
     if bom.readiness not in VALID_MANUFACTURING_READINESS:
         report.add_error(
             "INVALID_MANUFACTURING_READINESS",

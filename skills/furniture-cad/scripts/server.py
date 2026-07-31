@@ -23,12 +23,12 @@ bootstrap_runtime_paths(WORKSPACE_ROOT)
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from furniture_workflow.workflow_state import WorkflowStage
 
-API_VERSION = "0.5.0"
+API_VERSION = "0.6.0"
 
 app = FastAPI(
     title="Furniture Agent — 板式家具拆单服务",
@@ -88,6 +88,8 @@ class FurniturePlacementRequest(BaseModel):
 
 
 class CabinetRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     type: str = Field(default="floor_cabinet", description="家具类型: floor_cabinet / wall_cabinet")
     width: float = Field(..., gt=0, description="总宽 mm (X)")
     depth: float = Field(..., gt=0, description="总深 mm (Y)")
@@ -106,7 +108,7 @@ class CabinetRequest(BaseModel):
     back_mount: Literal["auto", "groove", "insert", "cover"] | None = Field(
         default=None,
         description=(
-            "背板安装方式；auto 按背板厚度解析为 groove 或 insert"
+            "板件阶段的背板安装方式；auto 按背板厚度解析为 groove 或 insert"
         ),
     )
     back_rail_height: float | None = Field(
@@ -117,6 +119,17 @@ class CabinetRequest(BaseModel):
     toe_kick_reveal_front: float | None = Field(default=None, ge=0, description="前踢脚板后缩 mm")
     toe_kick_reveal_back: float | None = Field(default=None, ge=0, description="后踢脚板前移 mm")
     toe_kick_support_count: int | None = Field(default=None, ge=0, description="踢脚支撑板数量；空值为自动")
+    hinge_brand: str | None = Field(default=None, description="制造阶段铰链品牌偏好")
+    hinge_variant: str | None = Field(default=None, description="制造阶段铰链规格偏好")
+    hinge_overlay: Literal["full", "half", "inset"] | None = Field(
+        default=None,
+        description="制造阶段门板盖法偏好",
+    )
+    hinge_angle: int | None = Field(default=None, gt=0, description="制造阶段铰链开启角度")
+    appearance: dict[str, Any] = Field(
+        default_factory=dict,
+        description="制造阶段使用的饰面和外观偏好",
+    )
     room: RoomRequest | None = Field(
         default=None,
         description="第 2 阶段使用的房间模型",
@@ -127,19 +140,11 @@ class CabinetRequest(BaseModel):
     )
     constraints: list[str] = Field(
         default_factory=list,
-        description="需要映射或明确标为 informational 的设计约束",
+        description="需要映射到所属阶段或明确标为 informational 的约束",
     )
     constraint_mappings: dict[str, str] = Field(
         default_factory=dict,
-        description="约束到可执行 DesignIntent 字段或 informational 的映射",
-    )
-    assumptions: dict[str, str] = Field(
-        default_factory=dict,
-        description="字段路径到假设来源的映射",
-    )
-    unresolved: list[str] = Field(
-        default_factory=list,
-        description="未解决决策；非空时不能确认设计意图",
+        description="约束到 layout/structure/manufacturing/外包络字段或 informational 的映射",
     )
 
 
@@ -285,7 +290,7 @@ async def plan_cabinet(req: CabinetRequest):
         furniture_name=report.furniture_name,
         dimensions=report.dimensions,
         readiness=report.readiness,
-        back_mount=orchestration.pipeline.layout.back_mount,
+        back_mount=orchestration.pipeline.spec.back_mount,
         panel_count=report.panel_count,
         total_area_m2=report.total_area_m2,
         panels=[

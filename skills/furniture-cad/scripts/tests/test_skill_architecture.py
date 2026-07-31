@@ -204,10 +204,13 @@ class SkillArchitectureTests(unittest.TestCase):
             / "scripts"
             / "furniture_design_intent"
         )
-        design_spec = (intent_package / "design_spec.py").read_text(
-            encoding="utf-8"
+        panel_package = (
+            SKILLS_ROOT
+            / "furniture-panel-planning"
+            / "scripts"
+            / "furniture_panel_planning"
         )
-        self.assertNotIn("def validation_errors(", design_spec)
+        self.assertFalse((intent_package / "design_spec.py").exists())
         self.assertFalse((intent_package / "translation.py").exists())
 
         input_adapter = (
@@ -226,8 +229,8 @@ class SkillArchitectureTests(unittest.TestCase):
             / "furniture_layout"
             / "validation.py"
         ).read_text(encoding="utf-8")
-        self.assertIn("NON_POSITIVE_INTERNAL_CLEARANCE", layout_validation)
-        self.assertIn("INTERNAL_CLEARANCE_MISMATCH", layout_validation)
+        self.assertNotIn("NON_POSITIVE_INTERNAL_CLEARANCE", layout_validation)
+        self.assertNotIn("INTERNAL_CLEARANCE_MISMATCH", layout_validation)
 
         panel_validation = (
             SKILLS_ROOT
@@ -236,6 +239,10 @@ class SkillArchitectureTests(unittest.TestCase):
             / "furniture_panel_planning"
             / "validation.py"
         ).read_text(encoding="utf-8")
+        panel_spec = (panel_package / "panel_spec.py").read_text(encoding="utf-8")
+        self.assertIn("def resolve_back_mount(", panel_spec)
+        self.assertIn("NON_POSITIVE_INTERNAL_CLEARANCE", panel_validation)
+        self.assertIn("STRUCTURE_GEOMETRY_MISMATCH", panel_validation)
         self.assertIn(
             "NON_POSITIVE_TOE_KICK_SUPPORT_SPACING",
             panel_validation,
@@ -267,15 +274,7 @@ class SkillArchitectureTests(unittest.TestCase):
         expected_terms = {
             ".agents/skills/furniture-agent/SKILL.md": (
                 "back_mount",
-                "背拉条",
-            ),
-            "skills/furniture-design-intent/SKILL.md": (
-                "auto/groove/insert/cover",
-                "back_rail_height",
-            ),
-            "skills/furniture-layout/SKILL.md": (
-                "back_mount",
-                "carcass_y_start/end",
+                "从板件阶段开始",
             ),
             "skills/furniture-panel-planning/SKILL.md": (
                 "back_mount",
@@ -308,16 +307,23 @@ class SkillArchitectureTests(unittest.TestCase):
             for term in terms:
                 self.assertIn(term, text, path)
 
+        for relative_path in (
+            "skills/furniture-design-intent/SKILL.md",
+            "skills/furniture-layout/SKILL.md",
+        ):
+            text = (WORKSPACE_ROOT / relative_path).read_text(encoding="utf-8")
+            self.assertNotIn("auto/groove/insert/cover", text)
+
     def test_corrected_stage_boundaries_match_runtime_ownership(self) -> None:
         expected_terms = {
             "skills/furniture-design-intent/SKILL.md": (
                 "草稿尺寸可为 `null`",
                 "furniture_type",
-                "不能静默忽略",
+                "成品外包络",
             ),
             "skills/furniture-layout/SKILL.md": (
-                "当前固定地柜/吊柜模板",
-                "数量不等于分区、开口或开启策略",
+                "shelf_count/door_count",
+                "数量不等于完整分区、开口或开启策略",
                 "左后下落地角",
             ),
             "skills/furniture-manufacturing/SKILL.md": (

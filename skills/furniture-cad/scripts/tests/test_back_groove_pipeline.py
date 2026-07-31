@@ -16,7 +16,7 @@ from runtime_paths import bootstrap_runtime_paths
 
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
-from furniture_design_intent.design_spec import FurnitureSpec
+from furniture_panel_planning.panel_spec import FurnitureSpec
 from furniture_feature_tree.feature_tree_builder import panels_to_feature_tree
 from furniture_feature_tree.feature_tree_emitter import write_build123d_source
 from furniture_layout.layout_pipeline import plan_layout
@@ -24,6 +24,7 @@ from furniture_manufacturing.manufacturing_bom import plan_manufacturing
 from furniture_manufacturing.validation import validate_manufacturing
 from furniture_panel_planning.panel_planning import plan_panels
 from furniture_panel_planning.validation import validate_panels
+from furniture_panel_planning.structure_planning import CabinetStructure
 
 
 class BackGroovePipelineTests(unittest.TestCase):
@@ -37,6 +38,7 @@ class BackGroovePipelineTests(unittest.TestCase):
             n_doors=0,
         )
         self.layout = plan_layout(self.spec)
+        self.structure = CabinetStructure.from_spec(self.spec)
         self.placements = plan_panels(self.spec, self.layout)
         self.manufacturing = plan_manufacturing(self.spec, self.placements)
         self.feature_tree = panels_to_feature_tree(
@@ -45,11 +47,12 @@ class BackGroovePipelineTests(unittest.TestCase):
             furniture_type=self.spec.furniture_type,
         )
 
-    def test_layout_stage_contains_regions_not_panel_records(self) -> None:
+    def test_layout_defers_exact_regions_to_panel_structure(self) -> None:
         payload = asdict(self.layout)
-        self.assertIn("internal_width", payload)
+        self.assertNotIn("internal_width", payload)
         self.assertNotIn("panels", payload)
         self.assertNotIn("placements", payload)
+        self.assertIn("internal_width", asdict(self.structure))
 
     def test_panel_stage_owns_back_and_toe_kick_dimensions(self) -> None:
         panels = {panel.id: panel for panel in self.placements}

@@ -16,7 +16,7 @@ from runtime_paths import bootstrap_runtime_paths
 
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
-from furniture_design_intent.design_spec import FurnitureSpec
+from furniture_panel_planning.panel_spec import FurnitureSpec
 from furniture_layout.layout_pipeline import plan_layout
 from furniture_manufacturing.connectors.hinge import HingeConnector
 from furniture_manufacturing.connectors.trinity import TrinityConnector
