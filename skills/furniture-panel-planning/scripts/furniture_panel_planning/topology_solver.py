@@ -15,7 +15,7 @@ from typing import Any
 
 import yaml
 
-from .cabinet_frame import CabinetFrame
+from .cabinet_frame import CabinetFrame, _negate as negate_axis
 from .joint_topology import compute_joints
 from .panel_models import PanelPlacement
 from .panel_spec import FurnitureSpec
@@ -89,7 +89,7 @@ def solve_panel_placements(
             continue
 
         if side_def.get("type") == "back_panel":
-            placements.extend(_back_panel_variants(spec, layout, side_name, side_def, face_dir))
+            placements.extend(_back_panel_variants(spec, layout, side_name, side_def, face_dir, frame))
             continue
 
         # Standard enclosure panel
@@ -212,13 +212,15 @@ def _back_panel_variants(
     side_name: str,
     side_def: dict[str, Any],
     face_dir: str,
+    frame: CabinetFrame,
 ) -> list[PanelPlacement]:
     """Generate back panel and optional back rails for the selected mount mode."""
     board = spec.board_thickness
     back_mount = layout.back_mount
     back_y = layout.back_plane_y
-    inner = "+y"  # inner face points frontward into cabinet
-    outer = "-y"
+    # 背板: 外表面=柜体背面, 内表面指向柜内=柜体前面
+    outer = face_dir          # frame.back
+    inner = negate_axis(outer)  # frame.front
 
     result: list[PanelPlacement] = []
 
@@ -348,14 +350,14 @@ def _toe_kick_panels(
     kw = layout.internal_width
     x = layout.internal_x_start
 
-    # Toe kick panels — their inner face is toward cabinet interior (+y for rear, -y for front)
+    # Toe kick panels — outer faces outward, inner faces toward cabinet interior
     rear = PanelPlacement(
         id="toe_kick_back", name="后踢脚板", panel_type="toe_kick",
         size_x=kw, size_y=board, size_z=layout.toe_kick_height,
         pos_x=x, pos_y=layout.toe_kick_rear_y,
         material_role="carcass",
         depends_on=["left_side_panel", "right_side_panel"],
-        inner_face="+y", outer_face="-y", cam_face=None,
+        inner_face=frame.front, outer_face=frame.back, cam_face=None,
     )
     front = PanelPlacement(
         id="toe_kick_front", name="前踢脚板", panel_type="toe_kick",
@@ -363,7 +365,7 @@ def _toe_kick_panels(
         pos_x=x, pos_y=layout.toe_kick_front_y - board,
         material_role="carcass",
         depends_on=["left_side_panel", "right_side_panel"],
-        inner_face="-y", outer_face="+y", cam_face=None,
+        inner_face=frame.back, outer_face=frame.front, cam_face=None,
     )
     panels = [rear, front]
 
@@ -401,7 +403,12 @@ def _fixed_shelves(
     layer_h = layout.internal_height / (layout.shelf_count + 1)
     sd = layout.internal_y_end - layout.internal_y_start
 
-    # Fixed shelves are horizontal: inner face = bottom (same cam accessibility)
+    # Fixed shelves are horizontal, oriented between top and bottom.
+    # Inner face points toward cabinet bottom (accessible from below).
+    # Cam face same as inner (eccentric wheel installed from below).
+    inner = frame.bottom
+    outer = frame.top
+    cam   = frame.bottom
     panels = []
     for i in range(1, layout.shelf_count + 1):
         cz = layout.internal_z_start + i * layer_h
@@ -413,7 +420,7 @@ def _fixed_shelves(
             pos_z=cz - board / 2,
             material_role="carcass",
             depends_on=["left_side_panel", "right_side_panel"],
-            inner_face="-z", outer_face="+z", cam_face="-z",  # cam accessible from below
+            inner_face=inner, outer_face=outer, cam_face=cam,  # derived from frame
             note="固定层板",
         ))
     return panels
