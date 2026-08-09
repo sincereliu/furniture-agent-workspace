@@ -32,6 +32,7 @@ class PanelRecord:
     inner_face: str = ""
     outer_face: str = ""
     cam_face: str | None = None
+    joints: list = field(default_factory=list)  # list[PanelJoint], face-to-edge adjacencies
 
     @property
     def area_m2(self) -> float:

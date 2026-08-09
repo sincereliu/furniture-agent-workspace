@@ -16,6 +16,7 @@ from typing import Any
 import yaml
 
 from .cabinet_frame import CabinetFrame
+from .joint_topology import compute_joints
 from .panel_models import PanelPlacement
 from .panel_spec import FurnitureSpec
 from .panel_rules import (
@@ -111,6 +112,14 @@ def solve_panel_placements(
     shelves_def = topology.get("internals", {}).get("shelves", {})
     if shelves_def.get("type") == "fixed" and layout.shelf_count > 0:
         placements.extend(_fixed_shelves(spec, layout, shelves_def, frame))
+
+    # ── Connection topology ──────────────────────────────────────
+    joints = compute_joints(placements)
+    for panel in placements:
+        panel.joints = [
+            j for j in joints
+            if j.female_id == panel.id or j.male_id == panel.id
+        ]
 
     return placements
 

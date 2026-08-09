@@ -4,8 +4,6 @@
 
 # ── 三合一系统排钻 ──────────────────────────────────────
 system_32_drilling:
-  # 适用于: 侧板、顶板、底板、固定层板
-  applies_to: [side, top, bottom, fixed_shelf]
   # 默认偏移
   first_hole_mm: 64       # 首孔距板边
   last_hole_mm: 64        # 末孔距板边
@@ -74,7 +72,7 @@ hinge_drilling:
 
   # ── 全局孔位参数 ──
   position:
-    edge_offset_mm: 5        # 杯孔中心距门侧边（铰链臂侧）
+    edge_offset_mm: 5        # 铰链臂侧边距（杯孔边到门侧边的距离）
     max_spacing_mm: 600      # 铰链之间最大间距，超过时自动增加铰链数量
     snap_to_mm: 0.5          # 孔位取整精度：0=不取整, 0.5=半毫米, 1.0=整毫米
 

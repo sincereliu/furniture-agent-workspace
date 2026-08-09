@@ -28,3 +28,4 @@ class PanelPlacement:
     inner_face: str = ""                 # panel face pointing toward cabinet interior
     outer_face: str = ""                 # panel face pointing toward cabinet exterior
     cam_face: str | None = None          # eccentric wheel accessible face, e.g. "-z"
+    joints: list = field(default_factory=list)  # list[PanelJoint], populated after solve

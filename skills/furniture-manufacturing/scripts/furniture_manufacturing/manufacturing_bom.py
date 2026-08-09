@@ -109,12 +109,29 @@ def _manufacturing_panel(spec: FurnitureSpec, back_mount: str, placement: PanelP
         material = f"{spec.board_thickness:g}mm柜体板"
         thickness = spec.board_thickness
     drill_length = 0.0
-    if placement.panel_type in ("side", "divider"):
-        drill_length = placement.size_z
-    elif placement.panel_type in ("top", "bottom", "fixed_shelf", "movable_shelf"):
-        drill_length = placement.size_x
-    elif placement.panel_type == "door":
-        drill_length = placement.size_z
+    # 优先从连接拓扑推导排钻孔方向
+    joints = placement.joints
+    if joints:
+        for j in joints:
+            if j.female_id == placement.id:
+                # female（侧板等）：inner_face 在 x/y 轴 → 高度方向排钻
+                face_axis = j.face[1] if len(j.face) >= 2 else ""
+                if face_axis in ("x", "y"):
+                    drill_length = placement.size_z
+                    break
+            if j.male_id == placement.id:
+                # male（横板等）：端面在 x 轴 → 宽度方向排钻
+                if j.edge_axis == "x":
+                    drill_length = placement.size_x
+                    break
+    # fallback：无连接拓扑时退回 panel_type 判断
+    if drill_length == 0.0:
+        if placement.panel_type in ("side", "divider"):
+            drill_length = placement.size_z
+        elif placement.panel_type in ("top", "bottom", "fixed_shelf", "movable_shelf"):
+            drill_length = placement.size_x
+        elif placement.panel_type == "door":
+            drill_length = placement.size_z
     return PanelRecord(
         label=placement.id,
         name=placement.name,
@@ -140,6 +157,7 @@ def _manufacturing_panel(spec: FurnitureSpec, back_mount: str, placement: PanelP
         inner_face=placement.inner_face,
         outer_face=placement.outer_face,
         cam_face=placement.cam_face,
+        joints=list(placement.joints),
     )
 
 
