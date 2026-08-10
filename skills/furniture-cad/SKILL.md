@@ -1,6 +1,6 @@
 ---
 name: furniture-cad
-description: 用于 cad_generated 阶段和 CLI/API 批处理；根据已确认特征树生成 CAD、STEP 和 Viewer 拓扑，不做特征树规划或最终验证。
+description: 用于 cad_generated 阶段和 CLI/API 批处理。当用户说"生成STEP""导出CAD""3D模型""生成六面钻文件""Viewer预览"时触发。根据已确认特征树生成 CAD、STEP 和 Viewer 拓扑，不做特征树规划或最终验证。
 ---
 
 # 家具 CAD 执行

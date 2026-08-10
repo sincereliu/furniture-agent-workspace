@@ -1,6 +1,6 @@
 ---
 name: furniture-manufacturing
-description: 用于 manufacturing_planned 阶段；根据已确认板件制定材料、封边、连接、五金、孔位和 BOM，不构造特征树或 CAD。
+description: 用于 manufacturing_planned 阶段。当用户说"用什么五金""三合一连接件""铰链怎么装""封边怎么做""出BOM清单""打孔位置"时触发。根据已确认板件制定材料、封边、连接、五金、孔位和 BOM，不构造特征树或 CAD。
 ---
 
 # 家具制造策略

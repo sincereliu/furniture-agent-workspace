@@ -1,6 +1,6 @@
 ---
 name: furniture-design-intent
-description: 用于 design_intent 阶段；只确认家具类别与成品外包络，不提前确认布局、结构、材料或制造细节。
+description: 用于 design_intent 阶段，也是家具流水线的入口。当用户提出"设计一个柜子/桌子/书架"、描述想要的家具类型和大致尺寸时触发。只确认家具类别与成品外包络，不提前确认布局、结构、材料或制造细节。
 ---
 
 # 家具设计意图

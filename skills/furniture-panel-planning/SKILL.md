@@ -1,6 +1,6 @@
 ---
 name: furniture-panel-planning
-description: 用于 panels_planned 阶段；在客户确认布局后首次确定结构规格、精确净空、背板与踢脚，并生成可审查的实体板件。
+description: 用于 panels_planned 阶段。当用户说"板子多厚""用什么背板""有没有踢脚线""加块层板""内部净空多大"时触发。在客户确认布局后首次确定结构规格、精确净空、背板与踢脚，并生成可审查的实体板件。
 ---
 
 # 家具板件规划

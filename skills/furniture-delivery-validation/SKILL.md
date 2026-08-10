@@ -1,6 +1,6 @@
 ---
 name: furniture-delivery-validation
-description: 用于 delivery_validated 阶段；验证当前 Revision 的前置检查点、产物谱系、文件存在性、大小和 SHA-256，并区分外部几何审查。
+description: 用于 delivery_validated 阶段。当用户说"检查一下产物""验证完整性""校验文件""确认交付"时触发。验证当前 Revision 的前置检查点、产物谱系、文件存在性、大小和 SHA-256，并区分外部几何审查。
 ---
 
 # 家具交付验证
