@@ -1,3 +1,6 @@
 [submodule "external/text-to-cad"]
 	path = external/text-to-cad
 	url = https://github.com/earthtojake/text-to-cad
+[submodule "external/scientific-agent-skills"]
+	path = external/scientific-agent-skills
+	url = https://github.com/K-Dense-AI/scientific-agent-skills.git
