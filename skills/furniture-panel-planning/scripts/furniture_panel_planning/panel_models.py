@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any, Mapping
 
 
 @dataclass
@@ -29,3 +30,19 @@ class PanelPlacement:
     outer_face: str = ""                 # panel face pointing toward cabinet exterior
     cam_face: str | None = None          # eccentric wheel accessible face, e.g. "-z"
     joints: list = field(default_factory=list)  # list[PanelJoint], populated after solve
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PanelPlacement":
+        """Restore nested joint contracts after a stage-output JSON round trip."""
+
+        from .joint_topology import PanelJoint
+
+        values = dict(data)
+        raw_joints = values.get("joints", [])
+        if not isinstance(raw_joints, list):
+            raise ValueError("panel joints must be a list")
+        values["joints"] = [
+            item if isinstance(item, PanelJoint) else PanelJoint(**item)
+            for item in raw_joints
+        ]
+        return cls(**values)

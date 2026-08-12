@@ -37,7 +37,7 @@ def validate_panel_output(
             raise ValueError("panel stage output requires panels")
         spec = FurnitureSpec(**raw_spec)
         structure = CabinetStructure(**raw_structure)
-        panels = [PanelPlacement(**item) for item in raw_panels]
+        panels = [PanelPlacement.from_dict(item) for item in raw_panels]
     except (TypeError, ValueError) as exc:
         report.add_error("INVALID_PANEL_STAGE_OUTPUT", str(exc))
         return report

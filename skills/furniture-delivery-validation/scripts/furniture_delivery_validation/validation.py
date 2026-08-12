@@ -107,6 +107,7 @@ def validate_delivery(
     stage_outputs: Mapping[str, Any] | None = None,
     approved_stages: Sequence[str] | None = None,
     stage_validations: Sequence[ValidationReport] | None = None,
+    stage_analyses: Mapping[str, Any] | None = None,
 ) -> ValidationReport:
     """Validate checkpoint lineage plus artifact existence and integrity."""
     report = ValidationReport(stage="delivery_validated")
@@ -115,6 +116,12 @@ def validate_delivery(
         stage_outputs=stage_outputs,
         approved_stages=approved_stages,
         stage_validations=stage_validations,
+    )
+    _validate_analysis_lineage(
+        report,
+        source_revision_id=source_revision_id,
+        stage_outputs=stage_outputs,
+        stage_analyses=stage_analyses,
     )
     if manifest is None:
         report.add_error("MISSING_MANIFEST", "delivery has no artifact manifest")
@@ -195,6 +202,80 @@ def validate_delivery(
                 artifact.kind,
             )
     return report
+
+
+def _stable_digest(value: Any) -> str:
+    import json
+
+    payload = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return sha256(payload).hexdigest()
+
+
+def _validate_analysis_lineage(
+    report: ValidationReport,
+    *,
+    source_revision_id: str,
+    stage_outputs: Mapping[str, Any] | None,
+    stage_analyses: Mapping[str, Any] | None,
+) -> None:
+    if not stage_analyses:
+        return
+    for stage, raw_records in stage_analyses.items():
+        if not isinstance(raw_records, Mapping):
+            report.add_error(
+                "INVALID_STAGE_ANALYSES",
+                f"analysis records for {stage} must be an object",
+                f"stage_analyses.{stage}",
+            )
+            continue
+        source_output = stage_outputs.get(stage) if stage_outputs else None
+        if source_output is None:
+            report.add_error(
+                "ANALYSIS_SOURCE_STAGE_MISSING",
+                f"analysis source stage is missing: {stage}",
+                f"stage_analyses.{stage}",
+            )
+            continue
+        expected_digest = _stable_digest(source_output)
+        for name, raw_record in raw_records.items():
+            path = f"stage_analyses.{stage}.{name}"
+            if not isinstance(raw_record, Mapping):
+                report.add_error(
+                    "INVALID_STAGE_ANALYSIS",
+                    f"analysis record must be an object: {name}",
+                    path,
+                )
+                continue
+            if raw_record.get("source_revision_id") != source_revision_id:
+                report.add_error(
+                    "ANALYSIS_REVISION_MISMATCH",
+                    f"analysis belongs to another revision: {name}",
+                    path,
+                )
+            if raw_record.get("source_stage") != stage:
+                report.add_error(
+                    "ANALYSIS_STAGE_MISMATCH",
+                    f"analysis source stage does not match its container: {name}",
+                    path,
+                )
+            if raw_record.get("source_sha256") != expected_digest:
+                report.add_error(
+                    "ANALYSIS_SOURCE_HASH_MISMATCH",
+                    f"analysis no longer matches its source stage: {name}",
+                    path,
+                )
+            status = str(raw_record.get("status", ""))
+            if status in {"unavailable", "descriptive_only"}:
+                report.add_warning(
+                    "ANALYSIS_INCOMPLETE",
+                    f"optional analysis is {status}: {name}",
+                    path,
+                )
 
 
 def _validate_checkpoint_lineage(

@@ -74,6 +74,57 @@ class SkillArchitectureTests(unittest.TestCase):
                 router,
             )
 
+    def test_scientific_skills_are_routed_on_demand_to_stage_owned_adapters(
+        self,
+    ) -> None:
+        router_path = (
+            WORKSPACE_ROOT / ".agents" / "skills" / "furniture-agent" / "SKILL.md"
+        )
+        router = router_path.read_text(encoding="utf-8")
+        for skill_name in (
+            "uncertainty-and-units",
+            "pymoo",
+            "experimental-design",
+            "statistical-analysis",
+            "simpy",
+        ):
+            self.assertIn(f"{skill_name}/SKILL.md", router, router_path)
+
+        owned_adapters = (
+            (
+                "furniture-panel-planning",
+                "furniture_panel_planning/quantitative_audit.py",
+            ),
+            (
+                "furniture-panel-planning",
+                "furniture_panel_planning/design_optimization.py",
+            ),
+            (
+                "furniture-manufacturing",
+                "furniture_manufacturing/prototype_experiment.py",
+            ),
+            (
+                "furniture-manufacturing",
+                "furniture_manufacturing/test_statistics.py",
+            ),
+            (
+                "furniture-manufacturing",
+                "furniture_manufacturing/production_simulation.py",
+            ),
+        )
+        for skill_name, relative_path in owned_adapters:
+            path = SKILLS_ROOT / skill_name / "scripts" / relative_path
+            self.assertTrue(path.is_file(), path)
+
+        self.assertFalse(
+            (
+                WORKSPACE_ROOT
+                / ".agents"
+                / "skills"
+                / "scientific-agent-skills"
+            ).exists()
+        )
+
     def test_stage_references_live_with_their_owning_skill(self) -> None:
         for skill_name, references in STAGE_REFERENCES.items():
             skill_root = SKILLS_ROOT / skill_name

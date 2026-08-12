@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict
+from typing import Any, Dict, Mapping
 
 
 @dataclass
@@ -33,6 +33,22 @@ class PanelRecord:
     outer_face: str = ""
     cam_face: str | None = None
     joints: list = field(default_factory=list)  # list[PanelJoint], face-to-edge adjacencies
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PanelRecord":
+        """Restore serialized panel joints at the manufacturing boundary."""
+
+        from furniture_panel_planning.joint_topology import PanelJoint
+
+        values = dict(data)
+        raw_joints = values.get("joints", [])
+        if not isinstance(raw_joints, list):
+            raise ValueError("manufacturing panel joints must be a list")
+        values["joints"] = [
+            item if isinstance(item, PanelJoint) else PanelJoint(**item)
+            for item in raw_joints
+        ]
+        return cls(**values)
 
     @property
     def area_m2(self) -> float:

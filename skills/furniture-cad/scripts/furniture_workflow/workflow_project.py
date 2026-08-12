@@ -32,6 +32,7 @@ class Revision:
     manifest: ArtifactManifest | None = None
     feature_tree: dict[str, Any] | None = None
     stage_outputs: dict[str, Any] = field(default_factory=dict)
+    stage_analyses: dict[str, dict[str, dict[str, Any]]] = field(default_factory=dict)
     approved_stages: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
@@ -75,6 +76,7 @@ class Revision:
             "manifest": self.manifest.to_dict() if self.manifest else None,
             "feature_tree": self.feature_tree,
             "stage_outputs": self.stage_outputs,
+            "stage_analyses": self.stage_analyses,
             "approved_stages": self.approved_stages,
         }
 
@@ -102,6 +104,13 @@ class Revision:
             ),
             feature_tree=data.get("feature_tree"),
             stage_outputs=dict(data.get("stage_outputs", {})),
+            stage_analyses={
+                str(stage): {
+                    str(name): dict(record)
+                    for name, record in dict(records).items()
+                }
+                for stage, records in dict(data.get("stage_analyses", {})).items()
+            },
             approved_stages=[
                 parse_stage(str(value)).value
                 for value in data.get("approved_stages", [])

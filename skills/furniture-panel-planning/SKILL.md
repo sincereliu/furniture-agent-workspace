@@ -15,6 +15,8 @@ description: 用于 panels_planned 阶段。当用户说"板子多厚""用什么
 4. 按 [板件定义规则](references/panel-definition-rules.md) 与 `references/cabinet-topologies/` 柜型拓扑生成实体板件；仅入槽背板生成背拉条。
 5. `panel_rules.py` 统一计算踢脚支撑与背拉条数量/净距；生成器和校验器必须共用。
 6. 输出 `spec/structure/back_mount_resolution/panels`；校验结构规格、精确净空、板件标识/尺寸/位置/依赖和背板几何，展示后暂停，不生成制造策略。
+7. 用户要求尺寸链、单位或公差审计时，先读 `../../external/scientific-agent-skills/skills/uncertainty-and-units/SKILL.md`，再用 `scripts/furniture_panel_planning/quantitative_audit.py` 对当前输出生成 `stage_analyses.panels_planned.panel_unit_audit`；不得据此静默改板件。
+8. 用户要求在材料用量、内部空间和复杂度间优化时，先读 `../../external/scientific-agent-skills/skills/pymoo/SKILL.md`，再用 `design_optimization.py` 生成有来源摘要的 Pareto 候选。只有用户选中候选后才用 `revise_stage_output()`。
 
 ## 边界
 
@@ -22,3 +24,4 @@ description: 用于 panels_planned 阶段。当用户说"板子多厚""用什么
 - 板件须有稳定标识、角色、尺寸、位置和材料角色；本阶段输出是后续制造所用的已确认 `FurnitureSpec` 来源。
 - 修改规划用 `revise_stage_output()`，使本阶段及下游失效。
 - 不在此阶段确定连接件孔位、封边细节、最终 BOM 或 CAD 操作。
+- 单位审计和优化报告属于可重跑的旁路证据；`panels_planned` 仍是唯一板件事实来源。

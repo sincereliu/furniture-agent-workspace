@@ -11,6 +11,7 @@ CLI / FastAPI / Agent Skill
 FurnitureOrchestrator
             |
             +-- 设计意图 -> 布局 -> 板件 -> 制造/BOM -> 特征树
+            +-- 按需科学分析 -> stage_analyses（不改阶段检查点）
             +-- CadBridge -> external/text-to-cad
             +-- 验证、Project/Revision、产物清单
 ```
@@ -62,6 +63,42 @@ FurnitureOrchestrator
 设计意图变化使用 `revise()` 从第 1 阶段建立新 Revision。修改第 2～5 阶段时使用 `revise_stage_output()`：新 Revision 只保留修改点之前已确认的结果，修改点及全部下游重新确认或生成。完整批处理请求中的后续参数保存在 `stage_inputs`，不会污染 `DesignIntent`；`stage_inputs`、`stage_outputs`、`approved_stages` 和工作流历史会随 Project JSON 一起保存。
 
 `generate_furniture.py` 和 `execute_spec()` 是明确的一次性批处理入口，可以自动确认已通过验证的中间阶段；它们不用于交互式逐步设计。
+
+## 按需科学分析
+
+`external/scientific-agent-skills` 保持上游子模块，不复制进家具 Skill。路由器只在任务需要时读取相应方法说明，家具数据适配器仍由板件或制造阶段拥有：
+
+| 分析名 | 来源阶段 | 方法 Skill | 家具适配器 |
+| --- | --- | --- | --- |
+| `panel_unit_audit` | `panels_planned` | `uncertainty-and-units` | `quantitative_audit.py` |
+| `panel_optimization` | `panels_planned` | `pymoo` | `design_optimization.py` |
+| `prototype_experiment` | `manufacturing_planned` | `experimental-design` | `prototype_experiment.py` |
+| `test_statistics` | `manufacturing_planned` | `statistical-analysis` | `test_statistics.py` |
+| `production_simulation` | `manufacturing_planned` | `simpy` | `production_simulation.py` |
+
+可选数值依赖统一安装：
+
+```powershell
+uv sync --extra furniture-analysis
+```
+
+调用统一入口：
+
+```python
+record = orchestrator.run_stage_analysis(
+    project,
+    "panel_optimization",
+    {
+        "variables": {"board_thickness": [15.0, 18.0, 21.0]},
+        "objectives": ["material_volume_m3", "negative_internal_volume_m3"],
+    },
+)
+
+# 用户审查 Pareto 候选并明确选择后，才生成新 Revision：
+revision = orchestrator.apply_panel_optimization_candidate(project, 0)
+```
+
+每条结果保存在当前 Revision 的 `stage_analyses`，包含来源阶段、Revision ID 和来源输出 SHA-256。分析不会改写 `stage_outputs`；来源家具方案变化后，交付验证会把旧分析标记为谱系错误。缺少可选依赖时，适配器会返回 `unavailable`，或使用报告中明确注明限制的有界回退。
 
 ## 入口
 

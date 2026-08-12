@@ -26,6 +26,9 @@ description: 用于 manufacturing_planned 阶段。当用户说"用什么五金"
    `HingeConnector` 才按位置回退。杯孔只从门板内侧钻入，Y1 =
    `edge_offset + cup_diameter/2`，为杯孔中心到门边的距离。
 10. 用 `FurnitureOrchestrator.run_next()` 生成；`scripts/furniture_manufacturing/validation.py` 校验 BOM、每条槽是否落在目标板件包络内、铰链孔位置/进刀面/深度、背板五金和配合孔，展示后暂停。
+11. 规划样件、承重、连接件或涂装对比试验时，先读 `../../external/scientific-agent-skills/skills/experimental-design/SKILL.md`，再用 `prototype_experiment.py` 生成带种子、区组和真实重复层级的试验表。
+12. 分析已采集试验数据时，先读 `../../external/scientific-agent-skills/skills/statistical-analysis/SKILL.md`，再用 `test_statistics.py` 输出描述统计、假设检查、效应量和适用的推断；不得把未采集的计划数据当结果。
+13. 分析板件加工路线、共享设备、齐套装配、工位排队或交期时，先读 `../../external/scientific-agent-skills/skills/simpy/SKILL.md`，再用 `production_simulation.py` 运行有界板件级模型；报告模型假设、种子、复制次数、未完成实体和引擎。
 
 ## 边界
 
@@ -33,3 +36,4 @@ description: 用于 manufacturing_planned 阶段。当用户说"用什么五金"
 - 修改制造策略时使用 `revise_stage_output()`，使本阶段及下游失效。
 - `readiness` 作用于整份制造方案/BOM，不伪装成每条五金或封边记录均已单独审批。
 - 不发射特征树、不调用 CAD Bridge、不手改派生产物。
+- 试验、统计和生产仿真写入 `stage_analyses.manufacturing_planned`，只提供证据或候选；它们不自动提升 `readiness`，不直接修改 BOM，也不构成现实工厂因果结论。

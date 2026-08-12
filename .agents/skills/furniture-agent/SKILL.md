@@ -26,6 +26,8 @@ description: 路由本仓库七阶段家具工作与所需 CAD 技能。适用�
 - 修改设计意图用 `revise()`；修改第 2～5 阶段用 `revise_stage_output()`。新 Revision 只继承修改点之前的已确认输出；修改阶段及下游重新确认/生成。
 - `back_mount` 从板件阶段开始：板件阶段首次物化结构规格、解析有效模式并生成背板/背拉条；制造阶段只消费已确认板件方案，生成封边、连接、BOM 和孔位。意图和布局不得提前携带或解析背板结构。
 - 外部技能只从 `external/text-to-cad/skills/` 按需加载：CAD/STEP/几何/快照用 `cad/SKILL.md`，审查/链接用 `cad-viewer/SKILL.md`，命名采购件用 `step-parts/SKILL.md`；忽略生成副本 `external/text-to-cad/plugins/cad/skills/`。
+- 科学分析只从 `external/scientific-agent-skills/skills/` 按当前阶段按需加载，不把整个集合注册为家具技能：板件尺寸链/公差审计读 `uncertainty-and-units/SKILL.md`，板件多目标候选读 `pymoo/SKILL.md`；制造样件试验读 `experimental-design/SKILL.md`，已有试验数据读 `statistical-analysis/SKILL.md`，板件流转/工位排队读 `simpy/SKILL.md`。
+- 科学分析是 `stage_analyses` 旁路证据，不是新的检查点，也不得直接覆盖 `stage_outputs`。候选方案经用户接受后，按字段所有者调用 `revise()` 或 `revise_stage_output()` 建立新 Revision，再重新确认受影响阶段及下游。
 - 仅明确的一次性批处理可用 `skills/furniture-cad/scripts/generate_furniture.py` 或 `execute_spec()`；`server.py` 只适配协议，仍调用 Orchestrator。
 - 声称可执行前检查实时代码、测试和入口；缺失则如实说明。
 
@@ -36,4 +38,5 @@ description: 路由本仓库七阶段家具工作与所需 CAD 技能。适用�
 - 可复用脚本和运行时模块放在所属阶段 Skill 的 `scripts/`；跨阶段入口与集成测试放在 `skills/furniture-cad/scripts/`。一次性检查、迁移、调试和实验统一放在已忽略的 `temp/<project-slug>/`，每个项目或任务独占一个目录，使脚本与派生产物可按目录整体识别和删除；任务结束即清理。生成 CAD 源码使用保留路径 `temp/cad-source/<artifact-name>/`。
 - 禁止根级 `scripts/`、`packages/`、`tests/`、`scratch/`、`tmp/`；生成源码不得进入 `generated/`。布局变更后运行 `skills/furniture-cad/scripts/validate_workspace_layout.py` 并清零违规。
 - 不修改 `external/text-to-cad` 实现家具逻辑；有上游意图/源码时不手改派生 STEP、GLB、BOM、裁切清单或 Python。
+- 不修改或复制 `external/scientific-agent-skills` 来实现家具逻辑；家具输入适配、结果约束和可复用执行代码归对应家具阶段的 `scripts/`。科学技能缺少可选依赖时必须报告 `unavailable` 或使用明确标注的有界回退，不得伪装成已运行上游引擎。
 - 只报告实际运行过的验证和实际存在的产物。

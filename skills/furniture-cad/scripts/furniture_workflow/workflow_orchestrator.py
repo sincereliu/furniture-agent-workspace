@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import asdict, dataclass
+from hashlib import sha256
+import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Mapping
 
 from furniture_cad.cad_bridge import BridgeResult, CadBridge
 from furniture_cad.validation import validate_cad
@@ -31,10 +33,18 @@ from furniture_manufacturing.manufacturing_models import (
     MachiningOperation,
     PanelRecord,
 )
+from furniture_manufacturing.production_simulation import simulate_production
+from furniture_manufacturing.prototype_experiment import design_prototype_experiment
+from furniture_manufacturing.test_statistics import analyze_prototype_results
 from furniture_manufacturing.validation import validate_manufacturing
+from furniture_panel_planning.design_optimization import (
+    materialize_optimization_candidate,
+    optimize_panel_design,
+)
 from furniture_panel_planning.panel_models import PanelPlacement
 from furniture_panel_planning.panel_pipeline import plan_panel_stage
 from furniture_panel_planning.panel_spec import FurnitureSpec
+from furniture_panel_planning.quantitative_audit import audit_panel_quantities
 from furniture_panel_planning.structure_planning import CabinetStructure
 from furniture_panel_planning.validation import validate_panel_output
 
@@ -54,6 +64,7 @@ from .workflow_state import (
     WorkflowState,
     parse_stage,
     stage_index,
+    utc_now,
 )
 
 
@@ -63,6 +74,32 @@ EDITABLE_STAGE_OUTPUTS = {
     WorkflowStage.MANUFACTURING_PLANNED,
     WorkflowStage.FEATURE_TREE_PLANNED,
 }
+
+ANALYSIS_STAGE_OWNERS = {
+    "panel_unit_audit": WorkflowStage.PANELS_PLANNED,
+    "panel_optimization": WorkflowStage.PANELS_PLANNED,
+    "prototype_experiment": WorkflowStage.MANUFACTURING_PLANNED,
+    "test_statistics": WorkflowStage.MANUFACTURING_PLANNED,
+    "production_simulation": WorkflowStage.MANUFACTURING_PLANNED,
+}
+
+ANALYSIS_METHOD_SKILLS = {
+    "panel_unit_audit": "uncertainty-and-units",
+    "panel_optimization": "pymoo",
+    "prototype_experiment": "experimental-design",
+    "test_statistics": "statistical-analysis",
+    "production_simulation": "simpy",
+}
+
+
+def _stable_digest(value: Any) -> str:
+    encoded = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return sha256(encoded).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -170,6 +207,105 @@ class FurnitureOrchestrator:
         if changed_stage == WorkflowStage.FEATURE_TREE_PLANNED:
             revision.feature_tree = deepcopy(output)
         return revision
+
+    def run_stage_analysis(
+        self,
+        project: Project,
+        analysis: str,
+        config: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Run one bounded side analysis without changing a stage checkpoint."""
+
+        analysis_name = str(analysis).strip()
+        if analysis_name not in ANALYSIS_STAGE_OWNERS:
+            supported = ", ".join(sorted(ANALYSIS_STAGE_OWNERS))
+            raise ValueError(f"unsupported stage analysis; use one of: {supported}")
+        revision = project.latest
+        source_stage = ANALYSIS_STAGE_OWNERS[analysis_name]
+        source_output = revision.stage_outputs.get(source_stage.value)
+        if not isinstance(source_output, dict):
+            raise ValueError(
+                f"analysis requires stage output: {source_stage.value}"
+            )
+        values = dict(config or {})
+        dispatch: dict[str, Callable[[], dict[str, Any]]] = {
+            "panel_unit_audit": lambda: audit_panel_quantities(
+                source_output,
+                values,
+            ),
+            "panel_optimization": lambda: optimize_panel_design(
+                self._layout_from_revision(revision),
+                source_output,
+                values,
+            ),
+            "prototype_experiment": lambda: design_prototype_experiment(
+                source_output,
+                values,
+            ),
+            "test_statistics": lambda: analyze_prototype_results(
+                source_output,
+                values,
+            ),
+            "production_simulation": lambda: simulate_production(
+                source_output,
+                values,
+            ),
+        }
+        report = dispatch[analysis_name]()
+        record = {
+            "analysis": analysis_name,
+            "method_skill": ANALYSIS_METHOD_SKILLS[analysis_name],
+            "status": str(report.get("status", "completed")),
+            "source_stage": source_stage.value,
+            "source_revision_id": revision.id,
+            "source_sha256": _stable_digest(source_output),
+            "created_at": utc_now(),
+            "report": deepcopy(report),
+        }
+        revision.stage_analyses.setdefault(source_stage.value, {})[
+            analysis_name
+        ] = record
+        revision.workflow.record(
+            f"{analysis_name} analysis recorded for {source_stage.value}"
+        )
+        return deepcopy(record)
+
+    def apply_panel_optimization_candidate(
+        self,
+        project: Project,
+        candidate_index: int,
+    ) -> Revision:
+        """Materialize an explicitly selected Pareto candidate as a new revision."""
+
+        revision = project.latest
+        stage = WorkflowStage.PANELS_PLANNED
+        analyses = revision.stage_analyses.get(stage.value, {})
+        record = analyses.get("panel_optimization")
+        if not isinstance(record, Mapping):
+            raise ValueError("run panel_optimization before selecting a candidate")
+        source_output = revision.stage_outputs.get(stage.value)
+        if not isinstance(source_output, dict):
+            raise ValueError("panels_planned output is unavailable")
+        if record.get("source_revision_id") != revision.id or record.get(
+            "source_sha256"
+        ) != _stable_digest(source_output):
+            raise ValueError("panel optimization is stale; run it again")
+        report = record.get("report")
+        candidates = report.get("candidates") if isinstance(report, Mapping) else None
+        if not isinstance(candidates, list):
+            raise ValueError("panel optimization has no selectable candidates")
+        if isinstance(candidate_index, bool) or not 0 <= candidate_index < len(candidates):
+            raise ValueError("candidate_index is outside the Pareto candidate list")
+        selected = candidates[candidate_index]
+        if not isinstance(selected, Mapping):
+            raise ValueError("selected optimization candidate is invalid")
+        output = materialize_optimization_candidate(
+            self._layout_from_revision(revision),
+            selected,
+        )
+        if selected.get("stage_output_sha256") != _stable_digest(output):
+            raise ValueError("selected candidate no longer materializes reproducibly")
+        return self.revise_stage_output(project, stage, output)
 
     def execute_spec(
         self,
@@ -489,6 +625,7 @@ class FurnitureOrchestrator:
                 stage_outputs=revision.stage_outputs,
                 approved_stages=revision.approved_stages,
                 stage_validations=revision.validations,
+                stage_analyses=revision.stage_analyses,
             )
             revision.stage_outputs[stage.value] = report.to_dict()
             revision.validations.append(report)
@@ -590,12 +727,14 @@ class FurnitureOrchestrator:
     @staticmethod
     def _placements_from_revision(revision: Revision) -> list[PanelPlacement]:
         output = revision.stage_outputs[WorkflowStage.PANELS_PLANNED.value]
-        return [PanelPlacement(**item) for item in output.get("panels", [])]
+        return [
+            PanelPlacement.from_dict(item) for item in output.get("panels", [])
+        ]
 
     @staticmethod
     def _panels_from_revision(revision: Revision) -> list[PanelRecord]:
         output = revision.stage_outputs[WorkflowStage.MANUFACTURING_PLANNED.value]
-        return [PanelRecord(**item) for item in output.get("panels", [])]
+        return [PanelRecord.from_dict(item) for item in output.get("panels", [])]
 
     @staticmethod
     def _bom_from_revision(revision: Revision) -> BOMReport:
@@ -603,7 +742,7 @@ class FurnitureOrchestrator:
         return BOMReport(
             furniture_name=str(output["furniture_name"]),
             dimensions=str(output["dimensions"]),
-            panels=[PanelRecord(**item) for item in output.get("panels", [])],
+            panels=[PanelRecord.from_dict(item) for item in output.get("panels", [])],
             hardware=[HardwareRecord(**item) for item in output.get("hardware", [])],
             operations=[
                 MachiningOperation(**item) for item in output.get("operations", [])
