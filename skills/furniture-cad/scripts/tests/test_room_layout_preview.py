@@ -108,7 +108,7 @@ class RoomLayoutPreviewTests(unittest.TestCase):
             output["layout_context"],
             {
                 "room_source": "default_bedroom",
-                "placement_source": "default_south_wall_centered",
+                "placement_source": "default_north_wall_centered",
             },
         )
         self.assertEqual(
@@ -129,7 +129,7 @@ class RoomLayoutPreviewTests(unittest.TestCase):
         )
         self.assertEqual(
             output["room_placement"]["placement"]["host_wall"],
-            "south",
+            "north",
         )
         self.assertEqual(
             output["preview"]["view_kind"],
@@ -172,7 +172,7 @@ class RoomLayoutPreviewTests(unittest.TestCase):
         self.assertEqual(output["layout_context"]["room_source"], "provided")
         self.assertEqual(
             output["layout_context"]["placement_source"],
-            "default_south_wall_centered",
+            "default_north_wall_centered",
         )
         self.assertEqual(
             output["room_placement"]["placement"]["origin_x_mm"],
@@ -197,16 +197,16 @@ class RoomLayoutPreviewTests(unittest.TestCase):
         room_placement = output["room_placement"]
         placement = room_placement["placement"]
         self.assertEqual(placement["host_wall"], "south")
-        self.assertEqual(placement["origin_x_mm"], 500)
-        self.assertEqual(placement["origin_y_mm"], 0)
-        self.assertEqual(placement["rotation_z_deg"], 0)
+        self.assertEqual(placement["origin_x_mm"], 3700)
+        self.assertEqual(placement["origin_y_mm"], 3600)
+        self.assertEqual(placement["rotation_z_deg"], 180)
         self.assertEqual(
             room_placement["furniture_footprint"],
             [
-                {"x_mm": 500.0, "y_mm": 0.0},
-                {"x_mm": 2300.0, "y_mm": 0.0},
-                {"x_mm": 2300.0, "y_mm": 600.0},
-                {"x_mm": 500.0, "y_mm": 600.0},
+                {"x_mm": 3700.0, "y_mm": 3600.0},
+                {"x_mm": 1900.0, "y_mm": 3600.0},
+                {"x_mm": 1900.0, "y_mm": 3000.0},
+                {"x_mm": 3700.0, "y_mm": 3000.0},
             ],
         )
         self.assertEqual(room_placement["clearances_mm"]["north"], 3000)
@@ -240,9 +240,9 @@ class RoomLayoutPreviewTests(unittest.TestCase):
         placement = result.revision.stage_outputs["layout_planned"][
             "room_placement"
         ]["placement"]
-        self.assertEqual(placement["origin_x_mm"], 3800)
-        self.assertEqual(placement["origin_y_mm"], 3600)
-        self.assertEqual(placement["rotation_z_deg"], 180)
+        self.assertEqual(placement["origin_x_mm"], 400)
+        self.assertEqual(placement["origin_y_mm"], 0)
+        self.assertEqual(placement["rotation_z_deg"], 0)
         self.assertEqual(
             result.revision.stage_outputs["layout_planned"]["room_placement"][
                 "clearances_mm"
@@ -310,8 +310,8 @@ class RoomLayoutPreviewTests(unittest.TestCase):
         free_door_spec = wardrobe_spec()
         free_door_spec["placement"] = {
             "mode": "free",
-            "origin_x_mm": 2200,
-            "origin_y_mm": 0,
+            "origin_x_mm": 0,
+            "origin_y_mm": 3000,
             "origin_z_mm": 0,
             "rotation_z_deg": 0,
         }
@@ -333,8 +333,8 @@ class RoomLayoutPreviewTests(unittest.TestCase):
             {
                 "id": "low_column",
                 "kind": "column",
-                "x_mm": 1000,
-                "y_mm": 200,
+                "x_mm": 2000,
+                "y_mm": 3200,
                 "z_mm": 0,
                 "width_mm": 300,
                 "depth_mm": 300,

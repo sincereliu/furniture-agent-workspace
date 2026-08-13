@@ -63,7 +63,7 @@ def plan_layout_stage(
     resolved_placement = placement
     if resolved_placement is None:
         resolved_placement = _default_placement(layout, resolved_room)
-        placement_source = "default_south_wall_centered"
+        placement_source = "default_north_wall_centered"
 
     room_placement = plan_room_placement(
         layout,
@@ -108,7 +108,7 @@ def _default_placement(
         )
     return {
         "mode": "wall",
-        "host_wall": "south",
+        "host_wall": "north",
         "offset_mm": max((room_model.width_mm - layout.width) / 2.0, 0.0),
         "origin_z_mm": origin_z_mm,
     }

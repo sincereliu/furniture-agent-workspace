@@ -11,7 +11,7 @@ description: 用于 layout_planned 阶段。当用户说"几扇门""几层层板
 
 1. 要求当前 Revision 的 `design_intent` 已确认，只读取类别和成品外包络。
 2. 按 [空间布局规则](references/spatial-layout-rules.md) 生成 `CabinetLayout`：保留外包络，并确定当前模板可执行的 `shelf_count/door_count`。
-3. 解析房间、门窗、障碍物及沿墙/自由摆放位置；缺失时使用可见标注的默认卧室与沿南墙居中位置。
+3. 解析房间、门窗、障碍物及沿墙/自由摆放位置；缺失时使用可见标注的默认卧室与沿北墙居中位置。
 4. 生成房间坐标、家具占地、六向净距、静态 SVG 和自包含互动 Viewer；校验越界、门窗遮挡和障碍物碰撞。
 5. 展示 `stage_outputs.layout_planned` 后暂停。客户可修改功能数量和房间定位；本阶段不生成板厚、背板、踢脚、内部净空或板件。
 
