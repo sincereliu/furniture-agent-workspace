@@ -6,6 +6,13 @@ from furniture_delivery_validation.validation import ValidationReport
 from furniture_panel_planning.panel_spec import FurnitureSpec, resolve_back_mount
 from furniture_panel_planning.panel_models import PanelPlacement
 
+from .connectors import ALL_CONNECTORS
+from .hole_validator import (
+    HoleValidationError,
+    validate_hole_bounds,
+    validate_hole_depth,
+    validate_holes_no_interference,
+)
 from .manufacturing_bom import (
     BOMReport,
     VALID_MANUFACTURING_READINESS,
@@ -205,6 +212,31 @@ def validate_manufacturing(
             "back rails must follow the repository four-edge rule",
             "back_rail",
         )
+
+    # ── 孔位几何校验：边界/深度/干涉（hole_validator）──────────────
+    hole_specs_by_panel: dict[str, list] = {}
+    for connector_cls in ALL_CONNECTORS:
+        connector = connector_cls()
+        for hole in connector.generate_holes_for_panels(bom.panels):
+            hole_specs_by_panel.setdefault(hole.panel_label, []).append(hole)
+    panel_records_by_label = {item.label: item for item in bom.panels}
+    for label, holes in hole_specs_by_panel.items():
+        panel = panel_records_by_label.get(label)
+        if panel is None:
+            continue
+        for hole in holes:
+            try:
+                validate_hole_bounds(hole, panel)
+            except HoleValidationError as exc:
+                report.add_error("HOLE_OUTSIDE_PANEL", str(exc), label)
+            try:
+                validate_hole_depth(hole, panel)
+            except HoleValidationError as exc:
+                report.add_error("HOLE_DEPTH_EXCEEDS_PANEL", str(exc), label)
+        try:
+            validate_holes_no_interference(holes, panel)
+        except HoleValidationError as exc:
+            report.add_error("HOLE_INTERFERENCE", str(exc), label)
 
     drilled = emit_drilled_holes(bom)
     drilled_by_panel = {
