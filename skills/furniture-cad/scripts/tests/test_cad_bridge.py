@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 import tempfile
 import unittest
@@ -90,6 +91,61 @@ class CadBridgeTests(unittest.TestCase):
             bridge._default_step_output(Path("cabinet.step.py")),
             Path("cabinet.step"),
         )
+
+    def test_real_default_gen_entrypoint_generates_current_artifacts(self) -> None:
+        module = load_adapter_module()
+        cad_source_root = WORKSPACE_ROOT / "temp" / "cad-source"
+        cad_source_root.mkdir(parents=True, exist_ok=True)
+
+        with tempfile.TemporaryDirectory(
+            prefix="cad-bridge-real-gen-",
+            dir=cad_source_root,
+        ) as temporary_directory:
+            source_path = Path(temporary_directory) / "bridge-smoke.step.py"
+            output_path = Path(temporary_directory) / "bridge-smoke.step"
+            source_path.write_text(
+                "\n".join(
+                    [
+                        "from build123d import Box",
+                        "",
+                        "def gen_step():",
+                        "    return Box(10, 20, 30)",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            bridge = module.CadBridge(
+                workspace_root=WORKSPACE_ROOT,
+                python_executable=sys.executable,
+            )
+            result = bridge.generate_from_source(
+                source_path,
+                output_path,
+                force=True,
+            )
+
+            self.assertEqual(
+                result.status,
+                "ok",
+                msg=f"stdout={result.stdout!r}\nstderr={result.stderr!r}",
+            )
+            self.assertEqual(result.returncode, 0)
+            self.assertTrue(output_path.is_file())
+            self.assertGreater(output_path.stat().st_size, 0)
+
+            package_path = Path(result.viewer_package_path)
+            descriptor_path = Path(result.topology_path)
+            self.assertTrue(package_path.is_dir())
+            self.assertEqual(descriptor_path, package_path / "assembly.json")
+            descriptor = json.loads(descriptor_path.read_text(encoding="utf-8"))
+            components = descriptor.get("components")
+            self.assertIsInstance(components, dict)
+            self.assertTrue(components)
+            for component in components.values():
+                component_path = package_path / component["glb"]
+                self.assertTrue(component_path.is_file())
+                self.assertGreater(component_path.stat().st_size, 0)
 
     def test_rejects_missing_source_before_launch(self) -> None:
         module = load_adapter_module()
