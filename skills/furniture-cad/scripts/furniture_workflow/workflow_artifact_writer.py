@@ -64,7 +64,7 @@ def write_artifacts(
         feature_tree_path = artifact_dir / f"{artifact_name}.feature-tree.json"
         bom_path = artifact_dir / f"{artifact_name}.bom.md"
         source_key = artifact_name
-        source_filename = f"{artifact_name}.py"
+        source_filename = f"{artifact_name}.step.py"
         step_filename = f"{artifact_name}.step"
     else:
         intent_path = artifact_dir / "design-intent.json"
@@ -74,7 +74,7 @@ def write_artifacts(
         feature_tree_path = artifact_dir / "feature-tree.json"
         bom_path = artifact_dir / "bom.md"
         source_key = revision.id
-        source_filename = "model.py"
+        source_filename = "model.step.py"
         step_filename = "model.step"
 
     source_dir = Path(workspace_root) / "temp" / "cad-source" / source_key

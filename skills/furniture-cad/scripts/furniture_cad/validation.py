@@ -27,4 +27,10 @@ def validate_cad(bridge: BridgeResult | None) -> ValidationReport:
                 f"{kind} artifact is missing",
                 kind,
             )
+    if not bridge.viewer_package_path or not Path(bridge.viewer_package_path).is_dir():
+        report.add_error(
+            "MISSING_CAD_ARTIFACT",
+            "viewer package directory is missing",
+            "viewer_package",
+        )
     return report

@@ -34,16 +34,23 @@ def cabinet_intent(*, furniture_type: str = "floor_cabinet") -> DesignIntent:
 
 
 def fake_orchestrator(temporary_root: Path) -> FurnitureOrchestrator:
-    launcher_path = temporary_root / "fake_step.py"
+    launcher_path = temporary_root / "fake_gen.py"
     launcher_path.write_text(
         "\n".join(
             [
+                "import json",
                 "import sys",
                 "from pathlib import Path",
-                "output = Path(sys.argv[sys.argv.index('--output') + 1])",
+                "source = Path(sys.argv[1])",
+                "output = Path(sys.argv[sys.argv.index('--write') + 1])",
                 "output.parent.mkdir(parents=True, exist_ok=True)",
                 "output.write_text('STEP', encoding='utf-8')",
-                "output.with_name(f'.{output.name}.glb').write_bytes(b'GLB')",
+                "package = source.parent / '__cadgen__' / 'models' / source.name",
+                "component = package / 'components' / 'fake.glb'",
+                "component.parent.mkdir(parents=True, exist_ok=True)",
+                "component.write_bytes(b'GLB')",
+                "(package / 'assembly.json').write_text(json.dumps({'components': {'fake': {'glb': 'components/fake.glb'}}}), encoding='utf-8')",
+                "print(json.dumps({'ok': True, 'packagePath': package.as_posix()}))",
             ]
         ),
         encoding="utf-8",
@@ -51,7 +58,7 @@ def fake_orchestrator(temporary_root: Path) -> FurnitureOrchestrator:
     bridge = CadBridge(
         workspace_root=WORKSPACE_ROOT,
         python_executable=sys.executable,
-        step_launcher=launcher_path,
+        gen_launcher=launcher_path,
     )
     return FurnitureOrchestrator(
         workspace_root=WORKSPACE_ROOT,

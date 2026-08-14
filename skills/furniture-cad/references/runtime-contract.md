@@ -109,13 +109,14 @@ result = orchestrator.run_next(
 - `<artifact-name>.drilled-holes.step.glb`
 - `六面钻文件/<panel-label>.xml`
 - `<artifact-name>.step`
-- 相邻隐藏 Viewer 拓扑 GLB
+- `temp/cad-source/<artifact-name>/__cadgen__/models/<artifact-name>.step.py/assembly.json`
+- 同一 Viewer 组件包内由 `assembly.json` 引用的 `components/*.glb`
 
-build123d 源码只写 `temp/cad-source/<artifact-name>/`。一次性 CLI 写上方目录；交互 Project/Revision 写 `<output-root>/<project-id>/revision-<n>/`。`workflow_artifact_writer.py` 写快照，`workflow_store.py` 将 Project/Revision、`stage_outputs`、`approved_stages` 存为 `project.json`。
+build123d 入口源码以 `<artifact-name>.step.py`（交互模式为 `model.step.py`）只写入 `temp/cad-source/<artifact-name>/`。CAD Bridge 调用 text-to-cad 的 `scripts/gen <source> --write <output.step> --json`，STEP 写入交付目录，Viewer 组件包按上游约定与生成器入口同目录缓存。一次性 CLI 写上方目录；交互 Project/Revision 写 `<output-root>/<project-id>/revision-<n>/`。`workflow_artifact_writer.py` 写快照，`workflow_store.py` 将 Project/Revision、`stage_outputs`、`approved_stages` 存为 `project.json`。
 
 运行时流水线为：
 
-`CLI / API / Agent -> FurnitureOrchestrator -> 设计意图 -> 布局 -> 板件 -> 制造/BOM -> 特征树 -> CAD Bridge -> STEP + Viewer 拓扑 -> 交付验证`
+`CLI / API / Agent -> FurnitureOrchestrator -> 设计意图 -> 布局 -> 板件 -> 制造/BOM -> 特征树 -> CAD Bridge -> STEP + Viewer 组件包 -> 交付验证`
 
 Feature Tree v2 支持板件 `box` 和定向 `cut_box`；发射器先建板、再切削、最后装配加工后的板件。
 

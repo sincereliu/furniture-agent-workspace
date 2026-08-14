@@ -100,8 +100,10 @@ def main(
     print(f"  {bridge_result.message}")
     if bridge_result.step_path:
         print(f"  STEP: {bridge_result.step_path}")
+    if bridge_result.viewer_package_path:
+        print(f"  Viewer 包: {bridge_result.viewer_package_path}")
     if bridge_result.topology_path:
-        print(f"  GLB:  {bridge_result.topology_path}")
+        print(f"  Viewer 清单: {bridge_result.topology_path}")
     print(f"{'='*60}")
 
     return 0 if bridge_result.status == "ok" else 1

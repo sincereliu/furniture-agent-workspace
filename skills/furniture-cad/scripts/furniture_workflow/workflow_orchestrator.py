@@ -609,6 +609,7 @@ class FurnitureOrchestrator:
                     revision.manifest.add_file(
                         "viewer_topology",
                         bridge.topology_path,
+                        package_path=bridge.viewer_package_path,
                     )
             report = self._validate_stage_output(revision, stage)
             revision.validations.append(report)
