@@ -170,7 +170,7 @@ class ApiEntrypointTests(unittest.TestCase):
             response.layout_context,
             {
                 "room_source": "default_bedroom",
-                "placement_source": "default_south_wall_centered",
+                "placement_source": "default_north_wall_centered",
             },
         )
         self.assertEqual(

@@ -527,7 +527,7 @@ def _opening_face(
     end = opening.offset_mm + opening.width_mm
     z_start = opening.sill_height_mm
     z_end = z_start + opening.height_mm
-    if opening.wall == "south":
+    if opening.wall == "north":
         return (
             (start, 0.0, z_start),
             (end, 0.0, z_start),
@@ -541,7 +541,7 @@ def _opening_face(
             (room_width, end, z_end),
             (room_width, start, z_end),
         )
-    if opening.wall == "north":
+    if opening.wall == "south":
         return (
             (room_width - start, room_depth, z_start),
             (room_width - end, room_depth, z_start),

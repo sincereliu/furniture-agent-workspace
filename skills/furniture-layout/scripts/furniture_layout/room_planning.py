@@ -365,9 +365,9 @@ def resolve_placement(
             "wall placement derives its origin; use offset_mm instead of x/y"
         )
     expected_rotation = {
-        "south": 0.0,
+        "south": 180.0,
         "east": 90.0,
-        "north": 180.0,
+        "north": 0.0,
         "west": 270.0,
     }[wall]
     if (
@@ -379,9 +379,9 @@ def resolve_placement(
         )
     offset = request.offset_mm or 0.0
     origin = {
-        "south": (offset, 0.0),
+        "north": (offset, 0.0),
         "east": (room.width_mm, offset),
-        "north": (room.width_mm - offset, room.depth_mm),
+        "south": (room.width_mm - offset, room.depth_mm),
         "west": (0.0, room.depth_mm - offset),
     }[wall]
     return ResolvedPlacement(
@@ -437,8 +437,8 @@ def build_room_placement(
         clearances_mm={
             "west": _clean(min(xs)),
             "east": _clean(room.width_mm - max(xs)),
-            "south": _clean(min(ys)),
-            "north": _clean(room.depth_mm - max(ys)),
+            "south": _clean(room.depth_mm - max(ys)),
+            "north": _clean(min(ys)),
             "floor": _clean(placement.origin_z_mm),
             "ceiling": _clean(
                 room.height_mm - placement.origin_z_mm - layout.height
@@ -534,11 +534,11 @@ def _footprint_span_on_wall(
 ) -> tuple[float, float] | None:
     xs = [point[0] for point in plan.furniture_footprint]
     ys = [point[1] for point in plan.furniture_footprint]
-    if wall == "south" and min(ys) <= EPSILON:
+    if wall == "north" and min(ys) <= EPSILON:
         return (min(xs), max(xs))
     if wall == "east" and max(xs) >= plan.room.width_mm - EPSILON:
         return (min(ys), max(ys))
-    if wall == "north" and max(ys) >= plan.room.depth_mm - EPSILON:
+    if wall == "south" and max(ys) >= plan.room.depth_mm - EPSILON:
         return (
             plan.room.width_mm - max(xs),
             plan.room.width_mm - min(xs),

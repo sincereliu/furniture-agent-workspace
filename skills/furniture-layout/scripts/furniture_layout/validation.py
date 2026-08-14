@@ -110,7 +110,7 @@ def validate_layout_output(
             ("room_source", {"provided", "default_bedroom"}),
             (
                 "placement_source",
-                {"provided", "default_south_wall_centered"},
+                {"provided", "default_north_wall_centered"},
             ),
         ):
             if raw_context.get(key) not in allowed:
