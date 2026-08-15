@@ -52,8 +52,17 @@ class FurnitureSpec:
     toe_kick_reveal_front: float = 1.0
     toe_kick_reveal_back: float = 30.0
     toe_kick_support_count: int | None = None
-    back_mount: str = "groove"
+    back_mount: str = "auto"
     back_rail_height: float = 70.0
+
+    def __post_init__(self) -> None:
+        # ``back_mount`` is always a resolved mode (groove/insert/cover) once a
+        # FurnitureSpec exists; ``auto`` only has meaning on the raw request.
+        self.back_mount = resolve_back_mount(
+            self.back_mount,
+            self.back_thickness,
+            self.board_thickness,
+        )
 
     @classmethod
     def from_layout(
@@ -100,11 +109,11 @@ class FurnitureSpec:
 
         def groove_float(key: str, fallback: float) -> float:
             raw = value(key, fallback)
-            if effective_back_mount == "groove":
-                return float(raw)
             try:
                 return float(raw)
             except (TypeError, ValueError):
+                if effective_back_mount == "groove":
+                    raise  # groove 模式下该字段必须有效，透传原始解析错误
                 return fallback
 
         toe_kick_default = 0.0 if furniture_type == "wall_cabinet" else 50.0

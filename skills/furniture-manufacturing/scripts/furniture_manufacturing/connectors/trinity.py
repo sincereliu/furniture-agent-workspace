@@ -230,7 +230,7 @@ class TrinityConnector(Connector):
         r_depth = float(rod.get("insertion_depth_mm", 33))
         w_diam = float(wheel.get("diameter_mm", 12))
         w_depth = float(wheel.get("hole_depth_mm", 13.5))
-        z_top = panel.pos_z + panel.size_z
+        z_center = panel.pos_z + panel.size_z / 2.0
         cam = panel.cam_face or ""
 
         if cam == "+z":
@@ -263,8 +263,8 @@ class TrinityConnector(Connector):
                     hole_type="system_32_male", panel_label=panel.label,
                     x_global=x_global,
                     y_global=panel.pos_y + y_offset,
-                    z_global=z_top,
-                    x_local=x_local, y_local=y_offset, z_local=panel.size_z,
+                    z_global=z_center,
+                    x_local=x_local, y_local=y_offset, z_local=panel.size_z / 2.0,
                     diameter=r_diam, depth=r_depth, direction=rod_sign,
                     is_face_hole=False, note="连接杆孔"))
 

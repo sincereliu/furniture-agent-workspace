@@ -26,7 +26,7 @@ class PanelJoint:
     face: str        # female 的哪个语义面被接触（inner_face 的值，如 "+x"）
     edge_axis: str   # male 的端面所在轴（"x"/"y"/"z"）
     edge_sign: int   # male 的端面方向：+1=轴正端，-1=轴负端
-    male_z: float    # male 面板的 top 面 Z 坐标（female 螺母所在的 Z 高度）
+    male_z: float    # male 面板厚度中心线的 Z 坐标（female 螺母所在的 Z 高度）
     male_has_cam: bool = False  # male 是否有 cam_face（三合一标志）
 
 
@@ -132,7 +132,7 @@ def compute_joints(placements: Sequence[PanelPlacement]) -> list[PanelJoint]:
                     face=face_dir,
                     edge_axis=face_axis,
                     edge_sign=edge_sign,
-                    male_z=male.pos_z + male.size_z,  # male 顶面 Z，螺母打在这
+                    male_z=male.pos_z + male.size_z / 2.0,  # 厚度中心线 Z，螺母打在这
                     male_has_cam=bool(male.cam_face),  # 有 cam_face 才是三合一
                 )
             )

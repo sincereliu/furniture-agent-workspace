@@ -173,18 +173,11 @@ def _build_enclosure_panel(
         name_map = {"top": "顶板", "bottom": "底板"}
         ptype = "top" if sign > 0 else "bottom"
 
-    else:  # y
-        # Back panel — broad face is X-Z plane
-        # Handled by _back_panel_variants; fallback
-        sx = layout.internal_width
-        sy = spec.back_thickness
-        sz = layout.internal_height
-        px = layout.internal_x_start
-        py = layout.back_plane_y
-        pz = layout.internal_z_start
-        inner = "-y"
-        name_map = {"back": "背板"}
-        ptype = "back"
+    else:
+        raise ValueError(
+            f"enclosure panel '{side_name}' has unsupported face axis "
+            f"'{face_dir}'; back and front openings use dedicated builders"
+        )
 
     name = name_map.get(side_name, side_name)
     outer = face_dir
@@ -198,7 +191,7 @@ def _build_enclosure_panel(
         panel_type=ptype,
         size_x=sx, size_y=sy, size_z=sz,
         pos_x=px, pos_y=py, pos_z=pz,
-        material_role=_material_role(axis, axis == "y"),
+        material_role="carcass",
         inner_face=inner,
         outer_face=outer,
         cam_face=cam,
@@ -444,9 +437,3 @@ def _frame_from_spec(spec: FurnitureSpec) -> CabinetFrame:
     """Build a CabinetFrame for the spec's furniture type."""
     topology = _load_topology(spec.furniture_type)
     return CabinetFrame(**topology["frame"])
-
-
-def _material_role(axis: str, is_back: bool) -> str:
-    if is_back:
-        return "back"
-    return "carcass"
