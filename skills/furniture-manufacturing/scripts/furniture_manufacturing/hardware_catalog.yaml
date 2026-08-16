@@ -12,7 +12,8 @@ three_in_one:
     eccentric_wheel:
       diameter_mm: 12            # 偏心轮本体直径
       hole_depth_mm: 13.5        # 沉孔深度
-      center_offset_from_edge_mm: 33.5   # 偏心轮圆心距板前边
+      center_offset_from_edge_mm: 33.5   # 偏心轮圆心到连接杆端面(接触端面)的距离，沿连接杆方向(x)
+      rod_axis_offset_mm: 9      # 连接杆轴线到偏心轮安装面(cam_face)的距离；软件暂定，投产前确认
     # 连接杆
     connecting_rod:
       diameter_mm: 8             # 连接杆直径
@@ -100,11 +101,9 @@ drawer_slides:
         model: 760H
 
 # ── 铰链 ──────────────────────────────────────────────
-
 hinges:
-  # ── 国内 35mm 杯 ────────────────────────────────────
-  domestic-35mm-full-overlay-100:
-    variant_group: 国内35mm杯全盖
+  默认35mm杯全盖:
+    variant_group: 35mm杯全盖
     cup: { diameter_mm: 35, depth_mm: 13 }
     overlay: full
     angle: 100
@@ -114,155 +113,3 @@ hinges:
     brands:
       - name: 默认
         model: HJ-100-F
-      - name: DTC
-        model: C80-100
-      - name: 悍高
-        model: HG-100F
-
-  domestic-35mm-full-overlay-165:
-    variant_group: 国内35mm杯全盖
-    cup: { diameter_mm: 35, depth_mm: 13 }
-    overlay: full
-    angle: 165
-    base_height_mm: 0
-    door_thickness_mm: [14, 22]
-    door_max_width_mm: 450
-    note: 大角度全盖，门宽需≤450mm
-    brands:
-      - name: 默认
-        model: HJ-165-F
-      - name: DTC
-        model: C80-165
-
-  domestic-35mm-full-overlay-90:
-    variant_group: 国内35mm杯全盖
-    cup: { diameter_mm: 35, depth_mm: 13 }
-    overlay: full
-    angle: 90
-    base_height_mm: 0
-    door_thickness_mm: [14, 22]
-    note: 小角度全盖，靠墙安装用
-    brands:
-      - name: 默认
-        model: HJ-90-F
-      - name: DTC
-        model: C80-90
-
-  # ── 半盖 ──
-  domestic-35mm-half-overlay-110:
-    variant_group: 国内35mm杯半盖
-    cup: { diameter_mm: 35, depth_mm: 13 }
-    overlay: half
-    angle: 110
-    base_height_mm: 3
-    door_thickness_mm: [14, 22]
-    note: 标准半盖铰链
-    brands:
-      - name: 默认
-        model: HJ-110-H
-      - name: DTC
-        model: C80-110H
-
-  domestic-35mm-half-overlay-135:
-    variant_group: 国内35mm杯半盖
-    cup: { diameter_mm: 35, depth_mm: 13 }
-    overlay: half
-    angle: 135
-    base_height_mm: 3
-    door_thickness_mm: [14, 22]
-    note: 135°转角柜专用半盖铰链
-    brands:
-      - name: 默认
-        model: HJ-135-H
-
-  domestic-35mm-half-overlay-165:
-    variant_group: 国内35mm杯半盖
-    cup: { diameter_mm: 35, depth_mm: 13 }
-    overlay: half
-    angle: 165
-    base_height_mm: 3
-    door_thickness_mm: [14, 22]
-    door_max_width_mm: 450
-    note: 大角度半盖，门宽需≤450mm
-    brands:
-      - name: 默认
-        model: HJ-165-H
-
-  # ── 内嵌 ──
-  domestic-35mm-inset-110:
-    variant_group: 国内35mm杯内嵌
-    cup: { diameter_mm: 35, depth_mm: 13 }
-    overlay: inset
-    angle: 110
-    base_height_mm: 3
-    door_thickness_mm: [14, 22]
-    note: 标准内嵌铰链
-    brands:
-      - name: 默认
-        model: HJ-110-I
-
-  # ── 进口 35mm 杯 (Blum/海蒂诗/萨郦奇等) ──────────────
-  imported-35mm-full-overlay-100:
-    variant_group: 进口35mm杯全盖
-    cup: { diameter_mm: 35, depth_mm: 12.7 }
-    overlay: full
-    angle: 100
-    base_height_mm: 0
-    door_thickness_mm: [15, 24]
-    note: Blum 标准全盖铰链
-    brands:
-      - name: Blum
-        model: 71B3550
-      - name: Grass
-        model: Tiomos-100-F
-      - name: 萨郦奇
-        model: S155-F
-
-  imported-35mm-full-overlay-165:
-    variant_group: 进口35mm杯全盖
-    cup: { diameter_mm: 35, depth_mm: 12.7 }
-    overlay: full
-    angle: 165
-    base_height_mm: 0
-    door_thickness_mm: [15, 24]
-    door_max_width_mm: 450
-    note: Blum 大角度全盖铰链
-    brands:
-      - name: Blum
-        model: 71B3590
-
-  imported-35mm-full-overlay-90:
-    variant_group: 进口35mm杯全盖
-    cup: { diameter_mm: 35, depth_mm: 12.7 }
-    overlay: full
-    angle: 90
-    base_height_mm: 0
-    door_thickness_mm: [15, 24]
-    note: Blum 小角度全盖铰链
-    brands:
-      - name: Blum
-        model: 71B3510
-
-  imported-35mm-half-overlay-110:
-    variant_group: 进口35mm杯半盖
-    cup: { diameter_mm: 35, depth_mm: 12.7 }
-    overlay: half
-    angle: 110
-    base_height_mm: 3
-    door_thickness_mm: [15, 24]
-    note: Blum 标准半盖铰链
-    brands:
-      - name: Blum
-        model: 71B3650
-
-  imported-35mm-inset-110:
-    variant_group: 进口35mm杯内嵌
-    cup: { diameter_mm: 35, depth_mm: 12.7 }
-    overlay: inset
-    angle: 110
-    base_height_mm: 3
-    door_thickness_mm: [15, 24]
-    note: Blum 标准内嵌铰链
-    brands:
-      - name: Blum
-        model: 71B3750

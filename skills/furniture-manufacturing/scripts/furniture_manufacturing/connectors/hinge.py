@@ -82,46 +82,24 @@ class HingeConnector(Connector):
         direction: str,
         note: str,
     ) -> HoleSpec:
-        """根据面板内侧面方向，计算正确的全局坐标并创建杯孔 HoleSpec。"""
-        inner = panel.inner_face or "+y"
+        """在面板 inner_face 上打杯孔。
 
-        # Determine which axis is the inner face axis
-        # inner_face is one of: "+x", "-x", "+y", "-y", "+z", "-z"
-        if inner[1] == "x":
-            if inner[0] == "+":
-                x_global = panel.pos_x + panel.size_x  # inner at right face
-            else:
-                x_global = panel.pos_x                  # inner at left face
-            y_global = panel.pos_y + y_local
-            z_global = panel.pos_z + z_local
-            hole_x_local = panel.size_x if inner[0] == "+" else 0.0
-            hole_y_local = y_local
-            hole_z_local = z_local
-        elif inner[1] == "y":
-            # Door panels: inner_face = "-y" (inner face is the front face)
-            # or "+y" for back panels
-            x_global = panel.pos_x + x_local
-            if inner[0] == "+":
-                y_global = panel.pos_y + panel.size_y  # inner at front
-                hole_y_local = panel.size_y
-            else:
-                y_global = panel.pos_y                  # inner at back
-                hole_y_local = 0.0
-            z_global = panel.pos_z + z_local
-            hole_x_local = x_local
-            hole_z_local = z_local
-        else:
-            # "+z" or "-z"
-            x_global = panel.pos_x + x_local
-            y_global = panel.pos_y + y_local
-            if inner[0] == "+":
-                z_global = panel.pos_z + panel.size_z
-                hole_z_local = panel.size_z
-            else:
-                z_global = panel.pos_z
-                hole_z_local = 0.0
-            hole_x_local = x_local
-            hole_y_local = y_local
+        孔位先在面板局部坐标定义（局部为唯一真源），
+        再由 to_global 派生世界坐标（当前轴对齐：仅平移）。
+        """
+        inner = panel.inner_face or "+y"
+        face_axis = inner[1] if len(inner) >= 2 else "y"
+
+        # 孔中心落在 inner_face 上：该轴局部坐标 = 面位置(0 或该轴尺寸)
+        origin = {"x": panel.pos_x, "y": panel.pos_y, "z": panel.pos_z}[face_axis]
+        face_local = panel.face_position(inner) - origin
+
+        local = {"x": x_local, "y": y_local, "z": z_local}
+        local[face_axis] = face_local
+
+        x_global, y_global, z_global = panel.to_global(
+            local["x"], local["y"], local["z"]
+        )
 
         return HoleSpec(
             hole_type="hinge",
@@ -129,9 +107,9 @@ class HingeConnector(Connector):
             x_global=x_global,
             y_global=y_global,
             z_global=z_global,
-            x_local=hole_x_local,
-            y_local=hole_y_local,
-            z_local=hole_z_local,
+            x_local=local["x"],
+            y_local=local["y"],
+            z_local=local["z"],
             diameter=diameter,
             depth=depth,
             direction=direction,
@@ -155,9 +133,9 @@ class HingeConnector(Connector):
         return [top + i * spacing for i in range(count)]
 
     def _cup_params(self, rules: Dict[str, Any]) -> Dict[str, Any]:
-        """获取杯孔参数（默认国内 35mm 全盖）。"""
+        """获取杯孔参数（唯一默认：35mm 杯全盖）。"""
         default = {"cup_diameter_mm": 35, "cup_depth_mm": 13}
-        return rules.get("cup_by_variant_group", {}).get("国内35mm杯全盖", default)
+        return rules.get("cup_by_variant_group", {}).get("35mm杯全盖", default)
 
     def boms(self, panels: List[PanelRecord]) -> List[HardwareRecord]:
         """生成铰链 BOM 清单。"""

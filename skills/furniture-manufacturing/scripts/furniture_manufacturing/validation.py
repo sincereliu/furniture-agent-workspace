@@ -329,6 +329,15 @@ def validate_manufacturing(
             "hinge cup count must match hinge hardware quantity",
             "hardware",
         )
+    # 三合一数量 = 偏心轮孔数（孔即真源）
+    trinity_hardware = hardware_by_name.get("三合一连接件")
+    trinity_cam_count = hole_types.count("system_32_female")
+    if trinity_hardware is not None and trinity_hardware.quantity != trinity_cam_count:
+        report.add_error(
+            "TRINITY_HARDWARE_COUNT_MISMATCH",
+            f"三合一连接件数量 {trinity_hardware.quantity} 与偏心轮孔数 {trinity_cam_count} 不一致",
+            "hardware",
+        )
     manufacturing_contracts: dict[
         str,
         tuple[str, tuple[str, ...]],

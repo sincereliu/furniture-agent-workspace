@@ -123,7 +123,9 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
             hole for hole in top_holes if hole.hole_type == "system_32_female"
         ]
         self.assertEqual({hole.y_local for hole in rod_holes}, {64.0, 536.0})
-        self.assertEqual({hole.y_local for hole in cam_holes}, {33.5, 566.5})
+        # 偏心轮 y 与连接杆同排；x 为端面 + center_offset_from_edge(33.5)
+        self.assertEqual({hole.y_local for hole in cam_holes}, {64.0, 536.0})
+        self.assertEqual({hole.x_local for hole in cam_holes}, {33.5, 764 - 33.5})
         self.assertTrue(all(not hole.is_face_hole for hole in rod_holes))
         self.assertTrue(all(hole.is_face_hole for hole in cam_holes))
 

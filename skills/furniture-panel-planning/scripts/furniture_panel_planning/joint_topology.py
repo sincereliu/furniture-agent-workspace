@@ -26,8 +26,10 @@ class PanelJoint:
     face: str        # female 的哪个语义面被接触（inner_face 的值，如 "+x"）
     edge_axis: str   # male 的端面所在轴（"x"/"y"/"z"）
     edge_sign: int   # male 的端面方向：+1=轴正端，-1=轴负端
-    male_z: float    # male 面板厚度中心线的 Z 坐标（female 螺母所在的 Z 高度）
+    male_z: float    # male 面板厚度中心线的 Z 坐标（几何基准，非五金孔位）
     male_has_cam: bool = False  # male 是否有 cam_face（三合一标志）
+    male_cam_face: str | None = None  # male 的偏心轮安装面（"+z"/"-z"）
+    male_size_z: float = 0.0           # male 在 z 方向的尺寸（横板=板厚）
 
 
 # ── 容差 ──────────────────────────────────────────────────────────
@@ -132,8 +134,10 @@ def compute_joints(placements: Sequence[PanelPlacement]) -> list[PanelJoint]:
                     face=face_dir,
                     edge_axis=face_axis,
                     edge_sign=edge_sign,
-                    male_z=male.pos_z + male.size_z / 2.0,  # 厚度中心线 Z，螺母打在这
+                    male_z=male.pos_z + male.size_z / 2.0,  # 几何基准：厚度中心线 Z
                     male_has_cam=bool(male.cam_face),  # 有 cam_face 才是三合一
+                    male_cam_face=male.cam_face,  # 偏心轮安装面，manufacturing 用于算连接杆轴线高度
+                    male_size_z=male.size_z,       # male 在 z 方向的尺寸（横板=板厚）
                 )
             )
 
