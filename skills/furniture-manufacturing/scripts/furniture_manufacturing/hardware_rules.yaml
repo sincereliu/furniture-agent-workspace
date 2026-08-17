@@ -78,35 +78,10 @@ hinge_drilling:
 
   # ── 杯孔参数（按 variant_group） ──
   cup_by_variant_group:
-    国内35mm杯全盖:
+    35mm杯全盖:
       cup_diameter_mm: 35
       cup_depth_mm: 13
       bore_distance_mm: 3     # 杯孔中心到门边的距离
-
-    国内35mm杯半盖:
-      cup_diameter_mm: 35
-      cup_depth_mm: 13
-      bore_distance_mm: 6     # 半盖时孔位内移
-
-    国内35mm杯内嵌:
-      cup_diameter_mm: 35
-      cup_depth_mm: 13
-      bore_distance_mm: 3
-
-    进口35mm杯全盖:
-      cup_diameter_mm: 35
-      cup_depth_mm: 12.7
-      bore_distance_mm: 3
-
-    进口35mm杯半盖:
-      cup_diameter_mm: 35
-      cup_depth_mm: 12.7
-      bore_distance_mm: 6
-
-    进口35mm杯内嵌:
-      cup_diameter_mm: 35
-      cup_depth_mm: 12.7
-      bore_distance_mm: 3
 
   # ── 避让规则 ──
   conflict_avoidance:

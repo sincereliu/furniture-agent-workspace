@@ -110,7 +110,7 @@ class TrinityConnector(Connector):
     预埋螺母在竖板内侧面，朝柜内方向钻入。
 
     深度方向：前后双排，分别距前/后边 first_hole_mm（默认 64mm）。
-    偏心轮：深度方向用 center_offset_from_edge（默认 33.5mm）。
+    偏心轮：沿连接杆方向(x)距端面 center_offset_from_edge（默认 33.5mm），深度方向与连接杆同排。
     """
 
     name = "三合一连接件"
@@ -160,7 +160,7 @@ class TrinityConnector(Connector):
 
         if _trinity_female(panel):
             result.extend(self._female_holes(
-                panel, z_positions, nut_first, nut_last, nut))
+                panel, z_positions, nut_first, nut_last, nut, wheel))
         if _trinity_male(panel):
             result.extend(self._male_holes(
                 panel, nut_first, nut_last, rod, wheel, cam_offset))
@@ -170,6 +170,7 @@ class TrinityConnector(Connector):
     def _female_holes(
         self, panel: PanelRecord, z_positions: List[float],
         nut_first: float, nut_last: float, nut: Dict[str, Any],
+        wheel: Dict[str, Any],
     ) -> List[HoleSpec]:
         """竖板（面接触方）→ 预埋螺母打在 inner_face 上。
 
@@ -181,24 +182,23 @@ class TrinityConnector(Connector):
         inner = panel.inner_face or ""
         nut_dir = _opposite(inner)
 
-        if inner == "+x":
-            x_global = panel.pos_x + panel.size_x
-            x_local = panel.size_x
-        elif inner == "-x":
-            x_global = panel.pos_x
-            x_local = 0.0
-        else:
-            x_global = panel.pos_x + panel.size_x
-            x_local = panel.size_x
+        # 螺母孔打在 inner_face 上：用几何接口 face_position 定位（面在 x 轴）
+        face = inner if inner in ("+x", "-x") else "+x"
+        x_global = panel.face_position(face)
+        x_local = x_global - panel.pos_x
 
         # 从连接拓扑确定螺母 Z 高度（每块横板一个高度，只取三合一连接）
         trinity_female_joints = [
             j for j in _joints_of(panel)
             if j.female_id == panel.label and j.face[1] == "x" and j.male_has_cam
         ]
+        rod_axis_offset = float(wheel.get("rod_axis_offset_mm", 9))
         if trinity_female_joints:
-            # 只在与横板接触的高度打螺母（1:1:1）
-            z_heights = sorted({round(j.male_z, 3) for j in trinity_female_joints})
+            # 螺母孔与连接杆轴线同高(cam_face + 偏心距)，而非板厚中心
+            z_heights = sorted({
+                round(self._rod_axis_z_from_joint(j, rod_axis_offset), 3)
+                for j in trinity_female_joints
+            })
         else:
             # fallback: 系统-32 全高排钻
             z_heights = [panel.pos_z + z for z in z_positions]
@@ -230,22 +230,30 @@ class TrinityConnector(Connector):
         r_depth = float(rod.get("insertion_depth_mm", 33))
         w_diam = float(wheel.get("diameter_mm", 12))
         w_depth = float(wheel.get("hole_depth_mm", 13.5))
-        z_center = panel.pos_z + panel.size_z / 2.0
+        # 连接杆轴线高度 = cam_face ± 偏心距(五金参数)，与板厚无关。
+        rod_axis_offset = float(wheel.get("rod_axis_offset_mm", 9))
         cam = panel.cam_face or ""
 
+        # cam_face 是偏心轮的可操作面：孔应落在该面所在的坐标。
+        # cam == "+z" → 顶面(z = pos_z + size_z)；cam == "-z" → 底面(z = pos_z)。
         if cam == "+z":
-            cam_z = panel.pos_z
-            cam_zl = 0.0
-        elif cam == "-z":
             cam_z = panel.pos_z + panel.size_z
             cam_zl = panel.size_z
+            rod_z = panel.pos_z + panel.size_z - rod_axis_offset
+            rod_zl = panel.size_z - rod_axis_offset
+        elif cam == "-z":
+            cam_z = panel.pos_z
+            cam_zl = 0.0
+            rod_z = panel.pos_z + rod_axis_offset
+            rod_zl = rod_axis_offset
         else:
             cam_z = panel.pos_z + panel.size_z
             cam_zl = panel.size_z
             cam = "+z"
+            rod_z = panel.pos_z + panel.size_z - rod_axis_offset
+            rod_zl = panel.size_z - rod_axis_offset
 
         rod_y_offsets = [nut_first, panel.size_y - nut_last]
-        cam_y_offsets = [cam_offset, panel.size_y - cam_offset]
 
         edge_signs = _male_edge_signs(panel)
         for sign in edge_signs:
@@ -253,32 +261,52 @@ class TrinityConnector(Connector):
                 x_global = panel.pos_x
                 x_local = 0.0
                 rod_sign = "+x"
+                # 偏心轮圆心距端面 cam_offset，沿连接杆伸入方向(向板内)
+                cam_x = panel.pos_x + cam_offset
+                cam_x_local = cam_offset
             else:
                 x_global = panel.pos_x + panel.size_x
                 x_local = panel.size_x
                 rod_sign = "-x"
+                cam_x = panel.pos_x + panel.size_x - cam_offset
+                cam_x_local = panel.size_x - cam_offset
 
             for y_offset in rod_y_offsets:
                 result.append(HoleSpec(
                     hole_type="system_32_male", panel_label=panel.label,
                     x_global=x_global,
                     y_global=panel.pos_y + y_offset,
-                    z_global=z_center,
-                    x_local=x_local, y_local=y_offset, z_local=panel.size_z / 2.0,
+                    z_global=rod_z,
+                    x_local=x_local, y_local=y_offset, z_local=rod_zl,
                     diameter=r_diam, depth=r_depth, direction=rod_sign,
                     is_face_hole=False, note="连接杆孔"))
 
-            for y_offset in cam_y_offsets:
+            for y_offset in rod_y_offsets:   # 偏心轮 y 与连接杆 y 一致
                 result.append(HoleSpec(
                     hole_type="system_32_female", panel_label=panel.label,
-                    x_global=x_global,
+                    x_global=cam_x,
                     y_global=panel.pos_y + y_offset,
                     z_global=cam_z,
-                    x_local=x_local, y_local=y_offset, z_local=cam_zl,
+                    x_local=cam_x_local, y_local=y_offset, z_local=cam_zl,
                     diameter=w_diam, depth=w_depth, direction=cam,
                     is_face_hole=True, note="偏心轮孔"))
 
         return result
+
+    @staticmethod
+    def _rod_axis_z_from_joint(joint: Any, rod_axis_offset: float) -> float:
+        """从连接拓扑反推连接杆轴线 Z（male 的 cam_face + 偏心距）。
+
+        旧数据无 male_cam_face/male_size_z 时，退回 male_z（板厚中心，旧行为）。
+        """
+        cam_face = getattr(joint, "male_cam_face", None)
+        size_z = getattr(joint, "male_size_z", 0.0)
+        if not cam_face or size_z <= 0:
+            return joint.male_z
+        # joint.male_z = male 板厚中心；cam_face 位置 = 中心 ± 板厚/2
+        if cam_face == "-z":
+            return (joint.male_z - size_z / 2.0) + rod_axis_offset
+        return (joint.male_z + size_z / 2.0) - rod_axis_offset
 
     # ── assembly-aware ──────────────────────────────────────────
 
@@ -326,14 +354,19 @@ class TrinityConnector(Connector):
         return merged
 
     def boms(self, panels: List[PanelRecord]) -> List[HardwareRecord]:
-        """生成三合一 BOM 清单。"""
+        """生成三合一 BOM 清单。
+
+        数量 = 实际生成的偏心轮孔数（孔即真源）。
+        一套三合一 = 1 偏心轮 + 1 连接杆 + 1 预埋螺母。
+        """
         matched = self.match(panels)
         brand = matched["brand"]
+        holes = self.generate_holes_for_panels(panels)
+        quantity = sum(1 for h in holes if h.hole_type == "system_32_female")
         return [HardwareRecord(
             name=self.name,
             spec="偏心轮φ12+预埋螺母φ10×11+连接杆φ8×33",
-            quantity=sum(len(self._system_32_positions(p, matched["rules"]))
-                         for p in matched["female"]) * 2,
+            quantity=quantity,
             unit="套", brand=brand.get("name", "默认"), model=brand.get("model", "SJY-01"))]
 
     def machining_operations(self, panel: PanelRecord) -> List[MachiningOperation]:

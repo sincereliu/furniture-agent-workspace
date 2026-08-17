@@ -1,5 +1,44 @@
 # 更新日志
 
+## 20260817.1 — 三合一几何正确性修复 + 孔即真源 + 铰链局部坐标化
+
+### 三合一孔位几何修正（connectors/trinity.py, joint_topology.py, hardware_catalog.yaml）
+
+- 偏心轮孔 cam_face 坐标映射反转修复：`cam_face="+z"` 落在顶面、`"-z"` 落在底面（原先写反）。
+- 连接杆孔/预埋螺母孔高度从"板厚中心"改为"偏心距驱动"：新增 `rod_axis_offset_mm: 9`（连接杆轴线到偏心轮安装面的距离），25mm 板下不再错位。
+- 偏心轮圆心修正：沿连接杆方向(x)距端面 `center_offset_from_edge_mm`(33.5)，深度方向(y)与连接杆同排（原先 33.5 被误用在深度方向）。
+- `PanelJoint` 新增 `male_cam_face`/`male_size_z`，供制造阶段由 cam_face + 偏心距反推连接杆轴线高度。
+
+### 孔即真源（connectors/trinity.py, validation.py）
+
+- 三合一 BOM 数量从"系统 32 排钻估算"改为"统计实际生成的偏心轮孔数"，消灭数量≠孔数。
+- 新增校验：三合一数量必须等于偏心轮孔数。
+
+### 几何接口地基（manufacturing_models.py）
+
+- `PanelRecord` 新增 `face_position`/`extent`/`center_along`/`to_global`/`to_local`，为局部坐标化与异形内核铺路。
+
+### 铰链目录精简（hardware_catalog.yaml, hardware_rules.yaml, hinge.py）
+
+- 铰链规格从 13 种（国内/进口 × 全盖/半盖/内嵌，共 11 品牌）精简为 1 个默认 `35mm杯全盖 100°`。
+- `cup_by_variant_group` 同步精简为单个 `35mm杯全盖`。
+
+### 铰链局部坐标化（connectors/hinge.py）
+
+- 杯孔生成从"先算全局、再反推局部"反转为"先在局部定义、`to_global` 派生"，局部坐标成为唯一真源。
+
+### 文档与测试
+
+- `manufacturing-rules.md` 三合一偏心轮规则与铰链"国产全盖"措辞同步。
+- `test_recent_manufacturing_patches.py` 三合一偏心轮 x/y 断言更新。
+
+### 遗留（待五金类目讨论）
+
+- `hinge_brand/hinge_variant/hinge_overlay/hinge_angle` 参数成为死接口（catalog 已精简，连接件不消费）。
+- `bore_distance_mm` 仍为死配置。
+
+---
+
 ## 20260814.1 — 房间坐标 Y 轴约定统一
 
 - 房间坐标 Y 轴从"向北"调整为"向南"（俯视朝下），原点从"西南角"改为"西北角"。
