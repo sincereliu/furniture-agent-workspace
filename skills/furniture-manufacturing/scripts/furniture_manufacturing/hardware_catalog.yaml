@@ -27,28 +27,6 @@ three_in_one:
       - name: 默认
         model: SJY-01
 
-# ── 背板与背拉条紧固件（软件暂定，投产前确认）─────────────
-back_fasteners:
-  cover_back_screw:
-    variant_group: 外盖背板周边螺钉
-    fastener_type: 沉头木螺钉
-    diameter_mm: 4
-    length_mm: 30
-    note: 外盖背板穿透背板后固定到柜体四周
-    brands:
-      - name: 默认
-        model: GB-COVER-4030
-
-  back_rail_screw:
-    variant_group: 背拉条端部螺钉
-    fastener_type: 沉头木螺钉
-    diameter_mm: 4
-    length_mm: 40
-    note: 从左右侧板外侧固定背拉条端部
-    brands:
-      - name: 默认
-        model: GB-RAIL-4040
-
 # ── 活动层板连接件 ────────────────────────────────────────
 shelf_connectors:
   二合一:

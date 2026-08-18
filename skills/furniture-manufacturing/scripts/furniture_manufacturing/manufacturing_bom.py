@@ -296,10 +296,6 @@ _COLOR_LEGEND = {
     "back_insert_cam": {"color": "#8E44AD", "label": "内嵌背板偏心轮孔"},
     "back_insert_rod": {"color": "#9B59B6", "label": "内嵌背板连接杆孔"},
     "back_insert_pre_nut": {"color": "#6C3483", "label": "内嵌背板预埋螺母孔"},
-    "cover_back_clearance": {"color": "#16A085", "label": "外盖背板螺钉通孔"},
-    "cover_back_pilot": {"color": "#48C9B0", "label": "外盖背板螺钉预孔"},
-    "back_rail_side_clearance": {"color": "#2E86C1", "label": "背拉条侧板通孔"},
-    "back_rail_pilot": {"color": "#85C1E9", "label": "背拉条端部预孔"},
 }
 
 

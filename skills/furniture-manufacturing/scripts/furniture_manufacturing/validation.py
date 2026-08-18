@@ -350,22 +350,7 @@ def validate_manufacturing(
                 "back_insert_pre_nut",
             ),
         ),
-        "cover": (
-            "沉头木螺钉（外盖背板）",
-            (
-                "cover_back_clearance",
-                "cover_back_pilot",
-            ),
-        ),
     }
-    if back_mount == "groove" and rails:
-        manufacturing_contracts["groove"] = (
-            "沉头木螺钉（背拉条）",
-            (
-                "back_rail_side_clearance",
-                "back_rail_pilot",
-            ),
-        )
     contract = manufacturing_contracts.get(back_mount)
     if contract is not None:
         hardware_name, required_hole_types = contract

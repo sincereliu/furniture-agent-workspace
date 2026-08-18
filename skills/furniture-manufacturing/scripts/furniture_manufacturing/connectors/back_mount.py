@@ -1,8 +1,7 @@
-"""背板安装连接件 — 支持内嵌、外盖、槽装三种模式。
+"""背板安装连接件 — 内嵌背板四边三合一。
 
-内嵌模式：背板四边三合一（偏心轮 + 连接杆 + 预埋螺母）。
-外盖模式：背板沿周边用沉头木螺钉固定。
-槽装模式：背板拉条端部用螺钉连接侧板。
+外盖(cover)与背拉条(groove)的螺钉连接属于组装现场工艺，
+不在柜体加工范围内，不生成孔位与五金。
 """
 
 from __future__ import annotations
@@ -21,15 +20,13 @@ from furniture_manufacturing.manufacturing_models import (
 class BackMountConnector(Connector):
     """背板安装连接件。
 
-    根据 back_mount 模式生成对应的成对连接孔：
-    - insert: 四边三合一（背板偏心轮孔 + 连接杆通道 + 柜体预埋螺母孔）
-    - cover: 周边沉头螺钉（背板通孔 + 柜体预孔）
-    - groove: 背拉条端部螺钉（侧板通孔 + 拉条预孔）
+    仅 insert 模式生成四边三合一（背板偏心轮孔 + 连接杆通道 + 柜体预埋螺母孔）。
+    cover/groove 的螺钉孔与五金属于组装现场工艺，不加工、不出 BOM。
     """
 
     name = "背板安装连接件"
     hole_type_for_json = "back_mount"
-    catalog_entry = "back_fasteners"
+    catalog_entry = "three_in_one"
     rules_section = "back_mount_drilling"
 
     def match(self, panels: List[PanelRecord]) -> Dict[str, Any]:
@@ -57,108 +54,37 @@ class BackMountConnector(Connector):
         mode = self._mode(panels)
         if mode == "insert":
             return self._insert_holes(panels)
-        if mode == "cover":
-            return self._cover_holes(panels)
-        if mode == "groove":
-            return self._back_rail_holes(panels)
         return []
 
     def boms(self, panels: List[PanelRecord]) -> List[HardwareRecord]:
         mode = self._mode(panels)
+        if mode != "insert":
+            return []
         holes = self.generate_holes_for_panels(panels)
-        if mode == "insert":
-            quantity = self._hole_count(holes, "back_insert_cam")
-            if quantity <= 0:
-                return []
-            spec = self.catalog.get("three_in_one", {}).get("标准", {})
-            brand = (spec.get("brands", [{}]) or [{}])[0]
-            return [
-                HardwareRecord(
-                    name="三合一连接件（内嵌背板）",
-                    spec="偏心轮φ12+预埋螺母φ10×11+连接杆φ8×33",
-                    quantity=quantity,
-                    unit="套",
-                    brand=brand.get("name", "默认"),
-                    model=brand.get("model", "SJY-01"),
-                    note="按四边连接点估算，投产前确认连接点数量",
-                    drilling=[
-                        {"hole_type": "back_insert_cam", "quantity": quantity},
-                        {"hole_type": "back_insert_rod", "quantity": quantity},
-                        {
-                            "hole_type": "back_insert_pre_nut",
-                            "quantity": quantity,
-                        },
-                    ],
-                )
-            ]
-        if mode == "cover":
-            quantity = self._hole_count(holes, "cover_back_clearance")
-            if quantity <= 0:
-                return []
-            item = self.catalog.get("back_fasteners", {}).get(
-                "cover_back_screw",
-                {},
+        quantity = self._hole_count(holes, "back_insert_cam")
+        if quantity <= 0:
+            return []
+        spec = self.catalog.get("three_in_one", {}).get("标准", {})
+        brand = (spec.get("brands", [{}]) or [{}])[0]
+        return [
+            HardwareRecord(
+                name="三合一连接件（内嵌背板）",
+                spec="偏心轮φ12+预埋螺母φ10×11+连接杆φ8×33",
+                quantity=quantity,
+                unit="套",
+                brand=brand.get("name", "默认"),
+                model=brand.get("model", "SJY-01"),
+                note="按四边连接点估算，投产前确认连接点数量",
+                drilling=[
+                    {"hole_type": "back_insert_cam", "quantity": quantity},
+                    {"hole_type": "back_insert_rod", "quantity": quantity},
+                    {
+                        "hole_type": "back_insert_pre_nut",
+                        "quantity": quantity,
+                    },
+                ],
             )
-            brand = (item.get("brands", [{}]) or [{}])[0]
-            diameter = float(item.get("diameter_mm", 4))
-            length = float(item.get("length_mm", 30))
-            return [
-                HardwareRecord(
-                    name="沉头木螺钉（外盖背板）",
-                    spec=f"{diameter:g}×{length:g}mm",
-                    quantity=quantity,
-                    unit="颗",
-                    brand=brand.get("name", "默认"),
-                    model=brand.get("model", "GB-COVER-4030"),
-                    note="软件暂定周边螺钉方案，投产前确认规格与间距",
-                    drilling=[
-                        {
-                            "hole_type": "cover_back_clearance",
-                            "quantity": quantity,
-                        },
-                        {
-                            "hole_type": "cover_back_pilot",
-                            "quantity": quantity,
-                        },
-                    ],
-                )
-            ]
-        if mode == "groove":
-            quantity = self._hole_count(
-                holes,
-                "back_rail_side_clearance",
-            )
-            if quantity <= 0:
-                return []
-            item = self.catalog.get("back_fasteners", {}).get(
-                "back_rail_screw",
-                {},
-            )
-            brand = (item.get("brands", [{}]) or [{}])[0]
-            diameter = float(item.get("diameter_mm", 4))
-            length = float(item.get("length_mm", 40))
-            return [
-                HardwareRecord(
-                    name="沉头木螺钉（背拉条）",
-                    spec=f"{diameter:g}×{length:g}mm",
-                    quantity=quantity,
-                    unit="颗",
-                    brand=brand.get("name", "默认"),
-                    model=brand.get("model", "GB-RAIL-4040"),
-                    note="软件暂定端部螺钉方案，投产前确认规格与孔位",
-                    drilling=[
-                        {
-                            "hole_type": "back_rail_side_clearance",
-                            "quantity": quantity,
-                        },
-                        {
-                            "hole_type": "back_rail_pilot",
-                            "quantity": quantity,
-                        },
-                    ],
-                )
-            ]
-        return []
+        ]
 
     def machining_operations(
         self,
@@ -309,178 +235,6 @@ class BackMountConnector(Connector):
             )
         return result
 
-    def _cover_holes(self, panels: List[PanelRecord]) -> List[HoleSpec]:
-        """外盖背板：周边沉头螺钉成对孔。"""
-        by_label = {panel.label: panel for panel in panels}
-        back = by_label.get("back_panel")
-        if back is None:
-            return []
-        rules = self.rules.get("back_mount_drilling", {}).get("cover", {})
-        first = float(rules.get("first_hole_mm", 50))
-        max_spacing = float(rules.get("max_spacing_mm", 200))
-        clearance_diameter = float(
-            rules.get("clearance_hole_diameter_mm", 4.5)
-        )
-        pilot_diameter = float(rules.get("pilot_hole_diameter_mm", 3))
-        pilot_depth = float(rules.get("pilot_depth_mm", 20))
-        targets = [
-            by_label.get("left_side_panel"),
-            by_label.get("right_side_panel"),
-            by_label.get("top_panel"),
-            by_label.get("bottom_panel"),
-        ]
-        result: List[HoleSpec] = []
-
-        def add_screw(
-            target: PanelRecord | None,
-            x_global: float,
-            z_global: float,
-        ) -> None:
-            if target is None:
-                return
-            result.append(
-                self._hole(
-                    back,
-                    "cover_back_clearance",
-                    x_global,
-                    back.pos_y,
-                    z_global,
-                    clearance_diameter,
-                    back.size_y,
-                    "+y",
-                    f"外盖背板至{target.name}的螺钉通孔",
-                    is_face_hole=True,
-                )
-            )
-            result.append(
-                self._hole(
-                    target,
-                    "cover_back_pilot",
-                    x_global,
-                    target.pos_y,
-                    z_global,
-                    pilot_diameter,
-                    min(pilot_depth, target.size_y),
-                    "+y",
-                    f"{target.name}外盖背板螺钉预孔",
-                    is_face_hole=True,
-                )
-            )
-
-        for target in targets[:2]:
-            if target is None:
-                continue
-            x_global = target.pos_x + target.size_x / 2
-            for z_local in self._spaced_positions(
-                target.size_z,
-                first,
-                max_spacing,
-            ):
-                add_screw(target, x_global, target.pos_z + z_local)
-        for target in targets[2:]:
-            if target is None:
-                continue
-            z_global = target.pos_z + target.size_z / 2
-            for x_local in self._spaced_positions(
-                target.size_x,
-                first,
-                max_spacing,
-            ):
-                add_screw(target, target.pos_x + x_local, z_global)
-        return result
-
-    def _back_rail_holes(
-        self,
-        panels: List[PanelRecord],
-    ) -> List[HoleSpec]:
-        """槽装背板：背拉条端部螺钉成对孔。
-
-        左右侧板通孔 + 拉条两端预孔，每端 count_per_end 个。
-        """
-        by_label = {panel.label: panel for panel in panels}
-        left = by_label.get("left_side_panel")
-        right = by_label.get("right_side_panel")
-        rails = [
-            panel for panel in panels if panel.panel_type == "back_rail"
-        ]
-        if left is None or right is None or not rails:
-            return []
-        rules = self.rules.get("back_mount_drilling", {}).get("back_rail", {})
-        count_per_end = int(rules.get("count_per_end", 2))
-        end_offset = float(rules.get("end_offset_mm", 20))
-        clearance_diameter = float(
-            rules.get("clearance_hole_diameter_mm", 4.5)
-        )
-        pilot_diameter = float(rules.get("pilot_hole_diameter_mm", 3))
-        pilot_depth = float(rules.get("pilot_depth_mm", 20))
-        result: List[HoleSpec] = []
-
-        for rail in rails:
-            y_global = rail.pos_y + rail.size_y / 2
-            for z_local in self._fixed_count_positions(
-                rail.size_z,
-                count_per_end,
-                end_offset,
-            ):
-                z_global = rail.pos_z + z_local
-                result.append(
-                    self._hole(
-                        left,
-                        "back_rail_side_clearance",
-                        left.pos_x,
-                        y_global,
-                        z_global,
-                        clearance_diameter,
-                        left.size_x,
-                        "+x",
-                        f"左侧板至{rail.name}的螺钉通孔",
-                        is_face_hole=True,
-                    )
-                )
-                result.append(
-                    self._hole(
-                        rail,
-                        "back_rail_pilot",
-                        rail.pos_x,
-                        y_global,
-                        z_global,
-                        pilot_diameter,
-                        min(pilot_depth, rail.size_x / 2),
-                        "+x",
-                        f"{rail.name}左端预孔",
-                        is_face_hole=False,
-                    )
-                )
-                result.append(
-                    self._hole(
-                        right,
-                        "back_rail_side_clearance",
-                        right.pos_x + right.size_x,
-                        y_global,
-                        z_global,
-                        clearance_diameter,
-                        right.size_x,
-                        "-x",
-                        f"右侧板至{rail.name}的螺钉通孔",
-                        is_face_hole=True,
-                    )
-                )
-                result.append(
-                    self._hole(
-                        rail,
-                        "back_rail_pilot",
-                        rail.pos_x + rail.size_x,
-                        y_global,
-                        z_global,
-                        pilot_diameter,
-                        min(pilot_depth, rail.size_x / 2),
-                        "-x",
-                        f"{rail.name}右端预孔",
-                        is_face_hole=False,
-                    )
-                )
-        return result
-
     @staticmethod
     def _mode(panels: List[PanelRecord]) -> str:
         """从面板列表中提取统一的背板安装模式。"""
@@ -508,27 +262,6 @@ class BackMountConnector(Connector):
         return [
             edge_offset + usable * index / intervals
             for index in range(intervals + 1)
-        ]
-
-    @staticmethod
-    def _fixed_count_positions(
-        length: float,
-        count: int,
-        edge_offset: float,
-    ) -> List[float]:
-        if length <= 0 or count <= 0:
-            return []
-        if count == 1:
-            return [length / 2]
-        if length <= 2 * edge_offset:
-            return [
-                length * (index + 1) / (count + 1)
-                for index in range(count)
-            ]
-        usable = length - 2 * edge_offset
-        return [
-            edge_offset + usable * index / (count - 1)
-            for index in range(count)
         ]
 
     @staticmethod

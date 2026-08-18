@@ -177,7 +177,7 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
             {issue.code for issue in report.issues},
         )
 
-    def test_emitted_panels_include_type_and_safe_screw_clearance(self) -> None:
+    def test_emitted_panels_include_type_and_no_screw_holes(self) -> None:
         spec = FurnitureSpec(
             furniture_type="floor_cabinet",
             width=800,
@@ -193,20 +193,19 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
         self.assertTrue(
             all(panel.get("panel_type") for panel in drilled["panels"])
         )
-        clearance_holes = [
+        # 螺钉孔为组装现场工艺，不应出现在柜体加工孔位中
+        screw_holes = [
             hole
             for panel in drilled["panels"]
             for hole in panel["holes"]
             if hole["hole_type"] in {
                 "cover_back_clearance",
+                "cover_back_pilot",
                 "back_rail_side_clearance",
+                "back_rail_pilot",
             }
         ]
-        self.assertTrue(clearance_holes)
-        self.assertEqual(
-            {hole["diameter"] for hole in clearance_holes},
-            {4.5},
-        )
+        self.assertEqual(screw_holes, [])
 
     def test_dynamic_panel_labels_stay_in_panel_step_group(self) -> None:
         groups = _build_grouped_geometry(

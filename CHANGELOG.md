@@ -32,6 +32,18 @@
 - `manufacturing-rules.md` 三合一偏心轮规则与铰链"国产全盖"措辞同步。
 - `test_recent_manufacturing_patches.py` 三合一偏心轮 x/y 断言更新。
 
+### 背板螺钉删除（组装现场工艺，不加工）
+
+- cover 外盖螺钉与 groove 背拉条螺钉的孔位（clearance 通孔 + pilot 预孔）与五金 BOM 全部删除——它们是组装现场工艺，非柜体加工。
+- `BackMountConnector` 只保留 insert 内嵌背板四边三合一；catalog 删除 `back_fasteners`，rules 删除 cover/back_rail 打孔规则。
+
+### 坐标命名约定（references/coordinate-naming.md）
+
+- 新增命名约定文档：三层坐标 panel/cabinet/world，`对象_参考系_轴` 命名规则，
+  `hole_x`/`hole_cabinet_x`/`panel_cabinet_x`/`panel_world_x`/`cabinet_world_x` 五层量，
+  以及圆心=入口面圆心、direction=钻入方向、废弃 `global` 等约定。
+- 现有代码字段未动，按"搭车改、不单独改"策略，待 P3 局部坐标化/direction 统一/2.5D 时落地。
+
 ### 遗留（待五金类目讨论）
 
 - `hinge_brand/hinge_variant/hinge_overlay/hinge_angle` 参数成为死接口（catalog 已精简，连接件不消费）。

@@ -41,8 +41,6 @@ HOLE_GROUP_MAP = {
     "system_32_male":       "连接杆孔",
     "system_32_pre_nut":    "预埋螺母孔",
     "hinge":                "铰链孔位",
-    "back_rail_side_clearance": "背拉条孔位",
-    "back_rail_pilot":      "背拉条孔位",
     "shelf_connector":      "层板孔位",
 }
 

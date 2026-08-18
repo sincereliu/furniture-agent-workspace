@@ -161,28 +161,20 @@ class BackMountModeTests(unittest.TestCase):
                     self.assertEqual(operation_ids, set())
 
     def test_all_modes_emit_mount_specific_manufacturing_semantics(self) -> None:
-        expected_contracts = {
-            "groove": (
-                "沉头木螺钉（背拉条）",
-                ("back_rail_side_clearance", "back_rail_pilot"),
-            ),
-            "insert": (
-                "三合一连接件（内嵌背板）",
-                (
-                    "back_insert_cam",
-                    "back_insert_rod",
-                    "back_insert_pre_nut",
-                ),
-            ),
-            "cover": (
-                "沉头木螺钉（外盖背板）",
-                ("cover_back_clearance", "cover_back_pilot"),
-            ),
+        # insert 有三合一五金与成对孔；cover/groove 的螺钉为组装现场工艺，无五金无孔
+        insert_contract = (
+            "三合一连接件（内嵌背板）",
+            ("back_insert_cam", "back_insert_rod", "back_insert_pre_nut"),
+        )
+        screw_names = {"沉头木螺钉（外盖背板）", "沉头木螺钉（背拉条）"}
+        screw_hole_types = {
+            "cover_back_clearance",
+            "cover_back_pilot",
+            "back_rail_side_clearance",
+            "back_rail_pilot",
         }
 
-        for back_mount, (hardware_name, required_holes) in (
-            expected_contracts.items()
-        ):
+        for back_mount in ("insert", "cover", "groove"):
             with self.subTest(back_mount=back_mount):
                 spec = self._spec(back_mount)
                 layout = plan_layout(spec)
@@ -210,27 +202,40 @@ class BackMountModeTests(unittest.TestCase):
                         {"四边": "ABS 1.0mm同色"},
                     )
 
-                hardware = next(
-                    item
-                    for item in bom.hardware
-                    if item.name == hardware_name
-                )
-                self.assertGreater(hardware.quantity, 0)
-                self.assertIn("投产前确认", hardware.note)
-
                 drilled = emit_drilled_holes(bom)
                 holes = [
                     hole
                     for panel in drilled["panels"]
                     for hole in panel["holes"]
                 ]
-                counts = {
-                    hole_type: sum(
-                        hole["hole_type"] == hole_type for hole in holes
+
+                if back_mount == "insert":
+                    hardware_name, required_holes = insert_contract
+                    hardware = next(
+                        item
+                        for item in bom.hardware
+                        if item.name == hardware_name
                     )
-                    for hole_type in required_holes
-                }
-                self.assertEqual(set(counts.values()), {hardware.quantity})
+                    self.assertGreater(hardware.quantity, 0)
+                    self.assertIn("投产前确认", hardware.note)
+                    counts = {
+                        hole_type: sum(
+                            hole["hole_type"] == hole_type for hole in holes
+                        )
+                        for hole_type in required_holes
+                    }
+                    self.assertEqual(set(counts.values()), {hardware.quantity})
+                else:
+                    # cover/groove 的螺钉为组装现场工艺，不出五金、不出孔
+                    self.assertFalse(
+                        any(item.name in screw_names for item in bom.hardware)
+                    )
+                    self.assertFalse(
+                        any(
+                            hole["hole_type"] in screw_hole_types
+                            for hole in holes
+                        )
+                    )
 
                 for panel in drilled["panels"]:
                     box = panel["box"]

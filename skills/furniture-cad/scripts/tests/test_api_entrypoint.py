@@ -187,13 +187,9 @@ class ApiEntrypointTests(unittest.TestCase):
     def test_plan_endpoint_returns_each_back_mount_manufacturing_contract(
         self,
     ) -> None:
+        # cover/groove 的螺钉为组装现场工艺：无螺钉五金、无螺钉孔
         contracts = {
-            "groove": (
-                9,
-                "沉头木螺钉（背拉条）",
-                {"back_rail_side_clearance", "back_rail_pilot"},
-                4,
-            ),
+            "groove": (9, None, set(), 4),
             "insert": (
                 18,
                 "三合一连接件（内嵌背板）",
@@ -204,12 +200,14 @@ class ApiEntrypointTests(unittest.TestCase):
                 },
                 0,
             ),
-            "cover": (
-                9,
-                "沉头木螺钉（外盖背板）",
-                {"cover_back_clearance", "cover_back_pilot"},
-                0,
-            ),
+            "cover": (9, None, set(), 0),
+        }
+        screw_names = {"沉头木螺钉（外盖背板）", "沉头木螺钉（背拉条）"}
+        screw_hole_types = {
+            "cover_back_clearance",
+            "cover_back_pilot",
+            "back_rail_side_clearance",
+            "back_rail_pilot",
         }
 
         for back_mount, (
@@ -252,14 +250,22 @@ class ApiEntrypointTests(unittest.TestCase):
                     else {"四边": "ABS 1.0mm同色"},
                 )
 
-                hardware = next(
-                    item
-                    for item in response.hardware
-                    if item.name == hardware_name
-                )
-                self.assertGreater(hardware.quantity, 0)
-                self.assertIn("投产前确认", hardware.note)
-                self.assertTrue(hardware.drilling)
+                if hardware_name is None:
+                    self.assertFalse(
+                        any(
+                            item.name in screw_names
+                            for item in response.hardware
+                        )
+                    )
+                else:
+                    hardware = next(
+                        item
+                        for item in response.hardware
+                        if item.name == hardware_name
+                    )
+                    self.assertGreater(hardware.quantity, 0)
+                    self.assertIn("投产前确认", hardware.note)
+                    self.assertTrue(hardware.drilling)
 
                 hole_types = {
                     hole.hole_type
@@ -267,6 +273,7 @@ class ApiEntrypointTests(unittest.TestCase):
                     for hole in panel.holes
                 }
                 self.assertTrue(required_holes.issubset(hole_types))
+                self.assertFalse(screw_hole_types & hole_types)
                 self.assertEqual(
                     len(response.operations),
                     expected_operation_count,
