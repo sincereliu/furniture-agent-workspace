@@ -119,13 +119,6 @@ class CabinetRequest(BaseModel):
     toe_kick_reveal_front: float | None = Field(default=None, ge=0, description="前踢脚板后缩 mm")
     toe_kick_reveal_back: float | None = Field(default=None, ge=0, description="后踢脚板前移 mm")
     toe_kick_support_count: int | None = Field(default=None, ge=0, description="踢脚支撑板数量；空值为自动")
-    hinge_brand: str | None = Field(default=None, description="制造阶段铰链品牌偏好")
-    hinge_variant: str | None = Field(default=None, description="制造阶段铰链规格偏好")
-    hinge_overlay: Literal["full", "half", "inset"] | None = Field(
-        default=None,
-        description="制造阶段门板盖法偏好",
-    )
-    hinge_angle: int | None = Field(default=None, gt=0, description="制造阶段铰链开启角度")
     appearance: dict[str, Any] = Field(
         default_factory=dict,
         description="制造阶段使用的饰面和外观偏好",

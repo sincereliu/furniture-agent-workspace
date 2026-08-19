@@ -63,7 +63,6 @@ hinge_drilling:
     35mm杯全盖:
       cup_diameter_mm: 35
       cup_depth_mm: 13
-      bore_distance_mm: 3     # 杯孔中心到门边的距离
 
   # ── 避让规则 ──
   conflict_avoidance:

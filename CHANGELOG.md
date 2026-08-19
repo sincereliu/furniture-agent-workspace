@@ -1,5 +1,31 @@
 # 更新日志
 
+## 20260819.2 — 铰链死接口清理（五金类目决策：路线 B）
+
+经五金类目讨论拍板，采纳路线 B（整体移除）：`hinge_brand / hinge_variant / hinge_overlay / hinge_angle` 四个参数自 20260817.1 精简目录后已成死接口（API/适配器接受并回显，`HingeConnector` 不消费），删除以消除"收了不生效"的静默失效风险。决策依据见 `temp/hardware-category-decision/PROPOSAL.md`。
+
+### 移除点
+
+- `server.py`：删除 `CabinetRequest` 四个铰链偏好字段（`hinge_brand/hinge_variant/hinge_overlay/hinge_angle`）。
+- `input_adapter.py`：`MANUFACTURING_SPEC_FIELDS` 仅保留 `options`。
+- `workflow_project.py`：`_legacy_stage_inputs` 制造搬运白名单仅保留 `options`。
+- `manufacturing_bom.py`：`MANUFACTURING_OPTION_FIELDS` 仅保留 `options`。
+- `hardware_rules.yaml`：删除 `bore_distance_mm` 注释残留（杯孔边距由 `edge_offset_mm + cup_diameter/2` 现算，无消费方）。
+- `test_furniture_orchestrator.py`：删除 `test_input_adapter_routes_hinge_preferences_to_manufacturing`（只测回显、语义已死）。
+
+### 影响
+
+- 孔位/BOM/六面钻 XML 零变化（死字段本就无消费；探针已验证磁盘产物与代码一致）。
+- 铰链仍为单一默认 `35mm杯全盖 100° full`（`hardware_catalog.yaml` 不变）。
+- 未来如需多盖法/品牌：按经验层设计（`temp/experience-layer-design/DESIGN.md` §6.3 候选-拍板）以真参数形态回归，品牌经 `factory_profile.yaml` 厂规注入。
+
+### 遗留（完整总账见 `temp/hardware-category-decision/PENDING.md`）
+
+- 路线 B 改动**未提交**（7 文件在工作树，待 review 后 commit）。
+- 四边盖值模型（铰链边+三边）讨论中：已共识"铰链边为主、默认联动、先做第 1 层"；宽度口径/对开门中缝/铰链型号映射/特殊角度排除 4 点待拆单员拍板。
+- 经验层 `temp/experience-layer-design/` DESIGN.md 待评审 + 5 个开放问题 + EXPERIENCE-CHECKLIST 8 类厂规待填。
+- `direction` 语义统一与坐标字段改名：按策略 P3 搭车改，不单独动。
+
 ## 20260817.1 — 三合一几何正确性修复 + 孔即真源 + 铰链局部坐标化
 
 ### 三合一孔位几何修正（connectors/trinity.py, joint_topology.py, hardware_catalog.yaml）

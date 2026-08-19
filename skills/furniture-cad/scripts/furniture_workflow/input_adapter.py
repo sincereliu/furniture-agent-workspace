@@ -12,10 +12,6 @@ LAYOUT_SPEC_FIELDS = frozenset({"shelf_count", "n_doors", "door_count"})
 LAYOUT_CONTEXT_FIELDS = frozenset({"room", "placement"})
 MANUFACTURING_SPEC_FIELDS = frozenset(
     {
-        "hinge_brand",
-        "hinge_variant",
-        "hinge_overlay",
-        "hinge_angle",
         "options",
     }
 )

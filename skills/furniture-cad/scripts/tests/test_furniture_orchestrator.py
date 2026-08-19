@@ -620,30 +620,6 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         self.assertEqual(panel_output["spec"]["board_thickness"], 18.0)
         self.assertEqual(panel_output["structure"]["back_mount"], "groove")
 
-    def test_input_adapter_routes_hinge_preferences_to_manufacturing(self) -> None:
-        request = {
-            "type": "floor_cabinet",
-            "width": 800,
-            "depth": 600,
-            "height": 1000,
-            "hinge_brand": "DTC",
-            "hinge_variant": "国产35mm杯全盖",
-            "hinge_overlay": "half",
-            "hinge_angle": 110,
-        }
-        inputs = stage_inputs_from_spec(request)
-        self.assertEqual(inputs["manufacturing"]["parameters"]["hinge_brand"], "DTC")
-        result = self.orchestrator.execute_spec(
-            "五金偏好柜体",
-            {
-                **request,
-            },
-            through_stage=WorkflowStage.MANUFACTURING_PLANNED,
-        )
-        requested = result.revision.stage_outputs["manufacturing_planned"]["requested_options"]
-        self.assertEqual(requested["hinge_brand"], "DTC")
-        self.assertEqual(requested["hinge_overlay"], "half")
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -35,10 +35,6 @@ MANUFACTURING_READINESS_LABELS = {
 
 MANUFACTURING_OPTION_FIELDS = frozenset(
     {
-        "hinge_brand",
-        "hinge_variant",
-        "hinge_overlay",
-        "hinge_angle",
         "options",
     }
 )

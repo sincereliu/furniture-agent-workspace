@@ -171,10 +171,6 @@ def _legacy_stage_inputs(raw_intent: dict[str, Any]) -> dict[str, Any]:
     layout = dict(raw_intent.get("layout", {}))
     structure = dict(raw_intent.get("structure", {}))
     manufacturing_keys = {
-        "hinge_brand",
-        "hinge_variant",
-        "hinge_overlay",
-        "hinge_angle",
         "options",
     }
     manufacturing = {
