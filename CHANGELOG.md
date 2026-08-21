@@ -1,5 +1,60 @@
 # 更新日志
 
+## 20260822.3 — direction 语义统一为钻入方向
+
+`HoleSpec.direction` 统一为"钻入方向（往板内）"（`coordinate-naming.md` 约定），
+消除"杯孔/偏心轮存面朝向、螺母/杆存钻入方向"的混合语义。
+
+### 改动点
+
+- `connectors/hinge.py`：杯孔 direction 从 `inner_face`（面朝向）改为 `_opposite(inner_face)`（钻入方向），新增 `_opposite` 助手。
+- `connectors/trinity.py`：偏心轮孔 direction 从 `cam_face` 改为 `_opposite(cam_face)`。
+- `furniture_panel_planning/panel_face.py`：`cup_direction`/`cam_direction` 语义同步改为钻入方向（该辅助当前无调用方，纯语义定义修正）。
+- `validation.py`：铰链方向校验改为 `hole["direction"] != _opposite(panel.inner_face)`。
+- 测试：`test_recent_manufacturing_patches.py` 铰链方向断言 `-y → +y`（1 处）。
+- 文档：`coordinate-naming.md` ⚠"待落地"→✅"已统一"、`manufacturing-rules.md`、`SKILL.md` 方向措辞同步。
+
+### 验证
+
+- 3 柜型（地柜 cover/insert + 吊柜）JSON diff 仅 direction 翻转（cam `-z→+z`、铰链 `-y→+y`），其余字段逐字相同。
+- GLB 孔位标记网格顶点多重集逐点相等——几何零变化，产物差异仅为旋转表示。
+- 六面钻 XML/Quadrant 零影响（Quadrant 仅用于边孔，边孔方向本就为钻入方向）。
+- 47 项测试通过。
+
+### 遗留
+
+- 前端 Viewer 是否消费 `drilled-holes.json` 的 `direction` 字段待确认（GUI 代码不在本仓库）。
+
+## 20260822.2 — 记录连接点级实体需求（待评审提案）
+
+记录"连接点作为整体增删"的需求，**未立项、未实施**。
+
+### 内容
+
+- 新增 `skills/furniture-manufacturing/references/connection-point-design.md`：背景（杆/轮/螺母配对为几何隐式约定）、现状行为表（删轮孔被拦、删杆孔静默孤儿、背板 1:1:1 拦截）、需求 4 条（整体增删、按连接点校验、配对显式化、machining id 去重）、实施建议与验收标准。
+- `SKILL.md` connectors 步骤加指引行，标注"实施前需评审"。
+
+## 20260822.1 — 三合一/背板/层板孔位局部坐标化
+
+孔位先在面板局部坐标定义（局部为唯一真源），世界坐标统一由 `to_global` 派生
+（当前轴对齐：仅平移）。不涉及字段改名（按"搭车改、不单独改"）。
+
+### 改动点
+
+- `connectors/trinity.py`：`_female_holes` 螺母孔 Z 先算局部（joint 高度 − `panel.pos_z`），删除 `x_local = x_global - panel.pos_x` 反推；`_male_holes` 世界坐标全部由 `to_global` 派生，删掉手工并行计算；保留旧发射顺序（先全部杆孔再全部轮孔）。
+- `connectors/back_mount.py`：连接点以背板局部坐标为锚，配合板按同一世界点折算到各自局部坐标；`_hole` 改为收局部坐标、内部统一 `to_global`。
+- `connectors/shelf.py`：层板托孔局部优先，世界由 `to_global` 派生。
+
+### 验证
+
+- 4 柜型（地柜 cover/insert/groove + 吊柜）改前/改后孔位 JSON 快照**字节级一致**（244578 字节）。
+- 所有孔位满足 `world == to_global(local)`。
+- 41 项测试通过。
+
+### 遗留
+
+- 字段改名（`x_local → hole_x` 等）：`coordinate-naming.md` P3 触发条件现已满足，仍按"搭车改、不单独改"等待下游需求。
+
 ## 20260819.2 — 铰链死接口清理（五金类目决策：路线 B）
 
 经五金类目讨论拍板，采纳路线 B（整体移除）：`hinge_brand / hinge_variant / hinge_overlay / hinge_angle` 四个参数自 20260817.1 精简目录后已成死接口（API/适配器接受并回显，`HingeConnector` 不消费），删除以消除"收了不生效"的静默失效风险。决策依据见 `temp/hardware-category-decision/PROPOSAL.md`。
