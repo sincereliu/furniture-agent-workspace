@@ -1,6 +1,7 @@
 """铰链连接件 — 门板杯孔打孔。
 
-铰链杯孔从门板内侧面钻入。内侧面方向由 panel.inner_face 提供，
+铰链杯孔从门板内侧面钻入，`direction` 存钻入方向（往板内，
+= inner_face 的反向）。内侧面方向由 panel.inner_face 提供，
 不再硬编码 "+y"。
 """
 
@@ -27,7 +28,8 @@ class HingeConnector(Connector):
     def generate_holes(self, panel: PanelRecord) -> List[HoleSpec]:
         """在一块门板上生成铰链杯孔。
 
-        杯孔沿门板高度方向分布，从 inner_face 方向钻入。
+        杯孔沿门板高度方向分布，从内侧面钻入；direction 为钻入方向
+        （inner_face 的反向）。
         """
         result: List[HoleSpec] = []
         if panel.panel_type != "door":
@@ -53,8 +55,9 @@ class HingeConnector(Connector):
         else:
             x_local = panel.size_x - cup_center_from_edge  # 兜底：X 位置靠右 → 右铰链
 
-        # Drill direction = inner_face (cup drilled from inner face into the door)
-        cup_dir = inner
+        # Drill direction = 钻入方向（往板内）：杯孔从内侧面钻入，
+        # 钻入方向 = inner_face 的反向（direction 语义统一约定，见 coordinate-naming.md）。
+        cup_dir = _opposite(inner)
 
         for y_local in positions:
             hole = self._make_hole(
@@ -161,8 +164,8 @@ class HingeConnector(Connector):
     def machining_operations(self, panel: PanelRecord) -> List[MachiningOperation]:
         """生成铰链杯孔的 cut_box 加工指令。
 
-        根据打孔方向将 cut_box 放置在孔位入口处，使其沿钻入方向
-        展开，而不是跑到板件后方。
+        根据钻入方向将 cut_box 放置在孔位入口处，使其沿钻入方向
+        展开，而不是跑到板件后方（direction 已是钻入方向语义）。
         """
         ops: List[MachiningOperation] = []
         for hole in self.generate_holes(panel):
@@ -182,3 +185,10 @@ class HingeConnector(Connector):
                 pos_z=hole.z_global - d / 2,
                 note=f"铰链杯孔 φ{d:g}"))
         return ops
+
+
+def _opposite(axis: str) -> str:
+    """反转带符号轴方向："+x"→"-x"，"-y"→"+y"。"""
+    if not axis or axis[0] not in ("+", "-"):
+        return "-x"
+    return f"{'+' if axis[0] == '-' else '-'}{axis[1]}"

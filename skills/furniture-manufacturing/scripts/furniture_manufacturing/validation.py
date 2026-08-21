@@ -20,6 +20,13 @@ from .manufacturing_bom import (
 )
 
 
+def _opposite(axis: str) -> str:
+    """反转带符号轴方向："+x"→"-x"，"-y"→"+y"。"""
+    if not axis or axis[0] not in ("+", "-"):
+        return "-x"
+    return f"{'+' if axis[0] == '-' else '-'}{axis[1]}"
+
+
 def validate_manufacturing(
     spec: FurnitureSpec,
     bom: BOMReport,
@@ -292,7 +299,7 @@ def validate_manufacturing(
             if (
                 panel.inner_face not in {"+y", "-y"}
                 or abs(hole["local_y"] - expected_face_coordinate) > 1e-6
-                or hole["direction"] != panel.inner_face
+                or hole["direction"] != _opposite(panel.inner_face)
                 or not hole["is_face_hole"]
             ):
                 report.add_error(

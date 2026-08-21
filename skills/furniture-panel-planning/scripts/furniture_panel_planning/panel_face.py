@@ -54,9 +54,11 @@ class PanelFace:
     def cup_direction(self) -> str:
         """Direction to drill hinge cup holes.
 
-        Hinge cup is drilled from the inner face into the door panel.
+        Hinge cup is drilled from the inner face INTO the door panel, so the
+        drilling direction is opposite to the inner face (direction 语义统一
+        为钻入方向，见 coordinate-naming.md)。
         """
-        return self.inner
+        return _negate(self.inner)
 
     @property
     def rod_direction(self) -> str:
@@ -73,9 +75,10 @@ class PanelFace:
     def cam_direction(self) -> str:
         """Direction to drill eccentric wheel holes.
 
-        Wheel is installed from the cam_face into the panel.
-        If cam_face is "-z", drilling goes into the panel in the -z direction.
+        Wheel is installed from the cam_face INTO the panel, so the drilling
+        direction is opposite to the cam_face.  If cam_face is "-z", drilling
+        goes into the panel in the +z direction.
         """
         if self.cam is None:
-            return self.inner  # fallback — shouldn't happen for horizontal panels
-        return self.cam
+            return _negate(self.inner)  # fallback — shouldn't happen for horizontal panels
+        return _negate(self.cam)

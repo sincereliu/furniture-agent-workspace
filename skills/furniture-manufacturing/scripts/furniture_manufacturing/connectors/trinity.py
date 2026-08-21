@@ -255,6 +255,10 @@ class TrinityConnector(Connector):
             cam = "+z"
             rod_zl = panel.size_z - rod_axis_offset
 
+        # direction 统一为钻入方向（往板内）：轮孔从 cam_face 钻入，
+        # 钻入方向 = cam_face 的反向（direction 语义统一约定，见 coordinate-naming.md）。
+        cam_dir = _opposite(cam)
+
         rod_y_offsets = [nut_first, panel.size_y - nut_last]
 
         edge_signs = _male_edge_signs(panel)
@@ -289,7 +293,7 @@ class TrinityConnector(Connector):
                     y_global=cam_y,
                     z_global=cam_z,
                     x_local=cam_x_local, y_local=y_offset, z_local=cam_zl,
-                    diameter=w_diam, depth=w_depth, direction=cam,
+                    diameter=w_diam, depth=w_depth, direction=cam_dir,
                     is_face_hole=True, note="偏心轮孔"))
 
         return result

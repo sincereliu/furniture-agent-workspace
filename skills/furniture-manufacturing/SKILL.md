@@ -23,7 +23,7 @@ description: 用于 manufacturing_planned 阶段。当用户说"用什么五金"
    `factory_ready`。
 9. 厚度来自 `panels_planned.spec` 中已确认的 `FurnitureSpec`，不得从意图重建或硬编码覆盖。单门和标准双门由板件规划
    显式写入 `door_hinge_side="left"/"right"`；旧数据缺省时
-   `HingeConnector` 才按位置回退。杯孔只从门板内侧钻入，Y1 =
+   `HingeConnector` 才按位置回退。杯孔只从门板内侧钻入，`direction` 为钻入方向（`inner_face` 的反向），Y1 =
    `edge_offset + cup_diameter/2`，为杯孔中心到门边的距离。
 10. 用 `FurnitureOrchestrator.run_next()` 生成；`scripts/furniture_manufacturing/validation.py` 校验 BOM、每条槽是否落在目标板件包络内、铰链孔位置/进刀面/深度、背板五金和配合孔；孔位几何（边界/深度/干涉）由 `hole_validator.py` 校验——深度按打孔方向的板件尺寸判定（端面钻入的连接杆/预孔可大于板厚），正交配合孔（三合一杆↔轮）不判干涉，展示后暂停。
 11. 规划样件、承重、连接件或涂装对比试验时，先读 `../../external/scientific-agent-skills/skills/experimental-design/SKILL.md`，再用 `prototype_experiment.py` 生成带种子、区组和真实重复层级的试验表。

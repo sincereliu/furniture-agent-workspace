@@ -145,7 +145,8 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
 
         self.assertTrue(holes)
         self.assertEqual({hole.x_local for hole in holes}, {22.5})
-        self.assertTrue(all(hole.direction == "-y" for hole in holes))
+        # direction 统一为钻入方向：内侧面 "-y" → 往板内钻 "+y"
+        self.assertTrue(all(hole.direction == "+y" for hole in holes))
         self.assertTrue(all(hole.is_face_hole for hole in holes))
 
     def test_manufacturing_validation_rejects_hinge_outside_door(self) -> None:
