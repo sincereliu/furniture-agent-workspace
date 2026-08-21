@@ -175,6 +175,8 @@ class TrinityConnector(Connector):
         """竖板（面接触方）→ 预埋螺母打在 inner_face 上。
 
         有连接拓扑时：只在横板连接的 Z 高度打螺母（1:1:1）。\n        无连接拓扑时：回退系统-32 全高排钻。
+
+        孔位先在面板局部坐标定义（局部为唯一真源），世界坐标由 to_global 派生。
         """
         result: List[HoleSpec] = []
         n_diam = float(nut.get("diameter_mm", 10))
@@ -182,10 +184,10 @@ class TrinityConnector(Connector):
         inner = panel.inner_face or ""
         nut_dir = _opposite(inner)
 
-        # 螺母孔打在 inner_face 上：用几何接口 face_position 定位（面在 x 轴）
+        # 螺母孔打在 inner_face 上：用几何接口 face_position 定位（面在 x 轴），
+        # 折算成板件局部坐标（局部为真源，世界由 to_global 派生）。
         face = inner if inner in ("+x", "-x") else "+x"
-        x_global = panel.face_position(face)
-        x_local = x_global - panel.pos_x
+        x_local = panel.face_position(face) - panel.pos_x
 
         # 从连接拓扑确定螺母 Z 高度（每块横板一个高度，只取三合一连接）
         trinity_female_joints = [
@@ -194,24 +196,28 @@ class TrinityConnector(Connector):
         ]
         rod_axis_offset = float(wheel.get("rod_axis_offset_mm", 9))
         if trinity_female_joints:
-            # 螺母孔与连接杆轴线同高(cam_face + 偏心距)，而非板厚中心
-            z_heights = sorted({
-                round(self._rod_axis_z_from_joint(j, rod_axis_offset), 3)
+            # 螺母孔与连接杆轴线同高(cam_face + 偏心距)，而非板厚中心；
+            # joint 高度是柜体坐标，折算到板件局部坐标。
+            z_locals = sorted({
+                round(self._rod_axis_z_from_joint(j, rod_axis_offset), 3) - panel.pos_z
                 for j in trinity_female_joints
             })
         else:
-            # fallback: 系统-32 全高排钻
-            z_heights = [panel.pos_z + z for z in z_positions]
+            # fallback: 系统-32 全高排钻（z_positions 已是局部坐标）
+            z_locals = list(z_positions)
 
-        for z_global in z_heights:
+        for z_local in z_locals:
             for y_local in [nut_first, panel.size_y - nut_last]:
+                x_global, y_global, z_global = panel.to_global(
+                    x_local, y_local, z_local
+                )
                 result.append(HoleSpec(
                     hole_type="system_32_pre_nut", panel_label=panel.label,
                     x_global=x_global,
-                    y_global=panel.pos_y + y_local,
+                    y_global=y_global,
                     z_global=z_global,
                     x_local=x_local, y_local=y_local,
-                    z_local=z_global - panel.pos_z,
+                    z_local=z_local,
                     diameter=n_diam, depth=n_depth, direction=nut_dir,
                     is_face_hole=True, note="预埋螺母孔"))
         return result
@@ -224,6 +230,8 @@ class TrinityConnector(Connector):
 
         根据 panel.joints 确定哪些端面有连接：
         edge_sign == -1 → 左端，+1 → 右端。只在实际有连接的端面生成孔位。
+
+        孔位先在面板局部坐标定义（局部为唯一真源），世界坐标由 to_global 派生。
         """
         result: List[HoleSpec] = []
         r_diam = float(rod.get("diameter_mm", 8))
@@ -234,23 +242,17 @@ class TrinityConnector(Connector):
         rod_axis_offset = float(wheel.get("rod_axis_offset_mm", 9))
         cam = panel.cam_face or ""
 
-        # cam_face 是偏心轮的可操作面：孔应落在该面所在的坐标。
-        # cam == "+z" → 顶面(z = pos_z + size_z)；cam == "-z" → 底面(z = pos_z)。
+        # cam_face 是偏心轮的可操作面：孔应落在该面所在的局部坐标。
+        # cam == "+z" → 顶面(z_local = size_z)；cam == "-z" → 底面(z_local = 0)。
         if cam == "+z":
-            cam_z = panel.pos_z + panel.size_z
             cam_zl = panel.size_z
-            rod_z = panel.pos_z + panel.size_z - rod_axis_offset
             rod_zl = panel.size_z - rod_axis_offset
         elif cam == "-z":
-            cam_z = panel.pos_z
             cam_zl = 0.0
-            rod_z = panel.pos_z + rod_axis_offset
             rod_zl = rod_axis_offset
         else:
-            cam_z = panel.pos_z + panel.size_z
             cam_zl = panel.size_z
             cam = "+z"
-            rod_z = panel.pos_z + panel.size_z - rod_axis_offset
             rod_zl = panel.size_z - rod_axis_offset
 
         rod_y_offsets = [nut_first, panel.size_y - nut_last]
@@ -258,34 +260,33 @@ class TrinityConnector(Connector):
         edge_signs = _male_edge_signs(panel)
         for sign in edge_signs:
             if sign == -1:
-                x_global = panel.pos_x
                 x_local = 0.0
                 rod_sign = "+x"
                 # 偏心轮圆心距端面 cam_offset，沿连接杆伸入方向(向板内)
-                cam_x = panel.pos_x + cam_offset
                 cam_x_local = cam_offset
             else:
-                x_global = panel.pos_x + panel.size_x
                 x_local = panel.size_x
                 rod_sign = "-x"
-                cam_x = panel.pos_x + panel.size_x - cam_offset
                 cam_x_local = panel.size_x - cam_offset
 
+            # 与旧实现保持相同的发射顺序：先全部连接杆孔，再全部偏心轮孔
             for y_offset in rod_y_offsets:
+                rod_x, rod_y, rod_z = panel.to_global(x_local, y_offset, rod_zl)
                 result.append(HoleSpec(
                     hole_type="system_32_male", panel_label=panel.label,
-                    x_global=x_global,
-                    y_global=panel.pos_y + y_offset,
+                    x_global=rod_x,
+                    y_global=rod_y,
                     z_global=rod_z,
                     x_local=x_local, y_local=y_offset, z_local=rod_zl,
                     diameter=r_diam, depth=r_depth, direction=rod_sign,
                     is_face_hole=False, note="连接杆孔"))
 
             for y_offset in rod_y_offsets:   # 偏心轮 y 与连接杆 y 一致
+                cam_x, cam_y, cam_z = panel.to_global(cam_x_local, y_offset, cam_zl)
                 result.append(HoleSpec(
                     hole_type="system_32_female", panel_label=panel.label,
                     x_global=cam_x,
-                    y_global=panel.pos_y + y_offset,
+                    y_global=cam_y,
                     z_global=cam_z,
                     x_local=cam_x_local, y_local=y_offset, z_local=cam_zl,
                     diameter=w_diam, depth=w_depth, direction=cam,

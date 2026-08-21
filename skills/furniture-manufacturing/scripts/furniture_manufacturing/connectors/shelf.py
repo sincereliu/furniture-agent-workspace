@@ -55,10 +55,10 @@ class ShelfConnector(Connector):
                 # side panel's origin.  For standard vertical cabinets, shelf Z
                 # is roughly at mid-height of the shelf.
                 # We drill pairs at the front and back of the shelf depth.
-                shelf_z_centers = [shelf.pos_z + shelf.size_z / 2]  # one row for now
+                # 孔位先在面板局部坐标定义（局部为唯一真源），世界由 to_global 派生。
+                shelf_z_centers = [shelf.pos_z + shelf.size_z / 2 - side.pos_z]
 
-                for z_center in shelf_z_centers:
-                    z_local_on_side = z_center - side.pos_z
+                for z_local_on_side in shelf_z_centers:
                     # Y position: near the front edge of the side panel
                     y_local_on_side = side.size_y - 32  # 32mm from front
 
@@ -70,24 +70,25 @@ class ShelfConnector(Connector):
                         y_local_on_side = side.size_y - x_local_shelf
 
                         if inner == "+x":
-                            # left side: inner face = right face = pos_x + size_x
-                            x_global = side.pos_x + side.size_x
+                            # left side: inner face = right face = +size_x
                             x_local = side.size_x
                         elif inner == "-x":
-                            # right side: inner face = left face = pos_x
-                            x_global = side.pos_x
+                            # right side: inner face = left face = 0
                             x_local = 0.0
                         else:
                             # fallback for legacy
-                            x_global = side.pos_x + side.size_x
                             x_local = side.size_x
+
+                        x_global, y_global, z_global = side.to_global(
+                            x_local, y_local_on_side, z_local_on_side
+                        )
 
                         result.append(HoleSpec(
                             hole_type="shelf_connector",
                             panel_label=side.label,
                             x_global=x_global,
-                            y_global=side.pos_y + y_local_on_side,
-                            z_global=side.pos_z + z_local_on_side,
+                            y_global=y_global,
+                            z_global=z_global,
                             x_local=x_local,
                             y_local=y_local_on_side,
                             z_local=z_local_on_side,

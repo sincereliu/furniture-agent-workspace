@@ -95,7 +95,12 @@ class BackMountConnector(Connector):
         return []
 
     def _insert_holes(self, panels: List[PanelRecord]) -> List[HoleSpec]:
-        """内嵌背板：四边三合一成对孔。"""
+        """内嵌背板：四边三合一成对孔。
+
+        连接点在背板局部坐标定义（背板为装配锚点，局部为唯一真源），
+        配合板按"同一世界点 − 板件原点"折算到各自局部坐标，
+        世界坐标统一由各板的 to_global 派生。
+        """
         by_label = {panel.label: panel for panel in panels}
         back = by_label.get("back_panel")
         if back is None:
@@ -122,16 +127,16 @@ class BackMountConnector(Connector):
         rod_depth = float(rod.get("insertion_depth_mm", 33))
         nut_diameter = float(nut.get("diameter_mm", 10))
         nut_depth = float(nut.get("depth_mm", 11))
-        y_center = back.pos_y + back.size_y / 2
-        y_face = back.pos_y + back.size_y
+        y_center_local = back.size_y / 2
+        y_face_local = back.size_y
         result: List[HoleSpec] = []
 
         def add_connection(
             target: PanelRecord | None,
-            cam_x: float,
-            cam_z: float,
-            rod_x: float,
-            rod_z: float,
+            cam_x_local: float,
+            cam_z_local: float,
+            rod_x_local: float,
+            rod_z_local: float,
             rod_direction: str,
             target_direction: str,
             edge_name: str,
@@ -142,9 +147,9 @@ class BackMountConnector(Connector):
                 self._hole(
                     back,
                     "back_insert_cam",
-                    cam_x,
-                    y_face,
-                    cam_z,
+                    cam_x_local,
+                    y_face_local,
+                    cam_z_local,
                     cam_diameter,
                     cam_depth,
                     "-y",
@@ -156,9 +161,9 @@ class BackMountConnector(Connector):
                 self._hole(
                     back,
                     "back_insert_rod",
-                    rod_x,
-                    y_center,
-                    rod_z,
+                    rod_x_local,
+                    y_center_local,
+                    rod_z_local,
                     rod_diameter,
                     rod_depth,
                     rod_direction,
@@ -166,13 +171,20 @@ class BackMountConnector(Connector):
                     is_face_hole=False,
                 )
             )
+            # 配合板预埋螺母孔必须与背板连接杆落在同一世界点：
+            # 以背板局部点为中间量折算到目标板局部坐标，再 to_global。
+            point = (
+                back.pos_x + rod_x_local,
+                back.pos_y + y_center_local,
+                back.pos_z + rod_z_local,
+            )
             result.append(
                 self._hole(
                     target,
                     "back_insert_pre_nut",
-                    rod_x,
-                    y_center,
-                    rod_z,
+                    point[0] - target.pos_x,
+                    point[1] - target.pos_y,
+                    point[2] - target.pos_z,
                     nut_diameter,
                     nut_depth,
                     target_direction,
@@ -186,23 +198,22 @@ class BackMountConnector(Connector):
             first,
             max_spacing,
         ):
-            z_global = back.pos_z + z_local
             add_connection(
                 targets["left"],
-                back.pos_x + cam_offset,
-                z_global,
-                back.pos_x,
-                z_global,
+                cam_offset,
+                z_local,
+                0.0,
+                z_local,
                 "+x",
                 "-x",
                 "左边",
             )
             add_connection(
                 targets["right"],
-                back.pos_x + back.size_x - cam_offset,
-                z_global,
-                back.pos_x + back.size_x,
-                z_global,
+                back.size_x - cam_offset,
+                z_local,
+                back.size_x,
+                z_local,
                 "-x",
                 "+x",
                 "右边",
@@ -212,23 +223,22 @@ class BackMountConnector(Connector):
             first,
             max_spacing,
         ):
-            x_global = back.pos_x + x_local
             add_connection(
                 targets["bottom"],
-                x_global,
-                back.pos_z + cam_offset,
-                x_global,
-                back.pos_z,
+                x_local,
+                cam_offset,
+                x_local,
+                0.0,
                 "+z",
                 "-z",
                 "下边",
             )
             add_connection(
                 targets["top"],
-                x_global,
-                back.pos_z + back.size_z - cam_offset,
-                x_global,
-                back.pos_z + back.size_z,
+                x_local,
+                back.size_z - cam_offset,
+                x_local,
+                back.size_z,
                 "-z",
                 "+z",
                 "上边",
@@ -268,24 +278,28 @@ class BackMountConnector(Connector):
     def _hole(
         panel: PanelRecord,
         hole_type: str,
-        x_global: float,
-        y_global: float,
-        z_global: float,
+        x_local: float,
+        y_local: float,
+        z_local: float,
         diameter: float,
         depth: float,
         direction: str,
         note: str,
         is_face_hole: bool = True,
     ) -> HoleSpec:
+        """在指定板上生成孔位：局部坐标定义（唯一真源），世界由 to_global 派生。"""
+        x_global, y_global, z_global = panel.to_global(
+            x_local, y_local, z_local
+        )
         return HoleSpec(
             hole_type=hole_type,
             panel_label=panel.label,
             x_global=x_global,
             y_global=y_global,
             z_global=z_global,
-            x_local=x_global - panel.pos_x,
-            y_local=y_global - panel.pos_y,
-            z_local=z_global - panel.pos_z,
+            x_local=x_local,
+            y_local=y_local,
+            z_local=z_local,
             diameter=diameter,
             depth=depth,
             direction=direction,
