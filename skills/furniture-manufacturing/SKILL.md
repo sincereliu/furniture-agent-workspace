@@ -14,6 +14,7 @@ description: 用于 manufacturing_planned 阶段。当用户说"用什么五金"
 3. 五金规格以 `scripts/furniture_manufacturing/hardware_catalog.yaml` 和 `hardware_rules.yaml` 为准。
 4. `connectors/` 集中连接/打孔逻辑：`Connector` 基类及 `TrinityConnector`、`HingeConnector`、`ShelfConnector`、`BackMountConnector`。新五金新增 Connector 并注册 `ALL_CONNECTORS`。
     各连接件通过 `HoleSpec` 描述孔位，`is_face_hole=True` 表示板面钻孔 (TypeNo=1 垂直孔)，`False` 表示板边钻孔 (TypeNo=2 水平孔)。三合一在高度方向按系统 32 排钻规则分布，深度方向前后双排。
+    （已记录需求：连接点级实体——杆/轮/螺母按连接点整体增删、校验按连接点对齐，见 `references/connection-point-design.md`；实施前需评审。）
 5. 单板规则实现 `generate_holes()`；需配合板时覆盖 `generate_holes_for_panels()` 生成成对孔。`estimate_hardware()` 与 `emit_drilled_holes()` 遍历 `ALL_CONNECTORS` 生成 BOM 和可序列化的全局/local 孔位数据；实际 `.drilled-holes.json/.glb` 文件由 CAD 阶段的 `workflow_artifact_writer.py` 写入。
 6. 六面钻 XML 导出由 `export_six_side_drill.py` + `devices/six_side_drill_guigui.yaml` 完成。设备映射 yaml 按面板类型定义 `sixd_x_from_box`/`sixd_y_from_box`（机床轴）和 `x1_from_hole`/`y1_from_hole`/`z1_from_hole`（局部坐标→机床坐标）；水平孔方向须从世界轴转换为机床轴后再确定 Quadrant。导出层从 `HoleSpec.is_face_hole` 直接读取 TypeNo，不再推导。板件轮廓 `PanelOutline` 顶点严格按 `(0, sixd_y) → (0, 0) → (sixd_x, 0) → (sixd_x, sixd_y)` 逆时针闭合。
 7. `groove` 为左右侧板、顶/底板生成 4 条目标明确的 `cut_box`：槽宽 `back_thickness + groove_clearance`，槽深 `groove_depth`。`insert` 输出四边三合一成对孔。cover/背拉条的螺钉连接属组装现场工艺，不生成孔位与五金。
