@@ -9,7 +9,6 @@ from furniture_panel_planning.panel_spec import FurnitureSpec, resolve_back_moun
 from furniture_panel_planning.panel_models import PanelPlacement
 
 from .manufacturing_edge_banding import get_edge_banding
-from .manufacturing_hardware import match_drawer_slides
 from .connectors import ALL_CONNECTORS
 from .manufacturing_models import HardwareRecord, MachiningOperation, PanelRecord
 
@@ -232,15 +231,6 @@ def estimate_hardware(panels: List[PanelRecord]) -> List[HardwareRecord]:
 
     if any(panel.panel_type == "toe_kick" for panel in panels):
         hardware.append(HardwareRecord(name="L型角码", spec="25×25mm镀锌", quantity=4))
-    if any("drawer" in panel.panel_type for panel in panels):
-        drawer_depth = max((p.size_y for p in panels if p.panel_type in ("side", "bottom")), default=450)
-        drawer_width = max((p.size_x for p in panels if p.panel_type in ("top", "bottom")), default=800)
-        for slide in match_drawer_slides(drawer_depth, drawer_width):
-            hardware.append(HardwareRecord(
-                name="抽屉滑轨",
-                spec=f"{slide['brand']} {slide['model']} {slide['length_mm']}mm {slide['load_rating']}",
-                quantity=slide["quantity"], unit="副",
-                brand=slide["brand"], model=slide["model"]))
     return hardware
 
 

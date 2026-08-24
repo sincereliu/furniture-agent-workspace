@@ -5,6 +5,7 @@ from .trinity import TrinityConnector
 from .hinge import HingeConnector
 from .shelf import ShelfConnector
 from .back_mount import BackMountConnector
+from .drawer_slide import DrawerSlideConnector
 
 __all__ = [
     "Connector",
@@ -13,6 +14,7 @@ __all__ = [
     "HingeConnector",
     "ShelfConnector",
     "BackMountConnector",
+    "DrawerSlideConnector",
 ]
 
 ALL_CONNECTORS = [
@@ -20,4 +22,5 @@ ALL_CONNECTORS = [
     HingeConnector,
     ShelfConnector,
     BackMountConnector,
+    DrawerSlideConnector,
 ]

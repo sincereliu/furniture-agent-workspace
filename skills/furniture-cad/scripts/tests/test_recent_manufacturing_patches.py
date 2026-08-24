@@ -19,6 +19,7 @@ bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 from furniture_panel_planning.panel_spec import FurnitureSpec
 from furniture_layout.layout_pipeline import plan_layout
+from furniture_manufacturing.connectors.drawer_slide import DrawerSlideConnector
 from furniture_manufacturing.connectors.hinge import HingeConnector
 from furniture_manufacturing.connectors.trinity import TrinityConnector
 from furniture_manufacturing.drilled_holes_glb import _build_grouped_geometry
@@ -190,6 +191,80 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
             "TRINITY_ROD_CAM_COUNT_MISMATCH",
             {issue.code for issue in report.issues},
         )
+
+    def test_drawer_slide_connector_emits_per_drawer_bom(self) -> None:
+        """每个抽屉实例一副滑轨（左右各 1）；不同深度各配各的长度。"""
+        drawer_1 = [
+            panel_record(
+                label="drawer_side_L_z300", name="抽屉左板",
+                panel_type="drawer_side", size_x=18, size_y=500, size_z=150,
+                pos_x=0, pos_y=0, pos_z=300,
+            ),
+            panel_record(
+                label="drawer_side_R_z300", name="抽屉右板",
+                panel_type="drawer_side", size_x=18, size_y=500, size_z=150,
+                pos_x=350, pos_y=0, pos_z=300,
+            ),
+            panel_record(
+                label="drawer_front_z300", name="抽屉前板",
+                panel_type="drawer_front", size_x=380, size_y=18, size_z=150,
+                pos_x=0, pos_y=0, pos_z=300,
+            ),
+            panel_record(
+                label="drawer_bottom_z300", name="抽屉底板",
+                panel_type="drawer_bottom", size_x=380, size_y=500, size_z=12,
+                pos_x=0, pos_y=0, pos_z=300,
+            ),
+        ]
+        drawer_2 = [
+            panel_record(
+                label="drawer_side_L_z600", name="抽屉左板",
+                panel_type="drawer_side", size_x=18, size_y=550, size_z=150,
+                pos_x=0, pos_y=0, pos_z=600,
+            ),
+            panel_record(
+                label="drawer_side_R_z600", name="抽屉右板",
+                panel_type="drawer_side", size_x=18, size_y=550, size_z=150,
+                pos_x=350, pos_y=0, pos_z=600,
+            ),
+            panel_record(
+                label="drawer_front_z600", name="抽屉前板",
+                panel_type="drawer_front", size_x=400, size_y=18, size_z=150,
+                pos_x=0, pos_y=0, pos_z=600,
+            ),
+            panel_record(
+                label="drawer_bottom_z600", name="抽屉底板",
+                panel_type="drawer_bottom", size_x=400, size_y=550, size_z=12,
+                pos_x=0, pos_y=0, pos_z=600,
+            ),
+        ]
+
+        records = DrawerSlideConnector().boms(drawer_1 + drawer_2)
+
+        self.assertEqual(len(records), 2)
+        self.assertTrue(all(r.name == "抽屉滑轨" for r in records))
+        self.assertTrue(all(r.unit == "副" for r in records))
+        # 每抽一副（左右各 1）；深度 500→450mm、550→500mm
+        self.assertEqual({r.quantity for r in records}, {2})
+        self.assertEqual({r.model for r in records}, {"SJG-01"})
+        self.assertEqual(
+            {r.spec for r in records},
+            {"默认 SJG-01 450mm 30kg", "默认 SJG-01 500mm 30kg"},
+        )
+
+    def test_drawer_slide_connector_absent_without_drawer_panels(self) -> None:
+        """无抽屉板件时不产出滑轨 BOM（且全流水线 BOM 无滑轨行）。"""
+        self.assertEqual(DrawerSlideConnector().boms([panel_record(
+            label="left_side_panel", name="左侧板", panel_type="side",
+            size_x=18, size_y=600, size_z=1000,
+        )]), [])
+        spec = FurnitureSpec(
+            furniture_type="floor_cabinet",
+            width=800, depth=600, height=1000, n_doors=2,
+        )
+        placements = plan_panels(spec, plan_layout(spec))
+        bom = plan_manufacturing(spec, placements)
+        self.assertNotIn("抽屉滑轨", [item.name for item in bom.hardware])
 
     def test_hinge_cup_uses_center_distance_and_inner_face(self) -> None:
         door = panel_record(
