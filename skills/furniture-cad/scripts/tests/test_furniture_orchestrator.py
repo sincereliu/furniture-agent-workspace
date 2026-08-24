@@ -450,10 +450,10 @@ class FurnitureOrchestratorTests(unittest.TestCase):
 
     def test_unsupported_layout_decision_fails_at_layout_stage(self) -> None:
         project = self.orchestrator.create_project(
-            "带抽屉柜体",
+            "未知布局选项柜体",
             cabinet_intent(),
             stage_inputs=stage_inputs_from_spec(
-                {"layout": {"drawer_count": 2}}
+                {"layout": {"unsupported_layout_option": 2}}
             ),
         )
         self.orchestrator.confirm_intent(project)

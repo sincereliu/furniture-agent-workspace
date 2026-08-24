@@ -51,4 +51,16 @@ internals:
     count_field: shelf_count
     divides: [top, bottom]
     snap: system_32
+  drawers:
+    type: full_height          # 整高抽屉区：抽屉占满内部净高与前开口
+    count_field: drawer_count
+    slide_type: 三节轨         # 几何从 hardware_catalog drawer_slides.<slide_type>.gap_requirement_mm 取值（单一真源）
+    face_mode: none            # 无面板：前板即前脸
+    layer_gap_mm: 1.5          # 相邻前板竖向缝，同 door_margin（待确认）
+    bottom_thickness_mm: 18.0  # 抽屉底板厚（待确认）
+    back_thickness_mm: 18.0    # 抽屉背板厚（待确认）
+    back_clearance_mm: 0.0     # 抽屉背与柜背间隙，须 ≥0（待确认）
+    # front_overlap（前板对盒体侧板的覆盖）按抽屉位置派生：
+    #   顶/中间抽屉 0（顶板盖抽面、抽屉间无覆盖）；最底抽屉 18（全盖底板）。
+    #   将来门+抽屉混合区按上方构造推导：共盖层板 9 / 顶板盖 0。
   dividers: []

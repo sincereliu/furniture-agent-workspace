@@ -26,6 +26,7 @@ PANEL_SPEC_FIELDS = frozenset(
         "toe_kick_support_count",
         "back_mount",
         "back_rail_height",
+        "drawer_count",
     }
 )
 
@@ -47,6 +48,7 @@ class FurnitureSpec:
     door_hinge_gap: float = 2.0
     shelf_count: int = 4
     n_doors: int = 2
+    drawer_count: int = 0
     groove_depth: float = 6.0
     groove_clearance: float = 1.0
     toe_kick_reveal_front: float = 1.0
@@ -131,6 +133,7 @@ class FurnitureSpec:
             door_hinge_gap=float(value("door_hinge_gap", 2.0)),
             shelf_count=_count(value("shelf_count", 4), "shelf_count"),
             n_doors=_count(value("n_doors", 2), "n_doors"),
+            drawer_count=_count(value("drawer_count", 0), "drawer_count"),
             groove_depth=groove_float("groove_depth", 6.0),
             groove_clearance=groove_float("groove_clearance", 1.0),
             toe_kick_reveal_front=float(value("toe_kick_reveal_front", 1.0)),

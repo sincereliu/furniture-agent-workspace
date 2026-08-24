@@ -1,5 +1,25 @@
 # 更新日志
 
+## 20260822.6 — 抽屉区首版落地（档 B：整高抽屉区 + 无面板 + 三节轨）
+
+`drawer_count` 驱动的整高抽屉区打通板件规划→制造全链路。
+
+### 改动点
+
+- `FurnitureSpec` 新增 `drawer_count`（默认 0，向后兼容）+ `PANEL_SPEC_FIELDS` 白名单 + `from_dict` 解析（走 options 路径，layout 不感知）。
+- `floor_cabinet.yaml` 新增 `internals.drawers` profile（type=full_height、slide_type、face_mode=none、layer_gap 1.5、底/背板厚 18、back_clearance≥0）；滑轨间隙**单一真源** = catalog `gap_requirement_mm`（按文件路径读取，不 import 制造模块）。
+- `topology_solver._drawer_panels`：每抽屉 5 板（前/左/右/后/底），label 契约 `drawer_*_z{pos}`；底抽前板全盖底板（overlap=18）、顶/中 0；抽屉优先——`drawer_count>0` 时不生成门与固定层板。
+- 板件校验：`drawer_count>0` 且 `n_doors>0`/`shelf_count>0` 时发 warning（`DRAWER_ZONE_SUPERSEDES_*`），不静默。
+- `hardware_catalog.yaml`：三节轨 `gap_requirement_mm` 12.5→**13.0**（投产前确认）。
+- 封边：`DEFAULT_EDGE_RULES` 补 `drawer_*` 四边 ABS 同色。
+- 清理：layout 测试中"未知字段"样例由 `drawer_count` 换为 `unsupported_layout_option`（drawer_count 已是合法面板输入）。
+- 测试：新增 `DrawerZoneTests` 5 条（5 板/抽、底抽覆盖、BOM 滑轨 ×6、warning、向后兼容）。
+
+### 验证
+
+- 56 项测试通过（51 + 5 新增）。
+- `drawer_count=0` 全回归不变；滑轨 BOM：3 抽 → 数量 6、长度按抽屉深 535→450mm。
+
 ## 20260822.5 — 记录抽屉组件级实体需求（待评审提案）
 
 抽屉本质是子装配组件（板件集合+盒体拓扑+滑轨/拉手五金），当前板件规划不生成抽屉板件。

@@ -55,7 +55,7 @@ drawer_slides:
   三节轨:
     variant_group: 国产三节轨
     mounting: 侧装
-    gap_requirement_mm: 12.5        # 每侧间隙
+    gap_requirement_mm: 13.0        # 每侧间隙（修正 12.5→13.0，投产前确认）
     extension: 100%                 # 全拉出
     standard_lengths_mm: [250, 300, 350, 400, 450, 500, 550, 600]
     brands:

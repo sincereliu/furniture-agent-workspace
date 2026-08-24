@@ -33,6 +33,8 @@ from furniture_manufacturing.manufacturing_bom import (
 from furniture_manufacturing.manufacturing_models import PanelRecord
 from furniture_manufacturing.validation import validate_manufacturing
 from furniture_panel_planning.panel_planning import plan_panels
+from furniture_panel_planning.structure_planning import CabinetStructure
+from furniture_panel_planning.validation import validate_panels
 
 
 def panel_record(
@@ -369,6 +371,113 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
 
         self.assertEqual([solid.label for solid in groups["板件"]], ["shelf_z999"])
         self.assertNotIn("其他孔位", groups)
+
+
+class DrawerZoneTests(unittest.TestCase):
+    """整高抽屉区（档 B 首版）：drawer_count>0 → 抽屉板件，无门无层板。"""
+
+    def _drawer_cabinet(
+        self,
+        drawer_count: int,
+        n_doors: int = 0,
+        shelf_count: int = 0,
+    ):
+        spec = FurnitureSpec(
+            furniture_type="floor_cabinet",
+            width=800,
+            depth=600,
+            height=1000,
+            n_doors=n_doors,
+            shelf_count=shelf_count,
+            drawer_count=drawer_count,
+        )
+        placements = plan_panels(spec, plan_layout(spec))
+        return spec, placements
+
+    def test_full_height_drawer_zone_generates_five_panels_per_drawer(self) -> None:
+        spec, placements = self._drawer_cabinet(3)
+        types = {p.panel_type for p in placements}
+        self.assertTrue(
+            {"drawer_front", "drawer_side", "drawer_back", "drawer_bottom"}
+            <= types
+        )
+        self.assertNotIn("door", types)
+        self.assertNotIn("fixed_shelf", types)
+
+        drawer_panels = [p for p in placements if "drawer" in p.panel_type]
+        self.assertEqual(len(drawer_panels), 15)  # 3 抽屉 × 5 板
+        # label 契约：drawer_<角色>_z{位置}（实例 key = z 后缀）
+        for panel in drawer_panels:
+            self.assertRegex(
+                panel.id,
+                r"^drawer_(front|side_L|side_R|back|bottom)_z\d+$",
+            )
+        # 3 个抽屉实例，每个 5 块板共享 z 后缀
+        from collections import Counter
+
+        instance_keys = Counter(
+            panel.id.rsplit("_", 1)[1] for panel in drawer_panels
+        )
+        self.assertEqual(len(instance_keys), 3)
+        self.assertTrue(all(count == 5 for count in instance_keys.values()))
+
+    def test_bottom_drawer_front_covers_bottom_panel(self) -> None:
+        """底抽前板全盖底板（front_overlap=18）：侧板高 = 前板高 − 36。"""
+        _, placements = self._drawer_cabinet(3)
+        drawer_panels = [p for p in placements if "drawer" in p.panel_type]
+        fronts = sorted(
+            (p for p in drawer_panels if p.panel_type == "drawer_front"),
+            key=lambda p: p.pos_z,
+        )
+        sides = [
+            p for p in drawer_panels if p.panel_type == "drawer_side"
+        ]
+        # 三个抽屉的前板高度相同（均分净高 − 层缝）
+        front_h = fronts[0].size_z  # 未取整的实际前板高
+        self.assertTrue(
+            all(abs(p.size_z - front_h) < 1e-6 for p in fronts)
+        )
+        # 底抽（最小 front_z）：前板向下覆盖 18 → 侧板 pos_z = front_z + 18，高 = front_h − 36
+        bottom_front_z = fronts[0].pos_z
+        bottom_sides = [p for p in sides if p.pos_z == bottom_front_z + 18]
+        self.assertEqual(len(bottom_sides), 2)
+        self.assertTrue(all(abs(p.size_z - (front_h - 36)) < 1e-6 for p in bottom_sides))
+        # 上两层抽屉：侧板 pos_z = 各自 front_z（无覆盖），高 = front_h
+        for front in fronts[1:]:
+            band_sides = [p for p in sides if p.pos_z == front.pos_z]
+            self.assertEqual(len(band_sides), 2)
+            self.assertTrue(all(abs(p.size_z - front_h) < 1e-6 for p in band_sides))
+
+    def test_drawer_zone_bom_emits_slides_per_drawer(self) -> None:
+        spec, placements = self._drawer_cabinet(3)
+        manufacturing = plan_manufacturing(spec, placements)
+        slides = [h for h in manufacturing.hardware if h.name == "抽屉滑轨"]
+        self.assertEqual(len(slides), 1)  # 同深度 → 单条记录
+        self.assertEqual(slides[0].quantity, 6)  # 3 抽屉 × 每抽 2
+        # 抽屉深 = 内部深(553) − 前板厚(18) → 535 → 匹配 450mm 三节轨
+        self.assertIn("450mm", slides[0].spec)
+
+        report = validate_manufacturing(spec, manufacturing, placements)
+        self.assertTrue(report.passed)
+
+    def test_drawer_zone_warns_when_doors_or_shelves_requested(self) -> None:
+        spec, placements = self._drawer_cabinet(3, n_doors=2, shelf_count=4)
+        types = {p.panel_type for p in placements}
+        self.assertNotIn("door", types)
+        self.assertNotIn("fixed_shelf", types)
+
+        structure = CabinetStructure.from_spec(spec)
+        report = validate_panels(spec, structure, placements)
+        codes = {issue.code for issue in report.issues}
+        self.assertIn("DRAWER_ZONE_SUPERSEDES_DOORS", codes)
+        self.assertIn("DRAWER_ZONE_SUPERSEDES_SHELVES", codes)
+
+    def test_no_drawer_keeps_doors_and_shelves(self) -> None:
+        spec, placements = self._drawer_cabinet(0, n_doors=2, shelf_count=4)
+        types = {p.panel_type for p in placements}
+        self.assertIn("door", types)
+        self.assertIn("fixed_shelf", types)
+        self.assertTrue(all("drawer" not in p.panel_type for p in placements))
 
 
 class SixSideDrillPatchTests(unittest.TestCase):

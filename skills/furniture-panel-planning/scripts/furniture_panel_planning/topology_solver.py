@@ -45,6 +45,25 @@ def _load_topology(furniture_type: str) -> dict[str, Any]:
         return yaml.safe_load(fp) or {}
 
 
+def _slide_gap_mm(slide_type: str) -> float:
+    """读五金 catalog 中抽屉滑轨的每侧间隙（单一真源）。
+
+    按文件路径读取（跨技能引用规格参考数据，不 import 制造模块，避免依赖成环）。
+    """
+    catalog_path = (
+        Path(__file__).resolve().parents[4]
+        / "skills"
+        / "furniture-manufacturing"
+        / "scripts"
+        / "furniture_manufacturing"
+        / "hardware_catalog.yaml"
+    )
+    with open(catalog_path, encoding="utf-8") as fp:
+        catalog = yaml.safe_load(fp) or {}
+    entry = catalog.get("drawer_slides", {}).get(slide_type, {})
+    return float(entry.get("gap_requirement_mm", 12.5))
+
+
 def _resolve_semantic_face(face_name: str, frame: CabinetFrame) -> str:
     """Map a semantic face name to a signed world axis.
 
@@ -97,8 +116,9 @@ def solve_panel_placements(
         placements.append(panel)
 
     # ── Doors ─────────────────────────────────────────────────────
+    # 整高抽屉区下前开口被抽屉占满，不生成门
     front_side = enclosure.get("front", {})
-    if front_side.get("type") == "opening":
+    if front_side.get("type") == "opening" and spec.drawer_count <= 0:
         for subtype in front_side.get("subtypes", []):
             if subtype == "doors":
                 placements.extend(_door_panels(spec, layout, frame))
@@ -108,10 +128,17 @@ def solve_panel_placements(
     if base_def.get("type") == "toe_kick" and layout.toe_kick_height > 0:
         placements.extend(_toe_kick_panels(spec, layout, base_def, frame))
 
-    # ── Internal shelves ──────────────────────────────────────────
-    shelves_def = topology.get("internals", {}).get("shelves", {})
-    if shelves_def.get("type") == "fixed" and layout.shelf_count > 0:
-        placements.extend(_fixed_shelves(spec, layout, shelves_def, frame))
+    # ── Internal shelves / drawers ────────────────────────────────
+    internals = topology.get("internals", {})
+    if spec.drawer_count > 0:
+        # 整高抽屉区：抽屉占满内部净高，不生成固定层板
+        drawers_def = internals.get("drawers", {})
+        if drawers_def.get("type") == "full_height":
+            placements.extend(_drawer_panels(spec, layout, drawers_def, frame))
+    else:
+        shelves_def = internals.get("shelves", {})
+        if shelves_def.get("type") == "fixed" and layout.shelf_count > 0:
+            placements.extend(_fixed_shelves(spec, layout, shelves_def, frame))
 
     # ── Connection topology ──────────────────────────────────────
     joints = compute_joints(placements)
@@ -415,6 +442,113 @@ def _fixed_shelves(
             depends_on=["left_side_panel", "right_side_panel"],
             inner_face=inner, outer_face=outer, cam_face=cam,  # derived from frame
             note="固定层板",
+        ))
+    return panels
+
+
+def _drawer_panels(
+    spec: FurnitureSpec,
+    layout: CabinetStructure,
+    drawers_def: dict[str, Any],
+    frame: CabinetFrame,
+) -> list[PanelPlacement]:
+    """Generate full-height drawer box panels（首版：无面板，前板即前脸）。
+
+    尺寸链（待确认，投产前核对）：
+    - 每层净高 band_h = 内部净高 ÷ drawer_count
+    - 前板：高 = band_h − layer_gap；宽 = 内部宽 − 2×door_margin；厚 = 板厚
+    - 盒体宽 = 内部宽 − 2×滑轨每侧间隙（catalog gap_requirement_mm，单一真源）
+    - 盒体深 = 内部深 − 前板厚 − back_clearance(≥0)
+    - 盒体高 = 前板高 − 2×front_overlap（底抽 18 全盖底板，顶/中 0）
+    板件 label 以 z 位置后缀结尾（drawer_*_z{pos}），与 DrawerSlideConnector
+    实例 key 契约一致。
+    """
+    count = spec.drawer_count
+    if count <= 0:
+        return []
+    board = spec.board_thickness
+    slide_gap = _slide_gap_mm(str(drawers_def.get("slide_type", "三节轨")))
+    layer_gap = float(drawers_def.get("layer_gap_mm", 1.5))
+    bottom_t = float(drawers_def.get("bottom_thickness_mm", 18.0))
+    back_t = float(drawers_def.get("back_thickness_mm", 18.0))
+    back_clear = float(drawers_def.get("back_clearance_mm", 0.0))
+    if back_clear < 0:
+        raise ValueError("drawer back_clearance_mm must be >= 0")
+
+    iw = layout.internal_width
+    internal_depth = layout.internal_y_end - layout.internal_y_start
+    band_h = layout.internal_height / count
+    front_h = band_h - layer_gap
+    front_w = iw - 2 * spec.door_margin
+    box_w = iw - 2 * slide_gap
+    box_d = internal_depth - board - back_clear
+    box_back_y = layout.internal_y_start + back_clear
+
+    panels: list[PanelPlacement] = []
+    for i in range(count):
+        front_z = (
+            layout.internal_z_start + i * band_h + (layer_gap if i > 0 else 0.0)
+        )
+        # 底抽前板全盖底板（overlap=板厚）；顶/中间抽屉无覆盖
+        overlap = board if i == 0 else 0.0
+        box_h = front_h - 2 * overlap
+        box_z = front_z + overlap
+        z_suffix = f"z{front_z:.0f}"
+
+        panels.append(PanelPlacement(
+            id=f"drawer_front_{z_suffix}", name=f"抽屉前板({front_z:.0f}mm)",
+            panel_type="drawer_front",
+            size_x=front_w, size_y=board, size_z=front_h,
+            pos_x=layout.internal_x_start + spec.door_margin,
+            pos_y=layout.carcass_y_end - board,
+            pos_z=front_z,
+            material_role="carcass",
+            inner_face=frame.back, outer_face=frame.front, cam_face=None,
+            note=f"抽屉前板 {front_w:.0f}×{front_h:.0f}×{board:.0f}mm",
+        ))
+        panels.append(PanelPlacement(
+            id=f"drawer_side_L_{z_suffix}", name=f"抽屉左板({front_z:.0f}mm)",
+            panel_type="drawer_side",
+            size_x=board, size_y=box_d, size_z=box_h,
+            pos_x=layout.internal_x_start,
+            pos_y=box_back_y,
+            pos_z=box_z,
+            material_role="carcass",
+            inner_face=frame.right, outer_face=frame.left, cam_face=None,
+            note=f"抽屉左侧板 {box_d:.0f}×{box_h:.0f}×{board:.0f}mm",
+        ))
+        panels.append(PanelPlacement(
+            id=f"drawer_side_R_{z_suffix}", name=f"抽屉右板({front_z:.0f}mm)",
+            panel_type="drawer_side",
+            size_x=board, size_y=box_d, size_z=box_h,
+            pos_x=layout.internal_x_end - board,
+            pos_y=box_back_y,
+            pos_z=box_z,
+            material_role="carcass",
+            inner_face=frame.left, outer_face=frame.right, cam_face=None,
+            note=f"抽屉右侧板 {box_d:.0f}×{box_h:.0f}×{board:.0f}mm",
+        ))
+        panels.append(PanelPlacement(
+            id=f"drawer_back_{z_suffix}", name=f"抽屉后板({front_z:.0f}mm)",
+            panel_type="drawer_back",
+            size_x=box_w - 2 * board, size_y=back_t, size_z=box_h - 2 * board,
+            pos_x=layout.internal_x_start + board,
+            pos_y=box_back_y,
+            pos_z=box_z + bottom_t,
+            material_role="carcass",
+            inner_face=frame.front, outer_face=frame.back, cam_face=None,
+            note=f"抽屉后板 {box_w - 2 * board:.0f}×{box_h - 2 * board:.0f}×{back_t:.0f}mm",
+        ))
+        panels.append(PanelPlacement(
+            id=f"drawer_bottom_{z_suffix}", name=f"抽屉底板({front_z:.0f}mm)",
+            panel_type="drawer_bottom",
+            size_x=box_w - 2 * board, size_y=box_d - 2 * board, size_z=bottom_t,
+            pos_x=layout.internal_x_start + board,
+            pos_y=box_back_y + board,
+            pos_z=box_z,
+            material_role="carcass",
+            inner_face=frame.top, outer_face=frame.bottom, cam_face=None,
+            note=f"抽屉底板 {box_w - 2 * board:.0f}×{box_d - 2 * board:.0f}×{bottom_t:.0f}mm",
         ))
     return panels
 

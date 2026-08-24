@@ -190,6 +190,20 @@ def validate_panels(
     if not panels:
         report.add_error("EMPTY_PANEL_PLAN", "panel plan contains no panels")
         return report
+    # 抽屉语义优先：整高抽屉区不生成门板与固定层板（warning 而非静默）
+    if spec.drawer_count > 0:
+        if spec.n_doors > 0:
+            report.add_warning(
+                "DRAWER_ZONE_SUPERSEDES_DOORS",
+                f"整高抽屉区（drawer_count={spec.drawer_count}）下不生成门板"
+                f"（n_doors={spec.n_doors} 被忽略）",
+            )
+        if spec.shelf_count > 0:
+            report.add_warning(
+                "DRAWER_ZONE_SUPERSEDES_SHELVES",
+                f"整高抽屉区（drawer_count={spec.drawer_count}）下不生成固定层板"
+                f"（shelf_count={spec.shelf_count} 被忽略）",
+            )
     ids = {item.id for item in panels}
     if len(ids) != len(panels):
         report.add_error("DUPLICATE_PANEL_ID", "panel ids must be unique")
