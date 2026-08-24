@@ -472,20 +472,41 @@ class DrawerZoneTests(unittest.TestCase):
         self.assertIn("DRAWER_ZONE_SUPERSEDES_DOORS", codes)
         self.assertIn("DRAWER_ZONE_SUPERSEDES_SHELVES", codes)
 
-    def test_drawer_panels_have_no_trinity_holes(self) -> None:
-        """抽屉盒体不用三合一：抽屉板件不得出现任何三合一孔位。
-
-        回归：_trinity_female 曾因未校验 male_has_cam，把抽屉侧板误判为
-        三合一母件并在侧板上打出系统 32 预埋螺母孔。
-        """
-        spec, placements = self._drawer_cabinet(3)
+    def test_drawer_box_uses_trinity_by_default(self) -> None:
+        """抽屉盒默认三合一（全屋定制主流）：杆/轮/螺母 1:1:1，底板 cam 在底面。"""
+        spec, placements = self._drawer_cabinet(1)
         manufacturing = plan_manufacturing(spec, placements)
         holes = TrinityConnector().generate_holes_for_panels(manufacturing.panels)
         drawer_labels = {
             p.label for p in manufacturing.panels if "drawer" in p.panel_type
         }
-        self.assertFalse(any(h.panel_label in drawer_labels for h in holes))
-        self.assertTrue(holes)  # carcass 三合一孔仍存在
+        drawer_holes = [h for h in holes if h.panel_label in drawer_labels]
+        types = [h.hole_type for h in drawer_holes]
+        # 1:1:1 配对（每连接：1 杆 + 1 轮 + 1 螺母）
+        self.assertGreater(types.count("system_32_male"), 0)
+        self.assertEqual(
+            types.count("system_32_male"),
+            types.count("system_32_female"),
+        )
+        self.assertEqual(
+            types.count("system_32_female"),
+            types.count("system_32_pre_nut"),
+        )
+        # 底板轮孔在底面（cam_face=-z → z_local=0，钻入方向 +z）
+        bottom_cams = [
+            h for h in holes
+            if h.panel_label == "drawer_bottom_z68"
+            and h.hole_type == "system_32_female"
+        ]
+        self.assertEqual(len(bottom_cams), 8)  # 4 连接 × 2 排
+        self.assertTrue(all(abs(h.z_local) < 1e-6 for h in bottom_cams))
+        self.assertTrue(all(h.direction == "+z" for h in bottom_cams))
+        # BOM 三合一数量 = 全部偏心轮孔数（柜体 + 抽屉，孔即真源）
+        trinity = [h for h in manufacturing.hardware if h.name == "三合一连接件"]
+        self.assertEqual(
+            trinity[0].quantity,
+            sum(1 for h in holes if h.hole_type == "system_32_female"),
+        )
 
     def test_no_drawer_keeps_doors_and_shelves(self) -> None:
         spec, placements = self._drawer_cabinet(0, n_doors=2, shelf_count=4)

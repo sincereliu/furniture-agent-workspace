@@ -484,6 +484,9 @@ def _drawer_panels(
     box_d = internal_depth - board - back_clear
     box_back_y = layout.internal_y_start + back_clear
 
+    # 底板 x/y 端面分别顶住侧板内面/前后面（三合一连接）；底板 y 向延伸到前板
+    bottom_size_y = box_d - board
+
     panels: list[PanelPlacement] = []
     for i in range(count):
         front_z = (
@@ -510,45 +513,49 @@ def _drawer_panels(
             id=f"drawer_side_L_{z_suffix}", name=f"抽屉左板({front_z:.0f}mm)",
             panel_type="drawer_side",
             size_x=board, size_y=box_d, size_z=box_h,
-            pos_x=layout.internal_x_start,
+            pos_x=layout.internal_x_start + slide_gap,
             pos_y=box_back_y,
             pos_z=box_z,
             material_role="carcass",
-            inner_face=frame.right, outer_face=frame.left, cam_face=None,
+            inner_face=frame.right, outer_face=frame.left,
+            cam_face=frame.left,  # 偏心轮在侧板外侧面（抽屉外部操作）
             note=f"抽屉左侧板 {box_d:.0f}×{box_h:.0f}×{board:.0f}mm",
         ))
         panels.append(PanelPlacement(
             id=f"drawer_side_R_{z_suffix}", name=f"抽屉右板({front_z:.0f}mm)",
             panel_type="drawer_side",
             size_x=board, size_y=box_d, size_z=box_h,
-            pos_x=layout.internal_x_end - board,
+            pos_x=layout.internal_x_end - board - slide_gap,
             pos_y=box_back_y,
             pos_z=box_z,
             material_role="carcass",
-            inner_face=frame.left, outer_face=frame.right, cam_face=None,
+            inner_face=frame.left, outer_face=frame.right,
+            cam_face=frame.right,  # 偏心轮在侧板外侧面（抽屉外部操作）
             note=f"抽屉右侧板 {box_d:.0f}×{box_h:.0f}×{board:.0f}mm",
         ))
         panels.append(PanelPlacement(
             id=f"drawer_back_{z_suffix}", name=f"抽屉后板({front_z:.0f}mm)",
             panel_type="drawer_back",
             size_x=box_w - 2 * board, size_y=back_t, size_z=box_h - 2 * board,
-            pos_x=layout.internal_x_start + board,
+            pos_x=layout.internal_x_start + slide_gap + board,
             pos_y=box_back_y,
-            pos_z=box_z + bottom_t,
+            pos_z=box_z,  # 背板底边与底板齐平：底板后端的连接杆轴线才能落在背板内
             material_role="carcass",
-            inner_face=frame.front, outer_face=frame.back, cam_face=None,
+            inner_face=frame.front, outer_face=frame.back,
+            cam_face=frame.back,  # 偏心轮在背板外侧面（抽屉外部操作）
             note=f"抽屉后板 {box_w - 2 * board:.0f}×{box_h - 2 * board:.0f}×{back_t:.0f}mm",
         ))
         panels.append(PanelPlacement(
             id=f"drawer_bottom_{z_suffix}", name=f"抽屉底板({front_z:.0f}mm)",
             panel_type="drawer_bottom",
-            size_x=box_w - 2 * board, size_y=box_d - 2 * board, size_z=bottom_t,
-            pos_x=layout.internal_x_start + board,
+            size_x=box_w - 2 * board, size_y=bottom_size_y, size_z=bottom_t,
+            pos_x=layout.internal_x_start + slide_gap + board,
             pos_y=box_back_y + board,
             pos_z=box_z,
             material_role="carcass",
-            inner_face=frame.top, outer_face=frame.bottom, cam_face=None,
-            note=f"抽屉底板 {box_w - 2 * board:.0f}×{box_d - 2 * board:.0f}×{bottom_t:.0f}mm",
+            inner_face=frame.top, outer_face=frame.bottom,
+            cam_face=frame.bottom,  # 偏心轮在底板下面（抽屉外部操作）
+            note=f"抽屉底板 {box_w - 2 * board:.0f}×{bottom_size_y:.0f}×{bottom_t:.0f}mm",
         ))
     return panels
 

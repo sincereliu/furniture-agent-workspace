@@ -104,6 +104,29 @@ def _opposite(axis: str) -> str:
     return f"{'+' if axis[0] == '-' else '-'}{axis[1]}"
 
 
+def _other_axis(a: str, t: str) -> str:
+    """连接平面内除边轴 a 与 cam 面轴 t 之外的第三轴。"""
+    for axis in ("x", "y", "z"):
+        if axis != a and axis != t:
+            return axis
+    return "y"
+
+
+def _is_trinity_joint(joint: Any, by_label: Dict[str, PanelRecord]) -> bool:
+    """某 joint 是否是三合一连接。
+
+    抽屉盒是滑动子装配，内部 x/y 轴接触均为连接（前/后/底↔侧）；
+    柜体结构连接仅 x 轴（侧板↔横板）——背板等 y 向接触（如层板后
+    端面搁在背板前面）是接触不是连接，不生成三合一。
+    """
+    if not joint.male_has_cam:
+        return False
+    female = by_label[joint.female_id]
+    if "drawer" in female.panel_type:
+        return joint.edge_axis in ("x", "y")
+    return joint.edge_axis == "x"
+
+
 class TrinityConnector(Connector):
     """三合一连接件。
 
@@ -176,7 +199,8 @@ class TrinityConnector(Connector):
     ) -> List[HoleSpec]:
         """竖板（面接触方）→ 预埋螺母打在 inner_face 上。
 
-        有连接拓扑时：只在横板连接的 Z 高度打螺母（1:1:1）。\n        无连接拓扑时：回退系统-32 全高排钻。
+        本路径仅服务无连接拓扑的旧数据：系统-32 全高排钻（1:1:1 的
+        轴无关成对孔由 generate_holes_for_panels 的连接驱动逻辑处理）。
 
         孔位先在面板局部坐标定义（局部为唯一真源），世界坐标由 to_global 派生。
         """
@@ -191,22 +215,9 @@ class TrinityConnector(Connector):
         face = inner if inner in ("+x", "-x") else "+x"
         x_local = panel.face_position(face) - panel.pos_x
 
-        # 从连接拓扑确定螺母 Z 高度（每块横板一个高度，只取三合一连接）
-        trinity_female_joints = [
-            j for j in _joints_of(panel)
-            if j.female_id == panel.label and j.face[1] == "x" and j.male_has_cam
-        ]
-        rod_axis_offset = float(wheel.get("rod_axis_offset_mm", 9))
-        if trinity_female_joints:
-            # 螺母孔与连接杆轴线同高(cam_face + 偏心距)，而非板厚中心；
-            # joint 高度是柜体坐标，折算到板件局部坐标。
-            z_locals = sorted({
-                round(self._rod_axis_z_from_joint(j, rod_axis_offset), 3) - panel.pos_z
-                for j in trinity_female_joints
-            })
-        else:
-            # fallback: 系统-32 全高排钻（z_positions 已是局部坐标）
-            z_locals = list(z_positions)
+        # 本路径仅服务无连接拓扑的旧数据（有拓扑的连接由 generate_holes_for_panels
+        # 的连接驱动逻辑处理）：系统-32 全高排钻（z_positions 已是局部坐标）。
+        z_locals = list(z_positions)
 
         for z_local in z_locals:
             for y_local in [nut_first, panel.size_y - nut_last]:
@@ -300,22 +311,7 @@ class TrinityConnector(Connector):
 
         return result
 
-    @staticmethod
-    def _rod_axis_z_from_joint(joint: Any, rod_axis_offset: float) -> float:
-        """从连接拓扑反推连接杆轴线 Z（male 的 cam_face + 偏心距）。
-
-        旧数据无 male_cam_face/male_size_z 时，退回 male_z（板厚中心，旧行为）。
-        """
-        cam_face = getattr(joint, "male_cam_face", None)
-        size_z = getattr(joint, "male_size_z", 0.0)
-        if not cam_face or size_z <= 0:
-            return joint.male_z
-        # joint.male_z = male 板厚中心；cam_face 位置 = 中心 ± 板厚/2
-        if cam_face == "-z":
-            return (joint.male_z - size_z / 2.0) + rod_axis_offset
-        return (joint.male_z + size_z / 2.0) - rod_axis_offset
-
-    # ── assembly-aware ──────────────────────────────────────────
+    # ── assembly-aware（连接驱动，轴无关）──────────────────────────
 
     def generate_holes_for_panels(
         self,
@@ -323,14 +319,191 @@ class TrinityConnector(Connector):
     ) -> List[HoleSpec]:
         """生成所有三合一孔位。
 
-        基础孔位由 generate_holes() 逐板生成——female 螺母按 joint.male_z
-        打（1:1:1），male 杆+轮按 joint.edge_sign 打。
+        对每个带 cam 的连接（male_has_cam 的 joint，边轴 x 或 y）成对生成：
+        - female 面 → 预埋螺母孔（位置对齐 male 的连接杆轴线与连接排）
+        - male 边   → 连接杆孔（端面）
+        - male cam 面 → 偏心轮孔
+        连接排沿"连接平面内除边轴与 cam 面轴之外的第三轴"分布；
+        无连接拓扑的旧数据走 generate_holes() 的 system-32 回退。
         """
-        return [
-            hole
-            for panel in panels
-            for hole in self.generate_holes(panel)
+        matched = self.match(panels)
+        spec = matched.get("spec", {})
+        wheel = spec.get("eccentric_wheel", {})
+        rod = spec.get("connecting_rod", {})
+        nut = spec.get("pre_embedded_nut", {})
+        rules = matched.get("rules", {})
+        row_first = float(rules.get("first_hole_mm", 64))
+        row_last = float(rules.get("last_hole_mm", 64))
+        cam_offset = float(wheel.get("center_offset_from_edge_mm", 33.5))
+        rod_axis_offset = float(wheel.get("rod_axis_offset_mm", 9))
+
+        by_label = {panel.label: panel for panel in panels}
+        result: List[HoleSpec] = []
+        for panel in panels:
+            fem_joints = [
+                j for j in (panel.joints or [])
+                if j.female_id == panel.label
+                and _is_trinity_joint(j, by_label)
+            ]
+            mal_joints = [
+                j for j in (panel.joints or [])
+                if j.male_id == panel.label
+                and _is_trinity_joint(j, by_label)
+            ]
+            if not panel.joints:
+                # 无连接拓扑的旧数据：system-32 回退
+                result.extend(self.generate_holes(panel))
+                continue
+            # 螺母孔先发（按连接杆轴线位置排序，保持旧顺序），再杆、再轮
+            for joint in sorted(
+                fem_joints,
+                key=lambda j: self._rod_axis_world(
+                    j, by_label[j.male_id], rod_axis_offset
+                ),
+            ):
+                result.extend(self._nut_holes(
+                    panel, joint, by_label[joint.male_id], nut, wheel,
+                    row_first, row_last, rod_axis_offset,
+                ))
+            for joint in sorted(mal_joints, key=lambda j: j.edge_sign):
+                result.extend(self._rod_holes(
+                    panel, joint, rod, wheel, cam_offset,
+                    row_first, row_last, rod_axis_offset,
+                ))
+            for joint in sorted(mal_joints, key=lambda j: j.edge_sign):
+                result.extend(self._cam_holes(
+                    panel, joint, wheel, cam_offset,
+                    row_first, row_last, rod_axis_offset,
+                ))
+        return result
+
+    @staticmethod
+    def _rod_axis_world(
+        joint: Any, male: PanelRecord, rod_axis_offset: float
+    ) -> float:
+        """male 连接杆轴线在 cam 面法向轴上的世界坐标（取整到 0.001）。"""
+        cam_face = getattr(joint, "male_cam_face", None) or "+z"
+        t = cam_face[1]
+        size_t = getattr(male, f"size_{t}", 0.0)
+        pos_t = getattr(male, f"pos_{t}", 0.0)
+        if size_t <= 0:
+            # 旧 joint 数据缺 male 尺寸：退回 male_z（旧行为，仅 z 轴有效）
+            return joint.male_z
+        rod_t = (
+            size_t - rod_axis_offset if cam_face[0] == "+" else rod_axis_offset
+        )
+        return round(pos_t + rod_t, 3)
+
+    def _nut_holes(
+        self, panel: PanelRecord, joint: Any, male: PanelRecord,
+        nut: Dict[str, Any], wheel: Dict[str, Any],
+        row_first: float, row_last: float, rod_axis_offset: float,
+    ) -> List[HoleSpec]:
+        """female 面板上的预埋螺母孔：与 male 的连接杆/轮同排同位。"""
+        result: List[HoleSpec] = []
+        n_diam = float(nut.get("diameter_mm", 10))
+        n_depth = float(nut.get("depth_mm", 11))
+        face = joint.face
+        f = face[1]
+        a = joint.edge_axis
+        cam_face = getattr(joint, "male_cam_face", None) or "+z"
+        t = cam_face[1]
+        s2 = _other_axis(a, t)
+        face_local = panel.face_position(face) - getattr(panel, f"pos_{f}")
+        t_rod_world = self._rod_axis_world(joint, male, rod_axis_offset)
+        # 连接排沿 s2 以 male 的跨度为基准（世界坐标，螺母与杆/轮严格同排）
+        rows_world = [
+            getattr(male, f"pos_{s2}") + row_first,
+            getattr(male, f"pos_{s2}") + getattr(male, f"size_{s2}") - row_last,
         ]
+        nut_dir = _opposite(face)
+        for row_world in rows_world:
+            local = {
+                f: face_local,
+                t: t_rod_world - getattr(panel, f"pos_{t}"),
+                s2: row_world - getattr(panel, f"pos_{s2}"),
+            }
+            x_global, y_global, z_global = panel.to_global(
+                local["x"], local["y"], local["z"]
+            )
+            result.append(HoleSpec(
+                hole_type="system_32_pre_nut", panel_label=panel.label,
+                x_global=x_global, y_global=y_global, z_global=z_global,
+                x_local=local["x"], y_local=local["y"], z_local=local["z"],
+                diameter=n_diam, depth=n_depth, direction=nut_dir,
+                is_face_hole=True, note="预埋螺母孔"))
+        return result
+
+    def _rod_holes(
+        self, panel: PanelRecord, joint: Any,
+        rod: Dict[str, Any], wheel: Dict[str, Any], cam_offset: float,
+        row_first: float, row_last: float, rod_axis_offset: float,
+    ) -> List[HoleSpec]:
+        """male 面板端面的连接杆孔（轴无关）。"""
+        result: List[HoleSpec] = []
+        r_diam = float(rod.get("diameter_mm", 8))
+        r_depth = float(rod.get("insertion_depth_mm", 33))
+        a = joint.edge_axis
+        cam_face = getattr(joint, "male_cam_face", None) or "+z"
+        t = cam_face[1]
+        s2 = _other_axis(a, t)
+        rows = [row_first, getattr(panel, f"size_{s2}") - row_last]
+        edge_local = (
+            0.0 if joint.edge_sign == -1 else getattr(panel, f"size_{a}")
+        )
+        rod_dir = f"{'+' if joint.edge_sign == -1 else '-'}{a}"
+        size_t = getattr(panel, f"size_{t}")
+        t_rod = (
+            size_t - rod_axis_offset if cam_face[0] == "+" else rod_axis_offset
+        )
+        for row in rows:
+            local = {a: edge_local, s2: row, t: t_rod}
+            x_global, y_global, z_global = panel.to_global(
+                local["x"], local["y"], local["z"]
+            )
+            result.append(HoleSpec(
+                hole_type="system_32_male", panel_label=panel.label,
+                x_global=x_global, y_global=y_global, z_global=z_global,
+                x_local=local["x"], y_local=local["y"], z_local=local["z"],
+                diameter=r_diam, depth=r_depth, direction=rod_dir,
+                is_face_hole=False, note="连接杆孔"))
+        return result
+
+    def _cam_holes(
+        self, panel: PanelRecord, joint: Any,
+        wheel: Dict[str, Any], cam_offset: float,
+        row_first: float, row_last: float, rod_axis_offset: float,
+    ) -> List[HoleSpec]:
+        """male 面板 cam 面上的偏心轮孔（轴无关）。"""
+        result: List[HoleSpec] = []
+        w_diam = float(wheel.get("diameter_mm", 12))
+        w_depth = float(wheel.get("hole_depth_mm", 13.5))
+        a = joint.edge_axis
+        cam_face = getattr(joint, "male_cam_face", None) or "+z"
+        t = cam_face[1]
+        s2 = _other_axis(a, t)
+        rows = [row_first, getattr(panel, f"size_{s2}") - row_last]
+        cam_a = (
+            cam_offset
+            if joint.edge_sign == -1
+            else getattr(panel, f"size_{a}") - cam_offset
+        )
+        cam_t = (
+            0.0 if cam_face[0] == "-" else getattr(panel, f"size_{t}")
+        )
+        cam_dir = _opposite(cam_face)
+        for row in rows:
+            local = {a: cam_a, s2: row, t: cam_t}
+            x_global, y_global, z_global = panel.to_global(
+                local["x"], local["y"], local["z"]
+            )
+            result.append(HoleSpec(
+                hole_type="system_32_female", panel_label=panel.label,
+                x_global=x_global, y_global=y_global, z_global=z_global,
+                x_local=local["x"], y_local=local["y"], z_local=local["z"],
+                diameter=w_diam, depth=w_depth, direction=cam_dir,
+                is_face_hole=True, note="偏心轮孔"))
+        return result
 
     def _system_32_positions(self, panel: PanelRecord, rules: Dict[str, Any]) -> List[float]:
         """按系统 32 排钻规则计算孔位 Z 坐标列表。"""

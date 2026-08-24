@@ -89,6 +89,9 @@ def compute_joints(placements: Sequence[PanelPlacement]) -> list[PanelJoint]:
     joints: list[PanelJoint] = []
     candidates = [p for p in placements if p.inner_face]
 
+    def _is_drawer(panel: PanelPlacement) -> bool:
+        return "drawer" in panel.panel_type
+
     for female in candidates:
         face_dir = female.inner_face
         face_axis = _axis_char(face_dir)
@@ -99,6 +102,10 @@ def compute_joints(placements: Sequence[PanelPlacement]) -> list[PanelJoint]:
 
         for male in placements:
             if male.id == female.id:
+                continue
+            # 抽屉是滑动子装配：抽屉↔柜体的接触（如抽屉侧板贴柜体侧板、
+            # 抽屉前板底边搁柜体底板）不是连接，排除跨装配 joint。
+            if _is_drawer(female) != _is_drawer(male):
                 continue
             # male 必须在这个面上有端面才可能接触
             male_min, male_max = _axis_range(male, face_axis)
