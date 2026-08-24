@@ -129,6 +129,32 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
         self.assertTrue(all(not hole.is_face_hole for hole in rod_holes))
         self.assertTrue(all(hole.is_face_hole for hole in cam_holes))
 
+    def test_trinity_machining_operation_ids_are_unique_per_end(self) -> None:
+        """两端连接的三合一板，加工指令 id 必须含 x_local 以区分左右端。"""
+        connector = TrinityConnector()
+        top = panel_record(
+            label="top_panel",
+            name="顶板",
+            panel_type="top",
+            size_x=764,
+            size_y=600,
+            size_z=18,
+            pos_x=18,
+            pos_z=982,
+            cam_face="-z",
+        )
+        ops = connector.machining_operations(top)
+        ids = [op.id for op in ops]
+        # 唯一性：旧实现 id 无 x_local 时，左右两端同 (z,y) 的孔 id 重复
+        self.assertEqual(len(ids), len(set(ids)))
+        # 同一深度排(y=64)的两个连接杆孔（左端 x=0 / 右端 x=764）id 必须不同
+        male_front = [
+            op for op in ops
+            if "system_32_male" in op.id and "_64_" in op.id
+        ]
+        self.assertEqual(len(male_front), 2)
+        self.assertNotEqual(male_front[0].id, male_front[1].id)
+
     def test_hinge_cup_uses_center_distance_and_inner_face(self) -> None:
         door = panel_record(
             label="left_door",

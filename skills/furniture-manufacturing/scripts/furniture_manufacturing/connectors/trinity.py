@@ -379,8 +379,12 @@ class TrinityConnector(Connector):
         ops: List[MachiningOperation] = []
         for hole in self.generate_holes(panel):
             d = hole.diameter
+            # id 含 x_local：区分左右两端同 (z,y) 的孔，避免 DUPLICATE_OPERATION_ID
             ops.append(MachiningOperation(
-                id=f"{hole.hole_type}_{panel.label}_{hole.z_local:.0f}_{hole.y_local:.0f}",
+                id=(
+                    f"{hole.hole_type}_{panel.label}_"
+                    f"{hole.z_local:.0f}_{hole.y_local:.0f}_{hole.x_local:.0f}"
+                ),
                 operation_type="cut_box", target_panel=panel.label,
                 size_x=hole.depth if hole.direction in ("+x", "-x") else d,
                 size_y=hole.depth if hole.direction in ("+y", "-y") else d,
