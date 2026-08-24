@@ -1,5 +1,32 @@
 # 更新日志
 
+## 20260822.5 — 记录抽屉组件级实体需求（待评审提案）
+
+抽屉本质是子装配组件（板件集合+盒体拓扑+滑轨/拉手五金），当前板件规划不生成抽屉板件。
+
+### 内容
+
+- 新增 `skills/furniture-manufacturing/references/drawer-component-design.md`：背景、现状、**契约 3 条**（panel_type 含 `drawer`、尺寸取自抽屉板件自身、实例 key = label 位置后缀且每抽 1 副）、需求（抽屉组件物化、layout `drawer_count` 启用或清理、滑轨长度校验、五金变体注入）、实施建议。
+- `SKILL.md` 步骤 4 与连接点需求并列加指引，标注"实施前需评审"。
+
+## 20260822.4 — 抽屉滑轨 Connector 化（档 A：纯重构）
+
+`DrawerSlideConnector` 落地，抽屉滑轨从"特例函数"迁入标准 Connector 路径，消灭死代码。
+
+### 改动点
+
+- 新增 `connectors/drawer_slide.py`：`DrawerSlideConnector`（`catalog_entry="drawer_slides"`），按抽屉实例匹配长度/承重/品牌；滑轨螺钉为组装现场工艺，不生成孔位。
+- 修复潜在 bug：滑轨数量从"整柜固定 2"改为"每抽一副（左右各 1）× 抽屉实例数"，不同规格分条记录。
+- `connectors/__init__.py`：注册 `ALL_CONNECTORS`；`manufacturing_bom.py`：删除滑轨特例块与 import。
+- 删除死模块 `manufacturing_hardware.py`（`match_drawer_slides` 原所在，无其他引用）。
+- 测试：新增 2 条——按抽屉实例出 BOM（数量/长度/品牌）、无抽屉板件时不产出滑轨。
+
+### 验证
+
+- 51 项测试通过（49 + 2 新增）。
+- 无抽屉柜型 BOM 零变化（DrawerSlideConnector 空输出）。
+- 契约面向"抽屉组件"（见 20260822.5），档 B 抽屉板件落地时滑轨自动生效。
+
 ## 20260822.3 — direction 语义统一为钻入方向
 
 `HoleSpec.direction` 统一为"钻入方向（往板内）"（`coordinate-naming.md` 约定），
