@@ -1,5 +1,22 @@
 # 更新日志
 
+## 20260822.7 — 修复抽屉侧板被误判为三合一母件
+
+抽屉盒体不用三合一（现实工艺为木榫+胶/螺丝）；但 `_trinity_female` 的拓扑判定
+只查 `face[1]=="x"`、未校验 `male_has_cam`，导致抽屉侧板（与抽屉底板/背板存在
+x 面邻接）被误判为三合一母件，走 fallback 全高排钻打出系统 32 预埋螺母孔
+（且仅左侧板出现，不对称）。
+
+### 修复
+
+- `connectors/trinity.py`：`_trinity_female` joint 判定补 `j.male_has_cam` 条件
+  （与 `_trinity_male`/`_female_holes` 一致）；抽屉板件 `cam_face=None` → 不再误判。
+- 测试：`test_drawer_panels_have_no_trinity_holes`（抽屉板件零三合一孔，carcass 孔位不变）。
+
+### 验证
+
+- 57 项测试通过；抽屉 15 板零孔；carcass 孔位不变（bottom 8 / 侧板各 4 / top 8）。
+
 ## 20260822.6 — 抽屉区首版落地（档 B：整高抽屉区 + 无面板 + 三节轨）
 
 `drawer_count` 驱动的整高抽屉区打通板件规划→制造全链路。

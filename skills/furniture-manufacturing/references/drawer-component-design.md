@@ -38,6 +38,7 @@
 1. **panel_type 命名**：抽屉板件 `panel_type` 含 `"drawer"`（`drawer_front` / `drawer_side` / `drawer_back` / `drawer_bottom`）。
 2. **尺寸来源**：抽屉深度 = 抽屉板件 `size_y` 最大值（侧板携带），宽度 = `size_x` 最大值（前板携带）——取自抽屉板件自身。
 3. **实例粒度**：抽屉板件 `label` = `drawer_<角色>_<实例后缀>`，实例 key = label 最后一个 `"_"` 分段（如 `drawer_front_z68` → `z68`）；数量 = 每抽 1 副（左右各 1）× 抽屉实例数。
+4. **连接方式**：抽屉盒体**不用三合一**（现实工艺：木榫+胶/螺丝）；抽屉板件 `cam_face=None`，且 `_trinity_female` 校验 `male_has_cam`（20260822.7 修复误判后抽屉板件零三合一孔）。
 
 ## 首版尺寸链（`_drawer_panels`，值待投产确认）
 

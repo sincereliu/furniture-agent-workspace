@@ -31,13 +31,15 @@ def _is_male(panel: PanelRecord) -> bool:
 
 
 def _trinity_female(panel: PanelRecord) -> bool:
-    """x 轴方向的面接触方（侧板/隔板）。
+    """x 轴方向、带 cam 的面接触方（侧板/隔板）。
 
     优先从连接拓扑推导；无连接拓扑时退回 panel_type 判断。
+    male_has_cam 必须为真（与 _trinity_male/_female_holes 一致）：
+    否则抽屉侧板等无 cam 的板件会被误判为三合一母件。
     """
     if panel.joints:
         return any(
-            j.female_id == panel.label and j.face[1] == "x"
+            j.female_id == panel.label and j.face[1] == "x" and j.male_has_cam
             for j in _joints_of(panel)
         )
     # fallback: no joint topology available

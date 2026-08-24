@@ -472,6 +472,21 @@ class DrawerZoneTests(unittest.TestCase):
         self.assertIn("DRAWER_ZONE_SUPERSEDES_DOORS", codes)
         self.assertIn("DRAWER_ZONE_SUPERSEDES_SHELVES", codes)
 
+    def test_drawer_panels_have_no_trinity_holes(self) -> None:
+        """抽屉盒体不用三合一：抽屉板件不得出现任何三合一孔位。
+
+        回归：_trinity_female 曾因未校验 male_has_cam，把抽屉侧板误判为
+        三合一母件并在侧板上打出系统 32 预埋螺母孔。
+        """
+        spec, placements = self._drawer_cabinet(3)
+        manufacturing = plan_manufacturing(spec, placements)
+        holes = TrinityConnector().generate_holes_for_panels(manufacturing.panels)
+        drawer_labels = {
+            p.label for p in manufacturing.panels if "drawer" in p.panel_type
+        }
+        self.assertFalse(any(h.panel_label in drawer_labels for h in holes))
+        self.assertTrue(holes)  # carcass 三合一孔仍存在
+
     def test_no_drawer_keeps_doors_and_shelves(self) -> None:
         spec, placements = self._drawer_cabinet(0, n_doors=2, shelf_count=4)
         types = {p.panel_type for p in placements}
