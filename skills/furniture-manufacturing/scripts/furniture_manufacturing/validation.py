@@ -345,6 +345,14 @@ def validate_manufacturing(
             f"三合一连接件数量 {trinity_hardware.quantity} 与偏心轮孔数 {trinity_cam_count} 不一致",
             "hardware",
         )
+    # 三合一杆孔数 = 偏心轮孔数（1:1 配对）：缺杆孔会产生静默孤儿偏心轮
+    trinity_rod_count = hole_types.count("system_32_male")
+    if trinity_rod_count != trinity_cam_count:
+        report.add_error(
+            "TRINITY_ROD_CAM_COUNT_MISMATCH",
+            f"连接杆孔数 {trinity_rod_count} 与偏心轮孔数 {trinity_cam_count} 不一致（1:1 配对）",
+            "drilled_holes",
+        )
     manufacturing_contracts: dict[
         str,
         tuple[str, tuple[str, ...]],

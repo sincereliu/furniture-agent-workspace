@@ -5,6 +5,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 from xml.etree import ElementTree as ET
 
 
@@ -154,6 +155,41 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
         ]
         self.assertEqual(len(male_front), 2)
         self.assertNotEqual(male_front[0].id, male_front[1].id)
+
+    def test_trinity_rod_cam_count_mismatch_is_rejected(self) -> None:
+        """删掉一个连接杆孔后，校验必须报 TRINITY_ROD_CAM_COUNT_MISMATCH。"""
+        spec = FurnitureSpec(
+            furniture_type="floor_cabinet",
+            width=800,
+            depth=600,
+            height=1000,
+            n_doors=2,
+        )
+        placements = plan_panels(spec, plan_layout(spec))
+        manufacturing = plan_manufacturing(spec, placements)
+        orig = TrinityConnector.generate_holes_for_panels
+
+        def drop_one_male(self, panels):
+            holes = orig(self, panels)
+            dropped = False
+            kept = []
+            for hole in holes:
+                if not dropped and hole.hole_type == "system_32_male":
+                    dropped = True
+                    continue
+                kept.append(hole)
+            return kept
+
+        with mock.patch.object(
+            TrinityConnector, "generate_holes_for_panels", drop_one_male
+        ):
+            report = validate_manufacturing(spec, manufacturing, placements)
+
+        self.assertFalse(report.passed)
+        self.assertIn(
+            "TRINITY_ROD_CAM_COUNT_MISMATCH",
+            {issue.code for issue in report.issues},
+        )
 
     def test_hinge_cup_uses_center_distance_and_inner_face(self) -> None:
         door = panel_record(
