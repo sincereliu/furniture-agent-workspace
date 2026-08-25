@@ -478,6 +478,10 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         issue_codes = {issue.code for issue in revision.validations[-1].issues}
         self.assertIn("INVALID_INTENT", issue_codes)
 
+    def test_runtime_requires_llm_to_normalize_natural_language_type(self) -> None:
+        with self.assertRaisesRegex(ValueError, "executable canonical type"):
+            cabinet_intent(furniture_type="地柜").confirm()
+
     def test_unsupported_layout_decision_is_rejected_by_independent_input(self) -> None:
         with self.assertRaisesRegex(ValueError, "layout input only accepts"):
             stage_inputs_from_spec(

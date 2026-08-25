@@ -4,7 +4,7 @@
 
 ## 捕获内容
 
-- `furniture_type`：当前可执行类别为 `floor_cabinet` 与 `wall_cabinet`。
+- `furniture_type`：由 LLM 根据完整语义归一化为 [家具目录](intake/catalog.yaml) 中 `executable: true` 的规范类别。目录里的语言示例不穷举，不要求字面命中；运行时只验证归一化结果，不实现自然语言别名匹配。
 - `overall_size.width_mm/depth_mm/height_mm`：成品外包络；草稿未知值可为 `null`，确认前必须全部为正数。
 - 坐标口径为 X 左→右、Y 后→前、Z 向上；未标注的三个尺寸按 `W×D×H` 解释并向客户展示。
 
@@ -18,5 +18,5 @@
 
 ## 边界
 
-- 类别无匹配时只输出 fallback 草稿，不确认、不进入布局。
+- 无法可靠归一化到可执行类别时只输出 fallback 草稿，不确认、不进入布局；不要因为目录里缺少某个同义表达就直接判定为不匹配。
 - 在外包络确认后停止；不计算布局、净空、板件、制造策略、特征树或 CAD。

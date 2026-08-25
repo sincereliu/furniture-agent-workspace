@@ -42,6 +42,25 @@ STAGE_RUNTIME_PACKAGES = {
 
 
 class SkillArchitectureTests(unittest.TestCase):
+    def test_llm_runtime_boundary_policy_is_discoverable(self) -> None:
+        policy_relative_path = (
+            ".agents/skills/furniture-agent/references/"
+            "llm-runtime-boundary.md"
+        )
+        policy_path = WORKSPACE_ROOT / policy_relative_path
+        self.assertTrue(policy_path.is_file(), policy_path)
+
+        router_path = (
+            WORKSPACE_ROOT / ".agents" / "skills" / "furniture-agent" / "SKILL.md"
+        )
+        router = router_path.read_text(encoding="utf-8")
+        self.assertIn("references/llm-runtime-boundary.md", router, router_path)
+
+        repository_instructions = (WORKSPACE_ROOT / "AGENTS.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(policy_relative_path, repository_instructions)
+
     def test_six_serial_stages_have_one_skill_each(self) -> None:
         claimed_stages: dict[str, str] = {}
 

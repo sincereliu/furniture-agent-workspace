@@ -24,6 +24,7 @@ description: 路由本仓库六阶段家具生成主流程、独立房间摆放�
 
 规则：
 
+- 创建、修改或审查家具 Skill 及其运行时代码前，必须读取 [LLM 与运行时边界](references/llm-runtime-boundary.md)，并在完成前执行其中的边界审计；无法归入确定性代码类别的逻辑不得进入 `scripts/`。
 - 讨论或推理停在所属阶段；实现由该 Skill 的 `scripts/` 拥有，串联阶段顺序统一由 `FurnitureOrchestrator` 管理。
 - 交互式家具生成 Agent 只用 `confirm_stage()`、`run_next()`：确认当前阶段、生成下一阶段、展示其 `stage_outputs`，然后等待“继续”。不得用 `execute_spec()` 越过确认；不得从 Agent 直接调用 `plan_cabinet()`、特征树发射器或 `CadBridge` 另建流水线。
 - 修改设计意图用 `revise()`；修改 `panels_planned`、`manufacturing_planned` 或 `feature_tree_planned` 用 `revise_stage_output()`。新 Revision 只继承修改点之前的已确认输出；修改阶段及下游重新确认/生成。

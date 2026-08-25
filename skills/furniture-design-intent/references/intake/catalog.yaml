@@ -1,9 +1,9 @@
-version: 1
+version: 2
 
 families:
   floor_cabinet:
     executable: true
-    aliases:
+    semantic_examples:
       - floor cabinet
       - base cabinet
       - storage cabinet
@@ -14,7 +14,7 @@ families:
 
   wall_cabinet:
     executable: true
-    aliases:
+    semantic_examples:
       - wall cabinet
       - hanging cabinet
       - 吊柜

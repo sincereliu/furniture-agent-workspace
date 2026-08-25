@@ -54,6 +54,11 @@ class DesignIntent:
 
     def confirm(self) -> "DesignIntent":
         errors = self.validate()
+        if self.furniture_type not in SUPPORTED_TYPES:
+            errors.append(
+                "furniture_type must be an executable canonical type: "
+                + ", ".join(sorted(SUPPORTED_TYPES))
+            )
         if errors:
             raise ValueError("; ".join(errors))
         return replace(self, confirmed=True)
