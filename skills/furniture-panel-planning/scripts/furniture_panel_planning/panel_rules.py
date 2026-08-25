@@ -7,7 +7,7 @@ def resolve_toe_kick_support_count(
     explicit: int | None,
     cabinet_width: float,
 ) -> int:
-    """Return the requested count or the repository width-based default."""
+    """Return an explicit count or calculate one when the proposal used null."""
     if explicit is not None:
         return explicit
     if cabinet_width < 600:

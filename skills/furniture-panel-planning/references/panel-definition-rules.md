@@ -15,11 +15,18 @@
 - 门板和抽屉面板必须关联其开启策略及净空包络。
 - 单门及标准双门必须显式记录 `door_hinge_side`；门数更多但开启策略未确认时
   保持为空，不由制造阶段猜测多门开启关系。
+- 当前 `drawer_count>0` 的规范语义仅为整高抽屉区；必须同时提交
+  `shelf_count=0/n_doors=0`。混合门、层板和抽屉分区先由 LLM 继续消歧，
+  不得由代码按数量优先级静默丢弃任何区域。
+- 抽屉每侧净空、层缝、底/背板厚和后部净空分别来自已准入的
+  `drawer_side_clearance/drawer_layer_gap/drawer_bottom_thickness/`
+  `drawer_back_thickness/drawer_back_clearance`。板件代码不得读取制造五金目录
+  来猜测这些值；制造阶段只能选择与已确认几何兼容的滑轨。
 - BOM 和五金记录应与 CAD 实体分离。
 - 背板结构、精确净空和三种模式尺寸统一按 [背板结构规则](back-construction-rules.md)；本文件不复制解析公式。
 - 入槽背拉条夹在左右侧板之间，数量按 `floor(internal_height / 500)` 计算，并使用 `back_rail_height` 等距布置；数量和净距必须由本阶段校验，净距不得小于等于 0。
 - 本阶段只定背板/背拉条尺寸、位置、依赖；槽、封边、连接和孔位归制造阶段。
-- 踢脚高度和前后退让在本阶段首次物化并形成精确区域；随后生成前后踢脚板和支撑板。自动支撑数量采用项目默认策略：`W < 600 → 0`，否则 `1 + floor((W-600)/300)`；用户给出的显式数量优先。支撑净距为 `(internal_width - count×board_thickness)/(count+1)`，必须大于 0。
+- 踢脚高度和前后退让在本阶段首次物化并形成精确区域；随后生成前后踢脚板和支撑板。提案显式提交 `toe_kick_support_count=null` 时才调用公式：`W < 600 → 0`，否则 `1 + floor((W-600)/300)`；显式整数直接使用。支撑净距为 `(internal_width - count×board_thickness)/(count+1)`，必须大于 0。
 
 ## 边界
 

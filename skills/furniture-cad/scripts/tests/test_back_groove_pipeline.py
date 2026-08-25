@@ -17,6 +17,7 @@ from runtime_paths import bootstrap_runtime_paths
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 from furniture_panel_planning.panel_spec import FurnitureSpec
+from panel_fixtures import furniture_spec
 from furniture_feature_tree.feature_tree_builder import panels_to_feature_tree
 from furniture_feature_tree.feature_tree_emitter import write_build123d_source
 from furniture_layout.layout_pipeline import plan_layout
@@ -29,7 +30,7 @@ from furniture_panel_planning.structure_planning import CabinetStructure
 
 class BackGroovePipelineTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.spec = FurnitureSpec(
+        self.spec = furniture_spec(
             furniture_type="floor_cabinet",
             width=800,
             depth=600,
@@ -108,7 +109,7 @@ class BackGroovePipelineTests(unittest.TestCase):
         self.assertAlmostEqual(shape.volume, uncut_volume - removed_volume, places=3)
 
     def test_invalid_groove_and_support_inputs_fail_in_owning_stages(self) -> None:
-        invalid_groove = FurnitureSpec(
+        invalid_groove = furniture_spec(
             furniture_type="floor_cabinet",
             width=800,
             depth=600,
@@ -128,7 +129,7 @@ class BackGroovePipelineTests(unittest.TestCase):
             {issue.code for issue in groove_report.issues},
         )
 
-        invalid_supports = FurnitureSpec(
+        invalid_supports = furniture_spec(
             furniture_type="floor_cabinet",
             width=100,
             depth=600,
@@ -149,13 +150,10 @@ class BackGroovePipelineTests(unittest.TestCase):
             {issue.code for issue in support_report.issues},
         )
 
-        with self.assertRaisesRegex(ValueError, "must be an integer"):
-            FurnitureSpec.from_dict(
-                {
-                    "type": "floor_cabinet",
-                    "toe_kick_support_count": "two",
-                }
-            )
+        with self.assertRaisesRegex(ValueError, "must be a non-negative integer"):
+            invalid_serialized = asdict(self.spec)
+            invalid_serialized["toe_kick_support_count"] = "two"
+            FurnitureSpec.from_dict(invalid_serialized)
 
 
 if __name__ == "__main__":

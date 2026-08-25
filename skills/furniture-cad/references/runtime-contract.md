@@ -59,19 +59,14 @@ result = orchestrator.run_next(
 ```json
 {
   "type": "floor_cabinet", "width": 800, "depth": 600, "height": 2000,
-  "board_thickness": 18, "back_thickness": 9, "door_thickness": 18,
-  "toe_kick_height": 50, "back_offset": 18,
-  "door_margin": 1.5, "door_hinge_gap": 2,
-  "back_mount": "groove", "back_rail_height": 70,
-  "groove_depth": 6, "groove_clearance": 1,
-  "toe_kick_reveal_front": 1, "toe_kick_reveal_back": 30,
-  "toe_kick_support_count": null, "shelf_count": 4, "n_doors": 2
+  "panel_profile": "floor_cabinet_standard_v1",
+  "back_mount": "groove", "shelf_count": 4, "n_doors": 2
 }
 ```
 
-`width/depth/height` 必须在意图确认前明确提供；不再用类别预设替代客户确认的外包络。`shelf_count/n_doors` 与板厚、背板、踢脚和门缝默认值都在 `panels_planned.spec` 首次物化。
+`width/depth/height` 必须在意图确认前明确提供；不再用类别预设替代客户确认的外包络。板件输入必须显式选择版本化 `panel_profile`（可覆盖字段），或完整提交全部板件规范字段；代码不按柜型静默补默认方案。展开后的完整值经确定性准入后才写入 `panels_planned.spec`。
 
-契约为扁平 JSON。适配器只把 `type/width/depth/height` 转成 `DesignIntent`，将 `shelf_count/n_doors` 和结构字段路由到板件，将铰链/外观等路由到制造；`room/placement` 只供独立房间布局 API 使用。可选 `constraints` 必须有阶段映射；未分类约束在协议路由时拒绝。
+契约为扁平 JSON。适配器只把 `type/width/depth/height` 转成 `DesignIntent`，将 `panel_profile`、`shelf_count/n_doors/drawer_count` 和结构字段路由到板件，将铰链/外观等路由到制造；`room/placement` 只供独立房间布局 API 使用。可选 `constraints` 必须有阶段映射；未分类约束在协议路由时拒绝。
 
 `back_mount` 接受 `auto/groove/insert/cover`，但不进入意图或布局输出。板件阶段在背板薄于柜体板时把 `auto` 解析为 `groove`，否则为 `insert`，并输出 requested/effective；`back_rail_height/groove_depth/groove_clearance` 仅对有效 `groove` 生效，`back_rail_height=0` 关闭背拉条。
 
@@ -81,7 +76,7 @@ result = orchestrator.run_next(
 
 `server.py` 的 `POST /api/plan-cabinet` 只适配一次性批处理并调用 `FurnitureOrchestrator.execute_spec()`：
 
-- 请求含 `back_mount/back_rail_height`；Pydantic 拒绝非法模式，Orchestrator 对几何组合错误返回 `422`。
+- 生成请求含显式 `panel_profile` 或完整板件字段；可覆盖 `back_mount/back_rail_height`。Pydantic 拒绝非法模式，Orchestrator 对缺字段、结构冲突或几何组合错误返回 `422`。
 - 请求可含 `constraints/constraint_mappings`；协议层按目标阶段路由，不得写入 `DesignIntent` 或静默丢弃。
 - 响应 `back_mount` 为有效模式；`readiness` 返回整份制造方案的 `preliminary/accepted/factory_ready` 状态；`panels` 保留备注/封边/模式，`hardware` 保留品牌/型号/暂定说明/孔数摘要。
 - `operations` 仅为入槽模式返回目标切削；`drilled_holes` 按板件返回全局/local 孔位，`hole_color_legend` 返回孔型图例。

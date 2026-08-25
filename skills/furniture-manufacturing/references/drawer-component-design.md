@@ -26,12 +26,12 @@
 ## 现状（20260822 档 A + 档 B 首版后）
 
 - ✅ 档 A：`DrawerSlideConnector` 按契约出滑轨 BOM，`manufacturing_hardware.py` 死代码已删除；
-- ✅ 档 B 首版：`FurnitureSpec.drawer_count`（默认 0，走 `PANEL_SPEC_FIELDS` 白名单，layout 不感知）；
-  `floor_cabinet.yaml` 新增 `internals.drawers` profile（整高抽屉区）；`topology_solver._drawer_panels`
-  生成 5 板/抽屉（前/左/右/后/底）；抽屉优先（门/层板不生成 + warning）；封边规则补齐；
+- ✅ 档 B 首版：`FurnitureSpec.drawer_count` 走板件提案确定性准入，layout 不感知；
+  `floor_cabinet.yaml` 声明 `internals.drawers` 整高抽屉拓扑；`topology_solver._drawer_panels`
+  生成 5 板/抽屉（前/左/右/后/底）；整高抽屉与门/层板冲突在准入前拒绝，不再静默忽略；封边规则补齐；
   layout 死字段 `drawer_count` 的测试样例已换名（drawer_count 现在是合法面板输入，不再适合当"未知字段"例子）；
-- ✅ 滑轨每侧间隙**单一真源** = `hardware_catalog.yaml` `drawer_slides.<slide_type>.gap_requirement_mm`
-  （三节轨已修正为 13.0），板件规划按文件路径读取（不 import 制造模块，避免依赖成环）。
+- ✅ 抽屉几何净空的单一真源 = 已确认 `FurnitureSpec.drawer_side_clearance`；
+  `hardware_catalog.yaml` 的 `gap_requirement_mm` 属于制造阶段候选五金规格，必须与已确认净空兼容，板件规划不再跨阶段读取制造目录。
 
 ## 契约（板件规划已遵守，滑轨 Connector 自动生效）
 
@@ -49,13 +49,13 @@
 ## 首版尺寸链（`_drawer_panels`，值待投产确认）
 
 - 每层净高 `band_h` = 内部净高 ÷ `drawer_count`；
-- 前板：高 = `band_h − layer_gap(1.5)`；宽 = 内部宽 − 2×`door_margin(1.5)`；厚 = 板厚(18)；
-- 盒体宽 = 内部宽 − 2×`gap_requirement_mm`（catalog 单一真源，三节轨 13.0）；
-- 盒体深 = 内部深 − 前板厚 − `back_clearance_mm`（须 ≥0，默认 0）；
+- 前板：高 = `band_h − drawer_layer_gap`；宽 = 内部宽 − 2×`door_margin`；厚 = 已确认柜体板厚；
+- 盒体宽 = 内部宽 − 2×`drawer_side_clearance`；
+- 盒体深 = 内部深 − 前板厚 − `drawer_back_clearance`（须 ≥0）；
 - 盒体高 = 前板高 − 2×`front_overlap`；
 - `front_overlap` 按抽屉位置派生：**底抽 18（全盖底板）；顶/中间 0**；
   将来门+抽屉混合区按上方构造推导：**共盖层板 9 / 顶板盖 0**；
-- 抽屉板厚：底板/背板 18.0（与板厚一致）。
+- 抽屉板厚：分别使用已准入的 `drawer_bottom_thickness/drawer_back_thickness`。
 
 ## 需求（待评审）
 

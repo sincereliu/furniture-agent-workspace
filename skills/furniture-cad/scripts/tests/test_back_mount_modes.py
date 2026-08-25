@@ -15,6 +15,7 @@ from runtime_paths import bootstrap_runtime_paths
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 from furniture_panel_planning.panel_spec import FurnitureSpec
+from panel_fixtures import furniture_spec
 from furniture_layout.layout_pipeline import plan_layout
 from furniture_layout.validation import validate_layout
 from furniture_manufacturing.manufacturing_bom import (
@@ -30,7 +31,7 @@ from furniture_workflow.workflow_state import WorkflowStage
 
 class BackMountModeTests(unittest.TestCase):
     def _spec(self, back_mount: str) -> FurnitureSpec:
-        return FurnitureSpec(
+        return furniture_spec(
             furniture_type="floor_cabinet",
             width=800,
             depth=600,
@@ -126,6 +127,7 @@ class BackMountModeTests(unittest.TestCase):
                     f"{back_mount}-back",
                     {
                         "type": spec.furniture_type,
+                        "panel_profile": "floor_cabinet_standard_v1",
                         "width": spec.width,
                         "depth": spec.depth,
                         "height": spec.height,
@@ -268,7 +270,7 @@ class BackMountModeTests(unittest.TestCase):
             invalid = self._spec("unsupported")
             plan_panels(invalid, plan_layout(invalid))
 
-        cover_spec = FurnitureSpec(
+        cover_spec = furniture_spec(
             furniture_type="floor_cabinet",
             width=800,
             depth=25,
@@ -287,7 +289,7 @@ class BackMountModeTests(unittest.TestCase):
             {issue.code for issue in cover_report.issues},
         )
 
-        insert_spec = FurnitureSpec(
+        insert_spec = furniture_spec(
             furniture_type="floor_cabinet",
             width=800,
             depth=600,
@@ -308,7 +310,7 @@ class BackMountModeTests(unittest.TestCase):
             {issue.code for issue in insert_report.issues},
         )
 
-        rail_spec = FurnitureSpec(
+        rail_spec = furniture_spec(
             furniture_type="floor_cabinet",
             width=800,
             depth=600,

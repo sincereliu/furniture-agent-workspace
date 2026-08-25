@@ -12,7 +12,7 @@ from typing import Any, Mapping
 from furniture_design_intent.design_intent import DesignIntent
 
 from .panel_pipeline import plan_panel_stage
-from .panel_spec import PANEL_SPEC_FIELDS
+from .panel_spec import PANEL_PARAMETER_FIELDS
 
 
 SUPPORTED_OBJECTIVES = frozenset(
@@ -41,7 +41,7 @@ def _normalize_domains(raw: Any) -> dict[str, list[Any]]:
         raise ValueError("optimization variables must be a non-empty object")
     domains: dict[str, list[Any]] = {}
     for name, values in raw.items():
-        if name not in PANEL_SPEC_FIELDS:
+        if name not in PANEL_PARAMETER_FIELDS:
             raise ValueError(f"optimization variable is not owned by panels_planned: {name}")
         if not isinstance(values, list) or not values:
             raise ValueError(f"optimization variable {name} requires a non-empty choices list")
@@ -189,13 +189,10 @@ def optimize_panel_design(
     """Generate bounded Pareto candidates without mutating confirmed output."""
 
     domains = _normalize_domains(config.get("variables"))
-    objectives = [
-        str(item)
-        for item in config.get(
-            "objectives",
-            ["material_volume_m3", "negative_internal_volume_m3"],
-        )
-    ]
+    raw_objectives = config.get("objectives")
+    if not isinstance(raw_objectives, list) or not raw_objectives:
+        raise ValueError("optimization objectives must be an explicit non-empty list")
+    objectives = [str(item) for item in raw_objectives]
     unknown_objectives = sorted(set(objectives) - SUPPORTED_OBJECTIVES)
     if unknown_objectives or not objectives:
         raise ValueError("unsupported or empty objectives: " + ", ".join(unknown_objectives))
@@ -219,7 +216,7 @@ def optimize_panel_design(
         raise ValueError("panel output requires a spec object")
     base_options = {
         name: base_spec[name]
-        for name in PANEL_SPEC_FIELDS
+        for name in PANEL_PARAMETER_FIELDS
         if name in base_spec
     }
     names = list(domains)
@@ -242,7 +239,7 @@ def optimize_panel_design(
                 "parameters": changes,
                 "resolved_parameters": {
                     name: output["spec"][name]
-                    for name in PANEL_SPEC_FIELDS
+                    for name in PANEL_PARAMETER_FIELDS
                     if name in output["spec"]
                 },
                 "objectives": {name: metrics[name] for name in objectives},

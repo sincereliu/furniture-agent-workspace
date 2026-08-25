@@ -18,6 +18,7 @@ from runtime_paths import bootstrap_runtime_paths
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 from furniture_panel_planning.panel_spec import FurnitureSpec
+from panel_fixtures import furniture_spec
 from furniture_layout.layout_pipeline import plan_layout
 from furniture_manufacturing.connectors.drawer_slide import DrawerSlideConnector
 from furniture_manufacturing.connectors.hinge import HingeConnector
@@ -74,7 +75,7 @@ def panel_record(
 
 class PanelAndConnectorPatchTests(unittest.TestCase):
     def test_standard_doors_have_explicit_hinge_sides(self) -> None:
-        spec = FurnitureSpec(
+        spec = furniture_spec(
             furniture_type="floor_cabinet",
             width=800,
             depth=600,
@@ -161,7 +162,7 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
 
     def test_trinity_rod_cam_count_mismatch_is_rejected(self) -> None:
         """删掉一个连接杆孔后，校验必须报 TRINITY_ROD_CAM_COUNT_MISMATCH。"""
-        spec = FurnitureSpec(
+        spec = furniture_spec(
             furniture_type="floor_cabinet",
             width=800,
             depth=600,
@@ -260,7 +261,7 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
             label="left_side_panel", name="左侧板", panel_type="side",
             size_x=18, size_y=600, size_z=1000,
         )]), [])
-        spec = FurnitureSpec(
+        spec = furniture_spec(
             furniture_type="floor_cabinet",
             width=800, depth=600, height=1000, n_doors=2,
         )
@@ -289,7 +290,7 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
         self.assertTrue(all(hole.is_face_hole for hole in holes))
 
     def test_manufacturing_validation_rejects_hinge_outside_door(self) -> None:
-        spec = FurnitureSpec(
+        spec = furniture_spec(
             furniture_type="floor_cabinet",
             width=800,
             depth=600,
@@ -318,7 +319,7 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
         )
 
     def test_emitted_panels_include_type_and_no_screw_holes(self) -> None:
-        spec = FurnitureSpec(
+        spec = furniture_spec(
             furniture_type="floor_cabinet",
             width=800,
             depth=600,
@@ -382,7 +383,7 @@ class DrawerZoneTests(unittest.TestCase):
         n_doors: int = 0,
         shelf_count: int = 0,
     ):
-        spec = FurnitureSpec(
+        spec = furniture_spec(
             furniture_type="floor_cabinet",
             width=800,
             depth=600,
@@ -460,17 +461,9 @@ class DrawerZoneTests(unittest.TestCase):
         report = validate_manufacturing(spec, manufacturing, placements)
         self.assertTrue(report.passed)
 
-    def test_drawer_zone_warns_when_doors_or_shelves_requested(self) -> None:
-        spec, placements = self._drawer_cabinet(3, n_doors=2, shelf_count=4)
-        types = {p.panel_type for p in placements}
-        self.assertNotIn("door", types)
-        self.assertNotIn("fixed_shelf", types)
-
-        structure = CabinetStructure.from_spec(spec)
-        report = validate_panels(spec, structure, placements)
-        codes = {issue.code for issue in report.issues}
-        self.assertIn("DRAWER_ZONE_SUPERSEDES_DOORS", codes)
-        self.assertIn("DRAWER_ZONE_SUPERSEDES_SHELVES", codes)
+    def test_drawer_zone_rejects_conflicting_doors_or_shelves(self) -> None:
+        with self.assertRaisesRegex(ValueError, "full-height drawers require"):
+            self._drawer_cabinet(3, n_doors=2, shelf_count=4)
 
     def test_drawer_box_uses_trinity_by_default(self) -> None:
         """抽屉盒默认三合一（全屋定制主流）：杆/轮/螺母 1:1:1，底板 cam 在底面。"""

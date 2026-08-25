@@ -24,6 +24,7 @@ from furniture_workflow.workflow_store import JsonProjectStore
 def cabinet_spec() -> dict[str, object]:
     return {
         "type": "floor_cabinet",
+        "panel_profile": "floor_cabinet_standard_v1",
         "width": 800,
         "depth": 600,
         "height": 1000,

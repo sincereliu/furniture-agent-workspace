@@ -4,7 +4,7 @@
 
 ## 阶段输入
 
-- `back_mount`：`auto/groove/insert/cover`，默认 `auto`。
+- `back_mount`：规范值为 `auto/groove/insert/cover`；必须由提案显式给出，或由显式 `panel_profile` 展开，不存在运行时缺省模式。
 - `board_thickness/back_thickness/door_thickness`。
 - `back_offset/door_margin/door_hinge_gap`。
 - `groove_depth/groove_clearance/back_rail_height`。
@@ -14,9 +14,9 @@
 ## 模式解析
 
 - `groove/insert/cover` 保持显式选择。
-- `auto`：`back_thickness < board_thickness` 时解析为 `groove`，否则为 `insert`。
+- 显式 `auto`：`back_thickness < board_thickness` 时解析为 `groove`，否则为 `insert`。这是用户确认后调用的确定性公式，不是代码自行选择结构方案。
 - 输出必须同时展示 `back_mount_resolution.requested/effective`；下游只消费有效模式。
-- `groove_depth/groove_clearance/back_rail_height` 只在有效模式为 `groove` 时生效；其他模式的休眠值不得阻塞板件阶段。
+- `groove_depth/groove_clearance/back_rail_height` 只在有效模式为 `groove` 时参与几何；其他模式仍要求它们是合法规范数值，但不因数值范围与入槽加工关系而阻塞。
 
 ## 精确结构
 

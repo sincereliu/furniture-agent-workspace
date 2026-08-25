@@ -72,7 +72,13 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         self.orchestrator = FurnitureOrchestrator(workspace_root=WORKSPACE_ROOT)
 
     def test_interactive_workflow_pauses_at_every_stage(self) -> None:
-        project = self.orchestrator.create_project("玄关柜", cabinet_intent())
+        project = self.orchestrator.create_project(
+            "玄关柜",
+            cabinet_intent(),
+            stage_inputs=stage_inputs_from_spec(
+                {"panel_profile": "floor_cabinet_standard_v1"}
+            ),
+        )
         revision = project.latest
 
         self.assertEqual(revision.workflow.current, WorkflowStage.DESIGN_INTENT)
@@ -107,6 +113,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             "可修改柜体",
             {
                 "type": "floor_cabinet",
+                "panel_profile": "floor_cabinet_standard_v1",
                 "width": 800,
                 "depth": 600,
                 "height": 1000,
@@ -122,7 +129,11 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         )
         edited_panels = plan_panel_stage(
             parent.intent,
-            {"shelf_count": 1, "n_doors": 2},
+            {
+                "panel_profile": "floor_cabinet_standard_v1",
+                "shelf_count": 1,
+                "n_doors": 2,
+            },
         )
 
         revised = self.orchestrator.revise_stage_output(
@@ -175,6 +186,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
                     artifact_name,
                     {
                         "type": "wall_cabinet",
+                        "panel_profile": "wall_cabinet_standard_v1",
                         "width": 800,
                         "depth": 350,
                         "height": 900,
@@ -310,6 +322,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             "加工验证",
             {
                 "type": "floor_cabinet",
+                "panel_profile": "floor_cabinet_standard_v1",
                 "width": 800,
                 "depth": 600,
                 "height": 1000,
@@ -342,6 +355,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             "制造状态验证",
             {
                 "type": "floor_cabinet",
+                "panel_profile": "floor_cabinet_standard_v1",
                 "width": 800,
                 "depth": 600,
                 "height": 1000,
@@ -382,6 +396,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
                     artifact_name,
                     {
                         "type": "wall_cabinet",
+                        "panel_profile": "wall_cabinet_standard_v1",
                         "width": 800,
                         "depth": 350,
                         "height": 900,
@@ -432,6 +447,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             "带房间信息的柜体",
             {
                 "type": "floor_cabinet",
+                "panel_profile": "floor_cabinet_standard_v1",
                 "width": 800,
                 "depth": 600,
                 "height": 1000,
@@ -525,11 +541,12 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         )
         self.assertEqual(inputs["informational_constraints"], ["仅供卧室方案比较"])
 
-    def test_inactive_groove_parameters_do_not_block_non_groove_panels(self) -> None:
+    def test_malformed_dormant_parameters_fail_structured_admission(self) -> None:
         result = self.orchestrator.execute_spec(
             "外盖背板柜体",
             {
                 "type": "floor_cabinet",
+                "panel_profile": "floor_cabinet_standard_v1",
                 "width": 800,
                 "depth": 600,
                 "height": 1000,
@@ -540,10 +557,10 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             },
             through_stage=WorkflowStage.PANELS_PLANNED,
         )
-        self.assertNotIn("layout_planned", result.revision.stage_outputs)
-        self.assertEqual(
-            result.revision.stage_outputs["panels_planned"]["structure"]["back_mount"],
-            "cover",
+        self.assertEqual(result.revision.workflow.current, WorkflowStage.FAILED)
+        self.assertIn(
+            "must be numeric",
+            result.revision.validations[-1].issues[0].message,
         )
 
     def test_active_groove_parameters_are_validated_at_panel_stage(self) -> None:
@@ -551,6 +568,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             "错误入槽参数柜体",
             {
                 "type": "floor_cabinet",
+                "panel_profile": "floor_cabinet_standard_v1",
                 "width": 800,
                 "depth": 600,
                 "height": 1000,
@@ -560,7 +578,10 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             through_stage=WorkflowStage.PANELS_PLANNED,
         )
         self.assertEqual(result.revision.workflow.current, WorkflowStage.FAILED)
-        self.assertIn("could not convert string to float", result.revision.validations[-1].issues[0].message)
+        self.assertIn(
+            "must be numeric",
+            result.revision.validations[-1].issues[0].message,
+        )
 
     def test_unsupported_family_fails_at_design_intent_confirmation(self) -> None:
         project = self.orchestrator.create_project(
@@ -578,7 +599,13 @@ class FurnitureOrchestratorTests(unittest.TestCase):
     def test_project_store_round_trips_stage_outputs_and_approvals(self) -> None:
         result = self.orchestrator.execute_spec(
             "可恢复项目",
-            {"type": "floor_cabinet", "width": 800, "depth": 600, "height": 1000},
+            {
+                "type": "floor_cabinet",
+                "panel_profile": "floor_cabinet_standard_v1",
+                "width": 800,
+                "depth": 600,
+                "height": 1000,
+            },
             through_stage=WorkflowStage.FEATURE_TREE_PLANNED,
         )
         project = result.project
@@ -632,13 +659,23 @@ class FurnitureOrchestratorTests(unittest.TestCase):
                 }
             )
 
-    def test_panel_stage_materializes_construction_defaults(self) -> None:
-        project = self.orchestrator.create_project("直接意图柜体", cabinet_intent())
+    def test_panel_stage_expands_an_explicit_profile(self) -> None:
+        project = self.orchestrator.create_project(
+            "直接意图柜体",
+            cabinet_intent(),
+            stage_inputs=stage_inputs_from_spec(
+                {"panel_profile": "floor_cabinet_standard_v1"}
+            ),
+        )
 
         revision = self.orchestrator.confirm_intent(project)
         self.assertNotIn("structure", revision.stage_outputs["design_intent"])
         result = self.orchestrator.run_next(project)
         panel_output = result.revision.stage_outputs["panels_planned"]
+        self.assertEqual(
+            panel_output["proposal_admission"]["panel_profile"],
+            "floor_cabinet_standard_v1",
+        )
         self.assertEqual(panel_output["spec"]["board_thickness"], 18.0)
         self.assertEqual(panel_output["structure"]["back_mount"], "groove")
 

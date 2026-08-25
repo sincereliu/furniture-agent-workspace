@@ -14,13 +14,14 @@ from runtime_paths import bootstrap_runtime_paths
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 from furniture_panel_planning.panel_spec import FurnitureSpec
+from panel_fixtures import furniture_spec
 from furniture_workflow.cabinet_pipeline import plan_cabinet
 
 
 class CabinetPipelineTests(unittest.TestCase):
     def setUp(self) -> None:
         self.result = plan_cabinet(
-            FurnitureSpec(
+            furniture_spec(
                 furniture_type="floor_cabinet",
                 width=800,
                 height=1000,
@@ -51,9 +52,9 @@ class CabinetPipelineTests(unittest.TestCase):
         self.assertEqual(self.result.bom.readiness, "preliminary")
 
     def test_rejects_non_cabinet_type(self) -> None:
-        with self.assertRaisesRegex(ValueError, "Unsupported cabinet type"):
+        with self.assertRaisesRegex(ValueError, "executable canonical type"):
             plan_cabinet(
-                FurnitureSpec(
+                furniture_spec(
                     furniture_type="wardrobe",
                     width=1200,
                     height=2000,

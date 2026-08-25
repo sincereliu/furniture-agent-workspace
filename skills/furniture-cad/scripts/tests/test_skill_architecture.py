@@ -23,7 +23,10 @@ STAGE_REFERENCES = {
         "references/intake/catalog.yaml",
     ),
     "furniture-layout": ("references/spatial-layout-rules.md",),
-    "furniture-panel-planning": ("references/panel-definition-rules.md",),
+    "furniture-panel-planning": (
+        "references/panel-definition-rules.md",
+        "references/panel-proposal-contract.md",
+    ),
     "furniture-manufacturing": ("references/manufacturing-rules.md",),
     "furniture-feature-tree": ("references/feature-tree-rules.md",),
     "furniture-cad": ("references/runtime-contract.md",),

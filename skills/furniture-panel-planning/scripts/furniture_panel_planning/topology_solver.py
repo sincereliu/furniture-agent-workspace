@@ -45,25 +45,6 @@ def _load_topology(furniture_type: str) -> dict[str, Any]:
         return yaml.safe_load(fp) or {}
 
 
-def _slide_gap_mm(slide_type: str) -> float:
-    """读五金 catalog 中抽屉滑轨的每侧间隙（单一真源）。
-
-    按文件路径读取（跨技能引用规格参考数据，不 import 制造模块，避免依赖成环）。
-    """
-    catalog_path = (
-        Path(__file__).resolve().parents[4]
-        / "skills"
-        / "furniture-manufacturing"
-        / "scripts"
-        / "furniture_manufacturing"
-        / "hardware_catalog.yaml"
-    )
-    with open(catalog_path, encoding="utf-8") as fp:
-        catalog = yaml.safe_load(fp) or {}
-    entry = catalog.get("drawer_slides", {}).get(slide_type, {})
-    return float(entry.get("gap_requirement_mm", 12.5))
-
-
 def _resolve_semantic_face(face_name: str, frame: CabinetFrame) -> str:
     """Map a semantic face name to a signed world axis.
 
@@ -457,7 +438,7 @@ def _drawer_panels(
     尺寸链（待确认，投产前核对）：
     - 每层净高 band_h = 内部净高 ÷ drawer_count
     - 前板：高 = band_h − layer_gap；宽 = 内部宽 − 2×door_margin；厚 = 板厚
-    - 盒体宽 = 内部宽 − 2×滑轨每侧间隙（catalog gap_requirement_mm，单一真源）
+    - 盒体宽 = 内部宽 − 2×已准入的抽屉每侧净空
     - 盒体深 = 内部深 − 前板厚 − back_clearance(≥0)
     - 盒体高 = 前板高 − 2×front_overlap（底抽 18 全盖底板，顶/中 0）
     板件 label 以 z 位置后缀结尾（drawer_*_z{pos}），与 DrawerSlideConnector
@@ -467,13 +448,11 @@ def _drawer_panels(
     if count <= 0:
         return []
     board = spec.board_thickness
-    slide_gap = _slide_gap_mm(str(drawers_def.get("slide_type", "三节轨")))
-    layer_gap = float(drawers_def.get("layer_gap_mm", 1.5))
-    bottom_t = float(drawers_def.get("bottom_thickness_mm", 18.0))
-    back_t = float(drawers_def.get("back_thickness_mm", 18.0))
-    back_clear = float(drawers_def.get("back_clearance_mm", 0.0))
-    if back_clear < 0:
-        raise ValueError("drawer back_clearance_mm must be >= 0")
+    slide_gap = spec.drawer_side_clearance
+    layer_gap = spec.drawer_layer_gap
+    bottom_t = spec.drawer_bottom_thickness
+    back_t = spec.drawer_back_thickness
+    back_clear = spec.drawer_back_clearance
 
     iw = layout.internal_width
     internal_depth = layout.internal_y_end - layout.internal_y_start
@@ -486,6 +465,8 @@ def _drawer_panels(
 
     # 底板 x/y 端面分别顶住侧板内面/前后面（三合一连接）；底板 y 向延伸到前板
     bottom_size_y = box_d - board
+    if min(front_h, front_w, box_w, box_d, bottom_size_y) <= 0:
+        raise ValueError("admitted drawer parameters leave non-positive geometry")
 
     panels: list[PanelPlacement] = []
     for i in range(count):

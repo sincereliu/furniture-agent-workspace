@@ -21,6 +21,7 @@ class ApiEntrypointTests(unittest.TestCase):
     def test_request_exposes_back_mount_and_toe_kick_controls(self) -> None:
         request = server.CabinetRequest(
             type="floor_cabinet",
+            panel_profile="floor_cabinet_standard_v1",
             width=800,
             depth=600,
             height=1000,
@@ -82,6 +83,7 @@ class ApiEntrypointTests(unittest.TestCase):
             server.plan_cabinet(
                 server.CabinetRequest(
                     type="wall_cabinet",
+                    panel_profile="wall_cabinet_standard_v1",
                     width=800,
                     depth=350,
                     height=900,
@@ -98,6 +100,7 @@ class ApiEntrypointTests(unittest.TestCase):
             server.plan_cabinet(
                 server.CabinetRequest(
                     type="wall_cabinet",
+                    panel_profile="wall_cabinet_standard_v1",
                     width=800,
                     depth=350,
                     height=900,
@@ -221,6 +224,7 @@ class ApiEntrypointTests(unittest.TestCase):
                     server.plan_cabinet(
                         server.CabinetRequest(
                             type="floor_cabinet",
+                            panel_profile="floor_cabinet_standard_v1",
                             width=800,
                             depth=600,
                             height=1000,

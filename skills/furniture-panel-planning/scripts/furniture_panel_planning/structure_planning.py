@@ -46,11 +46,9 @@ class CabinetStructure:
             carcass_y_start = 0.0
             back_plane_y = spec.back_offset
             internal_y_start = spec.back_offset + spec.back_thickness
-        toe_kick = (
-            spec.toe_kick_height
-            if spec.furniture_type != "wall_cabinet"
-            else 0.0
-        )
+        # Topology-specific legality was checked during proposal admission;
+        # geometry consumes the admitted value without silently overriding it.
+        toe_kick = spec.toe_kick_height
         return cls(
             furniture_type=spec.furniture_type,
             width=spec.width,

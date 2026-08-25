@@ -101,6 +101,13 @@ class CabinetRequest(BaseModel):
     width: float = Field(..., gt=0, description="总宽 mm (X)")
     depth: float = Field(..., gt=0, description="总深 mm (Y)")
     height: float = Field(..., gt=0, description="总高 mm (Z)")
+    panel_profile: Literal[
+        "floor_cabinet_standard_v1",
+        "wall_cabinet_standard_v1",
+    ] | None = Field(
+        default=None,
+        description="板件阶段显式选择的版本化结构方案；生成接口不得自行选择",
+    )
     board_thickness: float | None = Field(default=None, gt=0, description="柜体板厚 mm")
     back_thickness: float | None = Field(default=None, gt=0, description="背板厚 mm")
     door_thickness: float | None = Field(default=None, gt=0, description="门板厚 mm")
@@ -110,6 +117,7 @@ class CabinetRequest(BaseModel):
     door_hinge_gap: float | None = Field(default=None, ge=0, description="门铰深度间隙 mm")
     shelf_count: int | None = Field(default=None, ge=0, description="层板数量")
     n_doors: int | None = Field(default=None, ge=0, description="门板数量")
+    drawer_count: int | None = Field(default=None, ge=0, description="整高抽屉数量")
     groove_depth: float | None = Field(default=None, gt=0, description="背板入槽深度 mm")
     groove_clearance: float | None = Field(default=None, ge=0, description="槽宽相对背板厚度的余量 mm")
     back_mount: Literal["auto", "groove", "insert", "cover"] | None = Field(
@@ -126,6 +134,11 @@ class CabinetRequest(BaseModel):
     toe_kick_reveal_front: float | None = Field(default=None, ge=0, description="前踢脚板后缩 mm")
     toe_kick_reveal_back: float | None = Field(default=None, ge=0, description="后踢脚板前移 mm")
     toe_kick_support_count: int | None = Field(default=None, ge=0, description="踢脚支撑板数量；空值为自动")
+    drawer_side_clearance: float | None = Field(default=None, gt=0, description="抽屉每侧净空 mm")
+    drawer_layer_gap: float | None = Field(default=None, ge=0, description="抽屉层间缝 mm")
+    drawer_bottom_thickness: float | None = Field(default=None, gt=0, description="抽屉底板厚 mm")
+    drawer_back_thickness: float | None = Field(default=None, gt=0, description="抽屉背板厚 mm")
+    drawer_back_clearance: float | None = Field(default=None, ge=0, description="抽屉后部净空 mm")
     appearance: dict[str, Any] = Field(
         default_factory=dict,
         description="制造阶段使用的饰面和外观偏好",

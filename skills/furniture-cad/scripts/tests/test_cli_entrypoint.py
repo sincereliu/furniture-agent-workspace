@@ -36,6 +36,7 @@ class CliEntrypointTests(unittest.TestCase):
                     json.dumps(
                         {
                             "type": "wall_cabinet",
+                            "panel_profile": "wall_cabinet_standard_v1",
                             "width": 800,
                             "depth": 350,
                             "height": 900,
