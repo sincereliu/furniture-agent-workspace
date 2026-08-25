@@ -4,7 +4,7 @@
 
 ## 阶段输入
 
-- `back_mount`：规范值为 `auto/groove/insert/cover`；必须由提案显式给出，或由显式 `panel_profile` 展开，不存在运行时缺省模式。
+- `back_mount`：规范值为 `auto/groove/insert/cover`；必须由提案显式给出，不存在运行时缺省模式。
 - `board_thickness/back_thickness/door_thickness`。
 - `back_offset/door_margin/door_hinge_gap`。
 - `groove_depth/groove_clearance/back_rail_height`。

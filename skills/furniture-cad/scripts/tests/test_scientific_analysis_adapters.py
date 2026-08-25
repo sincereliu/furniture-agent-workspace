@@ -19,18 +19,11 @@ from furniture_delivery_validation.validation import validate_delivery
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from furniture_workflow.workflow_state import WorkflowStage
 from furniture_workflow.workflow_store import JsonProjectStore
+from panel_fixtures import cabinet_data
 
 
 def cabinet_spec() -> dict[str, object]:
-    return {
-        "type": "floor_cabinet",
-        "panel_profile": "floor_cabinet_standard_v1",
-        "width": 800,
-        "depth": 600,
-        "height": 1000,
-        "shelf_count": 2,
-        "n_doors": 2,
-    }
+    return cabinet_data(shelf_count=2, n_doors=2)
 
 
 class ScientificAnalysisAdapterTests(unittest.TestCase):

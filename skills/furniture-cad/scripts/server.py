@@ -97,17 +97,10 @@ class FurniturePlacementRequest(BaseModel):
 class CabinetRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    type: str = Field(default="floor_cabinet", description="家具类型: floor_cabinet / wall_cabinet")
+    type: str = Field(..., description="家具类型: floor_cabinet / wall_cabinet")
     width: float = Field(..., gt=0, description="总宽 mm (X)")
     depth: float = Field(..., gt=0, description="总深 mm (Y)")
     height: float = Field(..., gt=0, description="总高 mm (Z)")
-    panel_profile: Literal[
-        "floor_cabinet_standard_v1",
-        "wall_cabinet_standard_v1",
-    ] | None = Field(
-        default=None,
-        description="板件阶段显式选择的版本化结构方案；生成接口不得自行选择",
-    )
     board_thickness: float | None = Field(default=None, gt=0, description="柜体板厚 mm")
     back_thickness: float | None = Field(default=None, gt=0, description="背板厚 mm")
     door_thickness: float | None = Field(default=None, gt=0, description="门板厚 mm")
@@ -273,7 +266,9 @@ async def root():
 @app.post("/api/plan-cabinet", response_model=BOMResponse)
 async def plan_cabinet(req: CabinetRequest):
     """规划柜体、拆单、返回 BOM"""
-    spec = req.model_dump(exclude_none=True)
+    # Preserve an explicitly submitted null (for example the deterministic
+    # toe-kick support formula) while omitting fields the caller never sent.
+    spec = req.model_dump(exclude_unset=True)
     try:
         orchestration = ORCHESTRATOR.execute_spec(
             f"api-{req.type}",

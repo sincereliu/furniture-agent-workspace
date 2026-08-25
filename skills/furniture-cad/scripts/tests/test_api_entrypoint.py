@@ -15,25 +15,23 @@ from runtime_paths import bootstrap_runtime_paths
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 import server
+from panel_fixtures import cabinet_data
 
 
 class ApiEntrypointTests(unittest.TestCase):
     def test_request_exposes_back_mount_and_toe_kick_controls(self) -> None:
         request = server.CabinetRequest(
-            type="floor_cabinet",
-            panel_profile="floor_cabinet_standard_v1",
-            width=800,
-            depth=600,
-            height=1000,
-            back_mount="groove",
-            back_rail_height=80,
-            groove_depth=8,
-            groove_clearance=0.5,
-            toe_kick_reveal_front=2,
-            toe_kick_reveal_back=25,
-            toe_kick_support_count=2,
-            constraints=["背板必须入槽"],
-            constraint_mappings={"背板必须入槽": "structure.back_mount"},
+            **cabinet_data(
+                back_mount="groove",
+                back_rail_height=80,
+                groove_depth=8,
+                groove_clearance=0.5,
+                toe_kick_reveal_front=2,
+                toe_kick_reveal_back=25,
+                toe_kick_support_count=2,
+                constraints=["背板必须入槽"],
+                constraint_mappings={"背板必须入槽": "structure.back_mount"},
+            ),
         )
 
         payload = request.model_dump(exclude_none=True)
@@ -82,11 +80,7 @@ class ApiEntrypointTests(unittest.TestCase):
         response = asyncio.run(
             server.plan_cabinet(
                 server.CabinetRequest(
-                    type="wall_cabinet",
-                    panel_profile="wall_cabinet_standard_v1",
-                    width=800,
-                    depth=350,
-                    height=900,
+                    **cabinet_data("wall_cabinet"),
                 )
             )
         )
@@ -99,13 +93,7 @@ class ApiEntrypointTests(unittest.TestCase):
         auto_insert = asyncio.run(
             server.plan_cabinet(
                 server.CabinetRequest(
-                    type="wall_cabinet",
-                    panel_profile="wall_cabinet_standard_v1",
-                    width=800,
-                    depth=350,
-                    height=900,
-                    back_mount="auto",
-                    back_thickness=18,
+                    **cabinet_data("wall_cabinet", back_thickness=18),
                 )
             )
         )
@@ -223,16 +211,13 @@ class ApiEntrypointTests(unittest.TestCase):
                 response = asyncio.run(
                     server.plan_cabinet(
                         server.CabinetRequest(
-                            type="floor_cabinet",
-                            panel_profile="floor_cabinet_standard_v1",
-                            width=800,
-                            depth=600,
-                            height=1000,
-                            back_mount=back_mount,
-                            back_thickness=back_thickness,
-                            back_rail_height=80,
-                            shelf_count=1,
-                            n_doors=2,
+                            **cabinet_data(
+                                back_mount=back_mount,
+                                back_thickness=back_thickness,
+                                back_rail_height=80,
+                                shelf_count=1,
+                                n_doors=2,
+                            ),
                         )
                     )
                 )

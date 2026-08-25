@@ -22,6 +22,7 @@ bootstrap_runtime_paths(WORKSPACE_ROOT)
 import generate_furniture
 from furniture_cad.cad_bridge import CadBridge
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
+from panel_fixtures import cabinet_data
 
 
 class CliEntrypointTests(unittest.TestCase):
@@ -34,13 +35,7 @@ class CliEntrypointTests(unittest.TestCase):
                 spec_path = temporary_root / "cabinet.json"
                 spec_path.write_text(
                     json.dumps(
-                        {
-                            "type": "wall_cabinet",
-                            "panel_profile": "wall_cabinet_standard_v1",
-                            "width": 800,
-                            "depth": 350,
-                            "height": 900,
-                        }
+                        cabinet_data("wall_cabinet")
                     ),
                     encoding="utf-8",
                 )

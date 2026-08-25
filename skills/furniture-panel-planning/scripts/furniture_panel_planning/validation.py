@@ -9,14 +9,7 @@ from furniture_delivery_validation.validation import ValidationReport
 from furniture_design_intent.design_intent import DesignIntent
 
 from .panel_models import PanelPlacement
-from .panel_spec import (
-    PANEL_PROFILES,
-    PANEL_SPEC_FIELDS,
-    FurnitureSpec,
-    proposal_sha256,
-    resolve_back_mount,
-    spec_sha256,
-)
+from .panel_spec import FurnitureSpec, resolve_back_mount
 from .panel_rules import (
     back_rail_clear_spacing,
     resolve_back_rail_count,
@@ -53,77 +46,6 @@ def validate_panel_output(
     panel_report = validate_panels(spec, structure, panels)
     report.issues.extend(structure_report.issues)
     report.issues.extend(panel_report.issues)
-
-    admission = output.get("proposal_admission")
-    if not isinstance(admission, Mapping):
-        report.add_error(
-            "MISSING_PANEL_PROPOSAL_ADMISSION",
-            "panel stage must retain deterministic proposal admission metadata",
-            "proposal_admission",
-        )
-    else:
-        if admission.get("schema_version") != 1:
-            report.add_error(
-                "INVALID_PANEL_PROPOSAL_ADMISSION",
-                "proposal admission schema_version must be 1",
-                "proposal_admission.schema_version",
-            )
-        profile = admission.get("panel_profile")
-        if profile is not None:
-            profile_data = (
-                PANEL_PROFILES.get(profile) if isinstance(profile, str) else None
-            )
-            if profile_data is None or profile_data.get(
-                "furniture_type"
-            ) != spec.furniture_type:
-                report.add_error(
-                    "INVALID_PANEL_PROFILE_TRACE",
-                    "admitted panel profile must exist and match furniture_type",
-                    "proposal_admission.panel_profile",
-                )
-        explicit_fields = admission.get("explicit_fields")
-        if (
-            not isinstance(explicit_fields, list)
-            or any(
-                not isinstance(name, str) or name not in PANEL_SPEC_FIELDS
-                for name in explicit_fields
-            )
-        ):
-            report.add_error(
-                "INVALID_PANEL_PROPOSAL_ADMISSION",
-                "explicit_fields must list canonical panel-stage fields",
-                "proposal_admission.explicit_fields",
-            )
-        proposal_digest = admission.get("proposal_sha256")
-        resolution_for_digest = output.get("back_mount_resolution")
-        requested_for_digest = (
-            resolution_for_digest.get("requested")
-            if isinstance(resolution_for_digest, Mapping)
-            else None
-        )
-        if (
-            not isinstance(proposal_digest, str)
-            or not isinstance(explicit_fields, list)
-            or not isinstance(requested_for_digest, str)
-            or proposal_digest
-            != proposal_sha256(
-                profile if isinstance(profile, str) else None,
-                explicit_fields,
-                requested_for_digest,
-                raw_spec,
-            )
-        ):
-            report.add_error(
-                "INVALID_PANEL_PROPOSAL_ADMISSION",
-                "proposal_sha256 does not match the admitted proposal trace",
-                "proposal_admission.proposal_sha256",
-            )
-        if admission.get("spec_sha256") != spec_sha256(raw_spec):
-            report.add_error(
-                "PANEL_SPEC_ADMISSION_HASH_MISMATCH",
-                "panel spec changed after deterministic proposal admission",
-                "proposal_admission.spec_sha256",
-            )
 
     resolution = output.get("back_mount_resolution")
     if not isinstance(resolution, Mapping):

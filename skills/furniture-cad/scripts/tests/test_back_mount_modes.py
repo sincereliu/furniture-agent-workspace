@@ -15,7 +15,7 @@ from runtime_paths import bootstrap_runtime_paths
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 from furniture_panel_planning.panel_spec import FurnitureSpec
-from panel_fixtures import furniture_spec
+from panel_fixtures import cabinet_data, furniture_spec
 from furniture_layout.layout_pipeline import plan_layout
 from furniture_layout.validation import validate_layout
 from furniture_manufacturing.manufacturing_bom import (
@@ -125,17 +125,16 @@ class BackMountModeTests(unittest.TestCase):
                 spec = self._spec(back_mount)
                 result = orchestrator.execute_spec(
                     f"{back_mount}-back",
-                    {
-                        "type": spec.furniture_type,
-                        "panel_profile": "floor_cabinet_standard_v1",
-                        "width": spec.width,
-                        "depth": spec.depth,
-                        "height": spec.height,
-                        "back_mount": spec.back_mount,
-                        "back_thickness": spec.back_thickness,
-                        "shelf_count": spec.shelf_count,
-                        "n_doors": spec.n_doors,
-                    },
+                    cabinet_data(
+                        spec.furniture_type,
+                        width=spec.width,
+                        depth=spec.depth,
+                        height=spec.height,
+                        back_mount=spec.back_mount,
+                        back_thickness=spec.back_thickness,
+                        shelf_count=spec.shelf_count,
+                        n_doors=spec.n_doors,
+                    ),
                     through_stage=WorkflowStage.MANUFACTURING_PLANNED,
                 )
 
