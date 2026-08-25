@@ -9,7 +9,7 @@ description: 用于 feature_tree_planned 阶段。当用户说"建模顺序""哪
 
 ## 工作流
 
-1. 要求设计意图、布局、板件和制造策略均已确认。
+1. 要求设计意图、板件和制造策略均已确认；独立房间布局不是前置条件。
 2. 按 [特征树建模规则](references/feature-tree-rules.md) 转换建模职责、依赖和顺序。
 3. Feature Tree v2 用 `box` 表示板件，用带 `target` 的 `cut_box` 表示切削；制造阶段负责槽包络的主校验，本阶段对目标存在性和切削包络做防御性复核。
 4. 仅 `groove` 的四条背板槽转为 `cut_box`；`insert/cover` 连接孔和背拉条端孔保留为 drilled-holes，不伪装成方盒切削。

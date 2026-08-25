@@ -1,6 +1,6 @@
 ---
 name: furniture-panel-planning
-description: 用于 panels_planned 阶段。当用户说"板子多厚""用什么背板""有没有踢脚线""加块层板""内部净空多大"时触发。在客户确认布局后首次确定结构规格、精确净空、背板与踢脚，并生成可审查的实体板件。
+description: 用于 panels_planned 阶段。当用户说"几层层板""几扇门""板子多厚""用什么背板""有没有踢脚线""内部净空多大"时触发。在已确认成品外包络上直接确定功能数量、结构规格、精确净空、背板与踢脚，并生成可审查的实体板件；不要求房间摆放图。
 ---
 
 # 家具板件规划
@@ -9,8 +9,8 @@ description: 用于 panels_planned 阶段。当用户说"板子多厚""用什么
 
 ## 工作流
 
-1. 要求 `design_intent` 与 `layout_planned` 已确认。
-2. 从本阶段 `stage_inputs.panels.parameters` 首次物化 `FurnitureSpec`，包括板厚、背板、踢脚、门缝及结构覆盖值；不得从 `DesignIntent` 读取这些字段。
+1. 只要求 `design_intent` 已确认；独立 `furniture-layout` 结果不是前置条件。
+2. 从本阶段 `stage_inputs.panels.parameters` 首次物化 `FurnitureSpec`，包括 `shelf_count/n_doors/drawer_count`、板厚、背板、踢脚、门缝及结构覆盖值；不得从 `DesignIntent` 读取这些字段。
 3. 依据 [背板结构规则](references/back-construction-rules.md) 解析 `back_mount=auto`，生成精确 `CabinetStructure`：柜体前后范围、内部 X/Y/Z 净空、背板基准和踢脚区域。
 4. 按 [板件定义规则](references/panel-definition-rules.md) 与 `references/cabinet-topologies/` 柜型拓扑生成实体板件；仅入槽背板生成背拉条。
 5. `panel_rules.py` 统一计算踢脚支撑与背拉条数量/净距；生成器和校验器必须共用。

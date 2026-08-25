@@ -1,4 +1,4 @@
 interface:
   display_name: "家具智能体"
-  short_description: "路由七阶段家具规划、CAD 与验证"
+  short_description: "路由六阶段家具生成与独立房间布局"
   default_prompt: "使用 $furniture-agent 每次完成一个阶段，展示 stage_outputs 后等待确认；不得跳阶段生成 CAD。"

@@ -10,7 +10,6 @@ SKILLS_ROOT = WORKSPACE_ROOT / "skills"
 
 STAGE_SKILLS = {
     "design_intent": "furniture-design-intent",
-    "layout_planned": "furniture-layout",
     "panels_planned": "furniture-panel-planning",
     "manufacturing_planned": "furniture-manufacturing",
     "feature_tree_planned": "furniture-feature-tree",
@@ -43,7 +42,7 @@ STAGE_RUNTIME_PACKAGES = {
 
 
 class SkillArchitectureTests(unittest.TestCase):
-    def test_seven_stages_have_one_skill_each(self) -> None:
+    def test_six_serial_stages_have_one_skill_each(self) -> None:
         claimed_stages: dict[str, str] = {}
 
         for stage, skill_name in STAGE_SKILLS.items():
@@ -62,6 +61,11 @@ class SkillArchitectureTests(unittest.TestCase):
             claimed_stages[claimed_stage] = skill_name
 
         self.assertEqual(claimed_stages, STAGE_SKILLS)
+        layout_skill = (SKILLS_ROOT / "furniture-layout" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("独立按需步骤", layout_skill)
+        self.assertNotRegex(layout_skill, re.compile(r"^阶段：`", re.MULTILINE))
 
     def test_router_uses_explicit_stage_skill_paths(self) -> None:
         router = (
@@ -73,6 +77,11 @@ class SkillArchitectureTests(unittest.TestCase):
                 f"`{stage}`：`skills/{skill_name}/SKILL.md`",
                 router,
             )
+        self.assertIn(
+            "独立能力（不在上述串联阶段内）",
+            router,
+        )
+        self.assertIn("`skills/furniture-layout/SKILL.md`", router)
 
     def test_scientific_skills_are_routed_on_demand_to_stage_owned_adapters(
         self,
@@ -374,7 +383,7 @@ class SkillArchitectureTests(unittest.TestCase):
             ),
             "skills/furniture-layout/SKILL.md": (
                 "shelf_count/door_count",
-                "数量不等于完整分区、开口或开启策略",
+                "不参与房间定位",
                 "左后下落地角",
             ),
             "skills/furniture-manufacturing/SKILL.md": (
@@ -383,7 +392,7 @@ class SkillArchitectureTests(unittest.TestCase):
                 "workflow_artifact_writer.py",
             ),
             "skills/furniture-delivery-validation/SKILL.md": (
-                "前六阶段",
+                "前五个串联阶段",
                 "不解析 STEP 几何",
                 "未执行",
             ),

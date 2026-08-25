@@ -1,4 +1,4 @@
-"""Generate a dependency-free SVG 3D envelope preview for stage 2."""
+"""Generate a dependency-free SVG preview for independent room placement."""
 
 from __future__ import annotations
 

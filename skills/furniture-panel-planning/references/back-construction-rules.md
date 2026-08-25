@@ -1,6 +1,6 @@
 # 背板结构规则
 
-回答“布局确认后，柜体采用什么背板结构，以及由此得到哪些精确结构尺寸？”；本文件是背板设计的唯一规则中心。
+回答“成品外包络确认后，柜体采用什么背板结构，以及由此得到哪些精确结构尺寸？”；本文件是背板设计的唯一规则中心。
 
 ## 阶段输入
 
@@ -9,7 +9,7 @@
 - `back_offset/door_margin/door_hinge_gap`。
 - `groove_depth/groove_clearance/back_rail_height`。
 
-这些值可在完整 CLI/API 请求中提前提交，但只保存在 `stage_inputs.panels.parameters`，直到客户确认布局后才物化为板件阶段 `FurnitureSpec`。
+这些值可在完整 CLI/API 请求中提前提交，但只保存在 `stage_inputs.panels.parameters`，直到客户确认设计意图后才物化为板件阶段 `FurnitureSpec`。
 
 ## 模式解析
 

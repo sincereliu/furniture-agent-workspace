@@ -13,7 +13,7 @@ description: 用于 cad_generated 阶段和 CLI/API 批处理。当用户说"生
 
 - 阶段运行时放所属 `skills/furniture-*/scripts/`；跨阶段 Orchestrator、CLI/API、布局守卫和集成测试放 `skills/furniture-cad/scripts/`。
 - 一次性检查、迁移、调试和 CAD 实验放已忽略的 `temp/<project-slug>/`；每个项目或任务独占一个目录，脚本与派生产物随目录整体识别和删除，任务结束即清理。禁止把不同项目平铺在 `temp/` 根层；也禁止根级 `scripts/`、`packages/`、`tests/`、`scratch/`、`tmp/`，以及在非家具 Skill 新建脚本面。
-- 生成源码只进保留路径 `temp/cad-source/<artifact-name>/`，不得进 `generated/`。布局或生成变更后运行：
+- 生成源码只进保留路径 `temp/cad-source/<artifact-name>/`，不得进 `generated/`。工作区目录或生成逻辑变更后运行：
 
 ```powershell
 .\.venv\Scripts\python.exe skills\furniture-cad\scripts\validate_workspace_layout.py

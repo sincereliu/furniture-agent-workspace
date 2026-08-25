@@ -9,7 +9,7 @@ description: 用于 manufacturing_planned 阶段。当用户说"用什么五金"
 
 ## 工作流
 
-1. 要求设计意图、布局和板件规划均已确认。
+1. 要求设计意图和板件规划均已确认；独立房间布局不是前置条件。
 2. 按 [制造规则](references/manufacturing-rules.md) 确定材料、封边、连接、五金、孔位、公差和 BOM 假设；整份方案用 `readiness=preliminary/accepted/factory_ready` 表示接受程度，默认 `preliminary`。
 3. 五金规格以 `scripts/furniture_manufacturing/hardware_catalog.yaml` 和 `hardware_rules.yaml` 为准。
 4. `connectors/` 集中连接/打孔逻辑：`Connector` 基类及 `TrinityConnector`、`HingeConnector`、`ShelfConnector`、`BackMountConnector`、`DrawerSlideConnector`。新五金新增 Connector 并注册 `ALL_CONNECTORS`。

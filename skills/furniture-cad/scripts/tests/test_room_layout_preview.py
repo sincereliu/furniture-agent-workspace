@@ -16,9 +16,17 @@ from runtime_paths import bootstrap_runtime_paths
 
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
+from furniture_workflow.input_adapter import (
+    layout_stage_input,
+    panel_stage_input,
+    stage_inputs_from_spec,
+)
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
-from furniture_workflow.workflow_state import WorkflowStage
+from furniture_workflow.workflow_state import STAGE_SEQUENCE, WorkflowStage
+from furniture_layout.layout_pipeline import plan_layout_stage
 from furniture_layout.layout_preview import _build_projector
+from furniture_layout.layout_spec import LayoutSpec
+from furniture_layout.validation import validate_layout_output
 
 
 def wardrobe_spec(
@@ -69,10 +77,28 @@ def wardrobe_spec(
     }
 
 
-class RoomLayoutPreviewTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.orchestrator = FurnitureOrchestrator(workspace_root=WORKSPACE_ROOT)
+def run_independent_layout(name: str, spec: dict):
+    orchestrator = FurnitureOrchestrator(workspace_root=WORKSPACE_ROOT)
+    intent = orchestrator.intent_from_spec(spec).confirm()
+    stage_inputs = stage_inputs_from_spec(spec)
+    panel_parameters = panel_stage_input(stage_inputs).get("parameters", {})
+    options = {
+        key: panel_parameters[key]
+        for key in ("shelf_count", "n_doors", "door_count")
+        if key in panel_parameters
+    }
+    context = layout_stage_input(stage_inputs)
+    layout_spec = LayoutSpec.from_intent(intent, options)
+    output = plan_layout_stage(
+        layout_spec,
+        room=context.get("room"),
+        placement=context.get("placement"),
+        furniture_label=name,
+    )
+    return layout_spec, output, validate_layout_output(layout_spec, output)
 
+
+class RoomLayoutPreviewTests(unittest.TestCase):
     def test_preview_projection_makes_near_geometry_larger(self) -> None:
         project = _build_projector(4200, 3600, 2800)
 
@@ -92,7 +118,7 @@ class RoomLayoutPreviewTests(unittest.TestCase):
         self.assertGreater(near_height, far_height * 1.5)
 
     def test_missing_room_context_uses_visible_default_bedroom(self) -> None:
-        result = self.orchestrator.execute_spec(
+        _, output, report = run_independent_layout(
             "1600衣柜",
             {
                 "type": "floor_cabinet",
@@ -100,10 +126,8 @@ class RoomLayoutPreviewTests(unittest.TestCase):
                 "depth": 600,
                 "height": 2400,
             },
-            through_stage=WorkflowStage.LAYOUT_PLANNED,
         )
 
-        output = result.revision.stage_outputs["layout_planned"]
         self.assertEqual(
             output["layout_context"],
             {
@@ -146,29 +170,17 @@ class RoomLayoutPreviewTests(unittest.TestCase):
         self.assertIn('addEventListener("wheel"', output["viewer"]["html"])
         self.assertIn("透明为房间", output["preview"]["svg"])
         self.assertIn("默认卧室（系统假设）", output["preview"]["svg"])
-        self.assertTrue(
-            all(report.passed for report in result.revision.validations)
-        )
+        self.assertTrue(report.passed)
 
     def test_missing_placement_centers_furniture_in_provided_room(self) -> None:
         spec = wardrobe_spec()
         del spec["placement"]
-        result = self.orchestrator.execute_spec(
+        _, output, report = run_independent_layout(
             "主卧衣柜",
             spec,
-            through_stage=WorkflowStage.LAYOUT_PLANNED,
         )
 
-        self.assertIn(
-            "layout_planned",
-            result.revision.stage_outputs,
-            [
-                (issue.code, issue.message)
-                for report in result.revision.validations
-                for issue in report.issues
-            ],
-        )
-        output = result.revision.stage_outputs["layout_planned"]
+        self.assertTrue(report.passed)
         self.assertEqual(output["layout_context"]["room_source"], "provided")
         self.assertEqual(
             output["layout_context"]["placement_source"],
@@ -179,21 +191,13 @@ class RoomLayoutPreviewTests(unittest.TestCase):
             1200,
         )
 
-    def test_layout_stage_emits_room_position_footprint_and_svg(self) -> None:
-        result = self.orchestrator.execute_spec(
+    def test_independent_layout_emits_room_position_footprint_and_svg(self) -> None:
+        _, output, report = run_independent_layout(
             "主卧衣柜",
             wardrobe_spec(),
-            through_stage=WorkflowStage.LAYOUT_PLANNED,
         )
 
-        self.assertEqual(
-            result.revision.workflow.current,
-            WorkflowStage.LAYOUT_PLANNED,
-        )
-        self.assertTrue(
-            result.revision.is_stage_approved(WorkflowStage.LAYOUT_PLANNED)
-        )
-        output = result.revision.stage_outputs["layout_planned"]
+        self.assertNotIn(WorkflowStage.LAYOUT_PLANNED, STAGE_SEQUENCE)
         room_placement = output["room_placement"]
         placement = room_placement["placement"]
         self.assertEqual(placement["host_wall"], "south")
@@ -222,31 +226,23 @@ class RoomLayoutPreviewTests(unittest.TestCase):
             ElementTree.fromstring(output["preview"]["svg"]).tag,
             "{http://www.w3.org/2000/svg}svg",
         )
-        self.assertTrue(all(report.passed for report in result.revision.validations))
+        self.assertTrue(report.passed)
 
     def test_north_wall_position_derives_room_transform(self) -> None:
         spec = wardrobe_spec(wall="north", offset_mm=400)
         spec["room"]["obstacles"] = []
-        result = self.orchestrator.execute_spec(
+        _, output, report = run_independent_layout(
             "北墙衣柜",
             spec,
-            through_stage=WorkflowStage.LAYOUT_PLANNED,
         )
 
-        self.assertEqual(
-            result.revision.workflow.current,
-            WorkflowStage.LAYOUT_PLANNED,
-        )
-        placement = result.revision.stage_outputs["layout_planned"][
-            "room_placement"
-        ]["placement"]
+        self.assertTrue(report.passed)
+        placement = output["room_placement"]["placement"]
         self.assertEqual(placement["origin_x_mm"], 400)
         self.assertEqual(placement["origin_y_mm"], 0)
         self.assertEqual(placement["rotation_z_deg"], 0)
         self.assertEqual(
-            result.revision.stage_outputs["layout_planned"]["room_placement"][
-                "clearances_mm"
-            ]["north"],
+            output["room_placement"]["clearances_mm"]["north"],
             0,
         )
 
@@ -259,15 +255,13 @@ class RoomLayoutPreviewTests(unittest.TestCase):
             "origin_z_mm": 0,
             "rotation_z_deg": 90,
         }
-        result = self.orchestrator.execute_spec(
+        _, output, report = run_independent_layout(
             "自由摆放衣柜",
             spec,
-            through_stage=WorkflowStage.LAYOUT_PLANNED,
         )
 
-        footprint = result.revision.stage_outputs["layout_planned"][
-            "room_placement"
-        ]["furniture_footprint"]
+        self.assertTrue(report.passed)
+        footprint = output["room_placement"]["furniture_footprint"]
         self.assertEqual(
             footprint,
             [
@@ -277,34 +271,27 @@ class RoomLayoutPreviewTests(unittest.TestCase):
                 {"x_mm": 400.0, "y_mm": 1000.0},
             ],
         )
-        self.assertEqual(
-            result.revision.workflow.current,
-            WorkflowStage.LAYOUT_PLANNED,
-        )
-
     def test_layout_rejects_furniture_outside_room(self) -> None:
-        result = self.orchestrator.execute_spec(
+        _, _, report = run_independent_layout(
             "越界衣柜",
             wardrobe_spec(offset_mm=3000),
-            through_stage=WorkflowStage.LAYOUT_PLANNED,
         )
 
-        self.assertEqual(result.revision.workflow.current, WorkflowStage.FAILED)
+        self.assertFalse(report.passed)
         self.assertIn(
             "FURNITURE_OUTSIDE_ROOM",
-            {issue.code for issue in result.revision.validations[-1].issues},
+            {issue.code for issue in report.issues},
         )
 
     def test_layout_rejects_opening_and_obstacle_collisions(self) -> None:
         door_spec = wardrobe_spec(offset_mm=2200)
-        door_result = self.orchestrator.execute_spec(
+        _, _, door_report = run_independent_layout(
             "遮门衣柜",
             door_spec,
-            through_stage=WorkflowStage.LAYOUT_PLANNED,
         )
         self.assertIn(
             "FURNITURE_OPENING_COLLISION",
-            {issue.code for issue in door_result.revision.validations[-1].issues},
+            {issue.code for issue in door_report.issues},
         )
 
         free_door_spec = wardrobe_spec()
@@ -315,16 +302,14 @@ class RoomLayoutPreviewTests(unittest.TestCase):
             "origin_z_mm": 0,
             "rotation_z_deg": 0,
         }
-        free_door_result = self.orchestrator.execute_spec(
+        _, _, free_door_report = run_independent_layout(
             "自由摆放遮门衣柜",
             free_door_spec,
-            through_stage=WorkflowStage.LAYOUT_PLANNED,
         )
         self.assertIn(
             "FURNITURE_OPENING_COLLISION",
             {
-                issue.code
-                for issue in free_door_result.revision.validations[-1].issues
+                issue.code for issue in free_door_report.issues
             },
         )
 
@@ -341,40 +326,29 @@ class RoomLayoutPreviewTests(unittest.TestCase):
                 "height_mm": 2800,
             }
         ]
-        obstacle_result = self.orchestrator.execute_spec(
+        _, _, obstacle_report = run_independent_layout(
             "撞柱衣柜",
             obstacle_spec,
-            through_stage=WorkflowStage.LAYOUT_PLANNED,
         )
         self.assertIn(
             "FURNITURE_OBSTACLE_COLLISION",
             {
-                issue.code
-                for issue in obstacle_result.revision.validations[-1].issues
+                issue.code for issue in obstacle_report.issues
             },
         )
 
     def test_revised_position_must_refresh_transform_and_preview(self) -> None:
-        result = self.orchestrator.execute_spec(
+        layout_spec, output, report = run_independent_layout(
             "可修改衣柜位置",
             wardrobe_spec(),
-            through_stage=WorkflowStage.LAYOUT_PLANNED,
         )
-        edited = deepcopy(result.revision.stage_outputs["layout_planned"])
+        self.assertTrue(report.passed)
+        edited = deepcopy(output)
         edited["room_placement"]["placement"]["offset_mm"] = 700
-        revision = self.orchestrator.revise_stage_output(
-            result.project,
-            WorkflowStage.LAYOUT_PLANNED,
-            edited,
-        )
+        edited_report = validate_layout_output(layout_spec, edited)
 
-        self.orchestrator.confirm_stage(
-            result.project,
-            WorkflowStage.LAYOUT_PLANNED,
-        )
-
-        self.assertEqual(revision.workflow.current, WorkflowStage.FAILED)
-        issue_codes = {issue.code for issue in revision.validations[-1].issues}
+        self.assertFalse(edited_report.passed)
+        issue_codes = {issue.code for issue in edited_report.issues}
         self.assertIn("WALL_PLACEMENT_TRANSFORM_MISMATCH", issue_codes)
         self.assertIn("LAYOUT_PREVIEW_MISMATCH", issue_codes)
         self.assertIn("LAYOUT_VIEWER_MISMATCH", issue_codes)

@@ -12,17 +12,16 @@
 
 它们不是任意家具配置器。承诺变体前检查 `planner.py` 和模板；其他类别未实现前只做意图/建模方案。
 
-## 七阶段状态与确认
+## 六阶段状态与确认
 
 每个 Revision 记录：
 
 1. `design_intent`
-2. `layout_planned`
-3. `panels_planned`
-4. `manufacturing_planned`
-5. `feature_tree_planned`
-6. `cad_generated`
-7. `delivery_validated`
+2. `panels_planned`
+3. `manufacturing_planned`
+4. `feature_tree_planned`
+5. `cad_generated`
+6. `delivery_validated`
 
 输出在 `revision.stage_outputs[stage.value]`，待后续处理的参数在 `revision.stage_inputs`，确认在 `approved_stages`，历史在 `workflow.history`；`JsonProjectStore` 一并持久化。
 
@@ -46,10 +45,12 @@ result = orchestrator.run_next(
 `run_next()`/默认 `run_until()` 不越过未确认检查点。Agent 返回当前输出后等待确认，不用批处理代替确认。
 
 - 意图变化：`revise(project, new_intent)`，从 `design_intent` 开始。
-- 第 2～5 阶段变化：`revise_stage_output(project, stage, edited_output)`。
+- `panels_planned`、`manufacturing_planned`、`feature_tree_planned` 变化：`revise_stage_output(project, stage, edited_output)`。
 - 新 Revision 仅复制修改点前的已确认输出；修改阶段和下游重做。旧产物标为 stale，不手改 STEP、GLB、BOM 或源码。
 
 `execute_spec()` 仅供明确 CLI/API 批处理，会自动确认校验通过的中间阶段；交互 Agent 禁用。
+
+`furniture-layout` 不在 `STAGE_SEQUENCE` 中。只有明确请求房间摆放、碰撞检查、SVG 或 Viewer 时才单独运行 `/api/plan-layout`；其结果不写入 `approved_stages`，也不是板件、CAD 或交付的前置条件。
 
 ## 可执行 JSON
 
@@ -68,9 +69,9 @@ result = orchestrator.run_next(
 }
 ```
 
-`width/depth/height` 必须在意图确认前明确提供；不再用类别预设替代客户确认的外包络。`shelf_count/n_doors` 在布局阶段物化；板厚、背板、踢脚和门缝默认值在 `panels_planned.spec` 首次物化。
+`width/depth/height` 必须在意图确认前明确提供；不再用类别预设替代客户确认的外包络。`shelf_count/n_doors` 与板厚、背板、踢脚和门缝默认值都在 `panels_planned.spec` 首次物化。
 
-契约为扁平 JSON。适配器只把 `type/width/depth/height` 转成 `DesignIntent`，将 `shelf_count/n_doors/room/placement` 路由到布局，将结构字段路由到板件，将铰链/外观等路由到制造。可选 `constraints` 必须有阶段映射；未分类约束在协议路由时拒绝。
+契约为扁平 JSON。适配器只把 `type/width/depth/height` 转成 `DesignIntent`，将 `shelf_count/n_doors` 和结构字段路由到板件，将铰链/外观等路由到制造；`room/placement` 只供独立房间布局 API 使用。可选 `constraints` 必须有阶段映射；未分类约束在协议路由时拒绝。
 
 `back_mount` 接受 `auto/groove/insert/cover`，但不进入意图或布局输出。板件阶段在背板薄于柜体板时把 `auto` 解析为 `groove`，否则为 `insert`，并输出 requested/effective；`back_rail_height/groove_depth/groove_clearance` 仅对有效 `groove` 生效，`back_rail_height=0` 关闭背拉条。
 
@@ -98,7 +99,6 @@ result = orchestrator.run_next(
 写入 `generated/<artifact-name>/`：
 
 - `<artifact-name>.design-intent.json`
-- `<artifact-name>.layout-plan.json`
 - `<artifact-name>.panel-plan.json`
 - `<artifact-name>.manufacturing-plan.json`
 - `<artifact-name>.feature-tree.json`
@@ -116,7 +116,9 @@ build123d 入口源码以 `<artifact-name>.step.py`（交互模式为 `model.ste
 
 运行时流水线为：
 
-`CLI / API / Agent -> FurnitureOrchestrator -> 设计意图 -> 布局 -> 板件 -> 制造/BOM -> 特征树 -> CAD Bridge -> STEP + Viewer 组件包 -> 交付验证`
+`CLI / API / Agent -> FurnitureOrchestrator -> 设计意图 -> 板件 -> 制造/BOM -> 特征树 -> CAD Bridge -> STEP + Viewer 组件包 -> 交付验证`
+
+独立房间摆放为：`明确布局请求 -> furniture-layout -> 房间坐标/碰撞检查/SVG/互动 Viewer`。
 
 Feature Tree v2 支持板件 `box` 和定向 `cut_box`；发射器先建板、再切削、最后装配加工后的板件。
 
@@ -124,8 +126,8 @@ Feature Tree v2 支持板件 `box` 和定向 `cut_box`；发射器先建板、�
 
 ## 运行时板件与 BOM 路径
 
-- `furniture_layout/layout_pipeline.py::plan_layout()`：成品包络、功能数量和房间定位，不计算结构净空。
-- `furniture_panel_planning/panel_pipeline.py::plan_panel_stage()`：首次物化结构规格、精确净空、背板方案，并生成实体板件角色、尺寸和位置。
+- `furniture_layout/layout_pipeline.py::plan_layout_stage()`：独立计算房间定位、碰撞和预览，不进入家具生成串联流程。
+- `furniture_panel_planning/panel_pipeline.py::plan_panel_stage()`：从已确认意图直接首次物化功能数量、结构规格、精确净空、背板方案，并生成实体板件角色、尺寸和位置。
 - `furniture_manufacturing/manufacturing_bom.py::plan_manufacturing()`：材料、封边、五金、BOM、槽；`emit_drilled_holes()` 输出配合孔。
 
 `cabinet_pipeline.py::plan_cabinet()` 仅是无状态兼容门面；交互流程由 Orchestrator 分阶段调用，不合并检查点。

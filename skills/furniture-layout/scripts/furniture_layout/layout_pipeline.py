@@ -19,7 +19,7 @@ DEFAULT_WALL_CABINET_CEILING_CLEARANCE_MM = 450.0
 
 
 def plan_layout(spec: LayoutSpec | Any) -> CabinetLayout:
-    """Stage 2: preserve the envelope and plan customer-visible counts."""
+    """Normalize the envelope for an independent room-layout request."""
     if not isinstance(spec, LayoutSpec):
         spec = LayoutSpec(
             furniture_type=str(spec.furniture_type),
@@ -39,13 +39,13 @@ def plan_layout_stage(
     placement: Mapping[str, Any] | None = None,
     furniture_label: str = "",
 ) -> dict[str, Any]:
-    """Build the complete serializable stage-2 output.
+    """Build one complete serializable independent-layout output.
 
     Missing room context is filled with an explicit default bedroom and a
-    centered south-wall placement so every successful checkpoint has a visible
+    centered north-wall placement so every successful request has a visible
     3D envelope preview. The output records which values were assumed.  No
     board thickness, back construction, or final internal clearance is
-    introduced at this checkpoint.
+    introduced by this independent capability.
     """
     layout = plan_layout(spec)
     output: dict[str, Any] = {"layout": asdict(layout)}

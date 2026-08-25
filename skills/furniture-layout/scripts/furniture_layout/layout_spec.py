@@ -1,4 +1,4 @@
-"""Customer-visible functional layout inputs owned by layout_planned."""
+"""Envelope inputs for the independent room-placement capability."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ LAYOUT_PRESETS: dict[str, dict[str, int]] = {
 
 @dataclass(frozen=True)
 class LayoutSpec:
-    """Envelope plus customer-visible organization; no construction inputs."""
+    """Envelope plus legacy count fields; no construction inputs."""
 
     furniture_type: str
     width: float
@@ -35,7 +35,7 @@ class LayoutSpec:
         unknown = sorted(set(values) - {"shelf_count", "n_doors", "door_count"})
         if unknown:
             raise ValueError(
-                "layout stage does not support: " + ", ".join(unknown)
+                "independent layout does not support: " + ", ".join(unknown)
             )
         if intent.furniture_type not in SUPPORTED_TYPES:
             raise ValueError(f"unsupported furniture type: {intent.furniture_type}")

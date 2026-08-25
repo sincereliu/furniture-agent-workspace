@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-
-from furniture_layout.layout_planning import CabinetLayout
+from typing import Any
 
 from .cabinet_panel_planner import build_cabinet_panels
 from .panel_models import PanelPlacement
@@ -14,26 +13,30 @@ from .structure_planning import CabinetStructure
 
 def plan_panels(
     spec: FurnitureSpec,
-    layout: CabinetLayout | CabinetStructure,
+    layout: CabinetStructure | Any,
 ) -> list[PanelPlacement]:
-    """Stage 3: create physical panel roles, sizes, and placements."""
-    if isinstance(layout, CabinetLayout):
+    """Create physical panel roles, sizes, and placements."""
+    if not isinstance(layout, CabinetStructure):
+        # Compatibility for direct pre-refactor callers. The serial workflow
+        # never requests or imports a room-layout result.
         spec = FurnitureSpec.from_dict(asdict(spec))
-        if (
+        expected = (
             spec.furniture_type,
             spec.width,
             spec.depth,
             spec.height,
             spec.shelf_count,
             spec.n_doors,
-        ) != (
-            layout.furniture_type,
-            layout.width,
-            layout.depth,
-            layout.height,
-            layout.shelf_count,
-            layout.door_count,
-        ):
-            raise ValueError("panel specification must preserve the approved layout")
+        )
+        received = (
+            getattr(layout, "furniture_type", None),
+            getattr(layout, "width", None),
+            getattr(layout, "depth", None),
+            getattr(layout, "height", None),
+            getattr(layout, "shelf_count", None),
+            getattr(layout, "door_count", None),
+        )
+        if received != expected:
+            raise ValueError("legacy layout does not match the panel specification")
         layout = CabinetStructure.from_spec(spec)
     return build_cabinet_panels(spec, layout)

@@ -58,7 +58,6 @@ def write_artifacts(
 ) -> tuple[Path, Path]:
     if artifact_name:
         intent_path = artifact_dir / f"{artifact_name}.design-intent.json"
-        layout_path = artifact_dir / f"{artifact_name}.layout-plan.json"
         panel_path = artifact_dir / f"{artifact_name}.panel-plan.json"
         manufacturing_path = artifact_dir / f"{artifact_name}.manufacturing-plan.json"
         feature_tree_path = artifact_dir / f"{artifact_name}.feature-tree.json"
@@ -68,7 +67,6 @@ def write_artifacts(
         step_filename = f"{artifact_name}.step"
     else:
         intent_path = artifact_dir / "design-intent.json"
-        layout_path = artifact_dir / "layout-plan.json"
         panel_path = artifact_dir / "panel-plan.json"
         manufacturing_path = artifact_dir / "manufacturing-plan.json"
         feature_tree_path = artifact_dir / "feature-tree.json"
@@ -84,14 +82,6 @@ def write_artifacts(
 
     intent_path.write_text(
         json.dumps(revision.intent.to_dict(), ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    layout_path.write_text(
-        json.dumps(
-            revision.stage_outputs[WorkflowStage.LAYOUT_PLANNED.value],
-            ensure_ascii=False,
-            indent=2,
-        ),
         encoding="utf-8",
     )
     panel_path.write_text(
@@ -140,7 +130,6 @@ def write_artifacts(
     )
 
     revision.manifest.add_file("design_intent", intent_path)
-    revision.manifest.add_file("layout_plan", layout_path)
     revision.manifest.add_file("panel_plan", panel_path)
     revision.manifest.add_file(
         "manufacturing_plan",

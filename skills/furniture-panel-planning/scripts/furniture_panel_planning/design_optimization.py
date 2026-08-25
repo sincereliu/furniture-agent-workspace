@@ -9,7 +9,7 @@ import json
 from math import isfinite
 from typing import Any, Mapping
 
-from furniture_layout.layout_planning import CabinetLayout
+from furniture_design_intent.design_intent import DesignIntent
 
 from .panel_pipeline import plan_panel_stage
 from .panel_spec import PANEL_SPEC_FIELDS
@@ -182,7 +182,7 @@ def _select_front(
 
 
 def optimize_panel_design(
-    layout: CabinetLayout,
+    intent: DesignIntent,
     panel_output: Mapping[str, Any],
     config: Mapping[str, Any],
 ) -> dict[str, Any]:
@@ -229,7 +229,7 @@ def optimize_panel_design(
         changes = dict(zip(names, values))
         options = {**base_options, **changes}
         try:
-            output = plan_panel_stage(layout, options)
+            output = plan_panel_stage(intent, options)
             metrics = _metrics(output)
         except (KeyError, TypeError, ValueError) as exc:
             rejected.append({"parameters": changes, "reason": str(exc)})
@@ -286,10 +286,10 @@ def optimize_panel_design(
 
 
 def materialize_optimization_candidate(
-    layout: CabinetLayout,
+    intent: DesignIntent,
     candidate: Mapping[str, Any],
 ) -> dict[str, Any]:
     parameters = candidate.get("resolved_parameters")
     if not isinstance(parameters, Mapping):
         raise ValueError("candidate requires resolved_parameters")
-    return plan_panel_stage(layout, parameters)
+    return plan_panel_stage(intent, parameters)

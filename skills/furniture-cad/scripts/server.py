@@ -26,7 +26,14 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
-from furniture_workflow.workflow_state import WorkflowStage
+from furniture_workflow.input_adapter import (
+    layout_stage_input,
+    panel_stage_input,
+    stage_inputs_from_spec,
+)
+from furniture_layout.layout_pipeline import plan_layout_stage
+from furniture_layout.layout_spec import LayoutSpec
+from furniture_layout.validation import validate_layout_output
 
 API_VERSION = "0.6.0"
 
@@ -125,7 +132,7 @@ class CabinetRequest(BaseModel):
     )
     room: RoomRequest | None = Field(
         default=None,
-        description="第 2 阶段使用的房间模型",
+        description="独立房间布局使用的房间模型",
     )
     placement: FurniturePlacementRequest | None = Field(
         default=None,
@@ -342,24 +349,35 @@ async def plan_cabinet(req: CabinetRequest):
 
 @app.post("/api/plan-layout", response_model=LayoutPlanResponse)
 async def plan_layout(req: CabinetRequest):
-    """只运行到第 2 阶段，返回房间定位、占地和 SVG 预览。"""
-    orchestration = ORCHESTRATOR.execute_spec(
-        f"layout-{req.type}",
-        req.model_dump(exclude_none=True),
-        through_stage=WorkflowStage.LAYOUT_PLANNED,
-    )
-    output = orchestration.revision.stage_outputs.get(
-        WorkflowStage.LAYOUT_PLANNED.value
-    )
-    if output is None or orchestration.revision.workflow.current == WorkflowStage.FAILED:
-        errors = [
-            issue.message
-            for validation in orchestration.revision.validations
-            for issue in validation.issues
-        ]
+    """独立规划房间摆放；不进入家具生成的串联阶段。"""
+    payload = req.model_dump(exclude_none=True)
+    try:
+        intent = ORCHESTRATOR.intent_from_spec(payload).confirm()
+        stage_inputs = stage_inputs_from_spec(payload)
+        panel_parameters = panel_stage_input(stage_inputs).get("parameters", {})
+        layout_options = {
+            key: panel_parameters[key]
+            for key in ("shelf_count", "n_doors", "door_count")
+            if key in panel_parameters
+        }
+        context = layout_stage_input(stage_inputs)
+        spec = LayoutSpec.from_intent(intent, layout_options)
+        output = plan_layout_stage(
+            spec,
+            room=context.get("room"),
+            placement=context.get("placement"),
+            furniture_label=f"layout-{req.type}",
+        )
+        report = validate_layout_output(spec, output)
+    except (TypeError, ValueError) as exc:
         raise HTTPException(
             status_code=422,
-            detail="; ".join(errors) or "layout planning failed",
+            detail=str(exc),
+        ) from exc
+    if not report.passed:
+        raise HTTPException(
+            status_code=422,
+            detail="; ".join(issue.message for issue in report.issues),
         )
     return LayoutPlanResponse(**output)
 
@@ -370,7 +388,7 @@ async def plan_layout(req: CabinetRequest):
     responses={200: {"content": {"image/svg+xml": {}}}},
 )
 async def plan_layout_preview(req: CabinetRequest) -> Response:
-    """返回可直接在浏览器中显示的第 2 阶段 SVG 透视三维包络预览。"""
+    """返回可直接在浏览器中显示的独立 SVG 房间摆放预览。"""
     result = await plan_layout(req)
     if result.preview is None:
         raise HTTPException(
@@ -389,7 +407,7 @@ async def plan_layout_preview(req: CabinetRequest) -> Response:
     responses={200: {"content": {"text/html": {}}}},
 )
 async def plan_layout_viewer(req: CabinetRequest) -> HTMLResponse:
-    """返回可拖拽旋转、缩放和切换标准视角的第 2 阶段 Viewer。"""
+    """返回可拖拽旋转、缩放和切换标准视角的独立 Viewer。"""
     result = await plan_layout(req)
     if result.viewer is None:
         raise HTTPException(

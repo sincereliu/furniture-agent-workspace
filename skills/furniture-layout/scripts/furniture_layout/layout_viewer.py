@@ -1,4 +1,4 @@
-"""Generate a self-contained interactive orbit viewer for layout stage 2."""
+"""Generate a self-contained orbit viewer for independent room placement."""
 
 from __future__ import annotations
 

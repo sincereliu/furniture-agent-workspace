@@ -8,7 +8,7 @@ from furniture_design_intent.design_intent import DesignIntent
 from furniture_panel_planning.panel_spec import PANEL_SPEC_FIELDS
 
 
-LAYOUT_SPEC_FIELDS = frozenset({"shelf_count", "n_doors", "door_count"})
+PANEL_CONFIGURATION_FIELDS = frozenset({"shelf_count", "n_doors", "door_count"})
 LAYOUT_CONTEXT_FIELDS = frozenset({"room", "placement"})
 MANUFACTURING_SPEC_FIELDS = frozenset(
     {
@@ -32,7 +32,7 @@ PROTOCOL_FIELDS = frozenset(
         "constraint_mappings",
         "room",
         "placement",
-        *LAYOUT_SPEC_FIELDS,
+        *PANEL_CONFIGURATION_FIELDS,
         *PANEL_SPEC_FIELDS,
         *MANUFACTURING_SPEC_FIELDS,
     }
@@ -76,17 +76,20 @@ def stage_inputs_from_spec(spec: Mapping[str, Any]) -> dict[str, Any]:
     if not isinstance(raw_manufacturing, Mapping):
         raise ValueError("manufacturing must be an object")
 
-    layout_parameters = {
-        key: value
-        for key, value in raw_layout.items()
-        if key not in LAYOUT_CONTEXT_FIELDS
-    }
+    unknown_layout = sorted(
+        set(raw_layout) - LAYOUT_CONTEXT_FIELDS - PANEL_CONFIGURATION_FIELDS
+    )
+    if unknown_layout:
+        raise ValueError(
+            "layout input only accepts independent room placement or panel counts: "
+            + ", ".join(unknown_layout)
+        )
     panel_parameters = dict(raw_structure)
+    for key in PANEL_CONFIGURATION_FIELDS:
+        if key in raw_layout:
+            panel_parameters[key] = raw_layout[key]
     manufacturing_parameters = dict(raw_manufacturing)
 
-    for key in LAYOUT_SPEC_FIELDS:
-        if key in data:
-            layout_parameters[key] = data[key]
     for key in PANEL_SPEC_FIELDS:
         if key in data:
             panel_parameters[key] = data[key]
@@ -98,7 +101,6 @@ def stage_inputs_from_spec(spec: Mapping[str, Any]) -> dict[str, Any]:
     placement = data.get("placement", raw_layout.get("placement"))
     output: dict[str, Any] = {
         "layout": {
-            "parameters": layout_parameters,
             "room": room,
             "placement": placement,
         },
@@ -141,12 +143,14 @@ def _route_constraints(data: Mapping[str, Any], output: dict[str, Any]) -> None:
             envelope.append(record)
         elif target.startswith("layout."):
             field = target.split(".", 1)[1]
-            if (
-                field not in output["layout"].get("parameters", {})
-                and output["layout"].get(field) is None
-            ):
-                raise ValueError(f"constraint target is not explicit: {target}")
-            output["layout"].setdefault("constraints", []).append(record)
+            if field in PANEL_CONFIGURATION_FIELDS:
+                if field not in output["panels"].get("parameters", {}):
+                    raise ValueError(f"constraint target is not explicit: {target}")
+                output["panels"].setdefault("constraints", []).append(record)
+            else:
+                if field not in LAYOUT_CONTEXT_FIELDS or output["layout"].get(field) is None:
+                    raise ValueError(f"constraint target is not explicit: {target}")
+                output["layout"].setdefault("constraints", []).append(record)
         elif target.startswith(("structure.", "panels.")):
             field = target.split(".", 1)[1]
             if field not in output["panels"].get("parameters", {}):

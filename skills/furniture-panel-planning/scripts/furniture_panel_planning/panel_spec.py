@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping
 
-from furniture_layout.layout_planning import CabinetLayout
+from furniture_design_intent.design_intent import DesignIntent, SUPPORTED_TYPES
 
 
 VALID_BACK_MOUNTS = frozenset({"auto", "groove", "insert", "cover"})
@@ -27,8 +27,16 @@ PANEL_SPEC_FIELDS = frozenset(
         "back_mount",
         "back_rail_height",
         "drawer_count",
+        "shelf_count",
+        "n_doors",
+        "door_count",
     }
 )
+
+PANEL_PRESETS: dict[str, dict[str, int]] = {
+    "floor_cabinet": {"shelf_count": 4, "n_doors": 2},
+    "wall_cabinet": {"shelf_count": 1, "n_doors": 2},
+}
 
 
 @dataclass
@@ -67,9 +75,9 @@ class FurnitureSpec:
         )
 
     @classmethod
-    def from_layout(
+    def from_intent(
         cls,
-        layout: CabinetLayout,
+        intent: DesignIntent,
         options: Mapping[str, Any] | None = None,
     ) -> "FurnitureSpec":
         values = dict(options or {})
@@ -78,14 +86,34 @@ class FurnitureSpec:
             raise ValueError(
                 "panel stage does not support: " + ", ".join(unknown)
             )
+        if intent.furniture_type not in SUPPORTED_TYPES:
+            raise ValueError(f"unsupported furniture type: {intent.furniture_type}")
+        dimensions = (
+            intent.overall_size.width_mm,
+            intent.overall_size.depth_mm,
+            intent.overall_size.height_mm,
+        )
+        if any(value is None for value in dimensions):
+            raise ValueError("panel planning requires a confirmed finished envelope")
+        if (
+            "door_count" in values
+            and "n_doors" in values
+            and values["door_count"] != values["n_doors"]
+        ):
+            raise ValueError("door_count and n_doors must match when both are provided")
+        preset = PANEL_PRESETS[intent.furniture_type]
         return cls.from_dict(
             {
-                "type": layout.furniture_type,
-                "width": layout.width,
-                "depth": layout.depth,
-                "height": layout.height,
-                "shelf_count": layout.shelf_count,
-                "n_doors": layout.door_count,
+                "type": intent.furniture_type,
+                "width": dimensions[0],
+                "depth": dimensions[1],
+                "height": dimensions[2],
+                "shelf_count": values.get(
+                    "shelf_count", preset["shelf_count"]
+                ),
+                "n_doors": values.get(
+                    "n_doors", values.get("door_count", preset["n_doors"])
+                ),
                 **values,
             }
         )

@@ -19,10 +19,6 @@ from furniture_design_intent.design_intent import DesignIntent
 from furniture_design_intent.validation import validate_intent
 from furniture_feature_tree.feature_tree_builder import panels_to_feature_tree
 from furniture_feature_tree.validation import validate_feature_tree
-from furniture_layout.layout_pipeline import plan_layout_stage
-from furniture_layout.layout_planning import CabinetLayout
-from furniture_layout.layout_spec import LayoutSpec
-from furniture_layout.validation import validate_layout_output
 from furniture_manufacturing.manufacturing_bom import (
     BOMReport,
     emit_drilled_holes,
@@ -51,7 +47,6 @@ from furniture_panel_planning.validation import validate_panel_output
 from .cabinet_pipeline import CabinetPipelineResult
 from .input_adapter import (
     intent_from_spec as translate_intent_from_spec,
-    layout_stage_input,
     manufacturing_stage_input,
     panel_stage_input,
     stage_inputs_from_spec,
@@ -69,7 +64,6 @@ from .workflow_state import (
 
 
 EDITABLE_STAGE_OUTPUTS = {
-    WorkflowStage.LAYOUT_PLANNED,
     WorkflowStage.PANELS_PLANNED,
     WorkflowStage.MANUFACTURING_PLANNED,
     WorkflowStage.FEATURE_TREE_PLANNED,
@@ -145,7 +139,7 @@ class FurnitureOrchestrator:
         stage: str | WorkflowStage,
         output: dict[str, Any],
     ) -> Revision:
-        """Create a revision from an edited stage-2..5 output."""
+        """Create a revision from an edited serial planning-stage output."""
         changed_stage = parse_stage(stage)
         if changed_stage not in EDITABLE_STAGE_OUTPUTS:
             editable = ", ".join(item.value for item in EDITABLE_STAGE_OUTPUTS)
@@ -162,22 +156,14 @@ class FurnitureOrchestrator:
         revision.stage_outputs = {
             key: deepcopy(value)
             for key, value in parent.stage_outputs.items()
-            if stage_index(parse_stage(key)) < stage_index(changed_stage)
+            if parse_stage(key) in STAGE_SEQUENCE
+            and stage_index(parse_stage(key)) < stage_index(changed_stage)
         }
         revision.stage_outputs[WorkflowStage.DESIGN_INTENT.value] = (
             revision.intent.to_dict()
         )
         revision.stage_outputs[changed_stage.value] = deepcopy(output)
-        if changed_stage == WorkflowStage.LAYOUT_PLANNED:
-            revised_layout = output.get("layout", {})
-            layout_input = revision.stage_inputs.setdefault("layout", {})
-            parameters = layout_input.setdefault("parameters", {})
-            if isinstance(revised_layout, dict) and isinstance(parameters, dict):
-                if "shelf_count" in revised_layout:
-                    parameters["shelf_count"] = revised_layout["shelf_count"]
-                if "door_count" in revised_layout:
-                    parameters["n_doors"] = revised_layout["door_count"]
-        elif changed_stage == WorkflowStage.PANELS_PLANNED:
+        if changed_stage == WorkflowStage.PANELS_PLANNED:
             revised_spec = output.get("spec", {})
             panel_input = revision.stage_inputs.setdefault("panels", {})
             parameters = panel_input.setdefault("parameters", {})
@@ -188,15 +174,14 @@ class FurnitureOrchestrator:
                         "width",
                         "depth",
                         "height",
-                        "shelf_count",
-                        "n_doors",
                     }:
                         continue
                     parameters[key] = value
         revision.approved_stages = [
             value
             for value in parent.approved_stages
-            if stage_index(parse_stage(value)) < stage_index(changed_stage)
+            if parse_stage(value) in STAGE_SEQUENCE
+            and stage_index(parse_stage(value)) < stage_index(changed_stage)
         ]
         revision.workflow = WorkflowState()
         if changed_stage != WorkflowStage.DESIGN_INTENT:
@@ -234,7 +219,7 @@ class FurnitureOrchestrator:
                 values,
             ),
             "panel_optimization": lambda: optimize_panel_design(
-                self._layout_from_revision(revision),
+                revision.intent,
                 source_output,
                 values,
             ),
@@ -300,7 +285,7 @@ class FurnitureOrchestrator:
         if not isinstance(selected, Mapping):
             raise ValueError("selected optimization candidate is invalid")
         output = materialize_optimization_candidate(
-            self._layout_from_revision(revision),
+            revision.intent,
             selected,
         )
         if selected.get("stage_output_sha256") != _stable_digest(output):
@@ -318,7 +303,7 @@ class FurnitureOrchestrator:
         force: bool = False,
         through_stage: str | WorkflowStage | None = None,
     ) -> OrchestrationResult:
-        """Run an explicit batch request through the same seven-stage workflow."""
+        """Run an explicit batch request through the serial furniture workflow."""
         intent = self.intent_from_spec(spec)
         project = self.create_project(
             name,
@@ -503,27 +488,10 @@ class FurnitureOrchestrator:
         generate_cad: bool,
         force: bool,
     ) -> None:
-        if stage == WorkflowStage.LAYOUT_PLANNED:
-            stage_input = layout_stage_input(revision.stage_inputs)
-            spec = self._layout_spec_from_revision(revision)
-            output = plan_layout_stage(
-                spec,
-                room=stage_input.get("room"),
-                placement=stage_input.get("placement"),
-                furniture_label=project.name,
-            )
-            self._complete_stage(
-                revision,
-                stage,
-                output,
-                "cabinet envelope, clear regions, and layout counts planned",
-            )
-            return
-
         if stage == WorkflowStage.PANELS_PLANNED:
             stage_input = panel_stage_input(revision.stage_inputs)
             output = plan_panel_stage(
-                self._layout_from_revision(revision),
+                revision.intent,
                 stage_input.get("parameters", {}),
             )
             self._complete_stage(
@@ -687,7 +655,6 @@ class FurnitureOrchestrator:
         revision: Revision,
     ) -> CabinetPipelineResult | None:
         required = (
-            WorkflowStage.LAYOUT_PLANNED.value,
             WorkflowStage.PANELS_PLANNED.value,
             WorkflowStage.MANUFACTURING_PLANNED.value,
         )
@@ -695,17 +662,11 @@ class FurnitureOrchestrator:
             return None
         return CabinetPipelineResult(
             spec=self._spec_from_revision(revision),
-            layout=self._layout_from_revision(revision),
             structure=self._structure_from_revision(revision),
             placements=self._placements_from_revision(revision),
             panels=self._panels_from_revision(revision),
             bom=self._bom_from_revision(revision),
         )
-
-    @staticmethod
-    def _layout_from_revision(revision: Revision) -> CabinetLayout:
-        output = revision.stage_outputs[WorkflowStage.LAYOUT_PLANNED.value]
-        return CabinetLayout(**output["layout"])
 
     @staticmethod
     def _spec_from_revision(revision: Revision) -> FurnitureSpec:
@@ -716,14 +677,6 @@ class FurnitureOrchestrator:
     def _structure_from_revision(revision: Revision) -> CabinetStructure:
         output = revision.stage_outputs[WorkflowStage.PANELS_PLANNED.value]
         return CabinetStructure(**output["structure"])
-
-    @staticmethod
-    def _layout_spec_from_revision(revision: Revision) -> LayoutSpec:
-        stage_input = layout_stage_input(revision.stage_inputs)
-        parameters = stage_input.get("parameters", {})
-        if not isinstance(parameters, dict):
-            raise ValueError("layout stage parameters must be an object")
-        return LayoutSpec.from_intent(revision.intent, parameters)
 
     @staticmethod
     def _placements_from_revision(revision: Revision) -> list[PanelPlacement]:
@@ -767,14 +720,9 @@ class FurnitureOrchestrator:
         try:
             if stage == WorkflowStage.DESIGN_INTENT:
                 return validate_intent(revision.intent)
-            if stage == WorkflowStage.LAYOUT_PLANNED:
-                return validate_layout_output(
-                    self._layout_spec_from_revision(revision),
-                    revision.stage_outputs[stage.value],
-                )
             if stage == WorkflowStage.PANELS_PLANNED:
                 return validate_panel_output(
-                    self._layout_from_revision(revision),
+                    revision.intent,
                     revision.stage_outputs[stage.value],
                 )
             if stage == WorkflowStage.MANUFACTURING_PLANNED:

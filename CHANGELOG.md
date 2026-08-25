@@ -1,5 +1,18 @@
 # 更新日志
 
+## 20260825.1 — 房间布局从家具生成主流程拆分
+
+- 家具生成主流程由七阶段改为六阶段：`design_intent → panels_planned → manufacturing_planned → feature_tree_planned → cad_generated → delivery_validated`。
+- `furniture-layout` 改为明确请求房间摆放、碰撞检查、SVG 或互动 Viewer 时才运行的独立能力；普通家具生成不再创建默认卧室或摆放图。
+- `shelf_count/n_doors/door_count` 改由 `panels_planned` 直接从 `stage_inputs.panels.parameters` 物化，板件阶段只依赖已确认 `DesignIntent`。
+- CAD 交付不再生成或要求 `layout-plan.json`；独立布局结果不进入 `STAGE_SEQUENCE`、`approved_stages` 或交付谱系。
+- `/api/plan-layout` 保留为独立端点，房间越界、门窗/障碍物碰撞和 SVG/Viewer 行为不变。
+
+### 验证
+
+- 家具 CAD 集成测试 91 项通过。
+- 工作区目录布局校验通过。
+
 ## 20260822.8 — 抽屉盒默认三合一 + TrinityConnector 泛化（轴无关）
 
 全屋定制抽屉盒主流用三合一连接（木销+胶为少数），改为默认；连接布置按确认方案。

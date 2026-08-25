@@ -14,6 +14,9 @@ def utc_now() -> str:
 
 class WorkflowStage(str, Enum):
     DESIGN_INTENT = "design_intent"
+    # ``layout_planned`` is retained as a persisted/API compatibility value.
+    # It is an independent room-placement workflow, not a serial furniture
+    # generation checkpoint.
     LAYOUT_PLANNED = "layout_planned"
     PANELS_PLANNED = "panels_planned"
     MANUFACTURING_PLANNED = "manufacturing_planned"
@@ -23,7 +26,7 @@ class WorkflowStage(str, Enum):
     FAILED = "failed"
 
     # Compatibility aliases for project files and callers created before the
-    # seven-stage workflow became explicit.
+    # staged workflow became explicit.
     DRAFT_INTENT = DESIGN_INTENT
     INTENT_CONFIRMED = DESIGN_INTENT
     PANEL_PLANNED = PANELS_PLANNED
@@ -34,7 +37,6 @@ class WorkflowStage(str, Enum):
 
 STAGE_SEQUENCE: tuple[WorkflowStage, ...] = (
     WorkflowStage.DESIGN_INTENT,
-    WorkflowStage.LAYOUT_PLANNED,
     WorkflowStage.PANELS_PLANNED,
     WorkflowStage.MANUFACTURING_PLANNED,
     WorkflowStage.FEATURE_TREE_PLANNED,
@@ -63,6 +65,10 @@ def parse_stage(value: str | WorkflowStage) -> WorkflowStage:
 def stage_index(stage: WorkflowStage) -> int:
     if stage == WorkflowStage.FAILED:
         raise ValueError("failed is not a runnable workflow stage")
+    if stage == WorkflowStage.LAYOUT_PLANNED:
+        raise ValueError(
+            "layout_planned is independent and is not part of the serial workflow"
+        )
     return STAGE_SEQUENCE.index(stage)
 
 
@@ -117,4 +123,9 @@ class WorkflowState:
             )
             for item in data.get("history", [])
         ]
-        return cls(current=parse_stage(str(data["current"])), history=history)
+        current = parse_stage(str(data["current"]))
+        # Schema versions that placed room layout between intent and panels
+        # resume at the last serial checkpoint before that retired dependency.
+        if current == WorkflowStage.LAYOUT_PLANNED:
+            current = WorkflowStage.DESIGN_INTENT
+        return cls(current=current, history=history)

@@ -24,6 +24,7 @@ from furniture_workflow.input_adapter import stage_inputs_from_spec
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from furniture_workflow.workflow_state import STAGE_SEQUENCE, WorkflowStage
 from furniture_workflow.workflow_store import JsonProjectStore
+from furniture_panel_planning.panel_pipeline import plan_panel_stage
 
 
 def cabinet_intent(*, furniture_type: str = "floor_cabinet") -> DesignIntent:
@@ -81,7 +82,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         )
 
         self.orchestrator.confirm_intent(project)
-        for expected in STAGE_SEQUENCE[1:5]:
+        for expected in STAGE_SEQUENCE[1:4]:
             result = self.orchestrator.run_next(project)
             self.assertEqual(result.revision.workflow.current, expected)
             self.assertIn(expected.value, result.revision.stage_outputs)
@@ -98,10 +99,10 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         )
         self.assertEqual(
             set(project.latest.stage_outputs),
-            {stage.value for stage in STAGE_SEQUENCE[:5]},
+            {stage.value for stage in STAGE_SEQUENCE[:4]},
         )
 
-    def test_revising_layout_invalidates_and_regenerates_downstream(self) -> None:
+    def test_revising_panels_invalidates_and_regenerates_downstream(self) -> None:
         result = self.orchestrator.execute_spec(
             "可修改柜体",
             {
@@ -119,15 +120,15 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         old_panel_output = deepcopy(
             parent.stage_outputs[WorkflowStage.PANELS_PLANNED.value]
         )
-        edited_layout = deepcopy(
-            parent.stage_outputs[WorkflowStage.LAYOUT_PLANNED.value]
+        edited_panels = plan_panel_stage(
+            parent.intent,
+            {"shelf_count": 1, "n_doors": 2},
         )
-        edited_layout["layout"]["shelf_count"] = 1
 
         revised = self.orchestrator.revise_stage_output(
             project,
-            WorkflowStage.LAYOUT_PLANNED,
-            edited_layout,
+            WorkflowStage.PANELS_PLANNED,
+            edited_panels,
         )
 
         self.assertEqual(revised.parent_revision_id, parent.id)
@@ -135,7 +136,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             set(revised.stage_outputs),
             {
                 WorkflowStage.DESIGN_INTENT.value,
-                WorkflowStage.LAYOUT_PLANNED.value,
+                WorkflowStage.PANELS_PLANNED.value,
             },
         )
         self.assertNotIn(
@@ -147,7 +148,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             [WorkflowStage.DESIGN_INTENT.value],
         )
 
-        self.orchestrator.confirm_stage(project, WorkflowStage.LAYOUT_PLANNED)
+        self.orchestrator.confirm_stage(project, WorkflowStage.PANELS_PLANNED)
         regenerated = self.orchestrator.run_until(
             project,
             WorkflowStage.FEATURE_TREE_PLANNED,
@@ -163,7 +164,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             regenerated.revision.stage_outputs,
         )
 
-    def test_named_batch_generation_records_all_seven_stages(self) -> None:
+    def test_named_batch_generation_records_all_six_serial_stages(self) -> None:
         artifact_name = f"orchestrator-test-{uuid4().hex}"
         source_dir = WORKSPACE_ROOT / "temp" / "cad-source" / artifact_name
         try:
@@ -207,7 +208,6 @@ class FurnitureOrchestratorTests(unittest.TestCase):
                     artifact_kinds,
                     {
                         "design_intent",
-                        "layout_plan",
                         "panel_plan",
                         "manufacturing_plan",
                         "feature_tree",
@@ -409,7 +409,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         finally:
             shutil.rmtree(source_dir, ignore_errors=True)
 
-    def test_unconfirmed_intent_pauses_without_executing_layout(self) -> None:
+    def test_unconfirmed_intent_pauses_without_executing_panels(self) -> None:
         project = self.orchestrator.create_project("未确认", cabinet_intent())
         result = self.orchestrator.run_until(
             project,
@@ -422,9 +422,39 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             WorkflowStage.DESIGN_INTENT,
         )
         self.assertNotIn(
-            WorkflowStage.LAYOUT_PLANNED.value,
+            WorkflowStage.PANELS_PLANNED.value,
             result.revision.stage_outputs,
         )
+        self.assertNotIn("layout_planned", result.revision.stage_outputs)
+
+    def test_serial_workflow_skips_room_layout_even_when_context_is_supplied(self) -> None:
+        result = self.orchestrator.execute_spec(
+            "带房间信息的柜体",
+            {
+                "type": "floor_cabinet",
+                "width": 800,
+                "depth": 600,
+                "height": 1000,
+                "room": {
+                    "width_mm": 4200,
+                    "depth_mm": 3600,
+                    "height_mm": 2800,
+                },
+                "placement": {
+                    "mode": "wall",
+                    "host_wall": "north",
+                    "offset_mm": 500,
+                },
+            },
+            through_stage=WorkflowStage.PANELS_PLANNED,
+        )
+
+        self.assertEqual(
+            result.revision.workflow.current,
+            WorkflowStage.PANELS_PLANNED,
+        )
+        self.assertNotIn("layout_planned", result.revision.stage_outputs)
+        self.assertIn("panels_planned", result.revision.stage_outputs)
 
     def test_draft_intent_preserves_null_dimensions_and_cannot_confirm(self) -> None:
         intent = DesignIntent.from_dict(
@@ -448,19 +478,11 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         issue_codes = {issue.code for issue in revision.validations[-1].issues}
         self.assertIn("INVALID_INTENT", issue_codes)
 
-    def test_unsupported_layout_decision_fails_at_layout_stage(self) -> None:
-        project = self.orchestrator.create_project(
-            "未知布局选项柜体",
-            cabinet_intent(),
-            stage_inputs=stage_inputs_from_spec(
+    def test_unsupported_layout_decision_is_rejected_by_independent_input(self) -> None:
+        with self.assertRaisesRegex(ValueError, "layout input only accepts"):
+            stage_inputs_from_spec(
                 {"layout": {"unsupported_layout_option": 2}}
-            ),
-        )
-        self.orchestrator.confirm_intent(project)
-        revision = self.orchestrator.run_next(project).revision
-
-        self.assertEqual(revision.workflow.current, WorkflowStage.FAILED)
-        self.assertIn("layout stage does not support", revision.validations[-1].issues[0].message)
+            )
 
     def test_unsupported_structure_decision_fails_at_panel_stage(self) -> None:
         project = self.orchestrator.create_project(
@@ -471,8 +493,6 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             ),
         )
         self.orchestrator.confirm_intent(project)
-        self.orchestrator.run_next(project)
-        self.orchestrator.confirm_stage(project, WorkflowStage.LAYOUT_PLANNED)
         revision = self.orchestrator.run_next(project).revision
 
         self.assertEqual(revision.workflow.current, WorkflowStage.FAILED)
@@ -501,7 +521,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         )
         self.assertEqual(inputs["informational_constraints"], ["仅供卧室方案比较"])
 
-    def test_inactive_groove_parameters_do_not_block_non_groove_layout(self) -> None:
+    def test_inactive_groove_parameters_do_not_block_non_groove_panels(self) -> None:
         result = self.orchestrator.execute_spec(
             "外盖背板柜体",
             {
@@ -516,7 +536,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             },
             through_stage=WorkflowStage.PANELS_PLANNED,
         )
-        self.assertNotIn("back_mount", result.revision.stage_outputs["layout_planned"]["layout"])
+        self.assertNotIn("layout_planned", result.revision.stage_outputs)
         self.assertEqual(
             result.revision.stage_outputs["panels_planned"]["structure"]["back_mount"],
             "cover",
@@ -591,7 +611,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             {"furniture_type", "overall_size", "confirmed", "schema_version"},
         )
         inputs = stage_inputs_from_spec(request)
-        self.assertEqual(inputs["layout"]["parameters"]["shelf_count"], 1)
+        self.assertEqual(inputs["panels"]["parameters"]["shelf_count"], 1)
         self.assertEqual(inputs["panels"]["parameters"]["back_mount"], "cover")
 
     def test_design_intent_rejects_new_downstream_fields(self) -> None:
@@ -613,8 +633,6 @@ class FurnitureOrchestratorTests(unittest.TestCase):
 
         revision = self.orchestrator.confirm_intent(project)
         self.assertNotIn("structure", revision.stage_outputs["design_intent"])
-        self.orchestrator.run_next(project)
-        self.orchestrator.confirm_stage(project, WorkflowStage.LAYOUT_PLANNED)
         result = self.orchestrator.run_next(project)
         panel_output = result.revision.stage_outputs["panels_planned"]
         self.assertEqual(panel_output["spec"]["board_thickness"], 18.0)

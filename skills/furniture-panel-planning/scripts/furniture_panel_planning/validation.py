@@ -6,7 +6,7 @@ from dataclasses import asdict
 from typing import Any, Mapping
 
 from furniture_delivery_validation.validation import ValidationReport
-from furniture_layout.layout_planning import CabinetLayout
+from furniture_design_intent.design_intent import DesignIntent
 
 from .panel_models import PanelPlacement
 from .panel_spec import FurnitureSpec
@@ -20,7 +20,7 @@ from .structure_planning import CabinetStructure
 
 
 def validate_panel_output(
-    confirmed_layout: CabinetLayout,
+    confirmed_intent: DesignIntent,
     output: Mapping[str, Any],
 ) -> ValidationReport:
     """Validate the complete construction-and-panels stage checkpoint."""
@@ -42,7 +42,7 @@ def validate_panel_output(
         report.add_error("INVALID_PANEL_STAGE_OUTPUT", str(exc))
         return report
 
-    structure_report = validate_structure(confirmed_layout, spec, structure)
+    structure_report = validate_structure(confirmed_intent, spec, structure)
     panel_report = validate_panels(spec, structure, panels)
     report.issues.extend(structure_report.issues)
     report.issues.extend(panel_report.issues)
@@ -64,30 +64,37 @@ def validate_panel_output(
 
 
 def validate_structure(
-    confirmed_layout: CabinetLayout,
+    confirmed_intent: DesignIntent | Any,
     spec: FurnitureSpec,
     structure: CabinetStructure,
 ) -> ValidationReport:
-    """Validate exact geometry only after the customer approved layout."""
+    """Validate exact geometry against the confirmed finished envelope."""
     report = ValidationReport(stage="panels_planned")
+    if isinstance(confirmed_intent, DesignIntent):
+        confirmed = (
+            confirmed_intent.furniture_type,
+            confirmed_intent.overall_size.width_mm,
+            confirmed_intent.overall_size.depth_mm,
+            confirmed_intent.overall_size.height_mm,
+        )
+    else:
+        # Compatibility for direct callers that previously passed the retired
+        # serial CabinetLayout checkpoint.
+        confirmed = (
+            getattr(confirmed_intent, "furniture_type", None),
+            getattr(confirmed_intent, "width", None),
+            getattr(confirmed_intent, "depth", None),
+            getattr(confirmed_intent, "height", None),
+        )
     if (
         spec.furniture_type,
         spec.width,
         spec.depth,
         spec.height,
-        spec.shelf_count,
-        spec.n_doors,
-    ) != (
-        confirmed_layout.furniture_type,
-        confirmed_layout.width,
-        confirmed_layout.depth,
-        confirmed_layout.height,
-        confirmed_layout.shelf_count,
-        confirmed_layout.door_count,
-    ):
+    ) != confirmed:
         report.add_error(
-            "PANEL_SPEC_LAYOUT_MISMATCH",
-            "panel construction must preserve the approved layout",
+            "PANEL_SPEC_INTENT_MISMATCH",
+            "panel construction must preserve the confirmed finished envelope",
         )
 
     for name in ("board_thickness", "back_thickness", "door_thickness"):
@@ -180,11 +187,11 @@ def validate_structure(
 
 def validate_panels(
     spec: FurnitureSpec,
-    layout: CabinetLayout | CabinetStructure,
+    layout: CabinetStructure | Any,
     panels: list[PanelPlacement],
 ) -> ValidationReport:
     report = ValidationReport(stage="panels_planned")
-    if isinstance(layout, CabinetLayout):
+    if not isinstance(layout, CabinetStructure):
         spec = FurnitureSpec.from_dict(asdict(spec))
         layout = CabinetStructure.from_spec(spec)
     if not panels:
