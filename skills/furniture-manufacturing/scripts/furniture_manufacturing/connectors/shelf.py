@@ -9,7 +9,7 @@
 """
 
 from typing import Any, Dict, List
-from furniture_manufacturing.connectors.base import Connector, HoleSpec
+from furniture_manufacturing.connectors.base import Connector, HoleSpec, _opposite
 from furniture_manufacturing.manufacturing_models import HardwareRecord, MachiningOperation, PanelRecord
 
 
@@ -132,8 +132,3 @@ class ShelfConnector(Connector):
         return []
 
 
-def _opposite(axis: str) -> str:
-    """反转带符号轴方向："+x"→"-x"，"-y"→"+y"。"""
-    if not axis or axis[0] not in ("+", "-"):
-        return "-x"
-    return f"{'+' if axis[0] == '-' else '-'}{axis[1]}"

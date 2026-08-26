@@ -7,6 +7,7 @@ from furniture_panel_planning.panel_spec import FurnitureSpec, resolve_back_moun
 from furniture_panel_planning.panel_models import PanelPlacement
 
 from .connectors import ALL_CONNECTORS
+from .connectors.base import _opposite
 from .hole_validator import (
     HoleValidationError,
     validate_hole_bounds,
@@ -18,13 +19,6 @@ from .manufacturing_bom import (
     VALID_MANUFACTURING_READINESS,
     emit_drilled_holes,
 )
-
-
-def _opposite(axis: str) -> str:
-    """反转带符号轴方向："+x"→"-x"，"-y"→"+y"。"""
-    if not axis or axis[0] not in ("+", "-"):
-        return "-x"
-    return f"{'+' if axis[0] == '-' else '-'}{axis[1]}"
 
 
 def validate_manufacturing(
