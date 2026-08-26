@@ -22,6 +22,7 @@ from furniture_delivery_validation.validation import validate_delivery
 from furniture_design_intent.design_intent import DesignIntent, OverallSize
 from furniture_workflow.input_adapter import stage_inputs_from_spec
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
+from furniture_workflow.workflow_project import Project
 from furniture_workflow.workflow_state import STAGE_SEQUENCE, WorkflowStage
 from furniture_workflow.workflow_store import JsonProjectStore
 from furniture_panel_planning.panel_pipeline import plan_panel_stage
@@ -162,6 +163,36 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         self.assertIn(
             WorkflowStage.FEATURE_TREE_PLANNED.value,
             regenerated.revision.stage_outputs,
+        )
+
+    def test_revised_single_door_hinge_side_must_match_spec(self) -> None:
+        result = self.orchestrator.execute_spec(
+            "右铰单门柜",
+            cabinet_data(n_doors=1, door_hinge_side="right"),
+            through_stage=WorkflowStage.PANELS_PLANNED,
+        )
+        edited = deepcopy(
+            result.revision.stage_outputs[WorkflowStage.PANELS_PLANNED.value]
+        )
+        door = next(
+            panel for panel in edited["panels"] if panel["panel_type"] == "door"
+        )
+        door["door_hinge_side"] = "left"
+
+        revision = self.orchestrator.revise_stage_output(
+            result.project,
+            WorkflowStage.PANELS_PLANNED,
+            edited,
+        )
+        self.orchestrator.confirm_stage(
+            result.project,
+            WorkflowStage.PANELS_PLANNED,
+        )
+
+        self.assertEqual(revision.workflow.current, WorkflowStage.FAILED)
+        self.assertIn(
+            "DOOR_HINGE_SIDE_MISMATCH",
+            {issue.code for issue in revision.validations[-1].issues},
         )
 
     def test_named_batch_generation_records_all_six_serial_stages(self) -> None:
@@ -564,6 +595,83 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             restored.latest.workflow.current,
             WorkflowStage.FEATURE_TREE_PLANNED,
         )
+
+    def test_legacy_projects_migrate_only_recoverable_hinge_sides(self) -> None:
+        payloads: list[tuple[dict, str | None]] = []
+        for door_count, hinge_side in ((1, "right"), (2, None)):
+            result = self.orchestrator.execute_spec(
+                f"旧项目-{door_count}",
+                cabinet_data(
+                    n_doors=door_count,
+                    door_hinge_side=hinge_side,
+                ),
+                through_stage=WorkflowStage.PANELS_PLANNED,
+            )
+            payload = deepcopy(result.project.to_dict())
+            raw_revision = payload["revisions"][-1]
+            raw_revision["stage_outputs"]["panels_planned"]["spec"].pop(
+                "door_hinge_side"
+            )
+            raw_revision["stage_inputs"]["panels"]["parameters"].pop(
+                "door_hinge_side"
+            )
+            if door_count == 2:
+                for panel in raw_revision["stage_outputs"]["panels_planned"][
+                    "panels"
+                ]:
+                    if panel["panel_type"] == "door":
+                        panel.pop("door_hinge_side")
+            payloads.append((payload, hinge_side))
+
+        for payload, expected_side in payloads:
+            with self.subTest(expected_side=expected_side):
+                restored = Project.from_dict(payload)
+                revision = restored.latest
+                self.assertEqual(
+                    revision.stage_outputs["panels_planned"]["spec"][
+                        "door_hinge_side"
+                    ],
+                    expected_side,
+                )
+                self.assertEqual(
+                    revision.stage_inputs["panels"]["parameters"][
+                        "door_hinge_side"
+                    ],
+                    expected_side,
+                )
+                if expected_side is None:
+                    migrated_doors = sorted(
+                        (
+                            panel
+                            for panel in revision.stage_outputs["panels_planned"][
+                                "panels"
+                            ]
+                            if panel["panel_type"] == "door"
+                        ),
+                        key=lambda panel: panel["pos_x"],
+                    )
+                    self.assertEqual(
+                        [panel["door_hinge_side"] for panel in migrated_doors],
+                        ["left", "right"],
+                    )
+                continued = self.orchestrator.run_next(restored)
+                self.assertEqual(
+                    continued.revision.workflow.current,
+                    WorkflowStage.MANUFACTURING_PLANNED,
+                )
+                self.assertTrue(continued.revision.validations[-1].passed)
+
+        invalid_single = deepcopy(payloads[0][0])
+        invalid_door = next(
+            panel
+            for panel in invalid_single["revisions"][-1]["stage_outputs"][
+                "panels_planned"
+            ]["panels"]
+            if panel["panel_type"] == "door"
+        )
+        invalid_door["door_hinge_side"] = None
+        with self.assertRaisesRegex(ValueError, "explicit panel door_hinge_side"):
+            Project.from_dict(invalid_single)
 
     def test_intent_from_spec_contains_only_category_and_envelope(self) -> None:
         request = {

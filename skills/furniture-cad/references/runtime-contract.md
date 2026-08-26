@@ -67,13 +67,15 @@ result = orchestrator.run_next(
   "toe_kick_support_count": null, "back_mount": "auto", "back_rail_height": 70,
   "drawer_count": 0, "drawer_side_clearance": 13, "drawer_layer_gap": 1.5,
   "drawer_bottom_thickness": 18, "drawer_back_thickness": 18,
-  "drawer_back_clearance": 0, "shelf_count": 4, "n_doors": 2
+  "drawer_back_clearance": 0, "shelf_count": 4, "n_doors": 2, "door_hinge_side": null
 }
 ```
 
 `width/depth/height` 必须在意图确认前明确提供；不再用类别预设替代客户确认的外包络。板件输入必须完整提交全部规范字段；代码不按柜型静默补默认方案。完整值经确定性准入后才写入 `panels_planned.spec`。
 
-契约为扁平 JSON。适配器只把 `type/width/depth/height` 转成 `DesignIntent`，将板件规范字段路由到板件，将铰链/外观等路由到制造；`room/placement` 只供独立房间布局 API 使用。可选 `constraints` 必须有阶段映射；未分类约束在协议路由时拒绝。
+契约为扁平 JSON。适配器只把 `type/width/depth/height` 转成 `DesignIntent`，将包括 `door_hinge_side` 在内的板件规范字段路由到板件，将制造选项/外观路由到制造；`room/placement` 只供独立房间布局 API 使用。可选 `constraints` 必须有阶段映射；未分类约束在协议路由时拒绝。
+
+持久化兼容只发生在读取旧 Project 时：旧单门规格缺少 `door_hinge_side`，仅当其唯一门板已显式保存 `left/right` 才恢复；否则加载停止。旧标准双门规格迁移为规范 `null`，门板缺省侧按确定性左右拓扑恢复；更多门保持 `null`。该迁移不用于新 JSON/API 请求，也不根据位置或柜型猜测单门偏好。
 
 `back_mount` 接受 `auto/groove/insert/cover`，但不进入意图或布局输出。板件阶段在背板薄于柜体板时把 `auto` 解析为 `groove`，否则为 `insert`，并输出 requested/effective；`back_rail_height/groove_depth/groove_clearance` 仅对有效 `groove` 生效，`back_rail_height=0` 关闭背拉条。
 

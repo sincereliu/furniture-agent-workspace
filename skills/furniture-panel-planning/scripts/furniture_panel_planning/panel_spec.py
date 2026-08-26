@@ -8,6 +8,8 @@ from typing import Any, Mapping
 
 from furniture_design_intent.design_intent import DesignIntent, SUPPORTED_TYPES
 
+from .panel_rules import resolve_door_hinge_side
+
 
 VALID_BACK_MOUNTS = frozenset({"auto", "groove", "insert", "cover"})
 
@@ -21,7 +23,7 @@ PANEL_PARAMETER_FIELDS = frozenset(
         "toe_kick_reveal_back", "toe_kick_support_count", "back_mount",
         "back_rail_height", "drawer_count", "drawer_side_clearance",
         "drawer_layer_gap", "drawer_bottom_thickness", "drawer_back_thickness",
-        "drawer_back_clearance", "shelf_count", "n_doors",
+        "drawer_back_clearance", "shelf_count", "n_doors", "door_hinge_side",
     }
 )
 PANEL_SPEC_FIELDS = PANEL_PARAMETER_FIELDS | {"door_count"}
@@ -60,6 +62,7 @@ class FurnitureSpec:
     drawer_bottom_thickness: float
     drawer_back_thickness: float
     drawer_back_clearance: float
+    door_hinge_side: str | None
 
     def __post_init__(self) -> None:
         if self.furniture_type not in SUPPORTED_TYPES:
@@ -168,6 +171,91 @@ def resolve_back_mount(
     return "insert" if back_thickness >= board_thickness else "groove"
 
 
+def migrate_legacy_panel_hinge_side(
+    panel_parameters: dict[str, Any] | None,
+    panel_output: dict[str, Any] | None,
+) -> None:
+    """Upgrade persisted pre-field panel data without guessing a preference."""
+    output_side_available = False
+    migrated_side: str | None = None
+    if isinstance(panel_output, dict):
+        spec = panel_output.get("spec")
+        if isinstance(spec, dict):
+            if "door_hinge_side" not in spec:
+                door_count = _legacy_door_count(spec)
+                doors = _legacy_doors(panel_output)
+                if len(doors) != door_count:
+                    raise ValueError(
+                        "legacy panel output door count does not match its specification"
+                    )
+                if door_count == 1:
+                    migrated_side = doors[0].get("door_hinge_side")
+                    if migrated_side not in {"left", "right"}:
+                        raise ValueError(
+                            "legacy single-door output requires one explicit panel "
+                            "door_hinge_side for migration"
+                        )
+                ordered_doors = sorted(
+                    doors,
+                    key=lambda panel: (
+                        float(panel.get("pos_x", 0.0)),
+                        str(panel.get("id", "")),
+                    ),
+                )
+                for index, door in enumerate(ordered_doors):
+                    expected_side = resolve_door_hinge_side(
+                        door_count,
+                        index,
+                        migrated_side,
+                    )
+                    actual_side = door.get("door_hinge_side")
+                    if door_count == 2 and actual_side is None:
+                        door["door_hinge_side"] = expected_side
+                    elif actual_side != expected_side:
+                        raise ValueError(
+                            "legacy panel output has inconsistent door_hinge_side values"
+                        )
+                spec["door_hinge_side"] = migrated_side
+            else:
+                migrated_side = spec["door_hinge_side"]
+            output_side_available = True
+
+    if not isinstance(panel_parameters, dict) or "door_hinge_side" in panel_parameters:
+        return
+    if output_side_available:
+        panel_parameters["door_hinge_side"] = migrated_side
+        return
+    door_count = panel_parameters.get(
+        "n_doors",
+        panel_parameters.get("door_count"),
+    )
+    if (
+        isinstance(door_count, int)
+        and not isinstance(door_count, bool)
+        and door_count >= 0
+        and door_count != 1
+    ):
+        panel_parameters["door_hinge_side"] = None
+
+
+def _legacy_door_count(spec: Mapping[str, Any]) -> int:
+    value = spec.get("n_doors", spec.get("door_count"))
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError("legacy panel spec requires a valid n_doors for migration")
+    return value
+
+
+def _legacy_doors(panel_output: Mapping[str, Any]) -> list[dict[str, Any]]:
+    panels = panel_output.get("panels")
+    if not isinstance(panels, list):
+        return []
+    return [
+        panel
+        for panel in panels
+        if isinstance(panel, dict) and panel.get("panel_type") == "door"
+    ]
+
+
 def _require_count(value: Any, name: str) -> None:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise ValueError(f"{name} must be a non-negative integer")
@@ -202,3 +290,14 @@ def _validate_objective_invariants(spec: FurnitureSpec) -> None:
         raise ValueError("toe-kick supports require a positive toe_kick_height")
     if spec.drawer_count and (spec.shelf_count or spec.n_doors):
         raise ValueError("full-height drawers require shelf_count=0 and n_doors=0")
+    if spec.door_hinge_side not in {None, "left", "right"}:
+        raise ValueError("door_hinge_side must be 'left', 'right', or null")
+    if spec.n_doors == 1:
+        if spec.door_hinge_side not in {"left", "right"}:
+            raise ValueError(
+                "a single door requires an explicit door_hinge_side 'left' or 'right'"
+            )
+    elif spec.door_hinge_side is not None:
+        raise ValueError(
+            "door_hinge_side only applies to a single door; use null otherwise"
+        )

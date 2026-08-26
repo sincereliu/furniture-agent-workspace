@@ -110,6 +110,10 @@ class CabinetRequest(BaseModel):
     door_hinge_gap: float | None = Field(default=None, ge=0, description="门铰深度间隙 mm")
     shelf_count: int | None = Field(default=None, ge=0, description="层板数量")
     n_doors: int | None = Field(default=None, ge=0, description="门板数量")
+    door_hinge_side: Literal["left", "right"] | None = Field(
+        default=None,
+        description="单门铰链侧；仅 n_doors=1 时有效，双门由代码确定性推导",
+    )
     drawer_count: int | None = Field(default=None, ge=0, description="整高抽屉数量")
     groove_depth: float | None = Field(default=None, gt=0, description="背板入槽深度 mm")
     groove_clearance: float | None = Field(default=None, ge=0, description="槽宽相对背板厚度的余量 mm")

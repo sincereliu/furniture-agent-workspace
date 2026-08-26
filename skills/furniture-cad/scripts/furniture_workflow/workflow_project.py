@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field
 from hashlib import sha256
 import json
@@ -10,6 +11,7 @@ from uuid import uuid4
 
 from furniture_delivery_validation.validation import ValidationReport
 from furniture_design_intent.design_intent import DesignIntent
+from furniture_panel_planning.panel_spec import migrate_legacy_panel_hinge_side
 
 from .workflow_artifacts import ArtifactManifest
 from .workflow_state import WorkflowStage, WorkflowState, parse_stage, utc_now
@@ -86,6 +88,15 @@ class Revision:
         stage_inputs = data.get("stage_inputs")
         if not isinstance(stage_inputs, dict):
             stage_inputs = _legacy_stage_inputs(raw_intent)
+        else:
+            stage_inputs = deepcopy(stage_inputs)
+        stage_outputs = deepcopy(dict(data.get("stage_outputs", {})))
+        panel_input = stage_inputs.get("panels")
+        panel_parameters = (
+            panel_input.get("parameters") if isinstance(panel_input, dict) else None
+        )
+        panel_output = stage_outputs.get(WorkflowStage.PANELS_PLANNED.value)
+        migrate_legacy_panel_hinge_side(panel_parameters, panel_output)
         return cls(
             id=str(data["id"]),
             number=int(data["number"]),
@@ -103,7 +114,7 @@ class Revision:
                 else None
             ),
             feature_tree=data.get("feature_tree"),
-            stage_outputs=dict(data.get("stage_outputs", {})),
+            stage_outputs=stage_outputs,
             stage_analyses={
                 str(stage): {
                     str(name): dict(record)

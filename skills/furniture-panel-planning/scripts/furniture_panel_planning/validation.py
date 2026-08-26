@@ -13,6 +13,7 @@ from .panel_spec import FurnitureSpec, resolve_back_mount
 from .panel_rules import (
     back_rail_clear_spacing,
     resolve_back_rail_count,
+    resolve_door_hinge_side,
     resolve_toe_kick_support_count,
     toe_kick_support_clear_spacing,
 )
@@ -218,6 +219,29 @@ def validate_panels(
     if len(ids) != len(panels):
         report.add_error("DUPLICATE_PANEL_ID", "panel ids must be unique")
     panel_by_id = {item.id: item for item in panels}
+    doors = sorted(
+        (item for item in panels if item.panel_type == "door"),
+        key=lambda item: (item.pos_x, item.id),
+    )
+    if len(doors) != spec.n_doors:
+        report.add_error(
+            "DOOR_COUNT_MISMATCH",
+            "generated door count must match the admitted panel specification",
+            "n_doors",
+        )
+    else:
+        for index, door in enumerate(doors):
+            expected_hinge_side = resolve_door_hinge_side(
+                spec.n_doors,
+                index,
+                spec.door_hinge_side,
+            )
+            if door.door_hinge_side != expected_hinge_side:
+                report.add_error(
+                    "DOOR_HINGE_SIDE_MISMATCH",
+                    f"{door.id} hinge side must match the admitted door topology",
+                    door.id,
+                )
     for item in panels:
         if item.quantity <= 0:
             report.add_error(

@@ -19,6 +19,7 @@ def panel_parameters(furniture_type: str = "floor_cabinet", **overrides: Any) ->
         "drawer_count": 0, "drawer_side_clearance": 13.0, "drawer_layer_gap": 1.5,
         "drawer_bottom_thickness": 18.0, "drawer_back_thickness": 18.0,
         "drawer_back_clearance": 0.0, "shelf_count": 1 if wall else 4, "n_doors": 2,
+        "door_hinge_side": None,
     }
     values.update(overrides)
     return values

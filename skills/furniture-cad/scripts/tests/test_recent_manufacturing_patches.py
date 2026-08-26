@@ -92,6 +92,20 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
         self.assertEqual(doors["left_door"].door_hinge_side, "left")
         self.assertEqual(doors["right_door"].door_hinge_side, "right")
 
+    def test_single_door_requires_explicit_hinge_side(self) -> None:
+        # 单门铰链侧是开放偏好，必须由提案显式提交，缺省不得由代码补默认值
+        with self.assertRaises(ValueError):
+            furniture_spec(n_doors=1)
+
+        right_spec = furniture_spec(n_doors=1, door_hinge_side="right")
+        placements = plan_panels(right_spec, plan_layout(right_spec))
+        door = next(p for p in placements if p.panel_type == "door")
+        self.assertEqual(door.door_hinge_side, "right")
+
+        # 双门铰链侧由代码确定性推导，不接受显式标量覆盖
+        with self.assertRaises(ValueError):
+            furniture_spec(n_doors=2, door_hinge_side="left")
+
     def test_trinity_uses_two_depth_rows_and_explicit_hole_faces(self) -> None:
         connector = TrinityConnector()
         side = panel_record(

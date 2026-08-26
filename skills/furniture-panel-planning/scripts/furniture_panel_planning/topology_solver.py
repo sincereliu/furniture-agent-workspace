@@ -22,6 +22,7 @@ from .panel_spec import FurnitureSpec
 from .panel_rules import (
     back_rail_clear_spacing,
     resolve_back_rail_count,
+    resolve_door_hinge_side,
     resolve_toe_kick_support_count,
     toe_kick_support_clear_spacing,
 )
@@ -315,17 +316,19 @@ def _door_panels(
         if count == 1:
             pid, pname = "single_door", "门板"
             x = layout.width / 2 - dw / 2
-            hinge_side = "left"
         elif count == 2:
             pid = "left_door" if index == 0 else "right_door"
             pname = "左门板" if index == 0 else "右门板"
             x = margin if index == 0 else layout.width - margin - dw
-            hinge_side = "left" if index == 0 else "right"
         else:
             pid = f"door_{index + 1}_door"
             pname = f"门板{index + 1}"
             x = margin * (2 * (index + 1) - 1) + dw * index
-            hinge_side = None
+        hinge_side = resolve_door_hinge_side(
+            count,
+            index,
+            spec.door_hinge_side,
+        )
 
         panels.append(PanelPlacement(
             id=pid, name=pname, panel_type="door",
