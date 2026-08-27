@@ -37,5 +37,5 @@ BOM 数量只认轮孔（`TrinityConnector.boms()` quantity = `system_32_female`
 
 ## 关联
 
-- 五金参数位置：`SKILL.md`（`hardware_catalog.yaml` / `hardware_rules.yaml` / `connectors/` + `ALL_CONNECTORS` 注册）。
+- 五金参数位置：`SKILL.md` 工作流第 3 步（`hardware_catalog.yaml` / `hardware_rules.yaml`）；连接件结构见 `references/runtime-map.md`（`connectors/` + `ALL_CONNECTORS` 注册）。
 - 局部坐标化（局部为唯一真源）：`connectors/trinity.py`、`back_mount.py`、`shelf.py` 已落地，P3 触发条件已满足。

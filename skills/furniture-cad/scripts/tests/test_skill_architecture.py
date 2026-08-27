@@ -362,6 +362,10 @@ class SkillArchitectureTests(unittest.TestCase):
                 "背拉条",
             ),
             "skills/furniture-manufacturing/SKILL.md": (
+                "groove",
+                "背拉条",
+            ),
+            "skills/furniture-manufacturing/references/runtime-map.md": (
                 "BackMountConnector",
                 "generate_holes_for_panels",
             ),
@@ -409,8 +413,8 @@ class SkillArchitectureTests(unittest.TestCase):
             ),
             "skills/furniture-manufacturing/SKILL.md": (
                 "readiness=preliminary/accepted/factory_ready",
-                "可序列化的全局/local 孔位数据",
-                "workflow_artifact_writer.py",
+                "FurnitureOrchestrator.run_next()",
+                "references/runtime-map.md",
             ),
             "skills/furniture-delivery-validation/SKILL.md": (
                 "前五个串联阶段",

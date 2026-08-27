@@ -7,19 +7,26 @@ description: 用于 manufacturing_planned 阶段。当用户说"用什么五金"
 
 阶段：`manufacturing_planned`
 
-## 工作流（核心）
+## 工作流
 
-1. 要求设计意图和板件规划均已确认；独立房间布局不是前置条件。
-2. 按 [制造规则](references/manufacturing-rules.md) 确定材料、封边、连接、五金、孔位、公差和 BOM 假设；整份方案用 `readiness=preliminary/accepted/factory_ready` 表示接受程度，默认 `preliminary`。
-3. 五金规格以 `scripts/furniture_manufacturing/hardware_catalog.yaml` 和 `hardware_rules.yaml` 为准。
-4. `connectors/` 集中连接/打孔逻辑：`Connector` 基类及 `TrinityConnector`、`HingeConnector`、`ShelfConnector`、`BackMountConnector`、`DrawerSlideConnector`。新五金新增 Connector 并注册 `ALL_CONNECTORS`。
-     各连接件通过 `HoleSpec` 描述孔位，`is_face_hole=True` 表示板面钻孔 (TypeNo=1 垂直孔)，`False` 表示板边钻孔 (TypeNo=2 水平孔)。三合一在高度方向按系统 32 排钻规则分布，深度方向前后双排。
-     （已记录需求：连接点级实体——杆/轮/螺母按连接点整体增删、校验按连接点对齐，见 `references/connection-point-design.md`；完整抽屉组件见 `references/drawer-component-design.md`，均待评审。）
-5. 单板规则实现 `generate_holes()`；需配合板时覆盖 `generate_holes_for_panels()` 生成成对孔。`estimate_hardware()` 与 `emit_drilled_holes()` 遍历 `ALL_CONNECTORS` 生成 BOM 和可序列化的全局/local 孔位数据；实际 `.drilled-holes.json/.glb` 文件由 CAD 阶段的 `workflow_artifact_writer.py` 写入。
-6. `groove` 为左右侧板、顶/底板生成 4 条目标明确的 `cut_box`：槽宽 `back_thickness + groove_clearance`，槽深 `groove_depth`。`insert` 输出四边三合一成对孔。cover/背拉条的螺钉连接属组装现场工艺，不生成孔位与五金。
-7. 入槽背板不封边；其他背板及背拉条四边封边。未经明确接受不得把 `readiness` 提升为 `accepted`，未经工厂确认不得提升为 `factory_ready`。
-8. 厚度来自 `panels_planned.spec` 中已确认的 `FurnitureSpec`，不得从意图重建或硬编码覆盖。单门和标准双门由板件规划显式写入 `door_hinge_side="left"/"right"`；旧数据缺省时 `HingeConnector` 才按位置回退。杯孔只从门板内侧钻入，`direction` 为钻入方向（`inner_face` 的反向），Y1 = `edge_offset + cup_diameter/2`，为杯孔中心到门边的距离。
-9. 用 `FurnitureOrchestrator.run_next()` 生成；`scripts/furniture_manufacturing/validation.py` 校验 BOM、每条槽是否落在目标板件包络内、铰链孔位置/进刀面/深度、背板五金和配合孔；孔位几何（边界/深度/干涉）由 `hole_validator.py` 校验——深度按打孔方向的板件尺寸判定（端面钻入的连接杆/预孔可大于板厚），正交配合孔（三合一杆↔轮）不判干涉，展示后暂停。
+1. 检查前置：`design_intent` 与 `panels_planned` 均已确认；独立 `furniture-layout` 结果不是前置条件。
+2. 由 LLM 根据完整上下文理解制造需求，提出整份策略草案，并把未明确的假设逐项列出给用户确认。策略覆盖：
+   - 材料：类别、等级、厚度、纹理、可见面、饰面；
+   - 封边：封哪些边、封边厚度及余量；
+   - 连接：螺钉、木榫、偏心件（三合一/二合一）、槽/企口、胶合；
+   - 五金：铰链、滑轨、拉手、层板托、固定、防倾倒及荷载；
+   - 公差/净空：门缝、安装/设备缝隙、地墙不平、安全余量。
+   口径见 [制造规则](references/manufacturing-rules.md)；不做关键词识别、同义词映射或开放方案排序。
+3. 五金变体与打孔参数以 `scripts/furniture_manufacturing/hardware_catalog.yaml`、`hardware_rules.yaml` 为准：LLM 只选变体并把数值假设标为待确认，不硬编码或猜测参数。
+4. 把选定策略交 `FurnitureOrchestrator.run_next()` 生成确定性结果（孔位、封边、槽、BOM），由运行时校验；展示整套制造方案，暂停等待用户确认。
+5. 整份方案用 `readiness=preliminary/accepted/factory_ready` 表示接受程度，默认 `preliminary`；未经用户明确接受不得升 `accepted`，未经工厂确认不得升 `factory_ready`。
+
+## 关键规则
+
+- 材料厚度、单门/标准双门的铰链侧 `door_hinge_side` 均来自已确认的 `panels_planned` 输出，不从意图重建或硬编码覆盖；旧数据缺省时才按门板位置回退。
+- 三合一在高度方向按系统 32 排钻分布、深度方向前后双排；铰链孔、背板槽与背板连接、封边的精确口径见 [制造规则](references/manufacturing-rules.md)。
+- 入槽背板不封边；其余背板及背拉条四边封边；cover 外盖螺钉与 groove 背拉条螺钉属组装现场工艺，不生成孔位与五金。
+- `readiness` 作用于整份方案/BOM，不伪装成每条五金或封边记录均已单独审批。
 
 ## 子流程（按触发词加载，不进主流程）
 
@@ -33,8 +40,7 @@ description: 用于 manufacturing_planned 阶段。当用户说"用什么五金"
 
 ## 边界
 
-- 运行时在 `scripts/furniture_manufacturing/`。
+- 运行时在 `scripts/furniture_manufacturing/`；代码契约与演进中需求见 [运行时映射](references/runtime-map.md)。
 - 修改制造策略时使用 `revise_stage_output()`，使本阶段及下游失效。
-- `readiness` 作用于整份制造方案/BOM，不伪装成每条五金或封边记录均已单独审批。
 - 不发射特征树、不调用 CAD Bridge、不手改派生产物。
 - 试验、统计和生产仿真写入 `stage_analyses.manufacturing_planned`，只提供证据或候选；它们不自动提升 `readiness`，不直接修改 BOM，也不构成现实工厂因果结论。
