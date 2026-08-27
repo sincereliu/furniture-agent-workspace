@@ -44,13 +44,7 @@
 
 ## 六面钻 XML 导出
 
-- `export_six_side_drill.py` 从 `drilled-holes.json` 反推板件和孔位，生成 `KDTPanelFormat` XML。
-- 机床坐标 X=PanelLength, Y=PanelWidth, Z=PanelThickness。
-- TypeNo 由 `HoleSpec.is_face_hole` 决定，不再从世界坐标推导。
-- 板件轮廓 `PanelOutline` 按逆时针列出顶点：`(0, PanelWidth) → (0, 0) → (PanelLength, 0) → (PanelLength, PanelWidth)` 加闭合点。
-- `devices/six_side_drill_guigui.yaml` 按面板类型配置
-  `sixd_x_from_box`/`sixd_y_from_box` 与 `x1/y1/z1_from_hole`；水平孔的
-  世界方向必须随板件摆放转换成机床 X/Y 方向后再生成 Quadrant。
+机床加工文件（`KDTPanelFormat`）导出契约见 [six-side-drill-export.md](six-side-drill-export.md)，仅在用户要求出六面钻/机床加工文件时读取。
 
 ## 边界
 
