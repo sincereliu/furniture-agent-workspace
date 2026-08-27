@@ -25,7 +25,7 @@ description: 用于 manufacturing_planned 阶段。当用户说"用什么五金"
 
 | 用户提到 | 读取/调用 |
 |---------|----------|
-| 对照柜柜、柜柜五金类目/打孔 | `references/guigui-hardware-reference.md` |
+| 对照外部五金/加工类目、打孔 | `references/hardware-machining-reference.md` |
 | 六面钻、机床加工、导 XML | `references/six-side-drill-export.md` |
 | 样件、承重、连接件或涂装对比试验 | `../../external/scientific-agent-skills/skills/experimental-design/SKILL.md` + `prototype_experiment.py` |
 | 分析已采集试验数据 | `../../external/scientific-agent-skills/skills/statistical-analysis/SKILL.md` + `test_statistics.py` |

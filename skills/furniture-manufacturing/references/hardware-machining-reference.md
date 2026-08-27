@@ -1,7 +1,7 @@
-# 柜柜（Guigui3）五金与加工参照资料
+# 五金与加工参照资料
 
 > ⚠️ **存档资料，暂不纳入当前计划。**
-> 仅在对话中明确提到「对照柜柜进行对照」时，才读取本资料并启动对照工作。
+> 仅在对话中明确提到「对照外部五金/加工类目」时，才读取本资料并启动对照工作。
 
 来源：`D:\Program Files\guigui3`（柜柜 5.0.0.4）。
 
@@ -28,7 +28,7 @@
 
 ## 三、加工语义词汇表（`caches\clients\BFZ\technology\MachineDictionary.json`）
 
-柜柜用「位置 + 动作 + 条件」描述加工，词汇如下：
+外部拆单软件用「位置 + 动作 + 条件」描述加工，词汇如下：
 
 - **位置类**：`margin_back`(距后)、`margin_front`(距前)、`margin_up`(距上)、`margin_down`(距下)、`margin_left`(距左)、`margin_right`(距右)、`margin_side`(距边=距前或后)、`spacing`(间隔)、`move_front/back/up/down/left/right`(向前/后/上/下/左/右运动)
 - **动作类**：`length_slot`(拉槽长)、`depth_hole`(打孔深)、`knife_change`(换刀)、`knife_lift`(提刀)、`count`(放一个)
@@ -48,4 +48,4 @@ JSON 顶点轮廓：`{b, x, y}` 描述 2D 轮廓（`b` 为贝塞尔/圆弧标志
 
 ## 启动条件
 
-仅在明确提到「对照柜柜进行对照」时启动，读取本资料并开展五金类目/打孔规则的对照工作。
+仅在明确提到「对照外部五金/加工类目」时启动，读取本资料并开展五金类目/打孔规则的对照工作。
