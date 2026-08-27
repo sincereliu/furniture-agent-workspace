@@ -4,7 +4,7 @@
 
 ## 当前能力
 
-唯一应用层入口：`skills/furniture-cad/scripts/furniture_workflow/workflow_orchestrator.py`。它接受只含类别与成品外包络的已确认 `DesignIntent`；`execute_spec()` 接受 CLI/API 扁平 JSON，并把其他字段路由到 `Revision.stage_inputs` 的所属阶段。字段转换、阶段实现和校验归各 Skill，Orchestrator 只管理生命周期。
+唯一应用层入口：`domain/skills/furniture-cad/scripts/furniture_workflow/workflow_orchestrator.py`。它接受只含类别与成品外包络的已确认 `DesignIntent`；`execute_spec()` 接受 CLI/API 扁平 JSON，并把其他字段路由到 `Revision.stage_inputs` 的所属阶段。字段转换、阶段实现和校验归各 Skill，Orchestrator 只管理生命周期。
 
 - `floor_cabinet`：固定模板，含背板、踢脚板、层板、门板。
 - `wall_cabinet`：固定模板，含背板、层板、门板，无踢脚板。
@@ -95,7 +95,7 @@ result = orchestrator.run_next(
 根目录运行：
 
 ```powershell
-.\.venv\Scripts\python.exe skills\furniture-cad\scripts\generate_furniture.py <spec.json> --force
+.\.venv\Scripts\python.exe domain\skills\furniture-cad\scripts\generate_furniture.py <spec.json> --force
 ```
 
 产物名不同于规格文件名时用 `--name <artifact-name>`；仅允许字母、数字、连字符、下划线。

@@ -5,8 +5,8 @@ import unittest
 from pathlib import Path
 
 
-WORKSPACE_ROOT = Path(__file__).resolve().parents[4]
-SKILLS_ROOT = WORKSPACE_ROOT / "skills"
+WORKSPACE_ROOT = Path(__file__).resolve().parents[5]
+SKILLS_ROOT = WORKSPACE_ROOT / "domain" / "skills"
 
 STAGE_SKILLS = {
     "design_intent": "furniture-design-intent",
@@ -95,14 +95,14 @@ class SkillArchitectureTests(unittest.TestCase):
 
         for stage, skill_name in STAGE_SKILLS.items():
             self.assertIn(
-                f"`{stage}`：`skills/{skill_name}/SKILL.md`",
+                f"`{stage}`：`domain/skills/{skill_name}/SKILL.md`",
                 router,
             )
         self.assertIn(
             "独立能力（不在上述串联阶段内）",
             router,
         )
-        self.assertIn("`skills/furniture-layout/SKILL.md`", router)
+        self.assertIn("`domain/skills/furniture-layout/SKILL.md`", router)
 
     def test_scientific_skills_are_routed_on_demand_to_stage_owned_adapters(
         self,
@@ -357,28 +357,28 @@ class SkillArchitectureTests(unittest.TestCase):
                 "back_mount",
                 "从板件阶段开始",
             ),
-            "skills/furniture-panel-planning/SKILL.md": (
+            "domain/skills/furniture-panel-planning/SKILL.md": (
                 "back_mount",
                 "背拉条",
             ),
-            "skills/furniture-manufacturing/SKILL.md": (
+            "domain/skills/furniture-manufacturing/SKILL.md": (
                 "groove",
                 "背拉条",
             ),
-            "skills/furniture-manufacturing/references/runtime-map.md": (
+            "domain/skills/furniture-manufacturing/references/runtime-map.md": (
                 "BackMountConnector",
                 "generate_holes_for_panels",
             ),
-            "skills/furniture-feature-tree/SKILL.md": (
+            "domain/skills/furniture-feature-tree/SKILL.md": (
                 "insert/cover",
                 "drilled-holes",
             ),
-            "skills/furniture-cad/SKILL.md": (
+            "domain/skills/furniture-cad/SKILL.md": (
                 "back_mount/back_rail_height",
                 "drilled-holes",
             ),
             (
-                "skills/furniture-delivery-validation/"
+                "domain/skills/furniture-delivery-validation/"
                 "references/delivery-checklist.md"
             ): (
                 "back_mount",
@@ -393,30 +393,30 @@ class SkillArchitectureTests(unittest.TestCase):
                 self.assertIn(term, text, path)
 
         for relative_path in (
-            "skills/furniture-design-intent/SKILL.md",
-            "skills/furniture-layout/SKILL.md",
+            "domain/skills/furniture-design-intent/SKILL.md",
+            "domain/skills/furniture-layout/SKILL.md",
         ):
             text = (WORKSPACE_ROOT / relative_path).read_text(encoding="utf-8")
             self.assertNotIn("auto/groove/insert/cover", text)
 
     def test_corrected_stage_boundaries_match_runtime_ownership(self) -> None:
         expected_terms = {
-            "skills/furniture-design-intent/SKILL.md": (
+            "domain/skills/furniture-design-intent/SKILL.md": (
                 "草稿尺寸可为 `null`",
                 "furniture_type",
                 "成品外包络",
             ),
-            "skills/furniture-layout/SKILL.md": (
+            "domain/skills/furniture-layout/SKILL.md": (
                 "shelf_count/door_count",
                 "不参与房间定位",
                 "左后下落地角",
             ),
-            "skills/furniture-manufacturing/SKILL.md": (
+            "domain/skills/furniture-manufacturing/SKILL.md": (
                 "readiness=preliminary/accepted/factory_ready",
                 "FurnitureOrchestrator.run_next()",
                 "references/runtime-map.md",
             ),
-            "skills/furniture-delivery-validation/SKILL.md": (
+            "domain/skills/furniture-delivery-validation/SKILL.md": (
                 "前五个串联阶段",
                 "不解析 STEP 几何",
                 "未执行",

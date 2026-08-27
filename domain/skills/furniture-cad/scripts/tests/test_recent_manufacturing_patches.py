@@ -10,7 +10,7 @@ from xml.etree import ElementTree as ET
 
 
 SCRIPT_ROOT = Path(__file__).resolve().parents[1]
-WORKSPACE_ROOT = Path(__file__).resolve().parents[4]
+WORKSPACE_ROOT = Path(__file__).resolve().parents[5]
 sys.path.insert(0, str(SCRIPT_ROOT))
 
 from runtime_paths import bootstrap_runtime_paths

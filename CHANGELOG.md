@@ -86,7 +86,7 @@ x 面邻接）被误判为三合一母件，走 fallback 全高排钻打出系�
 
 ### 内容
 
-- 新增 `skills/furniture-manufacturing/references/drawer-component-design.md`：背景、现状、**契约 3 条**（panel_type 含 `drawer`、尺寸取自抽屉板件自身、实例 key = label 位置后缀且每抽 1 副）、需求（抽屉组件物化、layout `drawer_count` 启用或清理、滑轨长度校验、五金变体注入）、实施建议。
+- 新增 `domain/skills/furniture-manufacturing/references/drawer-component-design.md`：背景、现状、**契约 3 条**（panel_type 含 `drawer`、尺寸取自抽屉板件自身、实例 key = label 位置后缀且每抽 1 副）、需求（抽屉组件物化、layout `drawer_count` 启用或清理、滑轨长度校验、五金变体注入）、实施建议。
 - `SKILL.md` 步骤 4 与连接点需求并列加指引，标注"实施前需评审"。
 
 ## 20260822.4 — 抽屉滑轨 Connector 化（档 A：纯重构）
@@ -138,7 +138,7 @@ x 面邻接）被误判为三合一母件，走 fallback 全高排钻打出系�
 
 ### 内容
 
-- 新增 `skills/furniture-manufacturing/references/connection-point-design.md`：背景（杆/轮/螺母配对为几何隐式约定）、现状行为表（删轮孔被拦、删杆孔静默孤儿、背板 1:1:1 拦截）、需求 4 条（整体增删、按连接点校验、配对显式化、machining id 去重）、实施建议与验收标准。
+- 新增 `domain/skills/furniture-manufacturing/references/connection-point-design.md`：背景（杆/轮/螺母配对为几何隐式约定）、现状行为表（删轮孔被拦、删杆孔静默孤儿、背板 1:1:1 拦截）、需求 4 条（整体增删、按连接点校验、配对显式化、machining id 去重）、实施建议与验收标准。
 - `SKILL.md` connectors 步骤加指引行，标注"实施前需评审"。
 
 ## 20260822.1 — 三合一/背板/层板孔位局部坐标化

@@ -1,6 +1,6 @@
 """Furniture Agent 服务 — FastAPI 入口
 
-启动: ./.venv/Scripts/python.exe skills/furniture-cad/scripts/server.py
+启动: ./.venv/Scripts/python.exe domain/skills/furniture-cad/scripts/server.py
 打开: http://localhost:8000/docs 查看 Swagger API 文档
 """
 
@@ -12,7 +12,7 @@ from typing import Any, Literal
 
 # skill 自带运行包，服务入口与它位于同一个 scripts 目录。
 SCRIPT_ROOT = Path(__file__).resolve().parent
-WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
+WORKSPACE_ROOT = Path(__file__).resolve().parents[4]
 OUTPUT_ROOT = WORKSPACE_ROOT / "generated"
 sys.path.insert(0, str(SCRIPT_ROOT))
 

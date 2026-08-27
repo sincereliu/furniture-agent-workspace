@@ -33,7 +33,7 @@ STAGE_SKILL_NAMES = (
     "furniture-delivery-validation",
 )
 ALLOWED_SCRIPT_ROOTS = tuple(
-    Path("skills") / skill_name / "scripts" for skill_name in STAGE_SKILL_NAMES
+    Path("domain") / "skills" / skill_name / "scripts" for skill_name in STAGE_SKILL_NAMES
 ) + (Path("temp"),)
 EXCLUDED_ROOTS = {".git", ".venv", "external"}
 FORBIDDEN_TOP_LEVEL_CODE_TREES = {"packages", "scripts", "scratch", "tests", "tmp"}
@@ -71,7 +71,7 @@ def main() -> int:
     parser.add_argument(
         "--workspace-root",
         type=Path,
-        default=Path(__file__).resolve().parents[3],
+        default=Path(__file__).resolve().parents[4],
     )
     args = parser.parse_args()
 
@@ -82,7 +82,7 @@ def main() -> int:
             print(f"- {violation}")
         return 1
 
-    print("Workspace script layout is valid: stage-owned skills/*/scripts + temp only.")
+    print("Workspace script layout is valid: stage-owned domain/skills/*/scripts + temp only.")
     return 0
 
 

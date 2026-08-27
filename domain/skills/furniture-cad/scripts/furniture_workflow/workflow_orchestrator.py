@@ -114,7 +114,7 @@ class FurnitureOrchestrator:
         cad_bridge: CadBridge | None = None,
     ) -> None:
         self.workspace_root = Path(
-            workspace_root or Path(__file__).resolve().parents[4]
+            workspace_root or Path(__file__).resolve().parents[5]
         ).resolve()
         self.cad_bridge = cad_bridge or CadBridge(workspace_root=self.workspace_root)
 

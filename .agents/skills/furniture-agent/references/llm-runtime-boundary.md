@@ -1,6 +1,6 @@
 # LLM 与运行时边界
 
-适用于创建、修改和审查所有 `skills/furniture-*` 及家具工作流代码。
+适用于创建、修改和审查所有 `domain/skills/furniture-*` 及家具工作流代码。
 
 ## 总原则
 
@@ -57,7 +57,7 @@
 
 ## 完成前边界审计
 
-1. 查看本次 `skills/furniture-*` 的差异，列出新增或扩大的分支、映射、默认值和解析器。
+1. 查看本次 `domain/skills/furniture-*` 的差异，列出新增或扩大的分支、映射、默认值和解析器。
 2. 给每项标注一个代码理由：`schema`、`validation`、`calculation`、`state`、`side_effect` 或 `structured_protocol`。
 3. 没有上述理由的逻辑移到 `SKILL.md`/`references/`，或删除。
 4. 检查代码中是否出现自然语言示例的复制、精确别名匹配或上游阶段的下游决策。

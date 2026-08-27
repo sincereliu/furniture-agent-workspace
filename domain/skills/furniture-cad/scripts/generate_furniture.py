@@ -1,7 +1,7 @@
 """端到端家具生成脚本：规划 → 拆单 → BOM → FeatureTree → 源码 → STEP/GLB
 
 用法（从仓库根目录运行）:
-  python skills/furniture-cad/scripts/generate_furniture.py examples/cabinet_basic.json --name my_cabinet --force
+  python domain/skills/furniture-cad/scripts/generate_furniture.py examples/cabinet_basic.json --name my_cabinet --force
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 SCRIPT_ROOT = Path(__file__).resolve().parent
-WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
+WORKSPACE_ROOT = Path(__file__).resolve().parents[4]
 
 # skill 自带 furniture 运行包，不依赖仓库根目录的 packages/。
 sys.path.insert(0, str(SCRIPT_ROOT))

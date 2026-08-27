@@ -18,7 +18,7 @@ FurnitureOrchestrator
 独立 furniture-layout -> 房间摆放 / 碰撞检查 / SVG / Viewer
 ```
 
-`skills/furniture-cad/scripts/furniture_workflow/workflow_orchestrator.py` 是家具生成的唯一应用层入口。六个串联阶段实现由各自 Skill 的 `scripts/` 拥有；CLI、API 与 Agent 不直接拼装规划器、发射器或 CAD Bridge。`furniture-layout` 是明确请求时才调用的独立房间摆放能力，不是家具生成前置步骤。
+`domain/skills/furniture-cad/scripts/furniture_workflow/workflow_orchestrator.py` 是家具生成的唯一应用层入口。六个串联阶段实现由各自 Skill 的 `scripts/` 拥有；CLI、API 与 Agent 不直接拼装规划器、发射器或 CAD Bridge。`furniture-layout` 是明确请求时才调用的独立房间摆放能力，不是家具生成前置步骤。
 
 ## 六阶段交互
 
@@ -105,13 +105,13 @@ revision = orchestrator.apply_panel_optimization_candidate(project, 0)
 
 ```powershell
 # CLI：明确的一次性批处理，规划并生成 CAD
-.\.venv\Scripts\python.exe skills\furniture-cad\scripts\generate_furniture.py <spec.json> --force
+.\.venv\Scripts\python.exe domain\skills\furniture-cad\scripts\generate_furniture.py <spec.json> --force
 
 # API：只负责 HTTP 协议，内部同样调用 FurnitureOrchestrator
-.\.venv\Scripts\python.exe skills\furniture-cad\scripts\server.py
+.\.venv\Scripts\python.exe domain\skills\furniture-cad\scripts\server.py
 ```
 
 `POST /api/plan-layout` 返回独立房间布局 JSON；`POST /api/plan-layout/preview` 直接返回 `image/svg+xml` 静态预览；`POST /api/plan-layout/viewer` 返回可直接打开的 `text/html` 互动 Viewer。
 
-可复用阶段代码放在对应的 `skills/furniture-*/scripts/`；统一 Orchestrator、CLI/API 和集成测试放在 `skills/furniture-cad/scripts/`；一次性脚本和派生 CAD 源码放在 `temp/`；最终产物放在 `generated/`。
+可复用阶段代码放在对应的 `domain/skills/furniture-*/scripts/`；统一 Orchestrator、CLI/API 和集成测试放在 `domain/skills/furniture-cad/scripts/`；一次性脚本和派生 CAD 源码放在 `temp/`；最终产物放在 `generated/`。
 

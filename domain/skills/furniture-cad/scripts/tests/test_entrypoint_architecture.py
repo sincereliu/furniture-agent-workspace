@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 SCRIPTS_ROOT = Path(__file__).resolve().parents[1]
-WORKSPACE_ROOT = Path(__file__).resolve().parents[4]
+WORKSPACE_ROOT = Path(__file__).resolve().parents[5]
 
 
 def imported_modules(path: Path) -> set[str]:
