@@ -8,20 +8,20 @@
 three_in_one:
   标准:
     variant_group: 三合一标准
-    # 偏心轮（母件，安装在侧板面上）
+    # 偏心轮（装在“边接触方”板件的板面 cam_face 上；具体板/面由连接拓扑决定）
     eccentric_wheel:
       diameter_mm: 12            # 偏心轮本体直径
       hole_depth_mm: 13.5        # 沉孔深度
       center_offset_from_edge_mm: 33.5   # 偏心轮圆心到连接杆端面(接触端面)的距离，沿连接杆方向(x)
       rod_axis_offset_mm: 9      # 连接杆轴线到偏心轮安装面(cam_face)的距离；软件暂定，投产前确认
-    # 连接杆
+    # 连接杆（从“边接触方”板件的端面穿入，指向“面接触方”板件的预埋螺母）
     connecting_rod:
       diameter_mm: 8             # 连接杆直径
       length_mm: 36              # 连接杆总长
       insertion_depth_mm: 33     # 连接杆插入板端深度
-    # 预埋件（安装在板端）
+    # 预埋螺母（装在“面接触方”板件的板面上）
     pre_embedded_nut:
-      diameter_mm: 10            # 预埋件直径
+      diameter_mm: 10            # 预埋螺母直径
       depth_mm: 11               # 预埋孔深度
     brands:
       - name: 默认

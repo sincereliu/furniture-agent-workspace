@@ -1,7 +1,7 @@
 """三合一连接件（偏心轮 + 连接杆 + 预埋螺母）。
 
 不再按 panel_type 名称判断角色。改用连接拓扑（PanelJoint）：
-- female（面接触方）→ 预埋螺母孔，打在 inner_face 面上
+- female（面接触方）→ 预埋螺母孔，打在板面上
 - male  （边接触方）→ 连接杆孔 + 偏心轮孔
 
 每块板的 joints 字段由 topology_solver 在求解阶段填充。
@@ -123,9 +123,9 @@ def _is_trinity_joint(joint: Any, by_label: Dict[str, PanelRecord]) -> bool:
 class TrinityConnector(Connector):
     """三合一连接件。
 
-    偏心轮位于横板的 cam_face，从可操作面钻入。
-    连接杆从横板端面穿入，指向竖板的预埋螺母。
-    预埋螺母在竖板内侧面，朝柜内方向钻入。
+    偏心轮位于“边接触方”板件的板面（cam_face），从可操作面钻入。
+    连接杆从“边接触方”板件的端面穿入，指向“面接触方”板件的预埋螺母。
+    预埋螺母在“面接触方”板件的板面上，朝柜内方向钻入。
 
     深度方向：前后双排，分别距前/后边 first_hole_mm（默认 64mm）。
     偏心轮：沿连接杆方向(x)距端面 center_offset_from_edge（默认 33.5mm），深度方向与连接杆同排。
