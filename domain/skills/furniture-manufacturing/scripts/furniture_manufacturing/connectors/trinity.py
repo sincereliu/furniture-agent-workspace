@@ -7,7 +7,7 @@
 每块板的 joints 字段由 topology_solver 在求解阶段填充。
 """
 
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Mapping, Set
 
 from furniture_manufacturing.connectors.base import Connector, HoleSpec, _opposite
 from furniture_manufacturing.manufacturing_models import HardwareRecord, MachiningOperation, PanelRecord
@@ -135,13 +135,17 @@ class TrinityConnector(Connector):
     hole_type_for_json = "three_in_one"
     catalog_entry = "three_in_one"
     rules_section = "system_32_drilling"
+    hole_legend = {
+        "system_32_female": {"color": "#FF6B35", "label": "三合一偏心轮孔 12mm", "glb_group": "偏心轮孔"},
+        "system_32_male": {"color": "#FF4500", "label": "三合一连接杆端孔 8mm", "glb_group": "连接杆孔"},
+        "system_32_pre_nut": {"color": "#D95F02", "label": "三合一预埋螺母孔 10mm", "glb_group": "预埋螺母孔"},
+    }
 
     def match(self, panels: List[PanelRecord]) -> Dict[str, Any]:
         """匹配 — 用连接拓扑而非 panel_type 名称。"""
         entry = self.catalog.get(self.catalog_entry, {})
         first_key = next(iter(entry)) if entry else None
         spec = entry.get(first_key, {}) if first_key else {}
-        brand = (spec.get("brands", [{}]) or [{}])[0]
         rules = self.rules.get(self.rules_section, {}) if self.rules_section else {}
 
         female_panels = [p for p in panels if _trinity_female(p)]
@@ -152,7 +156,6 @@ class TrinityConnector(Connector):
             "female": female_panels,
             "male": male_panels,
             "spec": spec,
-            "brand": brand,
             "rules": rules,
         }
 
@@ -526,14 +529,23 @@ class TrinityConnector(Connector):
             merged = [round(h / snap) * snap for h in merged]
         return merged
 
-    def boms(self, panels: List[PanelRecord]) -> List[HardwareRecord]:
+    def boms(
+        self,
+        panels: List[PanelRecord],
+        *,
+        options: Mapping[str, Any] | None = None,
+    ) -> List[HardwareRecord]:
         """生成三合一 BOM 清单。
 
         数量 = 实际生成的偏心轮孔数（孔即真源）。
         一套三合一 = 1 偏心轮 + 1 连接杆 + 1 预埋螺母。
+        品牌由确认选择（options）决定；未选择时目录唯一才返回。
         """
         matched = self.match(panels)
-        brand = matched["brand"]
+        spec = matched["spec"]
+        opts = (options or {}).get(self.catalog_entry, {})
+        opts = dict(opts) if isinstance(opts, Mapping) else {}
+        brand = self.resolve_brand(spec.get("brands", []), opts.get("brand"))
         holes = self.generate_holes_for_panels(panels)
         quantity = sum(1 for h in holes if h.hole_type == "system_32_female")
         return [HardwareRecord(
@@ -541,6 +553,36 @@ class TrinityConnector(Connector):
             spec="偏心轮φ12+预埋螺母φ10×11+连接杆φ8×33",
             quantity=quantity,
             unit="套", brand=brand.get("name", "默认"), model=brand.get("model", "SJY-01"))]
+
+    def validate(
+        self,
+        report: Any,
+        panels: List[PanelRecord],
+        hardware: List[HardwareRecord],
+        drilled: Dict[str, Any],
+    ) -> None:
+        """三合一专属校验：偏心轮孔数 = BOM 数，连接杆孔数 = 偏心轮孔数（1:1 配对）。"""
+        hole_types = [
+            hole["hole_type"]
+            for panel in drilled["panels"]
+            for hole in panel["holes"]
+        ]
+        hardware_by_name = {item.name: item for item in hardware}
+        trinity_hardware = hardware_by_name.get(self.name)
+        trinity_cam_count = hole_types.count("system_32_female")
+        if trinity_hardware is not None and trinity_hardware.quantity != trinity_cam_count:
+            report.add_error(
+                "TRINITY_HARDWARE_COUNT_MISMATCH",
+                f"三合一连接件数量 {trinity_hardware.quantity} 与偏心轮孔数 {trinity_cam_count} 不一致",
+                "hardware",
+            )
+        trinity_rod_count = hole_types.count("system_32_male")
+        if trinity_rod_count != trinity_cam_count:
+            report.add_error(
+                "TRINITY_ROD_CAM_COUNT_MISMATCH",
+                f"连接杆孔数 {trinity_rod_count} 与偏心轮孔数 {trinity_cam_count} 不一致（1:1 配对）",
+                "drilled_holes",
+            )
 
     def machining_operations(self, panel: PanelRecord) -> List[MachiningOperation]:
         """生成三合一孔位的 cut_box 加工指令。"""

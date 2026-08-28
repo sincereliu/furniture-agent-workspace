@@ -8,7 +8,7 @@
 暂时留在活动层板面板规划加入后再启用全量逻辑。
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Mapping
 from furniture_manufacturing.connectors.base import Connector, HoleSpec, _opposite
 from furniture_manufacturing.manufacturing_models import HardwareRecord, MachiningOperation, PanelRecord
 
@@ -18,6 +18,9 @@ class ShelfConnector(Connector):
     hole_type_for_json = "shelf_connector"
     catalog_entry = "shelf_connectors"
     rules_section = None
+    hole_legend = {
+        "shelf_connector": {"color": "#00A86B", "label": "层板托孔", "glb_group": "层板孔位"},
+    }
 
     def match(self, panels: List[PanelRecord]) -> Dict[str, Any]:
         movable = [p for p in panels if p.panel_type == "movable_shelf"]
@@ -113,9 +116,16 @@ class ShelfConnector(Connector):
                 holes.append(64.0 + i * spacing)
         return sorted(set(holes))
 
-    def boms(self, panels: List[PanelRecord]) -> List[HardwareRecord]:
+    def boms(
+        self,
+        panels: List[PanelRecord],
+        *,
+        options: Mapping[str, Any] | None = None,
+    ) -> List[HardwareRecord]:
+        opts = (options or {}).get(self.catalog_entry, {})
+        opts = dict(opts) if isinstance(opts, Mapping) else {}
         entry = self.catalog.get(self.catalog_entry, {}).get("二合一", {})
-        brand = (entry.get("brands", [{}]) or [{}])[0]
+        brand = self.resolve_brand(entry.get("brands", []), opts.get("brand"))
         shelves = [p for p in panels if p.panel_type == "movable_shelf"]
         total = sum(len(self._shelf_positions(p.drill_length)) * 2
                     for p in shelves)

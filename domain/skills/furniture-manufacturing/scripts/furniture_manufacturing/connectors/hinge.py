@@ -5,7 +5,7 @@
 不再硬编码 "+y"。
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Mapping
 from furniture_manufacturing.connectors.base import Connector, HoleSpec, _opposite
 from furniture_manufacturing.manufacturing_models import HardwareRecord, MachiningOperation, PanelRecord
 
@@ -17,6 +17,9 @@ class HingeConnector(Connector):
     hole_type_for_json = "hinge"
     catalog_entry = "hinges"
     rules_section = "hinge_drilling"
+    hole_legend = {
+        "hinge": {"color": "#4A90D9", "label": "铰链杯孔 35mm", "glb_group": "铰链孔位"},
+    }
 
     def match(self, panels: List[PanelRecord]) -> Dict[str, Any]:
         """匹配所有门板及相关规则。"""
@@ -140,26 +143,145 @@ class HingeConnector(Connector):
         default = {"cup_diameter_mm": 35, "cup_depth_mm": 13}
         return rules.get("cup_by_variant_group", {}).get("35mm杯全盖", default)
 
-    def boms(self, panels: List[PanelRecord]) -> List[HardwareRecord]:
-        """生成铰链 BOM 清单。"""
+    def boms(
+        self,
+        panels: List[PanelRecord],
+        *,
+        options: Mapping[str, Any] | None = None,
+    ) -> List[HardwareRecord]:
+        """生成铰链 BOM 清单。
+
+        条目与品牌由确认选择（options[本 catalog_entry]）决定；未选择时
+        仅当目录唯一才返回，否则抛错——不再按 full+100° 静默挑选。
+        """
         doors = [p for p in panels if p.panel_type == "door"]
+        if not doors:
+            return []
         catalog = self.catalog.get(self.catalog_entry, {})
+        opts = self._connector_options(options)
+        entry = self._resolve_entry(catalog, opts)
+        brand = self.resolve_brand(entry.get("brands", []), opts.get("brand"))
         records: List[HardwareRecord] = []
         for door in doors:
-            entry = self._pick_hinge_entry(catalog)
-            brand = (entry.get("brands", [{}]) or [{}])[0] if entry else {"name": "默认", "model": "HJ-100-F"}
-            count, _, _ = self._hinge_count(door.size_z, self.rules.get(self.rules_section, {}))
+            count, _, _ = self._hinge_count(
+                door.size_z, self.rules.get(self.rules_section, {})
+            )
             records.append(HardwareRecord(
                 name=self.name,
-                spec=f"{brand['name']} {brand['model']} {entry.get('angle', 100)}°{entry.get('overlay', 'full')}" if entry else f"{brand['name']} {brand['model']}",
+                spec=f"{brand['name']} {brand['model']} {entry.get('angle', 100)}°{entry.get('overlay', 'full')}",
                 quantity=count, brand=brand.get("name", "默认"), model=brand.get("model", ""),
                 note=f"门板: {door.name}"))
         return records
 
-    def _pick_hinge_entry(self, catalog: Dict[str, Any]) -> Dict[str, Any] | None:
-        """从目录中选择全盖 100° 铰链条目。"""
-        candidates = [v for v in catalog.values() if v.get("overlay") == "full" and v.get("angle") == 100]
-        return candidates[0] if candidates else None
+    def _connector_options(self, options: Mapping[str, Any] | None) -> Dict[str, Any]:
+        opts = (options or {}).get(self.catalog_entry, {})
+        return dict(opts) if isinstance(opts, Mapping) else {}
+
+    def _resolve_entry(
+        self,
+        catalog: Dict[str, Any],
+        opts: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """返回唯一铰链条目；歧义时抛错，不按 overlay/angle 静默筛选。"""
+        entries = list(catalog.items())
+        if not entries:
+            raise ValueError("hinge catalog is empty")
+        filters = {k: opts[k] for k in ("overlay", "angle") if k in opts}
+        if filters:
+            entries = [
+                (name, spec) for name, spec in entries
+                if all(spec.get(k) == v for k, v in filters.items())
+            ]
+            if not entries:
+                raise ValueError(f"no hinge entry matches {filters!r}")
+        if len(entries) == 1:
+            return entries[0][1]
+        raise ValueError("multiple hinge entries require an explicit selection")
+
+    def validate(
+        self,
+        report: Any,
+        panels: List[PanelRecord],
+        hardware: List[HardwareRecord],
+        drilled: Dict[str, Any],
+    ) -> None:
+        """铰链专属校验：杯孔在门包络内、从内侧面钻入、深度≤门厚、侧别正确、孔数=BOM 数。"""
+        drilled_by_panel = {
+            panel["label"]: panel["holes"] for panel in drilled["panels"]
+        }
+        door_panels = [p for p in panels if p.panel_type == "door"]
+        expected_hinge_count = sum(
+            item.quantity for item in hardware if item.name == self.name
+        )
+        hinge_holes = [
+            (panel, hole)
+            for panel in door_panels
+            for hole in drilled_by_panel.get(panel.label, [])
+            if hole["hole_type"] == "hinge"
+        ]
+        for panel in door_panels:
+            panel_hinges = [
+                hole for hole in drilled_by_panel.get(panel.label, [])
+                if hole["hole_type"] == "hinge"
+            ]
+            if not panel_hinges:
+                report.add_error(
+                    "MISSING_HINGE_HOLES",
+                    f"{panel.label} requires hinge cup holes",
+                    panel.label,
+                )
+            for hole in panel_hinges:
+                radius = hole["diameter"] / 2
+                if (
+                    hole["diameter"] <= 0
+                    or hole["local_x"] - radius < -1e-6
+                    or hole["local_x"] + radius > panel.size_x + 1e-6
+                    or hole["local_z"] - radius < -1e-6
+                    or hole["local_z"] + radius > panel.size_z + 1e-6
+                ):
+                    report.add_error(
+                        "HINGE_HOLE_OUTSIDE_DOOR",
+                        f"hinge cup on {panel.label} exceeds the door envelope",
+                        panel.label,
+                    )
+                expected_face_coordinate = (
+                    panel.size_y if panel.inner_face == "+y" else 0.0
+                )
+                if (
+                    panel.inner_face not in {"+y", "-y"}
+                    or abs(hole["local_y"] - expected_face_coordinate) > 1e-6
+                    or hole["direction"] != _opposite(panel.inner_face)
+                    or not hole["is_face_hole"]
+                ):
+                    report.add_error(
+                        "HINGE_HOLE_FACE_MISMATCH",
+                        f"hinge cup on {panel.label} must enter from its inner face",
+                        panel.label,
+                    )
+                if hole["depth"] <= 0 or hole["depth"] > panel.size_y + 1e-6:
+                    report.add_error(
+                        "INVALID_HINGE_HOLE_DEPTH",
+                        f"hinge cup depth on {panel.label} exceeds door thickness",
+                        panel.label,
+                    )
+                if (
+                    panel.door_hinge_side == "left"
+                    and hole["local_x"] >= panel.size_x / 2
+                ) or (
+                    panel.door_hinge_side == "right"
+                    and hole["local_x"] <= panel.size_x / 2
+                ):
+                    report.add_error(
+                        "HINGE_SIDE_MISMATCH",
+                        f"hinge cup on {panel.label} is on the wrong door edge",
+                        panel.label,
+                    )
+        if len(hinge_holes) != expected_hinge_count:
+            report.add_error(
+                "HINGE_HARDWARE_COUNT_MISMATCH",
+                "hinge cup count must match hinge hardware quantity",
+                "hardware",
+            )
 
     def machining_operations(self, panel: PanelRecord) -> List[MachiningOperation]:
         """生成铰链杯孔的 cut_box 加工指令。

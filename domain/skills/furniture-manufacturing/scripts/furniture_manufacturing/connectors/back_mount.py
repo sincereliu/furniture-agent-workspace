@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from math import ceil
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Mapping
 
 from furniture_manufacturing.connectors.base import Connector, HoleSpec
 from furniture_manufacturing.manufacturing_models import (
@@ -28,6 +28,11 @@ class BackMountConnector(Connector):
     hole_type_for_json = "back_mount"
     catalog_entry = "three_in_one"
     rules_section = "back_mount_drilling"
+    hole_legend = {
+        "back_insert_cam": {"color": "#8E44AD", "label": "内嵌背板偏心轮孔", "glb_group": "内嵌背板偏心轮孔"},
+        "back_insert_rod": {"color": "#9B59B6", "label": "内嵌背板连接杆孔", "glb_group": "内嵌背板连接杆孔"},
+        "back_insert_pre_nut": {"color": "#6C3483", "label": "内嵌背板预埋螺母孔", "glb_group": "内嵌背板预埋螺母孔"},
+    }
 
     def match(self, panels: List[PanelRecord]) -> Dict[str, Any]:
         return {
@@ -56,7 +61,12 @@ class BackMountConnector(Connector):
             return self._insert_holes(panels)
         return []
 
-    def boms(self, panels: List[PanelRecord]) -> List[HardwareRecord]:
+    def boms(
+        self,
+        panels: List[PanelRecord],
+        *,
+        options: Mapping[str, Any] | None = None,
+    ) -> List[HardwareRecord]:
         mode = self._mode(panels)
         if mode != "insert":
             return []
@@ -65,7 +75,9 @@ class BackMountConnector(Connector):
         if quantity <= 0:
             return []
         spec = self.catalog.get("three_in_one", {}).get("标准", {})
-        brand = (spec.get("brands", [{}]) or [{}])[0]
+        opts = (options or {}).get(self.catalog_entry, {})
+        opts = dict(opts) if isinstance(opts, Mapping) else {}
+        brand = self.resolve_brand(spec.get("brands", []), opts.get("brand"))
         return [
             HardwareRecord(
                 name="三合一连接件（内嵌背板）",
@@ -85,6 +97,63 @@ class BackMountConnector(Connector):
                 ],
             )
         ]
+
+    def validate(
+        self,
+        report: Any,
+        panels: List[PanelRecord],
+        hardware: List[HardwareRecord],
+        drilled: Dict[str, Any],
+    ) -> None:
+        """内嵌背板（insert）专属校验：三件套孔（轮/杆/螺母）数量一致且匹配 BOM。"""
+        mode = self._mode(panels)
+        hole_types = [
+            hole["hole_type"]
+            for panel in drilled["panels"]
+            for hole in panel["holes"]
+        ]
+        hardware_by_name = {item.name: item for item in hardware}
+        contract = {
+            "insert": (
+                "三合一连接件（内嵌背板）",
+                ("back_insert_cam", "back_insert_rod", "back_insert_pre_nut"),
+            ),
+        }.get(mode)
+        if contract is None:
+            return
+        hardware_name, required_hole_types = contract
+        hardware_item = hardware_by_name.get(hardware_name)
+        counts = {
+            hole_type: hole_types.count(hole_type)
+            for hole_type in required_hole_types
+        }
+        if hardware_item is None or hardware_item.quantity <= 0:
+            report.add_error(
+                "MISSING_BACK_MOUNT_HARDWARE",
+                f"{mode} back strategy is missing {hardware_name}",
+                "hardware",
+            )
+        if any(count <= 0 for count in counts.values()):
+            report.add_error(
+                "MISSING_BACK_MOUNT_HOLES",
+                f"{mode} back strategy is missing matched hole records",
+                "drilled_holes",
+            )
+        elif len(set(counts.values())) != 1:
+            report.add_error(
+                "BACK_MOUNT_HOLE_COUNT_MISMATCH",
+                f"{mode} mating hole counts do not match",
+                "drilled_holes",
+            )
+        elif (
+            hardware_item is not None
+            and hardware_item.quantity != next(iter(counts.values()))
+        ):
+            report.add_error(
+                "BACK_MOUNT_HARDWARE_COUNT_MISMATCH",
+                f"{hardware_name} quantity does not match its hole pattern",
+                "hardware",
+            )
 
     def machining_operations(
         self,

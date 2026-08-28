@@ -338,7 +338,16 @@ class SkillArchitectureTests(unittest.TestCase):
             / "validation.py"
         ).read_text(encoding="utf-8")
         self.assertIn("GROOVE_OUTSIDE_TARGET", manufacturing_validation)
-        self.assertIn("HINGE_HOLE_OUTSIDE_DOOR", manufacturing_validation)
+        # 五金专属几何规则随各 Connector 自洽（仍属制造阶段运行时）
+        hinge_connector = (
+            SKILLS_ROOT
+            / "furniture-manufacturing"
+            / "scripts"
+            / "furniture_manufacturing"
+            / "connectors"
+            / "hinge.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("HINGE_HOLE_OUTSIDE_DOOR", hinge_connector)
 
         feature_tree_emitter = (
             SKILLS_ROOT

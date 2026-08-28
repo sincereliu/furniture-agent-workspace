@@ -4,7 +4,7 @@
 """
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Mapping
 import yaml
 from furniture_manufacturing.manufacturing_models import HardwareRecord, MachiningOperation, PanelRecord
 
@@ -38,6 +38,8 @@ class Connector:
     hole_type_for_json: str = ""
     catalog_entry: str = ""
     rules_section: str | None = None
+    # hole_type → {color, label, glb_group}；Viewer/GLB 图例由各 Connector 自声明派生
+    hole_legend: Dict[str, Dict[str, str]] = {}
     _catalog_cache: Dict[str, Any] | None = None
     _rules_cache: Dict[str, Any] | None = None
 
@@ -86,8 +88,49 @@ class Connector:
             for hole in self.generate_holes(panel)
         ]
 
-    def boms(self, panels: List[PanelRecord]) -> List[HardwareRecord]:
+    def boms(
+        self,
+        panels: List[PanelRecord],
+        *,
+        options: Mapping[str, Any] | None = None,
+    ) -> List[HardwareRecord]:
         raise NotImplementedError
+
+    def validate(
+        self,
+        report: Any,
+        panels: List[PanelRecord],
+        hardware: List[HardwareRecord],
+        drilled: Dict[str, Any],
+    ) -> None:
+        """五金专属校验；默认 no-op，由各 Connector 覆盖。"""
+        return None
+
+    @staticmethod
+    def resolve_brand(
+        brands: List[Dict[str, Any]] | None,
+        selection: str | None = None,
+    ) -> Dict[str, Any]:
+        """返回唯一/已确认的品牌；歧义时抛错，不静默取第一个。
+
+        selection 为确认的品牌名；未提供时，目录恰好一个品牌才返回，
+        多个品牌则要求显式选择（失败安全，避免代码替用户拍板）。
+        """
+        candidates = [b for b in (brands or []) if isinstance(b, dict)]
+        if not candidates:
+            return {"name": "默认", "model": "N/A"}
+        if selection is not None:
+            for brand in candidates:
+                if brand.get("name") == selection:
+                    return brand
+            raise ValueError(
+                f"selected brand {selection!r} is not in the catalog"
+            )
+        if len(candidates) == 1:
+            return candidates[0]
+        raise ValueError(
+            "multiple brands are available; an explicit selection is required"
+        )
 
     def machining_operations(self, panel: PanelRecord) -> List[MachiningOperation]:
         raise NotImplementedError

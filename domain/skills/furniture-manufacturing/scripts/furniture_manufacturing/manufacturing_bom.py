@@ -80,11 +80,14 @@ def plan_manufacturing(
     panels = [_manufacturing_panel(spec, back_mount, item) for item in placements]
     operations = _back_groove_operations(spec, back_mount, placements)
     dimensions = f"{spec.width:.0f}×{spec.height:.0f}×{spec.depth:.0f}mm"
+    connector_options = options.get("options", {})
+    if not isinstance(connector_options, Mapping):
+        connector_options = {}
     return BOMReport(
         furniture_name=FURNITURE_NAMES.get(spec.furniture_type, spec.furniture_type),
         dimensions=dimensions,
         panels=panels,
-        hardware=estimate_hardware(panels),
+        hardware=estimate_hardware(panels, options=connector_options),
         operations=operations,
         total_area_m2=sum(panel.area_m2 for panel in panels),
         readiness="preliminary",
@@ -223,14 +226,15 @@ def _back_groove_operations(
     ]
 
 
-def estimate_hardware(panels: List[PanelRecord]) -> List[HardwareRecord]:
+def estimate_hardware(
+    panels: List[PanelRecord],
+    *,
+    options: Mapping[str, Any] | None = None,
+) -> List[HardwareRecord]:
     hardware: List[HardwareRecord] = []
     for connector_cls in ALL_CONNECTORS:
         connector = connector_cls()
-        hardware.extend(connector.boms(panels))
-
-    if any(panel.panel_type == "toe_kick" for panel in panels):
-        hardware.append(HardwareRecord(name="L型角码", spec="25×25mm镀锌", quantity=4))
+        hardware.extend(connector.boms(panels, options=options))
     return hardware
 
 
@@ -272,17 +276,19 @@ def format_bom_markdown(report: BOMReport) -> str:
     return "\n".join(lines)
 
 
-_COLOR_LEGEND = {
-    "hinge":           {"color": "#4A90D9", "label": "铰链杯孔 35mm"},
-    "system_32_female": {"color": "#FF6B35", "label": "三合一偏心轮孔 12mm"},
-    "system_32_male":  {"color": "#FF4500", "label": "三合一连接杆端孔 8mm"},
-    "system_32_pre_nut": {"color": "#D95F02", "label": "三合一预埋螺母孔 10mm"},
-    "shelf_connector": {"color": "#00A86B", "label": "层板托孔"},
-    "back_groove":     {"color": "#FFD700", "label": "背板槽"},
-    "back_insert_cam": {"color": "#8E44AD", "label": "内嵌背板偏心轮孔"},
-    "back_insert_rod": {"color": "#9B59B6", "label": "内嵌背板连接杆孔"},
-    "back_insert_pre_nut": {"color": "#6C3483", "label": "内嵌背板预埋螺母孔"},
-}
+def _build_color_legend() -> Dict[str, Dict[str, str]]:
+    """孔型图例：由各 Connector 的 hole_legend 自声明派生。"""
+    legend: Dict[str, Dict[str, str]] = {
+        # 背板槽是 cut_box 加工操作，非五金孔，留在制造阶段（不随 Connector 下沉）
+        "back_groove": {"color": "#FFD700", "label": "背板槽"},
+    }
+    for connector_cls in ALL_CONNECTORS:
+        for hole_type, meta in connector_cls.hole_legend.items():
+            legend[hole_type] = {"color": meta["color"], "label": meta["label"]}
+    return legend
+
+
+_COLOR_LEGEND = _build_color_legend()
 
 
 def emit_drilled_holes(bom: BOMReport) -> dict:

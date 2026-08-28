@@ -12,6 +12,8 @@ from typing import Any
 
 import build123d as bd
 
+from .connectors import ALL_CONNECTORS
+
 # ── 板件类型 → 颜色 ──────────────────────────────────────────────
 PANEL_TYPE_COLORS: dict[str, bd.Color] = {
     "side":      bd.Color(0.80, 0.70, 0.55, 0.30),
@@ -35,14 +37,16 @@ _DIRECTION_ROT: dict[str, bd.RotationLike] = {
     "-z": (bd.Axis.X, 180),
 }
 
-# ── 孔位分类 → Assembly 子组名称 ──────────────────────────────
-HOLE_GROUP_MAP = {
-    "system_32_female":     "偏心轮孔",
-    "system_32_male":       "连接杆孔",
-    "system_32_pre_nut":    "预埋螺母孔",
-    "hinge":                "铰链孔位",
-    "shelf_connector":      "层板孔位",
-}
+# ── 孔位分类 → Assembly 子组名称（由各 Connector 的 glb_group 派生）──
+def _build_hole_group_map() -> dict[str, str]:
+    group_map: dict[str, str] = {}
+    for connector_cls in ALL_CONNECTORS:
+        for hole_type, meta in connector_cls.hole_legend.items():
+            group_map[hole_type] = meta.get("glb_group", "其他孔位")
+    return group_map
+
+
+HOLE_GROUP_MAP = _build_hole_group_map()
 
 
 def _panel_color(panel: dict[str, Any]) -> bd.Color:
