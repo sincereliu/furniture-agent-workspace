@@ -38,11 +38,13 @@ class HingeConnector(Connector):
         if panel.panel_type != "door":
             return result
         rules = self.rules.get(self.rules_section, {}) if self.rules_section else {}
+        entry = self._resolve_entry(self.catalog.get(self.catalog_entry, {}), {})
         count, top_offset, bottom_offset = self._hinge_count(panel.size_z, rules)
         positions = self._distribute(panel.size_z, count, top_offset, bottom_offset)
-        edge_offset = float(rules.get("position", {}).get("edge_offset_mm", 5))
-        cup_params = self._cup_params(rules)
-        cup_diameter = float(cup_params.get("cup_diameter_mm", 35))
+        edge_offset = float(entry.get("edge_offset_mm", 5))
+        cup = entry.get("cup", {}) or {}
+        cup_diameter = float(cup.get("diameter_mm", 35))
+        cup_depth = float(cup.get("depth_mm", 13))
         # 杯孔中心距门边 = 边距 + 杯孔半径
         cup_center_from_edge = edge_offset + cup_diameter / 2
         inner = panel.inner_face or "+y"  # default for backward compat
@@ -68,8 +70,8 @@ class HingeConnector(Connector):
                 x_local=x_local,
                 y_local=0.0,
                 z_local=y_local,
-                diameter=float(cup_params.get("cup_diameter_mm", 35)),
-                depth=float(cup_params.get("cup_depth_mm", 13)),
+                diameter=cup_diameter,
+                depth=cup_depth,
                 direction=cup_dir,
                 note="从门板内侧面钻入的铰链杯孔",
             )
@@ -138,11 +140,6 @@ class HingeConnector(Connector):
         spacing = usable / (count - 1)
         return [top + i * spacing for i in range(count)]
 
-    def _cup_params(self, rules: Dict[str, Any]) -> Dict[str, Any]:
-        """获取杯孔参数（唯一默认：35mm 杯全盖）。"""
-        default = {"cup_diameter_mm": 35, "cup_depth_mm": 13}
-        return rules.get("cup_by_variant_group", {}).get("35mm杯全盖", default)
-
     def boms(
         self,
         panels: List[PanelRecord],
@@ -152,7 +149,7 @@ class HingeConnector(Connector):
         """生成铰链 BOM 清单。
 
         条目与品牌由确认选择（options[本 catalog_entry]）决定；未选择时
-        仅当目录唯一才返回，否则抛错——不再按 full+100° 静默挑选。
+        仅当目录唯一才返回，否则抛错——不再按固定规格静默挑选。
         """
         doors = [p for p in panels if p.panel_type == "door"]
         if not doors:
@@ -168,7 +165,7 @@ class HingeConnector(Connector):
             )
             records.append(HardwareRecord(
                 name=self.name,
-                spec=f"{brand['name']} {brand['model']} {entry.get('angle', 100)}°{entry.get('overlay', 'full')}",
+                spec=f"{brand['name']} {brand['model']} {entry.get('angle', 100)}°",
                 quantity=count, brand=brand.get("name", "默认"), model=brand.get("model", ""),
                 note=f"门板: {door.name}"))
         return records
@@ -186,7 +183,7 @@ class HingeConnector(Connector):
         entries = list(catalog.items())
         if not entries:
             raise ValueError("hinge catalog is empty")
-        filters = {k: opts[k] for k in ("overlay", "angle") if k in opts}
+        filters = {k: opts[k] for k in ("angle",) if k in opts}
         if filters:
             entries = [
                 (name, spec) for name, spec in entries
@@ -210,6 +207,19 @@ class HingeConnector(Connector):
             panel["label"]: panel["holes"] for panel in drilled["panels"]
         }
         door_panels = [p for p in panels if p.panel_type == "door"]
+        # 门厚适用范围校验：door_thickness_mm = [min, max]，仅目录唯一条目时适用
+        entries = list(self.catalog.get(self.catalog_entry, {}).values())
+        if len(entries) == 1:
+            door_range = entries[0].get("door_thickness_mm")
+            if isinstance(door_range, (list, tuple)) and len(door_range) == 2:
+                lo, hi = float(door_range[0]), float(door_range[1])
+                for panel in door_panels:
+                    if panel.thickness < lo - 1e-6 or panel.thickness > hi + 1e-6:
+                        report.add_error(
+                            "HINGE_DOOR_THICKNESS_OUT_OF_RANGE",
+                            f"{panel.label} door thickness {panel.thickness:g}mm is outside hinge range [{lo:g}, {hi:g}]mm",
+                            panel.label,
+                        )
         expected_hinge_count = sum(
             item.quantity for item in hardware if item.name == self.name
         )

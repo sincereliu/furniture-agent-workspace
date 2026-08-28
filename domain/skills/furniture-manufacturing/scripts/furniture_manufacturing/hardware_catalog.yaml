@@ -7,7 +7,6 @@
 # ── 三合一连接件 ────────────────────────────────────────
 three_in_one:
   标准:
-    variant_group: 三合一标准
     # 偏心轮（装在“边接触方”板件的板面 cam_face 上；具体板/面由连接拓扑决定）
     eccentric_wheel:
       diameter_mm: 12            # 偏心轮本体直径
@@ -30,7 +29,6 @@ three_in_one:
 # ── 活动层板连接件 ────────────────────────────────────────
 shelf_connectors:
   二合一:
-    variant_group: 二合一连接件
     连接杆直径: 5mm
     注塑件直径: 8mm
     侧板孔: { diameter_mm: 10, depth_mm: 12 }
@@ -41,7 +39,6 @@ shelf_connectors:
         model: EYJ-01
 
   隔板钉:
-    variant_group: 隔板钉
     钉径: 3mm
     钉长: 25mm
     侧板孔: { diameter_mm: 3, depth_mm: 8 }
@@ -53,7 +50,6 @@ shelf_connectors:
 # ── 抽屉滑轨 ──────────────────────────────────────────
 drawer_slides:
   三节轨:
-    variant_group: 国产三节轨
     mounting: 侧装
     gap_requirement_mm: 13.0        # 每侧间隙（修正 12.5→13.0，投产前确认）
     extension: 100%                 # 全拉出
@@ -67,7 +63,6 @@ drawer_slides:
         model: HG-3S
 
   隐藏轨:
-    variant_group: 国产隐藏轨
     mounting: 底装
     gap_requirement_mm: 12.7        # 每侧间隙
     extension: 100%
@@ -80,14 +75,11 @@ drawer_slides:
 
 # ── 铰链 ──────────────────────────────────────────────
 hinges:
-  默认35mm杯全盖:
-    variant_group: 35mm杯全盖
-    cup: { diameter_mm: 35, depth_mm: 13 }
-    overlay: full
+  HJ-100:
     angle: 100
-    base_height_mm: 0
-    door_thickness_mm: [14, 22]
-    note: 标准全盖铰链
+    cup: { diameter_mm: 35, depth_mm: 13 }
+    edge_offset_mm: 5                # 铰链臂侧边距（杯孔边到门侧边的距离），随厂规/五金基础参数
+    door_thickness_mm: [14, 22]      # 适用门厚范围 [min, max]，超出由校验拦截
     brands:
       - name: 默认
-        model: HJ-100-F
+        model: HJ-100

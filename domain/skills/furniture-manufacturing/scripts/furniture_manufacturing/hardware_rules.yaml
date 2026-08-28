@@ -54,15 +54,8 @@ hinge_drilling:
 
   # ── 全局孔位参数 ──
   position:
-    edge_offset_mm: 5        # 铰链臂侧边距（杯孔边到门侧边的距离）
     max_spacing_mm: 600      # 铰链之间最大间距，超过时自动增加铰链数量
     snap_to_mm: 0.5          # 孔位取整精度：0=不取整, 0.5=半毫米, 1.0=整毫米
-
-  # ── 杯孔参数（按 variant_group） ──
-  cup_by_variant_group:
-    35mm杯全盖:
-      cup_diameter_mm: 35
-      cup_depth_mm: 13
 
   # ── 避让规则 ──
   conflict_avoidance:
