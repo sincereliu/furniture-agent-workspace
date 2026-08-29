@@ -41,11 +41,16 @@ class DesignIntent:
 
     furniture_type: str
     overall_size: OverallSize
+    # 吊柜底边离地高度；地柜落地、无此义，默认 None。
+    mounting_height_mm: float | None = None
     confirmed: bool = False
     schema_version: int = 2
 
     def validate(self) -> list[str]:
         errors = self.overall_size.validate()
+        errors.extend(
+            _mounting_height_errors(self.furniture_type, self.mounting_height_mm)
+        )
         if not self.furniture_type.strip():
             errors.append("furniture_type is required")
         if self.schema_version != 2:
@@ -70,6 +75,7 @@ class DesignIntent:
             "depth_mm": _optional_float_value(self.overall_size.depth_mm),
             "height_mm": _optional_float_value(self.overall_size.height_mm),
         }
+        data["mounting_height_mm"] = _optional_float_value(self.mounting_height_mm)
         return data
 
     @classmethod
@@ -91,8 +97,8 @@ class DesignIntent:
         )
         if populated_downstream and not legacy_schema:
             raise ValueError(
-                "DesignIntent only accepts furniture_type and overall_size; "
-                "route later decisions through stage_inputs: "
+                "DesignIntent only accepts furniture_type, overall_size, and "
+                "mounting_height_mm; route later decisions through stage_inputs: "
                 + ", ".join(populated_downstream)
             )
         size = data.get("overall_size", {})
@@ -112,12 +118,34 @@ class DesignIntent:
                     "overall_size.height_mm",
                 ),
             ),
+            mounting_height_mm=_parse_optional_float(
+                data.get("mounting_height_mm"),
+                "mounting_height_mm",
+            ),
             confirmed=bool(data.get("confirmed", False)),
             # Schema v1 carried downstream layout and construction fields.
             # Reading it into the current model intentionally drops those
             # fields; workflow project loading migrates them to stage_inputs.
             schema_version=(2 if legacy_schema else source_schema_version),
         )
+
+
+def _mounting_height_errors(furniture_type: str, value: float | None) -> list[str]:
+    """Confirmation-time rules for the finished envelope's vertical position."""
+    if value is None:
+        if furniture_type == "wall_cabinet":
+            return [
+                "mounting_height_mm must be provided before confirmation "
+                "for a wall cabinet"
+            ]
+        return []
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return ["mounting_height_mm must be numeric or null"]
+    if furniture_type == "wall_cabinet" and value <= 0:
+        return ["mounting_height_mm must be greater than zero for a wall cabinet"]
+    if value < 0:
+        return ["mounting_height_mm must not be negative"]
+    return []
 
 
 def _optional_float_value(value: float | None) -> float | None:

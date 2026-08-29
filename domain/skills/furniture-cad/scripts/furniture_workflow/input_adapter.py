@@ -23,6 +23,8 @@ PROTOCOL_FIELDS = frozenset(
         "depth",
         "height",
         "overall_size",
+        "mounting_height",
+        "mounting_height_mm",
         "purpose",
         "layout",
         "appearance",
@@ -56,6 +58,9 @@ def intent_from_spec(spec: Mapping[str, Any]) -> DesignIntent:
                 "depth_mm": size.get("depth_mm", data.get("depth")),
                 "height_mm": size.get("height_mm", data.get("height")),
             },
+            "mounting_height_mm": data.get(
+                "mounting_height_mm", data.get("mounting_height")
+            ),
         }
     )
 

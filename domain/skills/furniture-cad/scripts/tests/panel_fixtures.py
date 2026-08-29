@@ -31,6 +31,8 @@ def cabinet_data(furniture_type: str = "floor_cabinet", **overrides: Any) -> dic
         "type": furniture_type, "width": 800, "depth": 350 if wall else 600,
         "height": 900 if wall else 1000, **panel_parameters(furniture_type),
     }
+    if wall:
+        values["mounting_height"] = 2000
     values.update(overrides)
     return values
 

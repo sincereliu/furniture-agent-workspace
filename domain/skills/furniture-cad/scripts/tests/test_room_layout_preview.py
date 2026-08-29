@@ -191,6 +191,30 @@ class RoomLayoutPreviewTests(unittest.TestCase):
             1200,
         )
 
+    def test_wall_cabinet_default_placement_uses_confirmed_mounting_height(
+        self,
+    ) -> None:
+        _, output, report = run_independent_layout(
+            "吊柜",
+            {
+                "type": "wall_cabinet",
+                "width": 800,
+                "depth": 350,
+                "height": 900,
+                "mounting_height": 1800,
+            },
+        )
+
+        self.assertTrue(report.passed)
+        self.assertEqual(
+            output["room_placement"]["placement"]["origin_z_mm"],
+            1800,
+        )
+        self.assertEqual(
+            output["room_placement"]["clearances_mm"]["floor"],
+            1800,
+        )
+
     def test_independent_layout_emits_room_position_footprint_and_svg(self) -> None:
         _, output, report = run_independent_layout(
             "主卧衣柜",
