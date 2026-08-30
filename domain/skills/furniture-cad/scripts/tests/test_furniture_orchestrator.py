@@ -408,6 +408,8 @@ class FurnitureOrchestratorTests(unittest.TestCase):
                     DesignIntent(
                         furniture_type="wall_cabinet",
                         overall_size=OverallSize(900, 350, 900),
+                        mount_mode="free_height",
+                        mounting_height_mm=2000,
                     ),
                 )
 
@@ -688,7 +690,14 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         self.assertEqual(intent.overall_size.height_mm, 900)
         self.assertEqual(
             set(intent.to_dict()),
-            {"furniture_type", "overall_size", "confirmed", "schema_version"},
+            {
+                "furniture_type",
+                "overall_size",
+                "mount_mode",
+                "mounting_height_mm",
+                "confirmed",
+                "schema_version",
+            },
         )
         inputs = stage_inputs_from_spec(request)
         self.assertEqual(inputs["panels"]["parameters"]["shelf_count"], 1)
@@ -707,6 +716,46 @@ class FurnitureOrchestratorTests(unittest.TestCase):
                     "structure": {"back_mount": "cover"},
                 }
             )
+
+    def test_wall_cabinet_intent_requires_mount_mode_before_confirmation(
+        self,
+    ) -> None:
+        with self.assertRaisesRegex(ValueError, "mount_mode"):
+            DesignIntent(
+                furniture_type="wall_cabinet",
+                overall_size=OverallSize(800, 350, 900),
+            ).confirm()
+
+        with self.assertRaisesRegex(ValueError, "mounting_height_mm"):
+            DesignIntent(
+                furniture_type="wall_cabinet",
+                overall_size=OverallSize(800, 350, 900),
+                mount_mode="free_height",
+            ).confirm()
+
+        free = DesignIntent(
+            furniture_type="wall_cabinet",
+            overall_size=OverallSize(800, 350, 900),
+            mount_mode="free_height",
+            mounting_height_mm=1800,
+        ).confirm()
+        self.assertTrue(free.confirmed)
+        self.assertEqual(free.to_dict()["mounting_height_mm"], 1800)
+
+        flush = DesignIntent(
+            furniture_type="wall_cabinet",
+            overall_size=OverallSize(800, 350, 900),
+            mount_mode="flush_ceiling",
+        ).confirm()
+        self.assertTrue(flush.confirmed)
+        self.assertIsNone(flush.mounting_height_mm)
+
+        floor = DesignIntent(
+            furniture_type="floor_cabinet",
+            overall_size=OverallSize(800, 600, 1000),
+        ).confirm()
+        self.assertTrue(floor.confirmed)
+        self.assertIsNone(floor.to_dict()["mounting_height_mm"])
 
     def test_panel_stage_admits_complete_structured_parameters(self) -> None:
         project = self.orchestrator.create_project(

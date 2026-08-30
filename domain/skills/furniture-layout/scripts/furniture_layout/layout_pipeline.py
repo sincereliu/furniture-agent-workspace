@@ -62,7 +62,12 @@ def plan_layout_stage(
         room_source = "default_bedroom"
     resolved_placement = placement
     if resolved_placement is None:
-        resolved_placement = _default_placement(layout, resolved_room)
+        resolved_placement = _default_placement(
+            layout,
+            resolved_room,
+            mount_mode=spec.mount_mode,
+            mounting_height_mm=spec.mounting_height_mm,
+        )
         placement_source = "default_north_wall_centered"
 
     room_placement = plan_room_placement(
@@ -96,16 +101,24 @@ def _default_bedroom() -> dict[str, Any]:
 def _default_placement(
     layout: CabinetLayout,
     room: Mapping[str, Any],
+    *,
+    mount_mode: str | None = None,
+    mounting_height_mm: float | None = None,
 ) -> dict[str, Any]:
     room_model = RoomModel.from_dict(room)
     origin_z_mm = 0.0
     if layout.furniture_type == "wall_cabinet":
-        origin_z_mm = max(
-            0.0,
-            room_model.height_mm
-            - layout.height
-            - DEFAULT_WALL_CABINET_CEILING_CLEARANCE_MM,
-        )
+        if mount_mode == "flush_ceiling":
+            origin_z_mm = max(0.0, room_model.height_mm - layout.height)
+        elif mount_mode == "free_height" and mounting_height_mm is not None:
+            origin_z_mm = float(mounting_height_mm)
+        else:
+            origin_z_mm = max(
+                0.0,
+                room_model.height_mm
+                - layout.height
+                - DEFAULT_WALL_CABINET_CEILING_CLEARANCE_MM,
+            )
     return {
         "mode": "wall",
         "host_wall": "north",

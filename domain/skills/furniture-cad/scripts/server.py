@@ -101,6 +101,15 @@ class CabinetRequest(BaseModel):
     width: float = Field(..., gt=0, description="总宽 mm (X)")
     depth: float = Field(..., gt=0, description="总深 mm (Y)")
     height: float = Field(..., gt=0, description="总高 mm (Z)")
+    mounting_height: float | None = Field(
+        default=None,
+        gt=0,
+        description="吊柜底边离地高度（挂高）mm；地柜无需提供",
+    )
+    mount_mode: Literal["free_height", "flush_ceiling"] | None = Field(
+        default=None,
+        description="吊柜挂装方式：free_height（自由挂高）/ flush_ceiling（贴顶到顶）",
+    )
     board_thickness: float | None = Field(default=None, gt=0, description="柜体板厚 mm")
     back_thickness: float | None = Field(default=None, gt=0, description="背板厚 mm")
     door_thickness: float | None = Field(default=None, gt=0, description="门板厚 mm")

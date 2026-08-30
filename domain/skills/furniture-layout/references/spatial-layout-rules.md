@@ -15,7 +15,7 @@
 
 - 房间：`4200×3600×2800 mm` 的矩形“默认卧室（系统假设）”，门窗和障碍物为空；
 - 位置：沿北墙居中，落地柜标高为 `0`；
-- 吊柜：沿北墙居中，默认保留 `450 mm` 顶部净距；空间不足时降至不低于地面。
+- 吊柜：沿北墙居中；若已确认意图提供了挂装方式，则按方式定位——`flush_ceiling` 贴顶（`origin_z_mm = 房高 − 柜高`），`free_height` 用挂高 `mounting_height_mm` 作 `origin_z_mm`；否则默认保留 `450 mm` 顶部净距；空间不足时降至不低于地面。
 
 只提供 `layout.room` 或 `layout.placement` 时，仅补齐缺失项。`layout_context.room_source` 与 `layout_context.placement_source` 必须说明数据来自用户还是系统默认；默认场景不是现场实测数据，用户可在确认前修改。
 
@@ -65,7 +65,7 @@
 ## 类别指导
 
 - 地柜：本能力只表达其成品外包络；踢脚和功能数量留给板件阶段。
-- 吊柜：房间定位应提供 `origin_z_mm`，若为 0 则警告；挂墙结构和安装策略不进入 `CabinetLayout`。
+- 吊柜：已确认意图的挂装方式决定 `origin_z_mm`（贴顶或自由挂高）；独立请求可显式提供 `origin_z_mm`，若为 0 则警告；挂墙结构和安装策略不进入 `CabinetLayout`。
 
 ## 边界
 

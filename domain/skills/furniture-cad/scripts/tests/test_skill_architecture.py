@@ -1,12 +1,21 @@
 from __future__ import annotations
 
 import re
+import sys
 import unittest
 from pathlib import Path
+
+import yaml
 
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[5]
 SKILLS_ROOT = WORKSPACE_ROOT / "domain" / "skills"
+
+INTENT_SCRIPTS_ROOT = SKILLS_ROOT / "furniture-design-intent" / "scripts"
+if str(INTENT_SCRIPTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(INTENT_SCRIPTS_ROOT))
+
+from furniture_design_intent.design_intent import SUPPORTED_TYPES
 
 STAGE_SKILLS = {
     "design_intent": "furniture-design-intent",
@@ -187,6 +196,28 @@ class SkillArchitectureTests(unittest.TestCase):
                 / "references"
                 / "cabinet_topologies"
             ).exists()
+        )
+
+    def test_intent_catalog_executable_families_match_runtime_supported_types(
+        self,
+    ) -> None:
+        catalog_path = (
+            SKILLS_ROOT
+            / "furniture-design-intent"
+            / "references"
+            / "intake"
+            / "catalog.yaml"
+        )
+        catalog = yaml.safe_load(catalog_path.read_text(encoding="utf-8")) or {}
+        executable_families = {
+            name
+            for name, family in catalog.get("families", {}).items()
+            if family.get("executable") is True
+        }
+        self.assertEqual(
+            executable_families,
+            set(SUPPORTED_TYPES),
+            "catalog.yaml `executable: true` families must match SUPPORTED_TYPES",
         )
 
     def test_each_stage_skill_owns_its_runtime_package(self) -> None:

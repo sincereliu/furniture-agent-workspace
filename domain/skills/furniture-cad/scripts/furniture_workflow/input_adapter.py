@@ -23,6 +23,9 @@ PROTOCOL_FIELDS = frozenset(
         "depth",
         "height",
         "overall_size",
+        "mounting_height",
+        "mounting_height_mm",
+        "mount_mode",
         "purpose",
         "layout",
         "appearance",
@@ -48,6 +51,9 @@ def intent_from_spec(spec: Mapping[str, Any]) -> DesignIntent:
     size = data.get("overall_size", {})
     if not isinstance(size, Mapping):
         raise ValueError("overall_size must be an object")
+    mount_mode = data.get("mount_mode")
+    if mount_mode is not None:
+        mount_mode = str(mount_mode).strip().lower()
     return DesignIntent.from_dict(
         {
             "furniture_type": furniture_type,
@@ -56,6 +62,10 @@ def intent_from_spec(spec: Mapping[str, Any]) -> DesignIntent:
                 "depth_mm": size.get("depth_mm", data.get("depth")),
                 "height_mm": size.get("height_mm", data.get("height")),
             },
+            "mount_mode": mount_mode,
+            "mounting_height_mm": data.get(
+                "mounting_height_mm", data.get("mounting_height")
+            ),
         }
     )
 

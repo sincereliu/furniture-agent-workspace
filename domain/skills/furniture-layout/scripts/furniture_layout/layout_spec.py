@@ -24,6 +24,8 @@ class LayoutSpec:
     height: float
     shelf_count: int
     door_count: int
+    mount_mode: str | None = None
+    mounting_height_mm: float | None = None
 
     @classmethod
     def from_intent(
@@ -59,6 +61,8 @@ class LayoutSpec:
             height=float(dimensions[2]),
             shelf_count=shelf_count,
             door_count=door_count,
+            mount_mode=intent.mount_mode,
+            mounting_height_mm=intent.mounting_height_mm,
         )
 
 
