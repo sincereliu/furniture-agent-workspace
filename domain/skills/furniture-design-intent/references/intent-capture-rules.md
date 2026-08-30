@@ -6,7 +6,8 @@
 
 - `furniture_type`：由 LLM 根据完整语义归一化为 [家具目录](intake/catalog.yaml) 中 `executable: true` 的规范类别。目录里的语言示例不穷举，不要求字面命中；运行时只验证归一化结果，不实现自然语言别名匹配。
 - `overall_size.width_mm/depth_mm/height_mm`：成品外包络；草稿未知值可为 `null`，确认前必须全部为正数。
-- `mounting_height_mm`：吊柜**底边离地高度**（挂高）。草稿可为 `null`，吊柜确认前必须给正数；地柜落地、无此义。客户说“挂多高 / 离地多少 / 底边距地面多少”时按柜体底面到地面归一到这一值，测量基准是柜底，不是柜顶、也不是台面。
+- `mount_mode`：吊柜**挂装方式**，二选一——`free_height`（自由挂高，需挂高）或 `flush_ceiling`（贴顶/到顶，无需数字）。客户说“做到顶 / 贴顶 / 到顶”归一到 `flush_ceiling`；说“挂多高 / 离地多少 / 底边距地面多少”归一到 `free_height`。
+- `mounting_height_mm`：仅 `free_height` 时有效，吊柜**底边离地高度**；测量基准是柜底，不是柜顶、也不是台面。地柜与 `flush_ceiling` 无需此值。
 - 坐标口径为 X 左→右、Y 后→前、Z 向上；未标注的三个尺寸按 `W×D×H` 解释并向客户展示。
 
 ## 不在本阶段捕获

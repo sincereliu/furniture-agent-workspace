@@ -65,6 +65,7 @@ def plan_layout_stage(
         resolved_placement = _default_placement(
             layout,
             resolved_room,
+            mount_mode=spec.mount_mode,
             mounting_height_mm=spec.mounting_height_mm,
         )
         placement_source = "default_north_wall_centered"
@@ -101,12 +102,15 @@ def _default_placement(
     layout: CabinetLayout,
     room: Mapping[str, Any],
     *,
+    mount_mode: str | None = None,
     mounting_height_mm: float | None = None,
 ) -> dict[str, Any]:
     room_model = RoomModel.from_dict(room)
     origin_z_mm = 0.0
     if layout.furniture_type == "wall_cabinet":
-        if mounting_height_mm is not None:
+        if mount_mode == "flush_ceiling":
+            origin_z_mm = max(0.0, room_model.height_mm - layout.height)
+        elif mount_mode == "free_height" and mounting_height_mm is not None:
             origin_z_mm = float(mounting_height_mm)
         else:
             origin_z_mm = max(

@@ -408,6 +408,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
                     DesignIntent(
                         furniture_type="wall_cabinet",
                         overall_size=OverallSize(900, 350, 900),
+                        mount_mode="free_height",
                         mounting_height_mm=2000,
                     ),
                 )
@@ -692,6 +693,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             {
                 "furniture_type",
                 "overall_size",
+                "mount_mode",
                 "mounting_height_mm",
                 "confirmed",
                 "schema_version",
@@ -715,22 +717,38 @@ class FurnitureOrchestratorTests(unittest.TestCase):
                 }
             )
 
-    def test_wall_cabinet_intent_requires_mounting_height_before_confirmation(
+    def test_wall_cabinet_intent_requires_mount_mode_before_confirmation(
         self,
     ) -> None:
-        with self.assertRaisesRegex(ValueError, "mounting_height_mm"):
+        with self.assertRaisesRegex(ValueError, "mount_mode"):
             DesignIntent(
                 furniture_type="wall_cabinet",
                 overall_size=OverallSize(800, 350, 900),
             ).confirm()
 
-        confirmed = DesignIntent(
+        with self.assertRaisesRegex(ValueError, "mounting_height_mm"):
+            DesignIntent(
+                furniture_type="wall_cabinet",
+                overall_size=OverallSize(800, 350, 900),
+                mount_mode="free_height",
+            ).confirm()
+
+        free = DesignIntent(
             furniture_type="wall_cabinet",
             overall_size=OverallSize(800, 350, 900),
+            mount_mode="free_height",
             mounting_height_mm=1800,
         ).confirm()
-        self.assertTrue(confirmed.confirmed)
-        self.assertEqual(confirmed.to_dict()["mounting_height_mm"], 1800)
+        self.assertTrue(free.confirmed)
+        self.assertEqual(free.to_dict()["mounting_height_mm"], 1800)
+
+        flush = DesignIntent(
+            furniture_type="wall_cabinet",
+            overall_size=OverallSize(800, 350, 900),
+            mount_mode="flush_ceiling",
+        ).confirm()
+        self.assertTrue(flush.confirmed)
+        self.assertIsNone(flush.mounting_height_mm)
 
         floor = DesignIntent(
             furniture_type="floor_cabinet",

@@ -201,6 +201,7 @@ class RoomLayoutPreviewTests(unittest.TestCase):
                 "width": 800,
                 "depth": 350,
                 "height": 900,
+                "mount_mode": "free_height",
                 "mounting_height": 1800,
             },
         )
@@ -213,6 +214,25 @@ class RoomLayoutPreviewTests(unittest.TestCase):
         self.assertEqual(
             output["room_placement"]["clearances_mm"]["floor"],
             1800,
+        )
+
+    def test_wall_cabinet_flush_ceiling_placement_uses_room_height(self) -> None:
+        _, output, report = run_independent_layout(
+            "到顶吊柜",
+            {
+                "type": "wall_cabinet",
+                "width": 800,
+                "depth": 350,
+                "height": 900,
+                "mount_mode": "flush_ceiling",
+            },
+        )
+
+        self.assertTrue(report.passed)
+        # 默认卧室层高 2800，贴顶 → 底边 = 2800 - 900 = 1900
+        self.assertEqual(
+            output["room_placement"]["placement"]["origin_z_mm"],
+            1900,
         )
 
     def test_independent_layout_emits_room_position_footprint_and_svg(self) -> None:
