@@ -187,7 +187,7 @@ class ApiEntrypointTests(unittest.TestCase):
                 {
                     "back_insert_cam",
                     "back_insert_rod",
-                    "back_insert_pre_nut",
+                    "back_insert_nut",
                 },
                 0,
             ),

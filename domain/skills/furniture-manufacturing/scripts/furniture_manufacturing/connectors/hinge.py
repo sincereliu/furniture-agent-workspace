@@ -179,7 +179,7 @@ class HingeConnector(Connector):
         catalog: Dict[str, Any],
         opts: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """返回唯一铰链条目；歧义时抛错，不按 overlay/angle 静默筛选。"""
+        """返回唯一铰链条目；歧义时抛错，不按固定规格静默筛选。"""
         entries = list(catalog.items())
         if not entries:
             raise ValueError("hinge catalog is empty")

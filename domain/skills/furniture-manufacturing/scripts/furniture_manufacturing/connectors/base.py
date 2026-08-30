@@ -16,6 +16,20 @@ def _opposite(axis: str) -> str:
     return f"{'+' if axis[0] == '-' else '-'}{axis[1]}"
 
 
+def cam_offset_from(rod_spec: Mapping[str, Any], cam_spec: Mapping[str, Any]) -> float:
+    """三合一轮孔圆心到连接杆端面的距离 = 杆插入深度 + 圆心到杆头端的固定距离。"""
+    return float(rod_spec.get("insertion_depth_mm", 33)) + float(
+        cam_spec.get("cam_center_to_rod_head_mm", 0.5)
+    )
+
+
+def rod_length_from(rod_spec: Mapping[str, Any], nut_spec: Mapping[str, Any]) -> float:
+    """连接杆总长 = 插入板端深度 + 预埋螺母深度。"""
+    return float(rod_spec.get("insertion_depth_mm", 33)) + float(
+        nut_spec.get("depth_mm", 11)
+    )
+
+
 @dataclass
 class HoleSpec:
     hole_type: str = ""

@@ -9,7 +9,12 @@ from __future__ import annotations
 from math import ceil
 from typing import Any, Dict, List, Mapping
 
-from furniture_manufacturing.connectors.base import Connector, HoleSpec
+from furniture_manufacturing.connectors.base import (
+    Connector,
+    HoleSpec,
+    cam_offset_from,
+    rod_length_from,
+)
 from furniture_manufacturing.manufacturing_models import (
     HardwareRecord,
     MachiningOperation,
@@ -31,7 +36,7 @@ class BackMountConnector(Connector):
     hole_legend = {
         "back_insert_cam": {"color": "#8E44AD", "label": "内嵌背板偏心轮孔", "glb_group": "内嵌背板偏心轮孔"},
         "back_insert_rod": {"color": "#9B59B6", "label": "内嵌背板连接杆孔", "glb_group": "内嵌背板连接杆孔"},
-        "back_insert_pre_nut": {"color": "#6C3483", "label": "内嵌背板预埋螺母孔", "glb_group": "内嵌背板预埋螺母孔"},
+        "back_insert_nut": {"color": "#6C3483", "label": "内嵌背板预埋螺母孔", "glb_group": "内嵌背板预埋螺母孔"},
     }
 
     def match(self, panels: List[PanelRecord]) -> Dict[str, Any]:
@@ -74,14 +79,15 @@ class BackMountConnector(Connector):
         quantity = self._hole_count(holes, "back_insert_cam")
         if quantity <= 0:
             return []
-        spec = self.catalog.get("three_in_one", {}).get("标准", {})
+        spec = self.catalog.get("three_in_one", {}).get("standard", {})
         opts = (options or {}).get(self.catalog_entry, {})
         opts = dict(opts) if isinstance(opts, Mapping) else {}
         brand = self.resolve_brand(spec.get("brands", []), opts.get("brand"))
+        rod_length = rod_length_from(spec.get("rod", {}), spec.get("nut", {}))
         return [
             HardwareRecord(
                 name="三合一连接件（内嵌背板）",
-                spec="偏心轮φ12+预埋螺母φ10×11+连接杆φ8×33",
+                spec=f"偏心轮φ12+预埋螺母φ10×11+连接杆φ8×{rod_length:.0f}",
                 quantity=quantity,
                 unit="套",
                 brand=brand.get("name", "默认"),
@@ -91,7 +97,7 @@ class BackMountConnector(Connector):
                     {"hole_type": "back_insert_cam", "quantity": quantity},
                     {"hole_type": "back_insert_rod", "quantity": quantity},
                     {
-                        "hole_type": "back_insert_pre_nut",
+                        "hole_type": "back_insert_nut",
                         "quantity": quantity,
                     },
                 ],
@@ -116,7 +122,7 @@ class BackMountConnector(Connector):
         contract = {
             "insert": (
                 "三合一连接件（内嵌背板）",
-                ("back_insert_cam", "back_insert_rod", "back_insert_pre_nut"),
+                ("back_insert_cam", "back_insert_rod", "back_insert_nut"),
             ),
         }.get(mode)
         if contract is None:
@@ -183,15 +189,13 @@ class BackMountConnector(Connector):
         rules = self.rules.get("back_mount_drilling", {}).get("insert", {})
         first = float(rules.get("first_hole_mm", 64))
         max_spacing = float(rules.get("max_spacing_mm", 400))
-        three_in_one = self.catalog.get("three_in_one", {}).get("标准", {})
-        wheel = three_in_one.get("eccentric_wheel", {})
-        rod = three_in_one.get("connecting_rod", {})
-        nut = three_in_one.get("pre_embedded_nut", {})
+        three_in_one = self.catalog.get("three_in_one", {}).get("standard", {})
+        wheel = three_in_one.get("cam", {})
+        rod = three_in_one.get("rod", {})
+        nut = three_in_one.get("nut", {})
         cam_diameter = float(wheel.get("diameter_mm", 12))
         cam_depth = float(wheel.get("hole_depth_mm", 13.5))
-        cam_offset = float(
-            wheel.get("center_offset_from_edge_mm", 33.5)
-        )
+        cam_offset = cam_offset_from(rod, wheel)
         rod_diameter = float(rod.get("diameter_mm", 8))
         rod_depth = float(rod.get("insertion_depth_mm", 33))
         nut_diameter = float(nut.get("diameter_mm", 10))
@@ -250,7 +254,7 @@ class BackMountConnector(Connector):
             result.append(
                 self._hole(
                     target,
-                    "back_insert_pre_nut",
+                    "back_insert_nut",
                     point[0] - target.pos_x,
                     point[1] - target.pos_y,
                     point[2] - target.pos_z,

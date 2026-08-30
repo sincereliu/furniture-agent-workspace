@@ -165,7 +165,7 @@ class BackMountModeTests(unittest.TestCase):
         # insert 有三合一五金与成对孔；cover/groove 的螺钉为组装现场工艺，无五金无孔
         insert_contract = (
             "三合一连接件（内嵌背板）",
-            ("back_insert_cam", "back_insert_rod", "back_insert_pre_nut"),
+            ("back_insert_cam", "back_insert_rod", "back_insert_nut"),
         )
         screw_names = {"沉头木螺钉（外盖背板）", "沉头木螺钉（背拉条）"}
         screw_hole_types = {

@@ -136,13 +136,13 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
 
         top_holes = connector.generate_holes(top)
         rod_holes = [
-            hole for hole in top_holes if hole.hole_type == "system_32_male"
+            hole for hole in top_holes if hole.hole_type == "three_in_one_rod"
         ]
         cam_holes = [
-            hole for hole in top_holes if hole.hole_type == "system_32_female"
+            hole for hole in top_holes if hole.hole_type == "three_in_one_cam"
         ]
         self.assertEqual({hole.y_local for hole in rod_holes}, {64.0, 536.0})
-        # 偏心轮 y 与连接杆同排；x 为端面 + center_offset_from_edge(33.5)
+        # 偏心轮 y 与连接杆同排；x 为端面 + cam_offset（= 插入深度 + 圆心到杆头端距离 = 33.5）
         self.assertEqual({hole.y_local for hole in cam_holes}, {64.0, 536.0})
         self.assertEqual({hole.x_local for hole in cam_holes}, {33.5, 764 - 33.5})
         self.assertTrue(all(not hole.is_face_hole for hole in rod_holes))
@@ -169,7 +169,7 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
         # 同一深度排(y=64)的两个连接杆孔（左端 x=0 / 右端 x=764）id 必须不同
         male_front = [
             op for op in ops
-            if "system_32_male" in op.id and "_64_" in op.id
+            if "three_in_one_rod" in op.id and "_64_" in op.id
         ]
         self.assertEqual(len(male_front), 2)
         self.assertNotEqual(male_front[0].id, male_front[1].id)
@@ -192,7 +192,7 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
             dropped = False
             kept = []
             for hole in holes:
-                if not dropped and hole.hole_type == "system_32_male":
+                if not dropped and hole.hole_type == "three_in_one_rod":
                     dropped = True
                     continue
                 kept.append(hole)
@@ -490,20 +490,20 @@ class DrawerZoneTests(unittest.TestCase):
         drawer_holes = [h for h in holes if h.panel_label in drawer_labels]
         types = [h.hole_type for h in drawer_holes]
         # 1:1:1 配对（每连接：1 杆 + 1 轮 + 1 螺母）
-        self.assertGreater(types.count("system_32_male"), 0)
+        self.assertGreater(types.count("three_in_one_rod"), 0)
         self.assertEqual(
-            types.count("system_32_male"),
-            types.count("system_32_female"),
+            types.count("three_in_one_rod"),
+            types.count("three_in_one_cam"),
         )
         self.assertEqual(
-            types.count("system_32_female"),
-            types.count("system_32_pre_nut"),
+            types.count("three_in_one_cam"),
+            types.count("three_in_one_nut"),
         )
         # 底板轮孔在底面（cam_face=-z → z_local=0，钻入方向 +z）
         bottom_cams = [
             h for h in holes
             if h.panel_label == "drawer_bottom_z68"
-            and h.hole_type == "system_32_female"
+            and h.hole_type == "three_in_one_cam"
         ]
         self.assertEqual(len(bottom_cams), 8)  # 4 连接 × 2 排
         self.assertTrue(all(abs(h.z_local) < 1e-6 for h in bottom_cams))
@@ -512,7 +512,7 @@ class DrawerZoneTests(unittest.TestCase):
         trinity = [h for h in manufacturing.hardware if h.name == "三合一连接件"]
         self.assertEqual(
             trinity[0].quantity,
-            sum(1 for h in holes if h.hole_type == "system_32_female"),
+            sum(1 for h in holes if h.hole_type == "three_in_one_cam"),
         )
 
     def test_no_drawer_keeps_doors_and_shelves(self) -> None:
@@ -541,7 +541,7 @@ class SixSideDrillPatchTests(unittest.TestCase):
                     },
                     "holes": [
                         {
-                            "hole_type": "system_32_female",
+                            "hole_type": "three_in_one_cam",
                             "local_x": 100,
                             "local_y": 64,
                             "local_z": 18,
@@ -551,7 +551,7 @@ class SixSideDrillPatchTests(unittest.TestCase):
                             "is_face_hole": True,
                         },
                         {
-                            "hole_type": "system_32_male",
+                            "hole_type": "three_in_one_rod",
                             "x": 98,
                             "y": 97,
                             "z": 39,

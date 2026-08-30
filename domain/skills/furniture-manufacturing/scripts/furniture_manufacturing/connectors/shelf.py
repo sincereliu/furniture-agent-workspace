@@ -16,7 +16,7 @@ from furniture_manufacturing.manufacturing_models import HardwareRecord, Machini
 class ShelfConnector(Connector):
     name = "层板托连接件"
     hole_type_for_json = "shelf_connector"
-    catalog_entry = "shelf_connectors"
+    catalog_entry = "two_in_one"
     rules_section = None
     hole_legend = {
         "shelf_connector": {"color": "#00A86B", "label": "层板托孔", "glb_group": "层板孔位"},
@@ -124,7 +124,7 @@ class ShelfConnector(Connector):
     ) -> List[HardwareRecord]:
         opts = (options or {}).get(self.catalog_entry, {})
         opts = dict(opts) if isinstance(opts, Mapping) else {}
-        entry = self.catalog.get(self.catalog_entry, {}).get("二合一", {})
+        entry = self.catalog.get(self.catalog_entry, {}).get("standard", {})
         brand = self.resolve_brand(entry.get("brands", []), opts.get("brand"))
         shelves = [p for p in panels if p.panel_type == "movable_shelf"]
         total = sum(len(self._shelf_positions(p.drill_length)) * 2

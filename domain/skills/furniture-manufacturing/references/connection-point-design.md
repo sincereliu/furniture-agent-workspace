@@ -7,7 +7,7 @@
 三合一（及背板 insert）的杆孔 / 轮孔配对目前是**几何隐式约定**，不是结构引用：
 
 - 一个连接点 = 1 杆孔（端面）+ 1 轮孔（cam 面）+ 配合板 1 预埋螺母孔；
-- 配对靠"同 y（深度排）、同 z（高度）、轮孔 x = 端面 ± `center_offset_from_edge_mm`"在几何上对齐；
+- 配对靠"同 y（深度排）、同 z（高度）、轮孔 x = 端面 ± `cam_offset`（= `insertion_depth_mm` + `cam_center_to_rod_head_mm`）"在几何上对齐；
 - `HoleSpec` 之间没有 `connection_id` 之类的引用，孔位列表里没有"连接点"实体；
 - 孔位永远是**整体重生成**（`generate_holes()` / `generate_holes_for_panels()` 从板件+连接拓扑从零计算），不存在"删单个孔"的增量编辑入口。
 
@@ -17,14 +17,14 @@
 |------|----------------|--------------|
 | 删主柜体轮孔 | ❌ 不删，杆孔成孤儿 | 拦截：`TRINITY_HARDWARE_COUNT_MISMATCH`（偏心轮孔数 ≠ BOM 数） |
 | 删主柜体杆孔 | ❌ 不删，轮孔成孤儿 | **不拦截**（无"杆孔数 == 轮孔数"检查，静默） |
-| 删背板 insert 任一类孔 | ❌ 不删 | 拦截：`BACK_MOUNT_HOLE_COUNT_MISMATCH`（cam/rod/pre_nut 三类数量必须相等） |
+| 删背板 insert 任一类孔 | ❌ 不删 | 拦截：`BACK_MOUNT_HOLE_COUNT_MISMATCH`（cam/rod/nut 三类数量必须相等） |
 
 依据：`validation.py` L332-340（主柜体只校验轮孔数）、L354-388（背板 1:1:1 数量约束）；
-BOM 数量只认轮孔（`TrinityConnector.boms()` quantity = `system_32_female` 计数，孔即真源）。
+BOM 数量只认轮孔（`TrinityConnector.boms()` quantity = `three_in_one_cam` 计数，孔即真源）。
 
 ## 需求
 
-1. **连接点作为整体增删**：删除一个三合一连接点 → 它的杆孔 + 轮孔 + 配合板螺母孔一起消失；增加同理。背板连接点（cam + rod + pre_nut）同样按连接点整体增删。
+1. **连接点作为整体增删**：删除一个三合一连接点 → 它的杆孔 + 轮孔 + 配合板螺母孔一起消失；增加同理。背板连接点（cam + rod + nut）同样按连接点整体增删。
 2. **校验按连接点对齐**：主柜体也校验 `杆孔数 == 轮孔数 == 连接点数`（或更强：按连接点标识逐点核对配对几何），消除"删杆孔静默孤儿"。
 3. **配对显式化**：`HoleSpec` 增加连接点标识（如 `connection_id` / group 字段），或引入连接点级实体；连接拓扑（`PanelJoint` 的 male/female 配对）可作来源。
 4. **顺带修正**：`machining_operations` 的 id 为 `{hole_type}_{panel}_{z:.0f}_{y:.0f}`，不含端面区分，横板左右两端同 (z,y) 的杆孔 id 重复——按连接点索引时该 id 方案必须含端面/方向区分。

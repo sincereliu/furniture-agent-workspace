@@ -10,6 +10,13 @@
 - 孔位用 `HoleSpec` 描述；`is_face_hole=True` 表示板面钻孔（导出 TypeNo=1 垂直孔），`False` 表示板边钻孔（TypeNo=2 水平孔）。
 - 旧数据缺省 `door_hinge_side` 时，`HingeConnector` 按门板位置回退。
 
+## 五金命名约定
+
+- 五金按「套」组织：三合一（偏心轮+连接杆+预埋螺母）、二合一（偏心轮+连接杆，固定塑料件并入连接杆）、隔板钉（单钉）。
+- 目录键（`hardware_catalog.yaml`）全英文：顶层按套 `three_in_one` / `two_in_one` / `shelf_pin`，套内规格组 `standard`，零件键 `cam` / `rod` / `nut` / `pin` / `pin_hole`。
+- 孔类型（`hole_type`）按 `<套名>_<零件>`：`three_in_one_cam` / `three_in_one_rod` / `three_in_one_nut`、`back_insert_cam` / `back_insert_rod` / `back_insert_nut`；进入 `drilled-holes.json` / GLB 标签 / 校验计数。
+- 派生量（三合一轮孔圆心到杆端面、连接杆总长）由代码计算（`base.cam_offset_from` / `base.rod_length_from`），不落库，避免与真源参数漂移。
+
 ## 生成与产物
 
 - 单板规则实现 `generate_holes()`；需要配合板时覆盖 `generate_holes_for_panels()` 生成成对孔。

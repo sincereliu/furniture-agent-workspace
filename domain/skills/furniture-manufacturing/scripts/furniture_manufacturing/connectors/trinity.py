@@ -9,7 +9,13 @@
 
 from typing import Any, Dict, List, Mapping, Set
 
-from furniture_manufacturing.connectors.base import Connector, HoleSpec, _opposite
+from furniture_manufacturing.connectors.base import (
+    Connector,
+    HoleSpec,
+    _opposite,
+    cam_offset_from,
+    rod_length_from,
+)
 from furniture_manufacturing.manufacturing_models import HardwareRecord, MachiningOperation, PanelRecord
 
 
@@ -128,7 +134,7 @@ class TrinityConnector(Connector):
     预埋螺母在“面接触方”板件的板面上，朝柜内方向钻入。
 
     深度方向：前后双排，分别距前/后边 first_hole_mm（默认 64mm）。
-    偏心轮：沿连接杆方向(x)距端面 center_offset_from_edge（默认 33.5mm），深度方向与连接杆同排。
+    偏心轮：沿连接杆方向(x)距端面 cam_offset（= 杆插入深度 + 圆心到杆头端固定距离 = 33.5mm），深度方向与连接杆同排。
     """
 
     name = "三合一连接件"
@@ -136,9 +142,9 @@ class TrinityConnector(Connector):
     catalog_entry = "three_in_one"
     rules_section = "system_32_drilling"
     hole_legend = {
-        "system_32_female": {"color": "#FF6B35", "label": "三合一偏心轮孔 12mm", "glb_group": "偏心轮孔"},
-        "system_32_male": {"color": "#FF4500", "label": "三合一连接杆端孔 8mm", "glb_group": "连接杆孔"},
-        "system_32_pre_nut": {"color": "#D95F02", "label": "三合一预埋螺母孔 10mm", "glb_group": "预埋螺母孔"},
+        "three_in_one_cam": {"color": "#FF6B35", "label": "三合一偏心轮孔 12mm", "glb_group": "偏心轮孔"},
+        "three_in_one_rod": {"color": "#FF4500", "label": "三合一连接杆端孔 8mm", "glb_group": "连接杆孔"},
+        "three_in_one_nut": {"color": "#D95F02", "label": "三合一预埋螺母孔 10mm", "glb_group": "预埋螺母孔"},
     }
 
     def match(self, panels: List[PanelRecord]) -> Dict[str, Any]:
@@ -171,13 +177,13 @@ class TrinityConnector(Connector):
         matched = self.match([panel])
         rules = matched.get("rules", {})
         spec = matched.get("spec", {})
-        wheel = spec.get("eccentric_wheel", {})
-        rod = spec.get("connecting_rod", {})
-        nut = spec.get("pre_embedded_nut", {})
+        wheel = spec.get("cam", {})
+        rod = spec.get("rod", {})
+        nut = spec.get("nut", {})
         z_positions = self._system_32_positions(panel, rules)
         nut_first = float(rules.get("first_hole_mm", 64))
         nut_last  = float(rules.get("last_hole_mm", 64))
-        cam_offset = float(wheel.get("center_offset_from_edge_mm", 33.5))
+        cam_offset = cam_offset_from(rod, wheel)
 
         if _trinity_female(panel):
             result.extend(self._female_holes(
@@ -221,7 +227,7 @@ class TrinityConnector(Connector):
                     x_local, y_local, z_local
                 )
                 result.append(HoleSpec(
-                    hole_type="system_32_pre_nut", panel_label=panel.label,
+                    hole_type="three_in_one_nut", panel_label=panel.label,
                     x_global=x_global,
                     y_global=y_global,
                     z_global=z_global,
@@ -248,7 +254,7 @@ class TrinityConnector(Connector):
         w_diam = float(wheel.get("diameter_mm", 12))
         w_depth = float(wheel.get("hole_depth_mm", 13.5))
         # 连接杆轴线高度 = cam_face ± 偏心距(五金参数)，与板厚无关。
-        rod_axis_offset = float(wheel.get("rod_axis_offset_mm", 9))
+        rod_axis_offset = float(wheel.get("rod_axis_to_cam_face_mm", 9))
         cam = panel.cam_face or ""
 
         # cam_face 是偏心轮的可操作面：孔应落在该面所在的局部坐标。
@@ -286,7 +292,7 @@ class TrinityConnector(Connector):
             for y_offset in rod_y_offsets:
                 rod_x, rod_y, rod_z = panel.to_global(x_local, y_offset, rod_zl)
                 result.append(HoleSpec(
-                    hole_type="system_32_male", panel_label=panel.label,
+                    hole_type="three_in_one_rod", panel_label=panel.label,
                     x_global=rod_x,
                     y_global=rod_y,
                     z_global=rod_z,
@@ -297,7 +303,7 @@ class TrinityConnector(Connector):
             for y_offset in rod_y_offsets:   # 偏心轮 y 与连接杆 y 一致
                 cam_x, cam_y, cam_z = panel.to_global(cam_x_local, y_offset, cam_zl)
                 result.append(HoleSpec(
-                    hole_type="system_32_female", panel_label=panel.label,
+                    hole_type="three_in_one_cam", panel_label=panel.label,
                     x_global=cam_x,
                     y_global=cam_y,
                     z_global=cam_z,
@@ -324,14 +330,14 @@ class TrinityConnector(Connector):
         """
         matched = self.match(panels)
         spec = matched.get("spec", {})
-        wheel = spec.get("eccentric_wheel", {})
-        rod = spec.get("connecting_rod", {})
-        nut = spec.get("pre_embedded_nut", {})
+        wheel = spec.get("cam", {})
+        rod = spec.get("rod", {})
+        nut = spec.get("nut", {})
         rules = matched.get("rules", {})
         row_first = float(rules.get("first_hole_mm", 64))
         row_last = float(rules.get("last_hole_mm", 64))
-        cam_offset = float(wheel.get("center_offset_from_edge_mm", 33.5))
-        rod_axis_offset = float(wheel.get("rod_axis_offset_mm", 9))
+        cam_offset = cam_offset_from(rod, wheel)
+        rod_axis_offset = float(wheel.get("rod_axis_to_cam_face_mm", 9))
 
         by_label = {panel.label: panel for panel in panels}
         result: List[HoleSpec] = []
@@ -423,7 +429,7 @@ class TrinityConnector(Connector):
                 local["x"], local["y"], local["z"]
             )
             result.append(HoleSpec(
-                hole_type="system_32_pre_nut", panel_label=panel.label,
+                hole_type="three_in_one_nut", panel_label=panel.label,
                 x_global=x_global, y_global=y_global, z_global=z_global,
                 x_local=local["x"], y_local=local["y"], z_local=local["z"],
                 diameter=n_diam, depth=n_depth, direction=nut_dir,
@@ -458,7 +464,7 @@ class TrinityConnector(Connector):
                 local["x"], local["y"], local["z"]
             )
             result.append(HoleSpec(
-                hole_type="system_32_male", panel_label=panel.label,
+                hole_type="three_in_one_rod", panel_label=panel.label,
                 x_global=x_global, y_global=y_global, z_global=z_global,
                 x_local=local["x"], y_local=local["y"], z_local=local["z"],
                 diameter=r_diam, depth=r_depth, direction=rod_dir,
@@ -494,7 +500,7 @@ class TrinityConnector(Connector):
                 local["x"], local["y"], local["z"]
             )
             result.append(HoleSpec(
-                hole_type="system_32_female", panel_label=panel.label,
+                hole_type="three_in_one_cam", panel_label=panel.label,
                 x_global=x_global, y_global=y_global, z_global=z_global,
                 x_local=local["x"], y_local=local["y"], z_local=local["z"],
                 diameter=w_diam, depth=w_depth, direction=cam_dir,
@@ -546,11 +552,12 @@ class TrinityConnector(Connector):
         opts = (options or {}).get(self.catalog_entry, {})
         opts = dict(opts) if isinstance(opts, Mapping) else {}
         brand = self.resolve_brand(spec.get("brands", []), opts.get("brand"))
+        rod_length = rod_length_from(spec.get("rod", {}), spec.get("nut", {}))
         holes = self.generate_holes_for_panels(panels)
-        quantity = sum(1 for h in holes if h.hole_type == "system_32_female")
+        quantity = sum(1 for h in holes if h.hole_type == "three_in_one_cam")
         return [HardwareRecord(
             name=self.name,
-            spec="偏心轮φ12+预埋螺母φ10×11+连接杆φ8×33",
+            spec=f"偏心轮φ12+预埋螺母φ10×11+连接杆φ8×{rod_length:.0f}",
             quantity=quantity,
             unit="套", brand=brand.get("name", "默认"), model=brand.get("model", "SJY-01"))]
 
@@ -569,14 +576,14 @@ class TrinityConnector(Connector):
         ]
         hardware_by_name = {item.name: item for item in hardware}
         trinity_hardware = hardware_by_name.get(self.name)
-        trinity_cam_count = hole_types.count("system_32_female")
+        trinity_cam_count = hole_types.count("three_in_one_cam")
         if trinity_hardware is not None and trinity_hardware.quantity != trinity_cam_count:
             report.add_error(
                 "TRINITY_HARDWARE_COUNT_MISMATCH",
                 f"三合一连接件数量 {trinity_hardware.quantity} 与偏心轮孔数 {trinity_cam_count} 不一致",
                 "hardware",
             )
-        trinity_rod_count = hole_types.count("system_32_male")
+        trinity_rod_count = hole_types.count("three_in_one_rod")
         if trinity_rod_count != trinity_cam_count:
             report.add_error(
                 "TRINITY_ROD_CAM_COUNT_MISMATCH",

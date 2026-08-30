@@ -4,44 +4,55 @@
 # 规格组决定工程参数（打孔），品牌决定 BOM 输出
 # ============================================================================
 
-# ── 三合一连接件 ────────────────────────────────────────
+# ── 三合一：一套 = 偏心轮 + 连接杆 + 预埋螺母 ────────────
 three_in_one:
-  标准:
+  standard:
     # 偏心轮（装在“边接触方”板件的板面 cam_face 上；具体板/面由连接拓扑决定）
-    eccentric_wheel:
-      diameter_mm: 12            # 偏心轮本体直径
-      hole_depth_mm: 13.5        # 沉孔深度
-      center_offset_from_edge_mm: 33.5   # 偏心轮圆心到连接杆端面(接触端面)的距离，沿连接杆方向(x)
-      rod_axis_offset_mm: 9      # 连接杆轴线到偏心轮安装面(cam_face)的距离；软件暂定，投产前确认
+    cam:
+      diameter_mm: 12                 # 偏心轮本体直径
+      hole_depth_mm: 13.5             # 沉孔深度
+      rod_axis_to_cam_face_mm: 9      # 偏心轮安装面到连接杆轴线的距离（五金固定参数；投产前确认）
+      cam_center_to_rod_head_mm: 0.5  # 偏心轮圆心到连接杆头端的固定距离（五金固定参数）
     # 连接杆（从“边接触方”板件的端面穿入，指向“面接触方”板件的预埋螺母）
-    connecting_rod:
-      diameter_mm: 8             # 连接杆直径
-      length_mm: 36              # 连接杆总长
-      insertion_depth_mm: 33     # 连接杆插入板端深度
+    rod:
+      diameter_mm: 8                  # 连接杆直径
+      insertion_depth_mm: 33          # 连接杆插入板端深度
     # 预埋螺母（装在“面接触方”板件的板面上）
-    pre_embedded_nut:
-      diameter_mm: 10            # 预埋螺母直径
-      depth_mm: 11               # 预埋孔深度
+    nut:
+      diameter_mm: 10                 # 预埋螺母直径
+      depth_mm: 11                    # 预埋孔深度
+    # 派生量（由代码计算，不落库）：
+    #   轮孔圆心到杆端面 = rod.insertion_depth_mm + cam.cam_center_to_rod_head_mm = 33.5
+    #   连接杆总长       = rod.insertion_depth_mm + nut.depth_mm              = 44
     brands:
       - name: 默认
         model: SJY-01
 
-# ── 活动层板连接件 ────────────────────────────────────────
-shelf_connectors:
-  二合一:
-    连接杆直径: 5mm
-    注塑件直径: 8mm
-    侧板孔: { diameter_mm: 10, depth_mm: 12 }
-    层板孔: { diameter_mm: 5, depth_mm: 10 }
+# ── 二合一：一套 = 偏心轮 + 连接杆（固定塑料件并入连接杆，不单列）──
+two_in_one:
+  standard:
+    cam:                              # 偏心轮
+      diameter_mm: 12                 # 偏心轮本体直径
+      hole_depth_mm: 13.5             # 沉孔深度
+      cam_center_to_edge_mm: 4.5      # 偏心轮圆心到端面的距离（五金固定参数）
+    rod:                              # 连接杆（特殊螺丝，打在侧板）
+      diameter_mm: 5                  # 连接杆直径
+      depth_mm: 10                    # 打孔深度
     note: 活动层板标准连接件
     brands:
       - name: 默认
         model: EYJ-01
 
-  隔板钉:
-    钉径: 3mm
-    钉长: 25mm
-    侧板孔: { diameter_mm: 3, depth_mm: 8 }
+# ── 隔板钉：一套 = 单钉 ──────────────────────────────────
+shelf_pin:
+  standard:
+    pin:                              # 钉
+      diameter_mm: 5                  # 钉直径
+      length_mm: 25                   # 钉长（待定，投产前确认）
+      # 层板架在钉上：层板底面 = 钉中心线 + 半径(diameter_mm/2 = 2.5mm)
+    pin_hole:                         # 侧板孔（装钉）
+      diameter_mm: 5
+      depth_mm: 9
     note: 轻载层板，安装简便
     brands:
       - name: 默认
