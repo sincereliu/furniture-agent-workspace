@@ -1,5 +1,9 @@
 version: 2
 
+# 分类轴 = 柜类家具的落位/安装方式：落地 → floor_cabinet，上墙 → wall_cabinet。
+# 与功能、外观、所在房间无关；桌、椅、床等非柜类家具不属于这两类，无法归类时产出
+# fallback 草稿（见 SKILL.md / references/intent-capture-rules.md）。
+
 families:
   floor_cabinet:
     executable: true
