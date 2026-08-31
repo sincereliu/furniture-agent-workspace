@@ -4,7 +4,7 @@
 
 ## 捕获内容
 
-- `furniture_type`：由 LLM 根据完整语义按**落位/安装方式**归一化为 [家具目录](intake/catalog.yaml) 中 `executable: true` 的规范类别——柜类家具中，落地的归 `floor_cabinet`、上墙的归 `wall_cabinet`；与功能、外观、所在房间无关。目录里的语言示例不穷举，不要求字面命中；运行时只验证归一化结果，不实现自然语言别名匹配。
+- `furniture_type`：由 LLM 根据完整语义按**落位/安装方式**归一化为 [家具目录](intake/catalog.yaml) 中 `executable: true` 的规范类别——柜类家具中，落地的归 `floor_cabinet`、上墙的归 `wall_cabinet`；与功能、外观、所在房间无关。归一化是语义判断，不要求字面命中；运行时只验证归一化结果是否属于可执行类别，不实现自然语言别名匹配。
 - `overall_size.width_mm/depth_mm/height_mm`：成品外包络；草稿未知值可为 `null`，确认前必须全部为正数。
 - `mount_mode`：吊柜**挂装方式**，二选一——`free_height`（自由挂高，需挂高）或 `flush_ceiling`（贴顶/到顶，无需数字）。客户说“做到顶 / 贴顶 / 到顶”归一到 `flush_ceiling`；说“挂多高 / 离地多少 / 底边距地面多少”归一到 `free_height`。
 - `mounting_height_mm`：仅 `free_height` 时有效，吊柜**底边离地高度**；测量基准是柜底，不是柜顶、也不是台面。地柜与 `flush_ceiling` 无需此值。
@@ -20,5 +20,5 @@
 
 ## 边界
 
-- 不要因为目录里缺少某个同义表达就直接判定为不匹配；无法可靠归一化时停在 fallback 草稿（确认与流水线门禁见 SKILL.md 工作流）。
+- 目录只列可执行类别，不列同义表达；无法可靠归一化时停在 fallback 草稿（确认与流水线门禁见 SKILL.md 工作流）。
 - 在外包络确认后停止；不计算布局、净空、板件、制造策略、特征树或 CAD。
