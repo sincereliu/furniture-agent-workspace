@@ -13,6 +13,10 @@ from .panel_rules import resolve_door_hinge_side
 
 VALID_BACK_MOUNTS = frozenset({"auto", "groove", "insert", "cover"})
 
+# 活动层板连接方式：二选一。默认候选为 two_in_one，但必须是显式+待确认的提案值，
+# 不得由代码静默补齐（见 furniture-panel-planning SKILL.md）。
+VALID_MOVABLE_SHELF_CONNECTORS = frozenset({"two_in_one", "shelf_pin"})
+
 # Every field is an LLM/user proposal decision. Runtime rejects omissions instead
 # of selecting a cabinet profile or filling construction defaults.
 PANEL_PARAMETER_FIELDS = frozenset(
@@ -24,6 +28,7 @@ PANEL_PARAMETER_FIELDS = frozenset(
         "back_rail_height", "drawer_count", "drawer_side_clearance",
         "drawer_layer_gap", "drawer_bottom_thickness", "drawer_back_thickness",
         "drawer_back_clearance", "shelf_count", "n_doors", "door_hinge_side",
+        "movable_shelf_connector",
     }
 )
 PANEL_SPEC_FIELDS = PANEL_PARAMETER_FIELDS | {"door_count"}
@@ -63,6 +68,7 @@ class FurnitureSpec:
     drawer_back_thickness: float
     drawer_back_clearance: float
     door_hinge_side: str | None
+    movable_shelf_connector: str
 
     def __post_init__(self) -> None:
         if self.furniture_type not in SUPPORTED_TYPES:
@@ -300,4 +306,9 @@ def _validate_objective_invariants(spec: FurnitureSpec) -> None:
     elif spec.door_hinge_side is not None:
         raise ValueError(
             "door_hinge_side only applies to a single door; use null otherwise"
+        )
+    if spec.movable_shelf_connector not in VALID_MOVABLE_SHELF_CONNECTORS:
+        raise ValueError(
+            "movable_shelf_connector must be one of: "
+            + ", ".join(sorted(VALID_MOVABLE_SHELF_CONNECTORS))
         )

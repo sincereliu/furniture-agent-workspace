@@ -1,5 +1,42 @@
 # 更新日志
 
+## 20260901.1 — 五金命名统一（part/hole 分层）+ 二合一/隔板钉拆分 + 活动层板选型
+
+将三套五金（三合一/二合一/隔板钉）与铰链的名称、参数和目录统一，并把「零件实物规格」与「打孔规格」分离为 `part`/`hole` 两层；活动层板连接方式（二合一 vs 隔板钉）改为显式选型。
+
+### 目录（hardware_catalog.yaml）
+
+- 顶层按套命名：`three_in_one` / `two_in_one` / `shelf_pin`；铰链 `hinges.*` 条目同样按 `part`/`hole` 分层。
+- 每个打孔件拆 `part`（实物 → BOM/采购，暂标「待定」）与 `hole`（打孔 → 钻孔）；定位类固定参数（`rod_axis_to_cam_face_mm`、`shelf_bottom_offset_mm`）留在零件顶层。
+- 参数直接存、不做代码派生：三合一轮孔边距 `cam.hole.edge_offset_mm=33.5`（原为 `insertion_depth+0.5` 派生）；`rod_axis_offset_mm` → `cam.rod_axis_to_cam_face_mm=9`；`pre_embedded_nut` → `nut`；删除 `base.cam_offset_from` / `base.rod_length_from`。
+- 二合一偏心轮 `cam.hole.edge_offset_mm=4.5`、`cam.rod_axis_to_cam_face_mm=9`；隔板钉 `pin.hole=5×9`、`pin.shelf_bottom_offset_mm=2.5`（层板底面比钉孔中心高 2.5）。
+
+### 孔类型标识（hole_type，进 drilled-holes.json / GLB 标签 / 校验）
+
+- `system_32_female/male/pre_nut` → `three_in_one_cam` / `three_in_one_rod` / `three_in_one_nut`（修正原 female/male 与板件公母语义相反）。
+- `back_insert_pre_nut` → `back_insert_nut`。
+- 新增 `two_in_one_cam` / `two_in_one_rod`、`shelf_pin`。
+
+### 代码
+
+- `ShelfConnector`（混搭「层板托」与「二合一」）拆为 `TwoInOneConnector`（二合一：偏心轮+连接杆）与 `ShelfPinConnector`（隔板钉：单钉），均读目录 `hole`、不再硬编码；无活动层板时 BOM 返回空（修复「二合一连接件 ×0套」挂空行）。
+- 铰链 `HingeConnector` 打孔读取由 `cup`/`edge_offset_mm` 改为 `hole.diameter_mm/depth_mm/edge_offset_mm`。
+- 三合一/背板/铰链/二合一/隔板钉的打孔尺寸全部来自目录 `hole`，无字面量硬编码。
+
+### 活动层板选型
+
+- `FurnitureSpec` 新增必填枚举 `movable_shelf_connector`（`two_in_one` / `shelf_pin`，无软默认、非法值拦截）；`CabinetRequest` 同步暴露；制造阶段盖章到 `PanelRecord`，两个连接件按值过滤，避免同时出孔/BOM。
+- 默认候选 `two_in_one` 仅在 LLM 提案层体现（`furniture-panel-planning/SKILL.md`），代码不静默补值。
+
+### 备注
+
+- `movable_shelf` 面板当前未由板件规划生成，二合一/隔板钉连接件为休眠占位；其几何定位（前后排、杆轴对齐、层板侧边投影）标「软件暂定，投产前确认」。
+- 各五金 `part`（实物规格）标「待定」，待提供后 BOM 规格串改为读 `part`。
+
+### 验证
+
+- 三合一/背板/抽屉/铰链/API 相关测试通过；`test_api_entrypoint` 5 项 OK；非法枚举被拒；选型过滤正确。
+
 ## 20260825.1 — 房间布局从家具生成主流程拆分
 
 - 家具生成主流程由七阶段改为六阶段：`design_intent → panels_planned → manufacturing_planned → feature_tree_planned → cad_generated → delivery_validated`。

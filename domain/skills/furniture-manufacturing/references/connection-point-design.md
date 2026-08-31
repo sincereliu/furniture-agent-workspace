@@ -7,7 +7,7 @@
 三合一（及背板 insert）的杆孔 / 轮孔配对目前是**几何隐式约定**，不是结构引用：
 
 - 一个连接点 = 1 杆孔（端面）+ 1 轮孔（cam 面）+ 配合板 1 预埋螺母孔；
-- 配对靠"同 y（深度排）、同 z（高度）、轮孔 x = 端面 ± `cam_offset`（= `insertion_depth_mm` + `cam_center_to_rod_head_mm`）"在几何上对齐；
+- 配对靠"同 y（深度排）、同 z（高度）、轮孔 x = 端面 ± `cam.hole.edge_offset_mm`"在几何上对齐；
 - `HoleSpec` 之间没有 `connection_id` 之类的引用，孔位列表里没有"连接点"实体；
 - 孔位永远是**整体重生成**（`generate_holes()` / `generate_holes_for_panels()` 从板件+连接拓扑从零计算），不存在"删单个孔"的增量编辑入口。
 

@@ -9,13 +9,7 @@
 
 from typing import Any, Dict, List, Mapping, Set
 
-from furniture_manufacturing.connectors.base import (
-    Connector,
-    HoleSpec,
-    _opposite,
-    cam_offset_from,
-    rod_length_from,
-)
+from furniture_manufacturing.connectors.base import Connector, HoleSpec, _opposite
 from furniture_manufacturing.manufacturing_models import HardwareRecord, MachiningOperation, PanelRecord
 
 
@@ -134,7 +128,7 @@ class TrinityConnector(Connector):
     预埋螺母在“面接触方”板件的板面上，朝柜内方向钻入。
 
     深度方向：前后双排，分别距前/后边 first_hole_mm（默认 64mm）。
-    偏心轮：沿连接杆方向(x)距端面 cam_offset（= 杆插入深度 + 圆心到杆头端固定距离 = 33.5mm），深度方向与连接杆同排。
+    偏心轮：沿连接杆方向(x)距端面 cam.hole.edge_offset_mm（33.5mm），深度方向与连接杆同排。
     """
 
     name = "三合一连接件"
@@ -177,27 +171,27 @@ class TrinityConnector(Connector):
         matched = self.match([panel])
         rules = matched.get("rules", {})
         spec = matched.get("spec", {})
-        wheel = spec.get("cam", {})
-        rod = spec.get("rod", {})
-        nut = spec.get("nut", {})
+        cam_spec = spec.get("cam", {})
+        rod_spec = spec.get("rod", {})
+        nut_spec = spec.get("nut", {})
         z_positions = self._system_32_positions(panel, rules)
         nut_first = float(rules.get("first_hole_mm", 64))
         nut_last  = float(rules.get("last_hole_mm", 64))
-        cam_offset = cam_offset_from(rod, wheel)
+        cam_offset = float(cam_spec.get("hole", {}).get("edge_offset_mm", 33.5))
 
         if _trinity_female(panel):
             result.extend(self._female_holes(
-                panel, z_positions, nut_first, nut_last, nut, wheel))
+                panel, z_positions, nut_first, nut_last, nut_spec, cam_spec))
         if _trinity_male(panel):
             result.extend(self._male_holes(
-                panel, nut_first, nut_last, rod, wheel, cam_offset))
+                panel, nut_first, nut_last, rod_spec, cam_spec, cam_offset))
 
         return result
 
     def _female_holes(
         self, panel: PanelRecord, z_positions: List[float],
-        nut_first: float, nut_last: float, nut: Dict[str, Any],
-        wheel: Dict[str, Any],
+        nut_first: float, nut_last: float, nut_spec: Dict[str, Any],
+        cam_spec: Dict[str, Any],
     ) -> List[HoleSpec]:
         """竖板（面接触方）→ 预埋螺母打在 inner_face 上。
 
@@ -207,8 +201,8 @@ class TrinityConnector(Connector):
         孔位先在面板局部坐标定义（局部为唯一真源），世界坐标由 to_global 派生。
         """
         result: List[HoleSpec] = []
-        n_diam = float(nut.get("diameter_mm", 10))
-        n_depth = float(nut.get("depth_mm", 11))
+        n_diam = float(nut_spec.get("hole", {}).get("diameter_mm", 10))
+        n_depth = float(nut_spec.get("hole", {}).get("depth_mm", 11))
         inner = panel.inner_face or ""
         nut_dir = _opposite(inner)
 
@@ -239,7 +233,7 @@ class TrinityConnector(Connector):
 
     def _male_holes(
         self, panel: PanelRecord, nut_first: float, nut_last: float,
-        rod: Dict[str, Any], wheel: Dict[str, Any], cam_offset: float,
+        rod_spec: Dict[str, Any], cam_spec: Dict[str, Any], cam_offset: float,
     ) -> List[HoleSpec]:
         """横板（边接触方）→ 连接杆孔 + 偏心轮孔。
 
@@ -249,12 +243,12 @@ class TrinityConnector(Connector):
         孔位先在面板局部坐标定义（局部为唯一真源），世界坐标由 to_global 派生。
         """
         result: List[HoleSpec] = []
-        r_diam = float(rod.get("diameter_mm", 8))
-        r_depth = float(rod.get("insertion_depth_mm", 33))
-        w_diam = float(wheel.get("diameter_mm", 12))
-        w_depth = float(wheel.get("hole_depth_mm", 13.5))
-        # 连接杆轴线高度 = cam_face ± 偏心距(五金参数)，与板厚无关。
-        rod_axis_offset = float(wheel.get("rod_axis_to_cam_face_mm", 9))
+        r_diam = float(rod_spec.get("hole", {}).get("diameter_mm", 8))
+        r_depth = float(rod_spec.get("hole", {}).get("depth_mm", 33))
+        w_diam = float(cam_spec.get("hole", {}).get("diameter_mm", 12))
+        w_depth = float(cam_spec.get("hole", {}).get("depth_mm", 13.5))
+        # 连接杆轴线高度 = cam_face ± 偏心距(五金固定参数)，与板厚无关。
+        rod_axis_offset = float(cam_spec.get("rod_axis_to_cam_face_mm", 9))
         cam = panel.cam_face or ""
 
         # cam_face 是偏心轮的可操作面：孔应落在该面所在的局部坐标。
@@ -330,14 +324,14 @@ class TrinityConnector(Connector):
         """
         matched = self.match(panels)
         spec = matched.get("spec", {})
-        wheel = spec.get("cam", {})
-        rod = spec.get("rod", {})
-        nut = spec.get("nut", {})
+        cam_spec = spec.get("cam", {})
+        rod_spec = spec.get("rod", {})
+        nut_spec = spec.get("nut", {})
         rules = matched.get("rules", {})
         row_first = float(rules.get("first_hole_mm", 64))
         row_last = float(rules.get("last_hole_mm", 64))
-        cam_offset = cam_offset_from(rod, wheel)
-        rod_axis_offset = float(wheel.get("rod_axis_to_cam_face_mm", 9))
+        cam_offset = float(cam_spec.get("hole", {}).get("edge_offset_mm", 33.5))
+        rod_axis_offset = float(cam_spec.get("rod_axis_to_cam_face_mm", 9))
 
         by_label = {panel.label: panel for panel in panels}
         result: List[HoleSpec] = []
@@ -364,17 +358,17 @@ class TrinityConnector(Connector):
                 ),
             ):
                 result.extend(self._nut_holes(
-                    panel, joint, by_label[joint.male_id], nut, wheel,
+                    panel, joint, by_label[joint.male_id], nut_spec, cam_spec,
                     row_first, row_last, rod_axis_offset,
                 ))
             for joint in sorted(mal_joints, key=lambda j: j.edge_sign):
                 result.extend(self._rod_holes(
-                    panel, joint, rod, wheel, cam_offset,
+                    panel, joint, rod_spec, cam_spec, cam_offset,
                     row_first, row_last, rod_axis_offset,
                 ))
             for joint in sorted(mal_joints, key=lambda j: j.edge_sign):
                 result.extend(self._cam_holes(
-                    panel, joint, wheel, cam_offset,
+                    panel, joint, cam_spec, cam_offset,
                     row_first, row_last, rod_axis_offset,
                 ))
         return result
@@ -398,13 +392,13 @@ class TrinityConnector(Connector):
 
     def _nut_holes(
         self, panel: PanelRecord, joint: Any, male: PanelRecord,
-        nut: Dict[str, Any], wheel: Dict[str, Any],
+        nut_spec: Dict[str, Any], cam_spec: Dict[str, Any],
         row_first: float, row_last: float, rod_axis_offset: float,
     ) -> List[HoleSpec]:
         """female 面板上的预埋螺母孔：与 male 的连接杆/轮同排同位。"""
         result: List[HoleSpec] = []
-        n_diam = float(nut.get("diameter_mm", 10))
-        n_depth = float(nut.get("depth_mm", 11))
+        n_diam = float(nut_spec.get("hole", {}).get("diameter_mm", 10))
+        n_depth = float(nut_spec.get("hole", {}).get("depth_mm", 11))
         face = joint.face
         f = face[1]
         a = joint.edge_axis
@@ -438,13 +432,13 @@ class TrinityConnector(Connector):
 
     def _rod_holes(
         self, panel: PanelRecord, joint: Any,
-        rod: Dict[str, Any], wheel: Dict[str, Any], cam_offset: float,
+        rod_spec: Dict[str, Any], cam_spec: Dict[str, Any], cam_offset: float,
         row_first: float, row_last: float, rod_axis_offset: float,
     ) -> List[HoleSpec]:
         """male 面板端面的连接杆孔（轴无关）。"""
         result: List[HoleSpec] = []
-        r_diam = float(rod.get("diameter_mm", 8))
-        r_depth = float(rod.get("insertion_depth_mm", 33))
+        r_diam = float(rod_spec.get("hole", {}).get("diameter_mm", 8))
+        r_depth = float(rod_spec.get("hole", {}).get("depth_mm", 33))
         a = joint.edge_axis
         cam_face = getattr(joint, "male_cam_face", None) or "+z"
         t = cam_face[1]
@@ -473,13 +467,13 @@ class TrinityConnector(Connector):
 
     def _cam_holes(
         self, panel: PanelRecord, joint: Any,
-        wheel: Dict[str, Any], cam_offset: float,
+        cam_spec: Dict[str, Any], cam_offset: float,
         row_first: float, row_last: float, rod_axis_offset: float,
     ) -> List[HoleSpec]:
         """male 面板 cam 面上的偏心轮孔（轴无关）。"""
         result: List[HoleSpec] = []
-        w_diam = float(wheel.get("diameter_mm", 12))
-        w_depth = float(wheel.get("hole_depth_mm", 13.5))
+        w_diam = float(cam_spec.get("hole", {}).get("diameter_mm", 12))
+        w_depth = float(cam_spec.get("hole", {}).get("depth_mm", 13.5))
         a = joint.edge_axis
         cam_face = getattr(joint, "male_cam_face", None) or "+z"
         t = cam_face[1]
@@ -552,12 +546,11 @@ class TrinityConnector(Connector):
         opts = (options or {}).get(self.catalog_entry, {})
         opts = dict(opts) if isinstance(opts, Mapping) else {}
         brand = self.resolve_brand(spec.get("brands", []), opts.get("brand"))
-        rod_length = rod_length_from(spec.get("rod", {}), spec.get("nut", {}))
         holes = self.generate_holes_for_panels(panels)
         quantity = sum(1 for h in holes if h.hole_type == "three_in_one_cam")
         return [HardwareRecord(
             name=self.name,
-            spec=f"偏心轮φ12+预埋螺母φ10×11+连接杆φ8×{rod_length:.0f}",
+            spec="偏心轮+连接杆+预埋螺母（实物规格待确认）",
             quantity=quantity,
             unit="套", brand=brand.get("name", "默认"), model=brand.get("model", "SJY-01"))]
 

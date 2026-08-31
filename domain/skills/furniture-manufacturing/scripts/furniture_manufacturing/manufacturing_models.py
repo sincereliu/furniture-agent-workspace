@@ -33,6 +33,7 @@ class PanelRecord:
     outer_face: str = ""
     cam_face: str | None = None
     joints: list = field(default_factory=list)  # list[PanelJoint], face-to-edge adjacencies
+    movable_shelf_connector: str = ""
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PanelRecord":

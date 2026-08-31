@@ -41,10 +41,10 @@ class HingeConnector(Connector):
         entry = self._resolve_entry(self.catalog.get(self.catalog_entry, {}), {})
         count, top_offset, bottom_offset = self._hinge_count(panel.size_z, rules)
         positions = self._distribute(panel.size_z, count, top_offset, bottom_offset)
-        edge_offset = float(entry.get("edge_offset_mm", 5))
-        cup = entry.get("cup", {}) or {}
-        cup_diameter = float(cup.get("diameter_mm", 35))
-        cup_depth = float(cup.get("depth_mm", 13))
+        hole = entry.get("hole", {}) or {}
+        edge_offset = float(hole.get("edge_offset_mm", 5))
+        cup_diameter = float(hole.get("diameter_mm", 35))
+        cup_depth = float(hole.get("depth_mm", 13))
         # 杯孔中心距门边 = 边距 + 杯孔半径
         cup_center_from_edge = edge_offset + cup_diameter / 2
         inner = panel.inner_face or "+y"  # default for backward compat

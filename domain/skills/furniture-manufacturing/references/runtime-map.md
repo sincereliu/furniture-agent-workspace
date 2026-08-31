@@ -5,7 +5,7 @@
 ## 五金连接件（`connectors/`）
 
 - 基类 `Connector` 定义统一接口：`match()`、`generate_holes()`、`generate_holes_for_panels()`、`boms()`、`machining_operations()`。
-- 具体连接件：`TrinityConnector`（三合一）、`HingeConnector`（铰链）、`ShelfConnector`（层板）、`BackMountConnector`（背板）、`DrawerSlideConnector`（滑轨）。
+- 具体连接件：`TrinityConnector`（三合一）、`HingeConnector`（铰链）、`TwoInOneConnector`（二合一）、`ShelfPinConnector`（隔板钉）、`BackMountConnector`（背板）、`DrawerSlideConnector`（滑轨）。
 - 新增五金：实现对应 `Connector` 并注册进 `ALL_CONNECTORS`。
 - 孔位用 `HoleSpec` 描述；`is_face_hole=True` 表示板面钻孔（导出 TypeNo=1 垂直孔），`False` 表示板边钻孔（TypeNo=2 水平孔）。
 - 旧数据缺省 `door_hinge_side` 时，`HingeConnector` 按门板位置回退。
@@ -13,9 +13,9 @@
 ## 五金命名约定
 
 - 五金按「套」组织：三合一（偏心轮+连接杆+预埋螺母）、二合一（偏心轮+连接杆，固定塑料件并入连接杆）、隔板钉（单钉）。
-- 目录键（`hardware_catalog.yaml`）全英文：顶层按套 `three_in_one` / `two_in_one` / `shelf_pin`，套内规格组 `standard`，零件键 `cam` / `rod` / `nut` / `pin` / `pin_hole`。
-- 孔类型（`hole_type`）按 `<套名>_<零件>`：`three_in_one_cam` / `three_in_one_rod` / `three_in_one_nut`、`back_insert_cam` / `back_insert_rod` / `back_insert_nut`；进入 `drilled-holes.json` / GLB 标签 / 校验计数。
-- 派生量（三合一轮孔圆心到杆端面、连接杆总长）由代码计算（`base.cam_offset_from` / `base.rod_length_from`），不落库，避免与真源参数漂移。
+- 目录键（`hardware_catalog.yaml`）全英文：顶层按套 `three_in_one` / `two_in_one` / `shelf_pin`，套内规格组 `standard`，零件键 `cam` / `rod` / `nut` / `pin`；每个零件分 `part`（实物，BOM/采购）与 `hole`（打孔，钻孔）两层，配合余量直接写入 `hole` 数值，不做代码派生。
+- 孔类型（`hole_type`）按 `<套名>_<零件>`：`three_in_one_cam` / `three_in_one_rod` / `three_in_one_nut`、`two_in_one_cam` / `two_in_one_rod`、`shelf_pin`、`back_insert_cam` / `back_insert_rod` / `back_insert_nut`；进入 `drilled-holes.json` / GLB 标签 / 校验计数。
+- 活动层板连接方式由 `FurnitureSpec.movable_shelf_connector`（`two_in_one`/`shelf_pin`）显式选择，经制造阶段盖章到 `PanelRecord`；`TwoInOneConnector`/`ShelfPinConnector` 只处理选中自己的板件，避免两者同时出孔/BOM。
 
 ## 生成与产物
 
@@ -36,6 +36,7 @@
 ## 演进中需求（待评审）
 
 - 连接点级实体（杆/轮/螺母按连接点整体增删、校验按连接点对齐）：`references/connection-point-design.md`。
+- 背板三合一孔类型合并（已定方向，待连接点身份）：`back_insert_cam/rod/nut` → `three_in_one_cam/rod/nut`；`cover`（外盖）也改三合一（当前代码视为螺钉组装现场、不钻孔）。阻塞在连接点身份：柜体与背板的预埋螺母孔都落在侧板，需 `connection_id` 才能区分与校验。
 - 完整抽屉组件（门+抽屉混合区、托底轨、有面板）：`references/drawer-component-design.md`。
 
 ## 相关契约

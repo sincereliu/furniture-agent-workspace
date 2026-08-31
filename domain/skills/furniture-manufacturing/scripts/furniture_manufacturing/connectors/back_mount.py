@@ -9,12 +9,7 @@ from __future__ import annotations
 from math import ceil
 from typing import Any, Dict, List, Mapping
 
-from furniture_manufacturing.connectors.base import (
-    Connector,
-    HoleSpec,
-    cam_offset_from,
-    rod_length_from,
-)
+from furniture_manufacturing.connectors.base import Connector, HoleSpec
 from furniture_manufacturing.manufacturing_models import (
     HardwareRecord,
     MachiningOperation,
@@ -83,11 +78,10 @@ class BackMountConnector(Connector):
         opts = (options or {}).get(self.catalog_entry, {})
         opts = dict(opts) if isinstance(opts, Mapping) else {}
         brand = self.resolve_brand(spec.get("brands", []), opts.get("brand"))
-        rod_length = rod_length_from(spec.get("rod", {}), spec.get("nut", {}))
         return [
             HardwareRecord(
                 name="三合一连接件（内嵌背板）",
-                spec=f"偏心轮φ12+预埋螺母φ10×11+连接杆φ8×{rod_length:.0f}",
+                spec="偏心轮+连接杆+预埋螺母（实物规格待确认）",
                 quantity=quantity,
                 unit="套",
                 brand=brand.get("name", "默认"),
@@ -190,16 +184,16 @@ class BackMountConnector(Connector):
         first = float(rules.get("first_hole_mm", 64))
         max_spacing = float(rules.get("max_spacing_mm", 400))
         three_in_one = self.catalog.get("three_in_one", {}).get("standard", {})
-        wheel = three_in_one.get("cam", {})
-        rod = three_in_one.get("rod", {})
-        nut = three_in_one.get("nut", {})
-        cam_diameter = float(wheel.get("diameter_mm", 12))
-        cam_depth = float(wheel.get("hole_depth_mm", 13.5))
-        cam_offset = cam_offset_from(rod, wheel)
-        rod_diameter = float(rod.get("diameter_mm", 8))
-        rod_depth = float(rod.get("insertion_depth_mm", 33))
-        nut_diameter = float(nut.get("diameter_mm", 10))
-        nut_depth = float(nut.get("depth_mm", 11))
+        cam_spec = three_in_one.get("cam", {})
+        rod_spec = three_in_one.get("rod", {})
+        nut_spec = three_in_one.get("nut", {})
+        cam_diameter = float(cam_spec.get("hole", {}).get("diameter_mm", 12))
+        cam_depth = float(cam_spec.get("hole", {}).get("depth_mm", 13.5))
+        cam_offset = float(cam_spec.get("hole", {}).get("edge_offset_mm", 33.5))
+        rod_diameter = float(rod_spec.get("hole", {}).get("diameter_mm", 8))
+        rod_depth = float(rod_spec.get("hole", {}).get("depth_mm", 33))
+        nut_diameter = float(nut_spec.get("hole", {}).get("diameter_mm", 10))
+        nut_depth = float(nut_spec.get("hole", {}).get("depth_mm", 11))
         y_center_local = back.size_y / 2
         y_face_local = back.size_y
         result: List[HoleSpec] = []

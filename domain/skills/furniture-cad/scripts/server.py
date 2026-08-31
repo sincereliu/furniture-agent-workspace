@@ -124,6 +124,10 @@ class CabinetRequest(BaseModel):
         description="单门铰链侧；仅 n_doors=1 时有效，双门由代码确定性推导",
     )
     drawer_count: int | None = Field(default=None, ge=0, description="整高抽屉数量")
+    movable_shelf_connector: Literal["two_in_one", "shelf_pin"] | None = Field(
+        default=None,
+        description="活动层板连接方式：two_in_one（二合一）/ shelf_pin（隔板钉）",
+    )
     groove_depth: float | None = Field(default=None, gt=0, description="背板入槽深度 mm")
     groove_clearance: float | None = Field(default=None, ge=0, description="槽宽相对背板厚度的余量 mm")
     back_mount: Literal["auto", "groove", "insert", "cover"] | None = Field(

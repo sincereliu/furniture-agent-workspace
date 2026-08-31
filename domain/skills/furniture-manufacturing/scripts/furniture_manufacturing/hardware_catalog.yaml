@@ -7,23 +7,16 @@
 # ── 三合一：一套 = 偏心轮 + 连接杆 + 预埋螺母 ────────────
 three_in_one:
   standard:
-    # 偏心轮（装在“边接触方”板件的板面 cam_face 上；具体板/面由连接拓扑决定）
-    cam:
-      diameter_mm: 12                 # 偏心轮本体直径
-      hole_depth_mm: 13.5             # 沉孔深度
-      rod_axis_to_cam_face_mm: 9      # 偏心轮安装面到连接杆轴线的距离（五金固定参数；投产前确认）
-      cam_center_to_rod_head_mm: 0.5  # 偏心轮圆心到连接杆头端的固定距离（五金固定参数）
-    # 连接杆（从“边接触方”板件的端面穿入，指向“面接触方”板件的预埋螺母）
-    rod:
-      diameter_mm: 8                  # 连接杆直径
-      insertion_depth_mm: 33          # 连接杆插入板端深度
-    # 预埋螺母（装在“面接触方”板件的板面上）
-    nut:
-      diameter_mm: 10                 # 预埋螺母直径
-      depth_mm: 11                    # 预埋孔深度
-    # 派生量（由代码计算，不落库）：
-    #   轮孔圆心到杆端面 = rod.insertion_depth_mm + cam.cam_center_to_rod_head_mm = 33.5
-    #   连接杆总长       = rod.insertion_depth_mm + nut.depth_mm              = 44
+    cam:                              # 偏心轮
+      part: { outer_diameter_mm: 待定, thickness_mm: 待定 }   # 实物 → BOM/采购
+      hole: { diameter_mm: 12, depth_mm: 13.5, edge_offset_mm: 33.5 }   # 打孔（圆心到横板端面）
+      rod_axis_to_cam_face_mm: 9      # 连接杆轴中心线到偏心轮安装面的距离（五金固定参数；投产前确认）
+    rod:                              # 连接杆
+      part: { diameter_mm: 待定, length_mm: 待定 }            # 实物（总长 44 待确认）
+      hole: { diameter_mm: 8, depth_mm: 33 }                  # 打孔
+    nut:                              # 预埋螺母
+      part: { outer_diameter_mm: 待定, thickness_mm: 待定 }   # 实物（外径/厚度待确认）
+      hole: { diameter_mm: 10, depth_mm: 11 }                 # 打孔
     brands:
       - name: 默认
         model: SJY-01
@@ -32,12 +25,12 @@ three_in_one:
 two_in_one:
   standard:
     cam:                              # 偏心轮
-      diameter_mm: 12                 # 偏心轮本体直径
-      hole_depth_mm: 13.5             # 沉孔深度
-      cam_center_to_edge_mm: 4.5      # 偏心轮圆心到端面的距离（五金固定参数）
+      part: { outer_diameter_mm: 待定, thickness_mm: 待定 }   # 实物 → BOM/采购
+      hole: { diameter_mm: 12, depth_mm: 13.5, edge_offset_mm: 4.5 }   # 打孔（层板底面，圆心到朝向侧板的侧边）
+      rod_axis_to_cam_face_mm: 9      # 连接杆轴中心线到层板底面（偏心轮安装面）的距离（五金固定参数）
     rod:                              # 连接杆（特殊螺丝，打在侧板）
-      diameter_mm: 5                  # 连接杆直径
-      depth_mm: 10                    # 打孔深度
+      part: { diameter_mm: 待定, length_mm: 待定 }            # 实物
+      hole: { diameter_mm: 5, depth_mm: 10 }                  # 打孔
     note: 活动层板标准连接件
     brands:
       - name: 默认
@@ -47,12 +40,9 @@ two_in_one:
 shelf_pin:
   standard:
     pin:                              # 钉
-      diameter_mm: 5                  # 钉直径
-      length_mm: 25                   # 钉长（待定，投产前确认）
-      # 层板架在钉上：层板底面 = 钉中心线 + 半径(diameter_mm/2 = 2.5mm)
-    pin_hole:                         # 侧板孔（装钉）
-      diameter_mm: 5
-      depth_mm: 9
+      part: { diameter_mm: 待定, length_mm: 待定 }            # 实物
+      hole: { diameter_mm: 5, depth_mm: 9 }                   # 打孔（侧板孔）
+      shelf_bottom_offset_mm: 2.5     # 层板底面比钉孔中心高（= 钉半径）
     note: 轻载层板，安装简便
     brands:
       - name: 默认
@@ -87,10 +77,10 @@ drawer_slides:
 # ── 铰链 ──────────────────────────────────────────────
 hinges:
   HJ-100:
-    angle: 100
-    cup: { diameter_mm: 35, depth_mm: 13 }
-    edge_offset_mm: 5                # 铰链臂侧边距（杯孔边到门侧边的距离），随厂规/五金基础参数
-    door_thickness_mm: [14, 22]      # 适用门厚范围 [min, max]，超出由校验拦截
+    angle: 100                          # 开门角度（产品规格）
+    part: { cup_diameter_mm: 待定 }     # 实物（铰链杯外径，待确认）
+    hole: { diameter_mm: 35, depth_mm: 13, edge_offset_mm: 5 }   # 杯孔打孔（直径/深度/边距）
+    door_thickness_mm: [14, 22]         # 适用门厚范围 [min, max]，超出由校验拦截
     brands:
       - name: 默认
         model: HJ-100

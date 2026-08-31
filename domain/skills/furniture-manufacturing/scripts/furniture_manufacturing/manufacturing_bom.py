@@ -152,6 +152,7 @@ def _manufacturing_panel(spec: FurnitureSpec, back_mount: str, placement: PanelP
         door_hinge_side=placement.door_hinge_side,
         door_overlay=placement.door_overlay,
         back_mount=back_mount,
+        movable_shelf_connector=spec.movable_shelf_connector,
         inner_face=placement.inner_face,
         outer_face=placement.outer_face,
         cam_face=placement.cam_face,
