@@ -39,10 +39,5 @@ base:
   type: none   # 吊柜无踢脚
 
 internals:
-  shelves:
-    type: fixed
-    orientation: horizontal
-    count_field: shelf_count
-    divides: [top, bottom]
-    snap: system_32
+  # 层板由 spec.shelves 驱动（从上到下、固定/活动混排），不再用 count_field
   dividers: []

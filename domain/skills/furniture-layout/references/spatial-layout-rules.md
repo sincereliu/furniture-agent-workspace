@@ -46,7 +46,7 @@
 
 ## 运行时输出
 
-`CabinetLayout` 以 `furniture_type/width/depth/height` 作为摆放计算依据。当前序列化结构为兼容旧调用仍可含 `shelf_count/door_count`，但这两个字段不参与房间定位，也不向家具生成主流程提供数据。
+`CabinetLayout` 以 `furniture_type/width/depth/height` 作为摆放计算依据。当前序列化结构为兼容旧调用仍可含 `door_count`，但该字段不参与房间定位，也不向家具生成主流程提供数据。
 
 完整 `layout_planned` 输出保持 `layout` 向后兼容，并增加：
 

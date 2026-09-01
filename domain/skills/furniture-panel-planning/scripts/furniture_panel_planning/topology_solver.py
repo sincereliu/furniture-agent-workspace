@@ -18,7 +18,7 @@ import yaml
 from .cabinet_frame import CabinetFrame, _negate as negate_axis
 from .joint_topology import compute_joints
 from .panel_models import PanelPlacement
-from .panel_spec import FurnitureSpec
+from .panel_spec import FurnitureSpec, resolve_shelf_gaps
 from .panel_rules import (
     back_rail_clear_spacing,
     resolve_back_rail_count,
@@ -118,9 +118,8 @@ def solve_panel_placements(
         if drawers_def.get("type") == "full_height":
             placements.extend(_drawer_panels(spec, layout, drawers_def, frame))
     else:
-        shelves_def = internals.get("shelves", {})
-        if shelves_def.get("type") == "fixed" and layout.shelf_count > 0:
-            placements.extend(_fixed_shelves(spec, layout, shelves_def, frame))
+        if spec.shelves:
+            placements.extend(_shelves_from_spec(spec, layout, frame))
 
     # ── Connection topology ──────────────────────────────────────
     joints = compute_joints(placements)
@@ -393,40 +392,45 @@ def _toe_kick_panels(
     return panels
 
 
-def _fixed_shelves(
+def _shelves_from_spec(
     spec: FurnitureSpec,
     layout: CabinetStructure,
-    shelves_def: dict[str, Any],
     frame: CabinetFrame,
 ) -> list[PanelPlacement]:
-    """Generate fixed shelf panels between top and bottom."""
+    """按 spec.shelves（从上到下）生成固定/活动层板；解析 auto 净高。"""
+    gaps = resolve_shelf_gaps(spec, layout.internal_height)
     board = spec.board_thickness
-    if layout.shelf_count <= 0:
-        return []
-
-    layer_h = layout.internal_height / (layout.shelf_count + 1)
     sd = layout.internal_y_end - layout.internal_y_start
-
-    # Fixed shelves are horizontal, oriented between top and bottom.
-    # Inner face points toward cabinet bottom (accessible from below).
-    # Cam face same as inner (eccentric wheel installed from below).
     inner = frame.bottom
     outer = frame.top
-    cam   = frame.bottom
-    panels = []
-    for i in range(1, layout.shelf_count + 1):
-        cz = layout.internal_z_start + i * layer_h
+    panels: list[PanelPlacement] = []
+    top_z = layout.internal_z_end - spec.top_gap_mm  # 最上层板顶面
+    for shelf, gap in zip(spec.shelves, gaps):
+        bottom_z = top_z - board          # 这块板底面
+        cz = bottom_z + board / 2         # 这块板中心
+        if shelf.shelf_type == "fixed":
+            panel_type = "fixed_shelf"
+            cam = frame.bottom
+            name = f"层板({cz:.0f}mm)"
+            note = "固定层板"
+            panel_id = f"shelf_z{cz:.0f}"
+        else:
+            panel_type = "movable_shelf"
+            cam = None
+            name = f"活动层板({cz:.0f}mm)"
+            note = "活动层板"
+            panel_id = f"movable_shelf_z{cz:.0f}"
         panels.append(PanelPlacement(
-            id=f"shelf_z{cz:.0f}", name=f"层板({cz:.0f}mm)",
-            panel_type="fixed_shelf",
+            id=panel_id, name=name, panel_type=panel_type,
             size_x=layout.internal_width, size_y=sd, size_z=board,
             pos_x=layout.internal_x_start, pos_y=layout.internal_y_start,
-            pos_z=cz - board / 2,
+            pos_z=bottom_z,
             material_role="carcass",
             depends_on=["left_side_panel", "right_side_panel"],
-            inner_face=inner, outer_face=outer, cam_face=cam,  # derived from frame
-            note="固定层板",
+            inner_face=inner, outer_face=outer, cam_face=cam,
+            note=note,
         ))
+        top_z = bottom_z - gap           # 下一层板顶面
     return panels
 
 

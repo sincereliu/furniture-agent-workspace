@@ -45,12 +45,7 @@ base:
   support_count_field: toe_kick_support_count
 
 internals:
-  shelves:
-    type: fixed
-    orientation: horizontal
-    count_field: shelf_count
-    divides: [top, bottom]
-    snap: system_32
+  # 层板由 spec.shelves 驱动（从上到下、固定/活动混排），不再用 count_field
   drawers:
     type: full_height          # 整高抽屉区：抽屉占满内部净高与前开口
     count_field: drawer_count

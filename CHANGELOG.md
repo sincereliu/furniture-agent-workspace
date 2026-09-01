@@ -1,5 +1,28 @@
 # 更新日志
 
+## 20260901.2 — 层板高度化：`shelf_count` 移除，`shelves` 列表 + `top_gap_mm`，活动层板落地
+
+层板规格从「数量 + 自动均分」改为「自上而下的逐层清单」，并真正生成活动层板（二合一/隔板钉按 `movable_shelf_connector` 选型出孔/BOM）。
+
+### 契约（`FurnitureSpec`）
+
+- 删除 `shelf_count`（无向后兼容迁移，测试夹具 `_fill_shelves` 仅为测试便利转换）。
+- 新增 `shelves: list[ShelfSpec]`，自上而下（视觉顺序）逐层描述，每层 `{shelf_type: fixed|movable, gap_below_mm: 净高|null}`。
+- 新增 `top_gap_mm: float`：最上层板顶面到顶板底面的净高。
+- `gap_below_mm` = 本层板底面到下方紧邻一层顶面的净高；最末层为到底板顶面。`null`(=auto) 表示由代码吸收剩余高度，**恰好一个** auto（或 0 个且各净高之和正好铺满内高）。
+- 抽屉校验改为 `drawer_count and (shelves or n_doors)`：有抽屉时层板清单必须为空。
+
+### 代码
+
+- `panel_spec.py`：`ShelfSpec` 冻结数据类、`_coerce_shelves()` 校验与 `resolve_shelf_gaps()` 确定性算高（auto = 内高 − top_gap_mm − N×板厚 − Σ显式净高）。
+- `topology_solver.py`：`_shelves_from_spec()` 自上而下累加定位，fixed→`fixed_shelf`（cam_face=底板 `frame.bottom`，id=`shelf_z{cz}`），movable→`movable_shelf`（cam_face=None，id=`movable_shelf_z{cz}`）。
+- 板件规划/布局/工作流/服务端（`server.py` `CabinetRequest`）同步删除 `shelf_count`，改传 `shelves` + `top_gap_mm`；布局阶段保留 `door_count`。
+
+### 验证
+
+- `spec.shelves=[movable(200), fixed(auto)] top_gap=150` 端到端生成 `fixed_shelf` 与 `movable_shelf`；`TwoInOneConnector` 出 `two_in_one_cam/rod`，`ShelfPinConnector` 因选型为 two_in_one 返回空。
+- 目标回归 30 项通过（`test_cabinet_pipeline` / `test_api_entrypoint` / `test_back_mount_modes` / `test_recent_manufacturing_patches.PanelAndConnectorPatchTests` / `.DrawerZoneTests`）；仅环境性 `%TEMP%` 写权限失败与本次改动无关。
+
 ## 20260901.1 — 五金命名统一（part/hole 分层）+ 二合一/隔板钉拆分 + 活动层板选型
 
 将三套五金（三合一/二合一/隔板钉）与铰链的名称、参数和目录统一，并把「零件实物规格」与「打孔规格」分离为 `part`/`hole` 两层；活动层板连接方式（二合一 vs 隔板钉）改为显式选型。

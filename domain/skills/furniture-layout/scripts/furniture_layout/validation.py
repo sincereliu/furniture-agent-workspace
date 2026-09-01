@@ -35,7 +35,6 @@ def validate_layout(
             width=float(spec.width),
             depth=float(spec.depth),
             height=float(spec.height),
-            shelf_count=int(spec.shelf_count),
             door_count=int(getattr(spec, "door_count", spec.n_doors)),
         )
     if (
@@ -54,7 +53,6 @@ def validate_layout(
             "layout envelope does not match confirmed design intent",
         )
     for name, count in (
-        ("shelf_count", layout.shelf_count),
         ("door_count", layout.door_count),
     ):
         if isinstance(count, bool) or not isinstance(count, int) or count < 0:
@@ -63,10 +61,7 @@ def validate_layout(
                 f"{name} must be a non-negative integer",
                 name,
             )
-    if (
-        layout.shelf_count != spec.shelf_count
-        or layout.door_count != spec.door_count
-    ):
+    if layout.door_count != spec.door_count:
         report.add_error(
             "LAYOUT_COUNT_MISMATCH",
             "layout counts must match the customer-visible layout request",

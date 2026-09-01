@@ -84,7 +84,7 @@ def run_independent_layout(name: str, spec: dict):
     panel_parameters = panel_stage_input(stage_inputs).get("parameters", {})
     options = {
         key: panel_parameters[key]
-        for key in ("shelf_count", "n_doors", "door_count")
+        for key in ("n_doors", "door_count")
         if key in panel_parameters
     }
     context = layout_stage_input(stage_inputs)

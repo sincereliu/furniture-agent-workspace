@@ -15,7 +15,6 @@ class CabinetLayout:
     width: float
     depth: float
     height: float
-    shelf_count: int
     door_count: int
 
     @classmethod
@@ -25,6 +24,5 @@ class CabinetLayout:
             width=spec.width,
             depth=spec.depth,
             height=spec.height,
-            shelf_count=spec.shelf_count,
             door_count=spec.door_count,
         )

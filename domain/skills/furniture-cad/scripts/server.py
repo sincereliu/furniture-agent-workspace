@@ -117,7 +117,11 @@ class CabinetRequest(BaseModel):
     back_offset: float | None = Field(default=None, ge=0, description="背板后移 mm")
     door_margin: float | None = Field(default=None, ge=0, description="门板四周间隙 mm")
     door_hinge_gap: float | None = Field(default=None, ge=0, description="门铰深度间隙 mm")
-    shelf_count: int | None = Field(default=None, ge=0, description="层板数量")
+    shelves: list[dict[str, Any]] | None = Field(
+        default=None,
+        description="层板列表（从上到下）：[{shelf_type: fixed|movable, gap_below_mm: 净高mm|null=auto}]",
+    )
+    top_gap_mm: float | None = Field(default=None, ge=0, description="顶格净高 mm（最上层板顶面到顶板底面）")
     n_doors: int | None = Field(default=None, ge=0, description="门板数量")
     door_hinge_side: Literal["left", "right"] | None = Field(
         default=None,
@@ -382,7 +386,7 @@ async def plan_layout(req: CabinetRequest):
         panel_parameters = panel_stage_input(stage_inputs).get("parameters", {})
         layout_options = {
             key: panel_parameters[key]
-            for key in ("shelf_count", "n_doors", "door_count")
+            for key in ("n_doors", "door_count")
             if key in panel_parameters
         }
         context = layout_stage_input(stage_inputs)

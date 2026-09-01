@@ -123,7 +123,11 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         )
         edited_panels = plan_panel_stage(
             parent.intent,
-            panel_parameters(shelf_count=1, n_doors=2),
+            panel_parameters(
+                shelves=[{"shelf_type": "fixed", "gap_below_mm": None}],
+                top_gap_mm=300,
+                n_doors=2,
+            ),
         )
 
         revised = self.orchestrator.revise_stage_output(
@@ -681,7 +685,8 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             "width": 800,
             "depth": 350,
             "height": 900,
-            "shelf_count": 1,
+            "shelves": [{"shelf_type": "fixed", "gap_below_mm": None}],
+            "top_gap_mm": 300,
             "back_mount": "cover",
         }
         intent = self.orchestrator.intent_from_spec(request)
@@ -700,7 +705,11 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             },
         )
         inputs = stage_inputs_from_spec(request)
-        self.assertEqual(inputs["panels"]["parameters"]["shelf_count"], 1)
+        self.assertEqual(
+            inputs["panels"]["parameters"]["shelves"],
+            [{"shelf_type": "fixed", "gap_below_mm": None}],
+        )
+        self.assertEqual(inputs["panels"]["parameters"]["top_gap_mm"], 300)
         self.assertEqual(inputs["panels"]["parameters"]["back_mount"], "cover")
 
     def test_design_intent_rejects_new_downstream_fields(self) -> None:

@@ -67,7 +67,7 @@ result = orchestrator.run_next(
   "toe_kick_support_count": null, "back_mount": "auto", "back_rail_height": 70,
   "drawer_count": 0, "drawer_side_clearance": 13, "drawer_layer_gap": 1.5,
   "drawer_bottom_thickness": 18, "drawer_back_thickness": 18,
-  "drawer_back_clearance": 0, "shelf_count": 4, "n_doors": 2, "door_hinge_side": null
+  "drawer_back_clearance": 0, "shelves": [{"shelf_type": "fixed", "gap_below_mm": 200}], "top_gap_mm": 200, "n_doors": 2, "door_hinge_side": null
 }
 ```
 

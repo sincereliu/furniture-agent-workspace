@@ -4,9 +4,9 @@
 - 二合一（TwoInOneConnector）：偏心轮装在层板底面、连接杆打在侧板，有固定作用；
 - 隔板钉（ShelfPinConnector）：单钉打在侧板，单纯架住层板。
 
-注意：movable_shelf 目前未在板件规划生成（shelf_count 生成 fixed_shelf），
-两个连接件为休眠占位；下列几何定位（前后排、高度对齐、层板侧边投影）为
-软件暂定，投产前确认。
+活动层板由 spec.shelves 里 `shelf_type="movable"` 的层板生成；连接方式由
+`movable_shelf_connector` 选择（two_in_one / shelf_pin）。下列几何定位
+（前后排、高度对齐、层板侧边投影）为软件暂定，投产前确认。
 """
 
 from typing import Any, Dict, List, Mapping

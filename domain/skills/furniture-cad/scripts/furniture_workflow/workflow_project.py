@@ -191,7 +191,7 @@ def _legacy_stage_inputs(raw_intent: dict[str, Any]) -> dict[str, Any]:
     }
     room = layout.pop("room", None)
     placement = layout.pop("placement", None)
-    for key in ("shelf_count", "n_doors", "door_count"):
+    for key in ("n_doors", "door_count"):
         if key in layout:
             structure[key] = layout.pop(key)
     result: dict[str, Any] = {
@@ -217,7 +217,7 @@ def _legacy_stage_inputs(raw_intent: dict[str, Any]) -> dict[str, Any]:
         record = {"text": constraint, "target": target}
         if target.startswith("layout."):
             field = target.split(".", 1)[1]
-            if field in {"shelf_count", "n_doors", "door_count"}:
+            if field in {"n_doors", "door_count"}:
                 result["panels"].setdefault("constraints", []).append(record)
             else:
                 result["layout"].setdefault("constraints", []).append(record)

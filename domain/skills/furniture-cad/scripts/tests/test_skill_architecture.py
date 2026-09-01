@@ -447,7 +447,7 @@ class SkillArchitectureTests(unittest.TestCase):
                 "成品外包络",
             ),
             "domain/skills/furniture-layout/SKILL.md": (
-                "shelf_count/door_count",
+                "door_count",
                 "不参与房间定位",
                 "左后下落地角",
             ),

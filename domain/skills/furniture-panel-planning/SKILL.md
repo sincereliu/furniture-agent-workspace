@@ -22,10 +22,11 @@ description: 用于 panels_planned 阶段。在已确认成品外包络上理解
 
 ## 提案
 
-- 完整参数包括数量 `shelf_count/n_doors/drawer_count` 与单门铰链侧 `door_hinge_side`（`n_doors=1` 时必填 `left/right`，其余显式 `null`），活动层板连接方式 `movable_shelf_connector`（`two_in_one`/`shelf_pin`），主体厚度，背板模式/偏移/槽/背拉条，门缝与踢脚，以及五项抽屉净空/厚度；单位均为 mm。自然语言说明留在交互中。
+- 完整参数包括层板列表 `shelves`（从上到下，每项 `{shelf_type: fixed|movable, gap_below_mm: 净高|null=auto}`）与顶格 `top_gap_mm`、数量 `n_doors/drawer_count`、单门铰链侧 `door_hinge_side`（`n_doors=1` 时必填 `left/right`，其余显式 `null`），活动层板连接方式 `movable_shelf_connector`（`two_in_one`/`shelf_pin`），主体厚度，背板模式/偏移/槽/背拉条，门缝与踢脚，以及五项抽屉净空/厚度；单位均为 mm。自然语言说明留在交互中。
 - 常见提议起点可采用柜体/门板 18、背板 9、背板后移 18、门边缝 1.5、铰链深度缝 2、槽深 6、槽余量 1、背拉条高 70；抽屉每侧净空 13、层缝 1.5、底/背板厚 18、后净空 0。落地柜可从 50 高踢脚、4 层板/2 门起步，吊柜可从无踢脚、1 层板/2 门起步。它们只是 LLM 候选，须结合需求逐字段确认。
 - `toe_kick_support_count=null` 是显式请求宽度公式，`back_mount=auto` 是显式请求厚度公式，均不是运行时缺省。混合门/抽屉、分区柜或多门开启关系超出当前拓扑时继续消歧。
 - `movable_shelf_connector` 是活动层板连接方式的显式枚举（`two_in_one`=二合一、`shelf_pin`=隔板钉）；无偏好时提议 `two_in_one` 作为待确认默认，不得由代码静默补齐。
+- `shelves` 按从上到下的视觉顺序排列；每项 `gap_below_mm` 是「本层板底面到下方紧邻一层顶面」的净高，最下层到底板顶面，顶格由 `top_gap_mm` 表示；恰好一项 `gap_below_mm` 可为 `null`/`auto`（计算层，吸收剩余）。均分由 LLM 算出具体值填入，运行时不做均分、不保留 `shelf_count`。
 
 ## 边界
 

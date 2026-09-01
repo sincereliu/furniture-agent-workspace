@@ -17,7 +17,7 @@
   代码拒绝缺省；标准双门由代码确定性推导（左门左铰、右门右铰）并写入各门板；
   门数更多但开启策略未确认时保持为空，不由制造阶段猜测多门开启关系。
 - 当前 `drawer_count>0` 的规范语义仅为整高抽屉区；必须同时提交
-  `shelf_count=0/n_doors=0`。混合门、层板和抽屉分区先由 LLM 继续消歧，
+  空 `shelves` 与 `n_doors=0`。混合门、层板和抽屉分区先由 LLM 继续消歧，
   不得由代码按数量优先级静默丢弃任何区域。
 - 抽屉每侧净空、层缝、底/背板厚和后部净空分别来自已准入的
   `drawer_side_clearance/drawer_layer_gap/drawer_bottom_thickness/`

@@ -26,7 +26,6 @@ def plan_layout(spec: LayoutSpec | Any) -> CabinetLayout:
             width=float(spec.width),
             depth=float(spec.depth),
             height=float(spec.height),
-            shelf_count=int(spec.shelf_count),
             door_count=int(getattr(spec, "door_count", spec.n_doors)),
         )
     return CabinetLayout.from_spec(spec)

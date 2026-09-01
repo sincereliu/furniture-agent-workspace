@@ -31,7 +31,6 @@ class CabinetStructure:
     toe_kick_height: float
     toe_kick_rear_y: float
     toe_kick_front_y: float
-    shelf_count: int
     door_count: int
 
     @classmethod
@@ -70,6 +69,5 @@ class CabinetStructure:
             toe_kick_height=toe_kick,
             toe_kick_rear_y=carcass_y_start + spec.toe_kick_reveal_back,
             toe_kick_front_y=carcass_y_end - spec.toe_kick_reveal_front,
-            shelf_count=spec.shelf_count,
             door_count=spec.n_doors,
         )

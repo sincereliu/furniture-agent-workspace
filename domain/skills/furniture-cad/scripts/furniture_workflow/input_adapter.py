@@ -8,7 +8,7 @@ from furniture_design_intent.design_intent import DesignIntent
 from furniture_panel_planning.panel_spec import PANEL_SPEC_FIELDS
 
 
-PANEL_CONFIGURATION_FIELDS = frozenset({"shelf_count", "n_doors", "door_count"})
+PANEL_CONFIGURATION_FIELDS = frozenset({"n_doors", "door_count"})
 LAYOUT_CONTEXT_FIELDS = frozenset({"room", "placement"})
 MANUFACTURING_SPEC_FIELDS = frozenset(
     {

@@ -25,7 +25,6 @@ def plan_panels(
             spec.width,
             spec.depth,
             spec.height,
-            spec.shelf_count,
             spec.n_doors,
         )
         received = (
@@ -33,7 +32,6 @@ def plan_panels(
             getattr(layout, "width", None),
             getattr(layout, "depth", None),
             getattr(layout, "height", None),
-            getattr(layout, "shelf_count", None),
             getattr(layout, "door_count", None),
         )
         if received != expected:

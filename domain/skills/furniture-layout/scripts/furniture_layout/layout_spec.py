@@ -9,8 +9,8 @@ from furniture_design_intent.design_intent import DesignIntent, SUPPORTED_TYPES
 
 
 LAYOUT_PRESETS: dict[str, dict[str, int]] = {
-    "floor_cabinet": {"shelf_count": 4, "door_count": 2},
-    "wall_cabinet": {"shelf_count": 1, "door_count": 2},
+    "floor_cabinet": {"door_count": 2},
+    "wall_cabinet": {"door_count": 2},
 }
 
 
@@ -22,7 +22,6 @@ class LayoutSpec:
     width: float
     depth: float
     height: float
-    shelf_count: int
     door_count: int
     mount_mode: str | None = None
     mounting_height_mm: float | None = None
@@ -34,7 +33,7 @@ class LayoutSpec:
         options: Mapping[str, Any] | None = None,
     ) -> "LayoutSpec":
         values = dict(options or {})
-        unknown = sorted(set(values) - {"shelf_count", "n_doors", "door_count"})
+        unknown = sorted(set(values) - {"n_doors", "door_count"})
         if unknown:
             raise ValueError(
                 "independent layout does not support: " + ", ".join(unknown)
@@ -49,7 +48,6 @@ class LayoutSpec:
         if any(value is None for value in dimensions):
             raise ValueError("layout requires a confirmed finished envelope")
         preset = LAYOUT_PRESETS[intent.furniture_type]
-        shelf_count = _count(values.get("shelf_count", preset["shelf_count"]), "shelf_count")
         door_count = _count(
             values.get("door_count", values.get("n_doors", preset["door_count"])),
             "door_count",
@@ -59,7 +57,6 @@ class LayoutSpec:
             width=float(dimensions[0]),
             depth=float(dimensions[1]),
             height=float(dimensions[2]),
-            shelf_count=shelf_count,
             door_count=door_count,
             mount_mode=intent.mount_mode,
             mounting_height_mm=intent.mounting_height_mm,
