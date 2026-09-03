@@ -1,5 +1,40 @@
 # 更新日志
 
+## 20260901.3 — 连接点身份 `connection_id` + 背板三合一孔类型合并
+
+为三合一三件套（轮/杆/螺母）建立确定性连接点标识，并把内嵌背板三合一与柜体三合一统一为同一套孔类型，靠 `connection_id` 区分来源与校验归属。
+
+### 连接点身份（非随机）
+
+- `HoleSpec` 新增 `connection_id`，格式 `<female>→<male>#<排次>`：`female`/`male` 来自 `PanelJoint`（哪块板的面被哪块板的端面顶住），`排次` 是同一连接边上的前后排/沿边排索引（按位置从小到大）。同一柜体每次重算生成完全相同的 id，可复现、可 diff、可测试。
+- 导出：`emit_drilled_holes` 与 `HoleResponse` 输出 `connection_id`。
+
+### 背板三合一合并
+
+- `back_insert_cam/rod/nut` → `three_in_one_cam/rod/nut`（内嵌背板与柜体统一为同一五金、同一孔类型）。
+- `BackMountConnector` 三件套孔共享 `connection_id`；BOM 名「三合一连接件（内嵌背板）」→「三合一连接件（背板）」，数量 = 连接点数（孔即真源），去掉「估算」措辞。
+- `TrinityConnector`（柜体）过滤背板连接（`male.panel_type == "back"` 排除），避免合并后重复出孔。
+
+### 校验按连接点对齐（消除静默孤儿）
+
+- 三合一/背板校验从「按孔类型全局计数」升级为「按 `connection_id` 逐点核对」：每个连接点恰好 1 轮 + 1 杆 + 1 螺母。
+- 修复「删杆孔静默孤儿」：现在报 `TRINITY_ROD_CAM_COUNT_MISMATCH` / `TRINITY_NUT_CAM_COUNT_MISMATCH` / `BACK_MOUNT_HOLE_COUNT_MISMATCH` 并指出具体连接点。
+- 新增 `TRINITY_NUT_CAM_COUNT_MISMATCH`（主柜体也补上螺母 1:1 校验）。
+
+### cover（外盖背板）改三合一（留待以后确定，本轮未落地）
+
+- 方向已厘清：反向角色——背板=母件（预埋螺母），侧/顶/底板=公件（连接杆+偏心轮）；且背板需 18mm（预埋螺母深 11mm 放不进 9mm 薄背板）。
+- 几何与装配可达性待确定后再实现；当前 cover 仍视为组装现场工艺、不钻孔、不出三合一 BOM。
+
+### 待定（留待下一轮）
+
+- 连接点「整体增删」的增量编辑入口（当前仍是整体重生成）。
+- cover 改三合一（几何/装配可达性待确定）。
+
+### 验证
+
+- `test_back_mount_modes` / `test_api_entrypoint` / `test_recent_manufacturing_patches.PanelAndConnectorPatchTests` 21 项通过；全套 100 项仅 13 项环境性 `%TEMP%` 写权限失败（与本次无关）。
+
 ## 20260901.2 — 层板高度化：`shelf_count` 移除，`shelves` 列表 + `top_gap_mm`，活动层板落地
 
 层板规格从「数量 + 自动均分」改为「自上而下的逐层清单」，并真正生成活动层板（二合一/隔板钉按 `movable_shelf_connector` 选型出孔/BOM）。
@@ -37,7 +72,7 @@
 ### 孔类型标识（hole_type，进 drilled-holes.json / GLB 标签 / 校验）
 
 - `system_32_female/male/pre_nut` → `three_in_one_cam` / `three_in_one_rod` / `three_in_one_nut`（修正原 female/male 与板件公母语义相反）。
-- `back_insert_pre_nut` → `back_insert_nut`。
+- `back_insert_pre_nut` → `back_insert_nut`（20260901.3 起随背板三合一合并，最终统一为 `three_in_one_nut`）。
 - 新增 `two_in_one_cam` / `two_in_one_rod`、`shelf_pin`。
 
 ### 代码
@@ -53,7 +88,7 @@
 
 ### 备注
 
-- `movable_shelf` 面板当前未由板件规划生成，二合一/隔板钉连接件为休眠占位；其几何定位（前后排、杆轴对齐、层板侧边投影）标「软件暂定，投产前确认」。
+- `movable_shelf` 面板自 20260901.2 起由 `spec.shelves` 生成（不再休眠占位）；其几何定位（前后排、杆轴对齐、层板侧边投影）标「软件暂定，投产前确认」。
 - 各五金 `part`（实物规格）标「待定」，待提供后 BOM 规格串改为读 `part`。
 
 ### 验证

@@ -1,7 +1,9 @@
 """背板安装连接件 — 内嵌背板四边三合一。
 
-外盖(cover)与背拉条(groove)的螺钉连接属于组装现场工艺，
-不在柜体加工范围内，不生成孔位与五金。
+内嵌背板(insert)使用与柜体相同的三合一五金（偏心轮+连接杆+预埋螺母），
+孔类型统一为 `three_in_one_cam/rod/nut`，靠 `connection_id` 与柜体三合一区分。
+外盖(cover)与背拉条(groove)的螺钉连接属于组装现场工艺，不在柜体加工范围内，
+不生成孔位与五金（cover 改三合一留待以后确定，见 runtime-map）。
 """
 
 from __future__ import annotations
@@ -9,7 +11,11 @@ from __future__ import annotations
 from math import ceil
 from typing import Any, Dict, List, Mapping
 
-from furniture_manufacturing.connectors.base import Connector, HoleSpec
+from furniture_manufacturing.connectors.base import (
+    Connector,
+    HoleSpec,
+    make_connection_id,
+)
 from furniture_manufacturing.manufacturing_models import (
     HardwareRecord,
     MachiningOperation,
@@ -20,7 +26,8 @@ from furniture_manufacturing.manufacturing_models import (
 class BackMountConnector(Connector):
     """背板安装连接件。
 
-    仅 insert 模式生成四边三合一（背板偏心轮孔 + 连接杆通道 + 柜体预埋螺母孔）。
+    仅 insert 模式生成四边三合一（背板偏心轮孔 + 连接杆通道 + 柜体预埋螺母孔），
+    孔类型与柜体三合一统一为 three_in_one_*，用 connection_id 区分来源。
     cover/groove 的螺钉孔与五金属于组装现场工艺，不加工、不出 BOM。
     """
 
@@ -28,11 +35,8 @@ class BackMountConnector(Connector):
     hole_type_for_json = "back_mount"
     catalog_entry = "three_in_one"
     rules_section = "back_mount_drilling"
-    hole_legend = {
-        "back_insert_cam": {"color": "#8E44AD", "label": "内嵌背板偏心轮孔", "glb_group": "内嵌背板偏心轮孔"},
-        "back_insert_rod": {"color": "#9B59B6", "label": "内嵌背板连接杆孔", "glb_group": "内嵌背板连接杆孔"},
-        "back_insert_nut": {"color": "#6C3483", "label": "内嵌背板预埋螺母孔", "glb_group": "内嵌背板预埋螺母孔"},
-    }
+    # 孔类型与柜体三合一统一：图例由 TrinityConnector 的 three_in_one_* 提供
+    hole_legend: Dict[str, Dict[str, str]] = {}
 
     def match(self, panels: List[PanelRecord]) -> Dict[str, Any]:
         return {
@@ -71,7 +75,7 @@ class BackMountConnector(Connector):
         if mode != "insert":
             return []
         holes = self.generate_holes_for_panels(panels)
-        quantity = self._hole_count(holes, "back_insert_cam")
+        quantity = self._connection_count(holes)
         if quantity <= 0:
             return []
         spec = self.catalog.get("three_in_one", {}).get("standard", {})
@@ -80,20 +84,17 @@ class BackMountConnector(Connector):
         brand = self.resolve_brand(spec.get("brands", []), opts.get("brand"))
         return [
             HardwareRecord(
-                name="三合一连接件（内嵌背板）",
+                name="三合一连接件（背板）",
                 spec="偏心轮+连接杆+预埋螺母（实物规格待确认）",
                 quantity=quantity,
                 unit="套",
                 brand=brand.get("name", "默认"),
                 model=brand.get("model", "SJY-01"),
-                note="按四边连接点估算，投产前确认连接点数量",
+                note="按四边连接点计（孔即真源），投产前确认连接点数量",
                 drilling=[
-                    {"hole_type": "back_insert_cam", "quantity": quantity},
-                    {"hole_type": "back_insert_rod", "quantity": quantity},
-                    {
-                        "hole_type": "back_insert_nut",
-                        "quantity": quantity,
-                    },
+                    {"hole_type": "three_in_one_cam", "quantity": quantity},
+                    {"hole_type": "three_in_one_rod", "quantity": quantity},
+                    {"hole_type": "three_in_one_nut", "quantity": quantity},
                 ],
             )
         ]
@@ -105,55 +106,42 @@ class BackMountConnector(Connector):
         hardware: List[HardwareRecord],
         drilled: Dict[str, Any],
     ) -> None:
-        """内嵌背板（insert）专属校验：三件套孔（轮/杆/螺母）数量一致且匹配 BOM。"""
+        """背板三合一（insert）专属校验：按连接点对齐，每个连接点 1 轮 + 1 杆 + 1 螺母。"""
         mode = self._mode(panels)
-        hole_types = [
-            hole["hole_type"]
-            for panel in drilled["panels"]
-            for hole in panel["holes"]
-        ]
-        hardware_by_name = {item.name: item for item in hardware}
-        contract = {
-            "insert": (
-                "三合一连接件（内嵌背板）",
-                ("back_insert_cam", "back_insert_rod", "back_insert_nut"),
-            ),
-        }.get(mode)
-        if contract is None:
+        if mode != "insert":
             return
-        hardware_name, required_hole_types = contract
+        holes = self.generate_holes_for_panels(panels)
+        by_conn: Dict[str, Dict[str, int]] = {}
+        for hole in holes:
+            if not hole.connection_id:
+                continue
+            entry = by_conn.setdefault(
+                hole.connection_id, {"cam": 0, "rod": 0, "nut": 0}
+            )
+            key = {
+                "three_in_one_cam": "cam",
+                "three_in_one_rod": "rod",
+                "three_in_one_nut": "nut",
+            }.get(hole.hole_type)
+            if key:
+                entry[key] += 1
+        hardware_by_name = {item.name: item for item in hardware}
+        hardware_name = "三合一连接件（背板）"
         hardware_item = hardware_by_name.get(hardware_name)
-        counts = {
-            hole_type: hole_types.count(hole_type)
-            for hole_type in required_hole_types
-        }
-        if hardware_item is None or hardware_item.quantity <= 0:
-            report.add_error(
-                "MISSING_BACK_MOUNT_HARDWARE",
-                f"{mode} back strategy is missing {hardware_name}",
-                "hardware",
-            )
-        if any(count <= 0 for count in counts.values()):
-            report.add_error(
-                "MISSING_BACK_MOUNT_HOLES",
-                f"{mode} back strategy is missing matched hole records",
-                "drilled_holes",
-            )
-        elif len(set(counts.values())) != 1:
-            report.add_error(
-                "BACK_MOUNT_HOLE_COUNT_MISMATCH",
-                f"{mode} mating hole counts do not match",
-                "drilled_holes",
-            )
-        elif (
-            hardware_item is not None
-            and hardware_item.quantity != next(iter(counts.values()))
-        ):
+        if hardware_item is None or hardware_item.quantity != len(by_conn):
             report.add_error(
                 "BACK_MOUNT_HARDWARE_COUNT_MISMATCH",
-                f"{hardware_name} quantity does not match its hole pattern",
+                f"背板三合一数量与连接点数不一致（期望 {len(by_conn)} 套）",
                 "hardware",
             )
+        for conn_id, counts in sorted(by_conn.items()):
+            if not (counts["cam"] == counts["rod"] == counts["nut"] == 1):
+                report.add_error(
+                    "BACK_MOUNT_HOLE_COUNT_MISMATCH",
+                    f"背板连接点 {conn_id} 三件套不完整："
+                    f"轮={counts['cam']} 杆={counts['rod']} 螺母={counts['nut']}（期望各 1）",
+                    "drilled_holes",
+                )
 
     def machining_operations(
         self,
@@ -199,6 +187,7 @@ class BackMountConnector(Connector):
         result: List[HoleSpec] = []
 
         def add_connection(
+            row_index: int,
             target: PanelRecord | None,
             cam_x_local: float,
             cam_z_local: float,
@@ -210,10 +199,11 @@ class BackMountConnector(Connector):
         ) -> None:
             if target is None:
                 return
+            conn_id = make_connection_id(target.label, back.label, row_index)
             result.append(
                 self._hole(
                     back,
-                    "back_insert_cam",
+                    "three_in_one_cam",
                     cam_x_local,
                     y_face_local,
                     cam_z_local,
@@ -222,12 +212,13 @@ class BackMountConnector(Connector):
                     "-y",
                     f"内嵌背板{edge_name}偏心轮孔",
                     is_face_hole=True,
+                    connection_id=conn_id,
                 )
             )
             result.append(
                 self._hole(
                     back,
-                    "back_insert_rod",
+                    "three_in_one_rod",
                     rod_x_local,
                     y_center_local,
                     rod_z_local,
@@ -236,6 +227,7 @@ class BackMountConnector(Connector):
                     rod_direction,
                     f"内嵌背板{edge_name}连接杆通道",
                     is_face_hole=False,
+                    connection_id=conn_id,
                 )
             )
             # 配合板预埋螺母孔必须与背板连接杆落在同一世界点：
@@ -248,7 +240,7 @@ class BackMountConnector(Connector):
             result.append(
                 self._hole(
                     target,
-                    "back_insert_nut",
+                    "three_in_one_nut",
                     point[0] - target.pos_x,
                     point[1] - target.pos_y,
                     point[2] - target.pos_z,
@@ -257,15 +249,15 @@ class BackMountConnector(Connector):
                     target_direction,
                     f"{target.name}与内嵌背板的预埋螺母孔",
                     is_face_hole=True,
+                    connection_id=conn_id,
                 )
             )
 
-        for z_local in self._spaced_positions(
-            back.size_z,
-            first,
-            max_spacing,
+        for row_index, z_local in enumerate(
+            self._spaced_positions(back.size_z, first, max_spacing)
         ):
             add_connection(
+                row_index,
                 targets["left"],
                 cam_offset,
                 z_local,
@@ -276,6 +268,7 @@ class BackMountConnector(Connector):
                 "左边",
             )
             add_connection(
+                row_index,
                 targets["right"],
                 back.size_x - cam_offset,
                 z_local,
@@ -285,12 +278,11 @@ class BackMountConnector(Connector):
                 "+x",
                 "右边",
             )
-        for x_local in self._spaced_positions(
-            back.size_x,
-            first,
-            max_spacing,
+        for row_index, x_local in enumerate(
+            self._spaced_positions(back.size_x, first, max_spacing)
         ):
             add_connection(
+                row_index,
                 targets["bottom"],
                 x_local,
                 cam_offset,
@@ -301,6 +293,7 @@ class BackMountConnector(Connector):
                 "下边",
             )
             add_connection(
+                row_index,
                 targets["top"],
                 x_local,
                 back.size_z - cam_offset,
@@ -319,9 +312,9 @@ class BackMountConnector(Connector):
         return next(iter(modes)) if len(modes) == 1 else ""
 
     @staticmethod
-    def _hole_count(holes: List[HoleSpec], hole_type: str) -> int:
-        """统计某类孔的数量。"""
-        return sum(hole.hole_type == hole_type for hole in holes)
+    def _connection_count(holes: List[HoleSpec]) -> int:
+        """统计不同连接点(connection_id)的数量（一套三合一 = 一个连接点）。"""
+        return len({hole.connection_id for hole in holes if hole.connection_id})
 
     @staticmethod
     def _spaced_positions(
@@ -353,6 +346,7 @@ class BackMountConnector(Connector):
         direction: str,
         note: str,
         is_face_hole: bool = True,
+        connection_id: str = "",
     ) -> HoleSpec:
         """在指定板上生成孔位：局部坐标定义（唯一真源），世界由 to_global 派生。"""
         x_global, y_global, z_global = panel.to_global(
@@ -372,4 +366,5 @@ class BackMountConnector(Connector):
             direction=direction,
             is_face_hole=is_face_hole,
             note=note,
+            connection_id=connection_id,
         )

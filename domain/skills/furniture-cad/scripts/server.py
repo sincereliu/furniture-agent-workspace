@@ -236,6 +236,7 @@ class HoleResponse(BaseModel):
     depth: float
     direction: str
     note: str
+    connection_id: str = ""
 
 
 class PanelDrillingResponse(BaseModel):

@@ -317,6 +317,7 @@ def emit_drilled_holes(bom: BOMReport) -> dict:
                 "direction": hole.direction,
                 "is_face_hole": hole.is_face_hole,
                 "note": hole.note,
+                "connection_id": hole.connection_id,
             })
 
     panels_out = []

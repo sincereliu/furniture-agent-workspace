@@ -178,16 +178,16 @@ class ApiEntrypointTests(unittest.TestCase):
     def test_plan_endpoint_returns_each_back_mount_manufacturing_contract(
         self,
     ) -> None:
-        # cover/groove 的螺钉为组装现场工艺：无螺钉五金、无螺钉孔
+        # insert 出三合一；cover/groove 的螺钉为组装现场工艺：无螺钉五金、无螺钉孔
         contracts = {
             "groove": (9, None, set(), 4),
             "insert": (
                 18,
-                "三合一连接件（内嵌背板）",
+                "三合一连接件（背板）",
                 {
-                    "back_insert_cam",
-                    "back_insert_rod",
-                    "back_insert_nut",
+                    "three_in_one_cam",
+                    "three_in_one_rod",
+                    "three_in_one_nut",
                 },
                 0,
             ),

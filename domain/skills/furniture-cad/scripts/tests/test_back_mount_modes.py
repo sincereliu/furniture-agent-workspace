@@ -165,8 +165,8 @@ class BackMountModeTests(unittest.TestCase):
     def test_all_modes_emit_mount_specific_manufacturing_semantics(self) -> None:
         # insert 有三合一五金与成对孔；cover/groove 的螺钉为组装现场工艺，无五金无孔
         insert_contract = (
-            "三合一连接件（内嵌背板）",
-            ("back_insert_cam", "back_insert_rod", "back_insert_nut"),
+            "三合一连接件（背板）",
+            ("three_in_one_cam", "three_in_one_rod", "three_in_one_nut"),
         )
         screw_names = {"沉头木螺钉（外盖背板）", "沉头木螺钉（背拉条）"}
         screw_hole_types = {
@@ -220,13 +220,21 @@ class BackMountModeTests(unittest.TestCase):
                     )
                     self.assertGreater(hardware.quantity, 0)
                     self.assertIn("投产前确认", hardware.note)
+                    # 背板三合一与柜体三合一统一为 three_in_one_*，靠 connection_id 区分：
+                    # 只统计背板连接点（connection_id 含 back_panel）的孔。
+                    back_holes = [
+                        hole
+                        for hole in holes
+                        if "back_panel" in (hole.get("connection_id") or "")
+                    ]
                     counts = {
                         hole_type: sum(
-                            hole["hole_type"] == hole_type for hole in holes
+                            hole["hole_type"] == hole_type for hole in back_holes
                         )
                         for hole_type in required_holes
                     }
                     self.assertEqual(set(counts.values()), {hardware.quantity})
+                    self.assertTrue(back_holes)
                 else:
                     # cover/groove 的螺钉为组装现场工艺，不出五金、不出孔
                     self.assertFalse(

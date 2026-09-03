@@ -9,7 +9,12 @@
 
 from typing import Any, Dict, List, Mapping, Set
 
-from furniture_manufacturing.connectors.base import Connector, HoleSpec, _opposite
+from furniture_manufacturing.connectors.base import (
+    Connector,
+    HoleSpec,
+    _opposite,
+    make_connection_id,
+)
 from furniture_manufacturing.manufacturing_models import HardwareRecord, MachiningOperation, PanelRecord
 
 
@@ -115,6 +120,10 @@ def _is_trinity_joint(joint: Any, by_label: Dict[str, PanelRecord]) -> bool:
     if not joint.male_has_cam:
         return False
     female = by_label[joint.female_id]
+    male = by_label[joint.male_id]
+    if male.panel_type == "back":
+        # 背板三合一（内嵌/外盖）由 BackMountConnector 负责，不在柜体三合一内
+        return False
     if "drawer" in female.panel_type:
         return joint.edge_axis in ("x", "y")
     return joint.edge_axis == "x"
@@ -413,7 +422,7 @@ class TrinityConnector(Connector):
             getattr(male, f"pos_{s2}") + getattr(male, f"size_{s2}") - row_last,
         ]
         nut_dir = _opposite(face)
-        for row_world in rows_world:
+        for row_index, row_world in enumerate(rows_world):
             local = {
                 f: face_local,
                 t: t_rod_world - getattr(panel, f"pos_{t}"),
@@ -427,7 +436,10 @@ class TrinityConnector(Connector):
                 x_global=x_global, y_global=y_global, z_global=z_global,
                 x_local=local["x"], y_local=local["y"], z_local=local["z"],
                 diameter=n_diam, depth=n_depth, direction=nut_dir,
-                is_face_hole=True, note="预埋螺母孔"))
+                is_face_hole=True, note="预埋螺母孔",
+                connection_id=make_connection_id(
+                    joint.female_id, joint.male_id, row_index,
+                )))
         return result
 
     def _rod_holes(
@@ -452,7 +464,7 @@ class TrinityConnector(Connector):
         t_rod = (
             size_t - rod_axis_offset if cam_face[0] == "+" else rod_axis_offset
         )
-        for row in rows:
+        for row_index, row in enumerate(rows):
             local = {a: edge_local, s2: row, t: t_rod}
             x_global, y_global, z_global = panel.to_global(
                 local["x"], local["y"], local["z"]
@@ -462,7 +474,10 @@ class TrinityConnector(Connector):
                 x_global=x_global, y_global=y_global, z_global=z_global,
                 x_local=local["x"], y_local=local["y"], z_local=local["z"],
                 diameter=r_diam, depth=r_depth, direction=rod_dir,
-                is_face_hole=False, note="连接杆孔"))
+                is_face_hole=False, note="连接杆孔",
+                connection_id=make_connection_id(
+                    joint.female_id, joint.male_id, row_index,
+                )))
         return result
 
     def _cam_holes(
@@ -488,7 +503,7 @@ class TrinityConnector(Connector):
             0.0 if cam_face[0] == "-" else getattr(panel, f"size_{t}")
         )
         cam_dir = _opposite(cam_face)
-        for row in rows:
+        for row_index, row in enumerate(rows):
             local = {a: cam_a, s2: row, t: cam_t}
             x_global, y_global, z_global = panel.to_global(
                 local["x"], local["y"], local["z"]
@@ -498,7 +513,10 @@ class TrinityConnector(Connector):
                 x_global=x_global, y_global=y_global, z_global=z_global,
                 x_local=local["x"], y_local=local["y"], z_local=local["z"],
                 diameter=w_diam, depth=w_depth, direction=cam_dir,
-                is_face_hole=True, note="偏心轮孔"))
+                is_face_hole=True, note="偏心轮孔",
+                connection_id=make_connection_id(
+                    joint.female_id, joint.male_id, row_index,
+                )))
         return result
 
     def _system_32_positions(self, panel: PanelRecord, rules: Dict[str, Any]) -> List[float]:
@@ -561,28 +579,46 @@ class TrinityConnector(Connector):
         hardware: List[HardwareRecord],
         drilled: Dict[str, Any],
     ) -> None:
-        """三合一专属校验：偏心轮孔数 = BOM 数，连接杆孔数 = 偏心轮孔数（1:1 配对）。"""
-        hole_types = [
-            hole["hole_type"]
-            for panel in drilled["panels"]
-            for hole in panel["holes"]
-        ]
+        """三合一专属校验：按连接点(connection_id)对齐，每个连接点恰好 1 轮 + 1 杆 + 1 螺母。
+
+        只统计本连接件自己生成的孔（柜体三合一）；背板三合一由
+        BackMountConnector 负责，合并孔类型后也不会把背板的孔算进柜体。
+        """
+        by_conn: Dict[str, Dict[str, int]] = {}
+        for hole in self.generate_holes_for_panels(panels):
+            if not hole.connection_id:
+                continue
+            entry = by_conn.setdefault(
+                hole.connection_id, {"cam": 0, "rod": 0, "nut": 0}
+            )
+            key = {
+                "three_in_one_cam": "cam",
+                "three_in_one_rod": "rod",
+                "three_in_one_nut": "nut",
+            }.get(hole.hole_type)
+            if key:
+                entry[key] += 1
         hardware_by_name = {item.name: item for item in hardware}
         trinity_hardware = hardware_by_name.get(self.name)
-        trinity_cam_count = hole_types.count("three_in_one_cam")
-        if trinity_hardware is not None and trinity_hardware.quantity != trinity_cam_count:
+        if trinity_hardware is not None and trinity_hardware.quantity != len(by_conn):
             report.add_error(
                 "TRINITY_HARDWARE_COUNT_MISMATCH",
-                f"三合一连接件数量 {trinity_hardware.quantity} 与偏心轮孔数 {trinity_cam_count} 不一致",
+                f"三合一连接件数量 {trinity_hardware.quantity} 与连接点数 {len(by_conn)} 不一致",
                 "hardware",
             )
-        trinity_rod_count = hole_types.count("three_in_one_rod")
-        if trinity_rod_count != trinity_cam_count:
-            report.add_error(
-                "TRINITY_ROD_CAM_COUNT_MISMATCH",
-                f"连接杆孔数 {trinity_rod_count} 与偏心轮孔数 {trinity_cam_count} 不一致（1:1 配对）",
-                "drilled_holes",
-            )
+        for conn_id, counts in sorted(by_conn.items()):
+            if counts["rod"] != counts["cam"]:
+                report.add_error(
+                    "TRINITY_ROD_CAM_COUNT_MISMATCH",
+                    f"连接点 {conn_id} 连接杆孔数 {counts['rod']} 与偏心轮孔数 {counts['cam']} 不一致（1:1 配对）",
+                    "drilled_holes",
+                )
+            if counts["nut"] != counts["cam"]:
+                report.add_error(
+                    "TRINITY_NUT_CAM_COUNT_MISMATCH",
+                    f"连接点 {conn_id} 预埋螺母孔数 {counts['nut']} 与偏心轮孔数 {counts['cam']} 不一致（1:1 配对）",
+                    "drilled_holes",
+                )
 
     def machining_operations(self, panel: PanelRecord) -> List[MachiningOperation]:
         """生成三合一孔位的 cut_box 加工指令。"""

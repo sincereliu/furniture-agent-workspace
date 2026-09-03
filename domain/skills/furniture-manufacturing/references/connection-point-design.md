@@ -1,6 +1,6 @@
 # 连接点级实体需求（记录）
 
-状态：**需求记录**（未立项、未实施）。来源于 2026-08 局部坐标化重构讨论。
+状态：**部分实施**（`connection_id` 已落地）。来源 2026-08 局部坐标化重构讨论；2026-09 随背板三合一孔类型合并落地 `HoleSpec.connection_id` 与按连接点校验。
 
 ## 背景
 
@@ -28,6 +28,13 @@ BOM 数量只认轮孔（`TrinityConnector.boms()` quantity = `three_in_one_cam`
 2. **校验按连接点对齐**：主柜体也校验 `杆孔数 == 轮孔数 == 连接点数`（或更强：按连接点标识逐点核对配对几何），消除"删杆孔静默孤儿"。
 3. **配对显式化**：`HoleSpec` 增加连接点标识（如 `connection_id` / group 字段），或引入连接点级实体；连接拓扑（`PanelJoint` 的 male/female 配对）可作来源。
 4. **顺带修正**：`machining_operations` 的 id 为 `{hole_type}_{panel}_{z:.0f}_{y:.0f}`，不含端面区分，横板左右两端同 (z,y) 的杆孔 id 重复——按连接点索引时该 id 方案必须含端面/方向区分。
+
+## 实施状态（2026-09）
+
+- `HoleSpec.connection_id`（确定性，`<female>→<male>#<排次>`，非随机）已落地：`TrinityConnector`（柜体三合一）与 `BackMountConnector`（内嵌背板三合一）三件套孔共享同一 `connection_id`。
+- 校验改为按连接点对齐：每个连接点恰好 1 轮 + 1 杆 + 1 螺母；「手动删单孔」现在会报出具体连接点（`TRINITY_ROD_CAM_COUNT_MISMATCH` / `TRINITY_NUT_CAM_COUNT_MISMATCH` / `BACK_MOUNT_HOLE_COUNT_MISMATCH`），消除「删杆孔静默孤儿」。
+- BOM 数量 = 连接点数量（孔即真源），柜体/背板靠 `connection_id` 区分，不再按孔类型全局计数。
+- 未落地（留待后续）：连接点作为整体增删的增量编辑入口（当前仍是整体重生成）；`machining_operations` id 含端面区分（已由 `x_local` 区分左右端，见 `trinity.py`）。
 
 ## 实施建议（暂定，实施前需重新评审）
 
