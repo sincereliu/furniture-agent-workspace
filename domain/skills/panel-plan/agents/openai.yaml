@@ -1,4 +1,4 @@
-interface:
+﻿interface:
   display_name: "家具板件规划"
   short_description: "确认结构、净空、背板并生成实体板件"
-  default_prompt: "使用 $furniture-panel-planning 从已确认外包络理解并提议层板、门、抽屉、板厚、背板、踢脚和净空方案；展示假设，经确定性代码准入后生成可审查板件，不要求房间摆放图。"
+  default_prompt: "使用 $panel-plan 从已确认外包络理解并提议层板、门、抽屉、板厚、背板、踢脚和净空方案；展示假设，经确定性代码准入后生成可审查板件，不要求房间摆放图。"

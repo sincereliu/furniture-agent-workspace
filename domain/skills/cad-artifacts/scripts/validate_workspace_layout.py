@@ -24,13 +24,13 @@ SCRIPT_SUFFIXES = {
     ".tsx",
 }
 STAGE_SKILL_NAMES = (
-    "furniture-design-intent",
-    "furniture-layout",
-    "furniture-panel-planning",
-    "furniture-manufacturing",
-    "furniture-feature-tree",
-    "furniture-cad",
-    "furniture-delivery-validation",
+    "design-intent",
+    "layout-plan",
+    "panel-plan",
+    "manufacturing-plan",
+    "feature-tree",
+    "cad-artifacts",
+    "delivery-report",
 )
 ALLOWED_SCRIPT_ROOTS = tuple(
     Path("domain") / "skills" / skill_name / "scripts" for skill_name in STAGE_SKILL_NAMES

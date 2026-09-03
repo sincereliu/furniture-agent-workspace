@@ -1,6 +1,6 @@
 """Furniture Agent 服务 — FastAPI 入口
 
-启动: ./.venv/Scripts/python.exe domain/skills/furniture-cad/scripts/server.py
+启动: ./.venv/Scripts/python.exe domain/skills/cad-artifacts/scripts/server.py
 打开: http://localhost:8000/docs 查看 Swagger API 文档
 """
 

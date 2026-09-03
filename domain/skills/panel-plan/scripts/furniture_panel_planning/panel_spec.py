@@ -14,7 +14,7 @@ from .panel_rules import resolve_door_hinge_side
 VALID_BACK_MOUNTS = frozenset({"auto", "groove", "insert", "cover"})
 
 # 活动层板连接方式：二选一。默认候选为 two_in_one，但必须是显式+待确认的提案值，
-# 不得由代码静默补齐（见 furniture-panel-planning SKILL.md）。
+# 不得由代码静默补齐（见 panel-plan SKILL.md）。
 VALID_MOVABLE_SHELF_CONNECTORS = frozenset({"two_in_one", "shelf_pin"})
 
 VALID_SHELF_TYPES = frozenset({"fixed", "movable"})

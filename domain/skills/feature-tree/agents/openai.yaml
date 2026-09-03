@@ -1,4 +1,4 @@
-interface:
+﻿interface:
   display_name: "家具特征树规划"
   short_description: "将制造策略转为可审查的建模特征树"
-  default_prompt: "使用 $furniture-feature-tree 规划已确认方案的特征树。"
+  default_prompt: "使用 $feature-tree 规划已确认方案的特征树。"

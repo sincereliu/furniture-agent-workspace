@@ -11,44 +11,44 @@ import yaml
 WORKSPACE_ROOT = Path(__file__).resolve().parents[5]
 SKILLS_ROOT = WORKSPACE_ROOT / "domain" / "skills"
 
-INTENT_SCRIPTS_ROOT = SKILLS_ROOT / "furniture-design-intent" / "scripts"
+INTENT_SCRIPTS_ROOT = SKILLS_ROOT / "design-intent" / "scripts"
 if str(INTENT_SCRIPTS_ROOT) not in sys.path:
     sys.path.insert(0, str(INTENT_SCRIPTS_ROOT))
 
 from furniture_design_intent.design_intent import SUPPORTED_TYPES
 
 STAGE_SKILLS = {
-    "design_intent": "furniture-design-intent",
-    "panels_planned": "furniture-panel-planning",
-    "manufacturing_planned": "furniture-manufacturing",
-    "feature_tree_planned": "furniture-feature-tree",
-    "cad_generated": "furniture-cad",
-    "delivery_validated": "furniture-delivery-validation",
+    "design_intent": "design-intent",
+    "panels_planned": "panel-plan",
+    "manufacturing_planned": "manufacturing-plan",
+    "feature_tree_planned": "feature-tree",
+    "cad_generated": "cad-artifacts",
+    "delivery_validated": "delivery-report",
 }
 
 STAGE_REFERENCES = {
-    "furniture-design-intent": (
+    "design-intent": (
         "references/intent-capture-rules.md",
         "references/intake/catalog.yaml",
     ),
-    "furniture-layout": ("references/spatial-layout-rules.md",),
-    "furniture-panel-planning": (
+    "layout-plan": ("references/spatial-layout-rules.md",),
+    "panel-plan": (
         "references/panel-definition-rules.md",
     ),
-    "furniture-manufacturing": ("references/manufacturing-rules.md",),
-    "furniture-feature-tree": ("references/feature-tree-rules.md",),
-    "furniture-cad": ("references/runtime-contract.md",),
-    "furniture-delivery-validation": ("references/delivery-checklist.md",),
+    "manufacturing-plan": ("references/manufacturing-rules.md",),
+    "feature-tree": ("references/feature-tree-rules.md",),
+    "cad-artifacts": ("references/runtime-contract.md",),
+    "delivery-report": ("references/delivery-checklist.md",),
 }
 
 STAGE_RUNTIME_PACKAGES = {
-    "furniture-design-intent": "furniture_design_intent",
-    "furniture-layout": "furniture_layout",
-    "furniture-panel-planning": "furniture_panel_planning",
-    "furniture-manufacturing": "furniture_manufacturing",
-    "furniture-feature-tree": "furniture_feature_tree",
-    "furniture-cad": "furniture_cad",
-    "furniture-delivery-validation": "furniture_delivery_validation",
+    "design-intent": "furniture_design_intent",
+    "layout-plan": "furniture_layout",
+    "panel-plan": "furniture_panel_planning",
+    "manufacturing-plan": "furniture_manufacturing",
+    "feature-tree": "furniture_feature_tree",
+    "cad-artifacts": "furniture_cad",
+    "delivery-report": "furniture_delivery_validation",
 }
 
 
@@ -91,7 +91,7 @@ class SkillArchitectureTests(unittest.TestCase):
             claimed_stages[claimed_stage] = skill_name
 
         self.assertEqual(claimed_stages, STAGE_SKILLS)
-        layout_skill = (SKILLS_ROOT / "furniture-layout" / "SKILL.md").read_text(
+        layout_skill = (SKILLS_ROOT / "layout-plan" / "SKILL.md").read_text(
             encoding="utf-8"
         )
         self.assertIn("独立按需步骤", layout_skill)
@@ -111,7 +111,7 @@ class SkillArchitectureTests(unittest.TestCase):
             "独立能力（不在上述串联阶段内）",
             router,
         )
-        self.assertIn("`domain/skills/furniture-layout/SKILL.md`", router)
+        self.assertIn("`domain/skills/layout-plan/SKILL.md`", router)
 
     def test_scientific_skills_are_routed_on_demand_to_stage_owned_adapters(
         self,
@@ -131,23 +131,23 @@ class SkillArchitectureTests(unittest.TestCase):
 
         owned_adapters = (
             (
-                "furniture-panel-planning",
+                "panel-plan",
                 "furniture_panel_planning/quantitative_audit.py",
             ),
             (
-                "furniture-panel-planning",
+                "panel-plan",
                 "furniture_panel_planning/design_optimization.py",
             ),
             (
-                "furniture-manufacturing",
+                "manufacturing-plan",
                 "furniture_manufacturing/prototype_experiment.py",
             ),
             (
-                "furniture-manufacturing",
+                "manufacturing-plan",
                 "furniture_manufacturing/test_statistics.py",
             ),
             (
-                "furniture-manufacturing",
+                "manufacturing-plan",
                 "furniture_manufacturing/production_simulation.py",
             ),
         )
@@ -170,7 +170,7 @@ class SkillArchitectureTests(unittest.TestCase):
             for relative_path in references:
                 self.assertTrue((skill_root / relative_path).is_file())
 
-        cad_references = SKILLS_ROOT / "furniture-cad" / "references"
+        cad_references = SKILLS_ROOT / "cad-artifacts" / "references"
         for moved_reference in (
             "intent-capture-rules.md",
             "spatial-layout-rules.md",
@@ -183,7 +183,7 @@ class SkillArchitectureTests(unittest.TestCase):
 
         topology_root = (
             SKILLS_ROOT
-            / "furniture-panel-planning"
+            / "panel-plan"
             / "references"
             / "cabinet-topologies"
         )
@@ -192,7 +192,7 @@ class SkillArchitectureTests(unittest.TestCase):
         self.assertFalse(
             (
                 SKILLS_ROOT
-                / "furniture-design-intent"
+                / "design-intent"
                 / "references"
                 / "cabinet_topologies"
             ).exists()
@@ -203,7 +203,7 @@ class SkillArchitectureTests(unittest.TestCase):
     ) -> None:
         catalog_path = (
             SKILLS_ROOT
-            / "furniture-design-intent"
+            / "design-intent"
             / "references"
             / "intake"
             / "catalog.yaml"
@@ -227,19 +227,19 @@ class SkillArchitectureTests(unittest.TestCase):
             self.assertTrue((package_root / "__init__.py").is_file(), package_root)
 
         workflow_package = (
-            SKILLS_ROOT / "furniture-cad" / "scripts" / "furniture_workflow"
+            SKILLS_ROOT / "cad-artifacts" / "scripts" / "furniture_workflow"
         )
         self.assertTrue((workflow_package / "workflow_orchestrator.py").is_file())
 
     def test_stage_validation_rules_do_not_live_in_the_orchestrator(self) -> None:
         validators = {
-            "furniture-design-intent": "furniture_design_intent/validation.py",
-            "furniture-layout": "furniture_layout/validation.py",
-            "furniture-panel-planning": "furniture_panel_planning/validation.py",
-            "furniture-manufacturing": "furniture_manufacturing/validation.py",
-            "furniture-feature-tree": "furniture_feature_tree/validation.py",
-            "furniture-cad": "furniture_cad/validation.py",
-            "furniture-delivery-validation": (
+            "design-intent": "furniture_design_intent/validation.py",
+            "layout-plan": "furniture_layout/validation.py",
+            "panel-plan": "furniture_panel_planning/validation.py",
+            "manufacturing-plan": "furniture_manufacturing/validation.py",
+            "feature-tree": "furniture_feature_tree/validation.py",
+            "cad-artifacts": "furniture_cad/validation.py",
+            "delivery-report": (
                 "furniture_delivery_validation/validation.py"
             ),
         }
@@ -250,7 +250,7 @@ class SkillArchitectureTests(unittest.TestCase):
 
         orchestrator = (
             SKILLS_ROOT
-            / "furniture-cad"
+            / "cad-artifacts"
             / "scripts"
             / "furniture_workflow"
             / "workflow_orchestrator.py"
@@ -271,7 +271,7 @@ class SkillArchitectureTests(unittest.TestCase):
 
         delivery_validation = (
             SKILLS_ROOT
-            / "furniture-delivery-validation"
+            / "delivery-report"
             / "scripts"
             / "furniture_delivery_validation"
             / "validation.py"
@@ -281,7 +281,7 @@ class SkillArchitectureTests(unittest.TestCase):
     def test_layout_does_not_own_panel_or_manufacturing_runtime(self) -> None:
         layout_package = (
             SKILLS_ROOT
-            / "furniture-layout"
+            / "layout-plan"
             / "scripts"
             / "furniture_layout"
         )
@@ -295,13 +295,13 @@ class SkillArchitectureTests(unittest.TestCase):
 
         panel_package = (
             SKILLS_ROOT
-            / "furniture-panel-planning"
+            / "panel-plan"
             / "scripts"
             / "furniture_panel_planning"
         )
         manufacturing_package = (
             SKILLS_ROOT
-            / "furniture-manufacturing"
+            / "manufacturing-plan"
             / "scripts"
             / "furniture_manufacturing"
         )
@@ -312,13 +312,13 @@ class SkillArchitectureTests(unittest.TestCase):
     def test_geometric_rules_live_in_their_owning_stages(self) -> None:
         intent_package = (
             SKILLS_ROOT
-            / "furniture-design-intent"
+            / "design-intent"
             / "scripts"
             / "furniture_design_intent"
         )
         panel_package = (
             SKILLS_ROOT
-            / "furniture-panel-planning"
+            / "panel-plan"
             / "scripts"
             / "furniture_panel_planning"
         )
@@ -327,7 +327,7 @@ class SkillArchitectureTests(unittest.TestCase):
 
         input_adapter = (
             SKILLS_ROOT
-            / "furniture-cad"
+            / "cad-artifacts"
             / "scripts"
             / "furniture_workflow"
             / "input_adapter.py"
@@ -336,7 +336,7 @@ class SkillArchitectureTests(unittest.TestCase):
 
         layout_validation = (
             SKILLS_ROOT
-            / "furniture-layout"
+            / "layout-plan"
             / "scripts"
             / "furniture_layout"
             / "validation.py"
@@ -346,7 +346,7 @@ class SkillArchitectureTests(unittest.TestCase):
 
         panel_validation = (
             SKILLS_ROOT
-            / "furniture-panel-planning"
+            / "panel-plan"
             / "scripts"
             / "furniture_panel_planning"
             / "validation.py"
@@ -363,7 +363,7 @@ class SkillArchitectureTests(unittest.TestCase):
 
         manufacturing_validation = (
             SKILLS_ROOT
-            / "furniture-manufacturing"
+            / "manufacturing-plan"
             / "scripts"
             / "furniture_manufacturing"
             / "validation.py"
@@ -372,7 +372,7 @@ class SkillArchitectureTests(unittest.TestCase):
         # 五金专属几何规则随各 Connector 自洽（仍属制造阶段运行时）
         hinge_connector = (
             SKILLS_ROOT
-            / "furniture-manufacturing"
+            / "manufacturing-plan"
             / "scripts"
             / "furniture_manufacturing"
             / "connectors"
@@ -382,7 +382,7 @@ class SkillArchitectureTests(unittest.TestCase):
 
         feature_tree_emitter = (
             SKILLS_ROOT
-            / "furniture-feature-tree"
+            / "feature-tree"
             / "scripts"
             / "furniture_feature_tree"
             / "feature_tree_emitter.py"
@@ -397,28 +397,28 @@ class SkillArchitectureTests(unittest.TestCase):
                 "back_mount",
                 "从板件阶段开始",
             ),
-            "domain/skills/furniture-panel-planning/SKILL.md": (
+            "domain/skills/panel-plan/SKILL.md": (
                 "back_mount",
                 "背拉条",
             ),
-            "domain/skills/furniture-manufacturing/SKILL.md": (
+            "domain/skills/manufacturing-plan/SKILL.md": (
                 "groove",
                 "背拉条",
             ),
-            "domain/skills/furniture-manufacturing/references/runtime-map.md": (
+            "domain/skills/manufacturing-plan/references/runtime-map.md": (
                 "BackMountConnector",
                 "generate_holes_for_panels",
             ),
-            "domain/skills/furniture-feature-tree/SKILL.md": (
+            "domain/skills/feature-tree/SKILL.md": (
                 "insert/cover",
                 "drilled-holes",
             ),
-            "domain/skills/furniture-cad/SKILL.md": (
+            "domain/skills/cad-artifacts/SKILL.md": (
                 "back_mount/back_rail_height",
                 "drilled-holes",
             ),
             (
-                "domain/skills/furniture-delivery-validation/"
+                "domain/skills/delivery-report/"
                 "references/delivery-checklist.md"
             ): (
                 "back_mount",
@@ -433,30 +433,30 @@ class SkillArchitectureTests(unittest.TestCase):
                 self.assertIn(term, text, path)
 
         for relative_path in (
-            "domain/skills/furniture-design-intent/SKILL.md",
-            "domain/skills/furniture-layout/SKILL.md",
+            "domain/skills/design-intent/SKILL.md",
+            "domain/skills/layout-plan/SKILL.md",
         ):
             text = (WORKSPACE_ROOT / relative_path).read_text(encoding="utf-8")
             self.assertNotIn("auto/groove/insert/cover", text)
 
     def test_corrected_stage_boundaries_match_runtime_ownership(self) -> None:
         expected_terms = {
-            "domain/skills/furniture-design-intent/SKILL.md": (
+            "domain/skills/design-intent/SKILL.md": (
                 "草稿尺寸可为 `null`",
                 "furniture_type",
                 "成品外包络",
             ),
-            "domain/skills/furniture-layout/SKILL.md": (
+            "domain/skills/layout-plan/SKILL.md": (
                 "door_count",
                 "不参与房间定位",
                 "左后下落地角",
             ),
-            "domain/skills/furniture-manufacturing/SKILL.md": (
+            "domain/skills/manufacturing-plan/SKILL.md": (
                 "readiness=preliminary/accepted/factory_ready",
                 "FurnitureOrchestrator.run_next()",
                 "references/runtime-map.md",
             ),
-            "domain/skills/furniture-delivery-validation/SKILL.md": (
+            "domain/skills/delivery-report/SKILL.md": (
                 "前五个串联阶段",
                 "不解析 STEP 几何",
                 "未执行",

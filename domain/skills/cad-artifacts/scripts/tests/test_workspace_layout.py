@@ -20,7 +20,7 @@ class WorkspaceLayoutTests(unittest.TestCase):
     def test_accepts_stage_owned_script_and_rejects_unrelated_skill_script(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
-            stage_scripts = root / "domain" / "skills" / "furniture-layout" / "scripts"
+            stage_scripts = root / "domain" / "skills" / "layout-plan" / "scripts"
             stage_scripts.mkdir(parents=True)
             (stage_scripts / "layout.py").write_text("pass\n", encoding="utf-8")
             unrelated_scripts = root / "domain" / "skills" / "other-skill" / "scripts"
