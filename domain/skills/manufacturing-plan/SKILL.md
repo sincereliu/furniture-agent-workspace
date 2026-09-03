@@ -1,5 +1,5 @@
----
-name: furniture-manufacturing
+﻿---
+name: manufacturing-plan
 description: 用于 manufacturing_planned 阶段。当用户说"用什么五金""三合一连接件""铰链怎么装""封边怎么做""出BOM清单""打孔位置"时触发。根据已确认板件制定材料、封边、连接、五金、孔位和 BOM，不构造特征树或 CAD。
 ---
 
@@ -9,7 +9,7 @@ description: 用于 manufacturing_planned 阶段。当用户说"用什么五金"
 
 ## 工作流
 
-1. 检查前置：`design_intent` 与 `panels_planned` 均已确认；独立 `furniture-layout` 结果不是前置条件。
+1. 检查前置：`design_intent` 与 `panels_planned` 均已确认；独立 `layout-plan` 结果不是前置条件。
 2. 由 LLM 根据完整上下文理解制造需求，提出整份策略草案，并把未明确的假设逐项列出给用户确认。策略覆盖：
    - 材料：类别、等级、厚度、纹理、可见面、饰面；
    - 封边：封哪些边、封边厚度及余量；

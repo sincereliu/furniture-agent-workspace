@@ -1,5 +1,5 @@
----
-name: furniture-feature-tree
+﻿---
+name: feature-tree
 description: 用于 feature_tree_planned 阶段。当用户说"建模顺序""哪个部件先做""槽怎么切""背板槽位置"时触发。将已确认制造策略转为可审查的部件、依赖、顺序和 CAD 建模语义，不生成几何。
 ---
 

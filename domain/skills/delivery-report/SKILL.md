@@ -1,5 +1,5 @@
----
-name: furniture-delivery-validation
+﻿---
+name: delivery-report
 description: 用于 delivery_validated 阶段。当用户说"检查一下产物""验证完整性""校验文件""确认交付"时触发。验证当前 Revision 的前置检查点、产物谱系、文件存在性、大小和 SHA-256，并区分外部几何审查。
 ---
 
@@ -10,7 +10,7 @@ description: 用于 delivery_validated 阶段。当用户说"检查一下产物"
 ## 工作流
 
 1. 要求 `cad_generated` 已确认且产物来自当前 Revision。
-2. 读取 [交付验证清单](references/delivery-checklist.md) 和 `../furniture-cad/references/runtime-contract.md`。
+2. 读取 [交付验证清单](references/delivery-checklist.md) 和 `../cad-artifacts/references/runtime-contract.md`。
 3. 用 `FurnitureOrchestrator.run_next()` 调用 `scripts/furniture_delivery_validation/validation.py`，要求前五个串联阶段在当前 Revision 中均有输出、已确认且最近验证通过，再检查必需产物、存在性、非空、大小、SHA-256、stale 状态和 Revision 谱系。独立房间布局不属于交付前置检查点。
 4. `manufacturing_planned.readiness` 必须与 manufacturing-plan/BOM 清单元数据一致；仍为 `preliminary` 时报告警告，交付完整不等于可直接投产。
 5. 若当前 Revision 有 `stage_analyses`，验证每条记录的 Revision、来源阶段及 `source_sha256`；`unavailable`/`descriptive_only` 只作警告，不把旁路分析变成必需交付物。

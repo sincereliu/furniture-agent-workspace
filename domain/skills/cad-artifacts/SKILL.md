@@ -1,5 +1,5 @@
----
-name: furniture-cad
+﻿---
+name: cad-artifacts
 description: 用于 cad_generated 阶段和 CLI/API 批处理。当用户说"生成STEP""导出CAD""3D模型""生成六面钻文件""Viewer预览"时触发。根据已确认特征树生成 CAD、STEP 和 Viewer 拓扑，不做特征树规划或最终验证。
 ---
 
@@ -11,12 +11,12 @@ description: 用于 cad_generated 阶段和 CLI/API 批处理。当用户说"生
 
 ## 代码位置
 
-- 阶段运行时放所属 `domain/skills/furniture-*/scripts/`；跨阶段 Orchestrator、CLI/API、布局守卫和集成测试放 `domain/skills/furniture-cad/scripts/`。
+- 阶段运行时放所属 `domain/skills/*/scripts/`；跨阶段 Orchestrator、CLI/API、布局守卫和集成测试放 `domain/skills/cad-artifacts/scripts/`。
 - 一次性检查、迁移、调试和 CAD 实验放已忽略的 `temp/<project-slug>/`；每个项目或任务独占一个目录，脚本与派生产物随目录整体识别和删除，任务结束即清理。禁止把不同项目平铺在 `temp/` 根层；也禁止根级 `scripts/`、`packages/`、`tests/`、`scratch/`、`tmp/`，以及在非家具 Skill 新建脚本面。
 - 生成源码只进保留路径 `temp/cad-source/<artifact-name>/`，不得进 `generated/`。工作区目录或生成逻辑变更后运行：
 
 ```powershell
-.\.venv\Scripts\python.exe domain\skills\furniture-cad\scripts\validate_workspace_layout.py
+.\.venv\Scripts\python.exe domain\skills\cad-artifacts\scripts\validate_workspace_layout.py
 ```
 
 有违规即失败，交付前清零。
@@ -35,4 +35,4 @@ description: 用于 cad_generated 阶段和 CLI/API 批处理。当用户说"生
 
 - 规范化输入、已确认特征树来源、CAD 命令结果和 `stage_outputs.cad_generated`。
 - 实际存在的 STEP、Viewer 组件包及其 `assembly.json` 清单、drilled-holes、孔位 STEP 及逐板六面钻 XML 路径。
-- 下一阶段：`domain/skills/furniture-delivery-validation/SKILL.md`；本阶段不宣称最终通过。
+- 下一阶段：`domain/skills/delivery-report/SKILL.md`；本阶段不宣称最终通过。

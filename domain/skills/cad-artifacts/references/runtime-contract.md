@@ -1,10 +1,10 @@
-# 家具运行时契约
+﻿# 家具运行时契约
 
 回答“当前工作区实际执行什么？”；声称支持、规范化输入、生成或报告产物前读取。这里只定义运行时契约、命令、路径和限制。
 
 ## 当前能力
 
-唯一应用层入口：`domain/skills/furniture-cad/scripts/furniture_workflow/workflow_orchestrator.py`。它接受只含类别与成品外包络的已确认 `DesignIntent`；`execute_spec()` 接受 CLI/API 扁平 JSON，并把其他字段路由到 `Revision.stage_inputs` 的所属阶段。字段转换、阶段实现和校验归各 Skill，Orchestrator 只管理生命周期。
+唯一应用层入口：`domain/skills/cad-artifacts/scripts/furniture_workflow/workflow_orchestrator.py`。它接受只含类别与成品外包络的已确认 `DesignIntent`；`execute_spec()` 接受 CLI/API 扁平 JSON，并把其他字段路由到 `Revision.stage_inputs` 的所属阶段。字段转换、阶段实现和校验归各 Skill，Orchestrator 只管理生命周期。
 
 - `floor_cabinet`：固定模板，含背板、踢脚板、层板、门板。
 - `wall_cabinet`：固定模板，含背板、层板、门板，无踢脚板。
@@ -50,7 +50,7 @@ result = orchestrator.run_next(
 
 `execute_spec()` 仅供明确 CLI/API 批处理，会自动确认校验通过的中间阶段；交互 Agent 禁用。
 
-`furniture-layout` 不在 `STAGE_SEQUENCE` 中。只有明确请求房间摆放、碰撞检查、SVG 或 Viewer 时才单独运行 `/api/plan-layout`；其结果不写入 `approved_stages`，也不是板件、CAD 或交付的前置条件。
+`layout-plan` 不在 `STAGE_SEQUENCE` 中。只有明确请求房间摆放、碰撞检查、SVG 或 Viewer 时才单独运行 `/api/plan-layout`；其结果不写入 `approved_stages`，也不是板件、CAD 或交付的前置条件。
 
 ## 可执行 JSON
 
@@ -95,7 +95,7 @@ result = orchestrator.run_next(
 根目录运行：
 
 ```powershell
-.\.venv\Scripts\python.exe domain\skills\furniture-cad\scripts\generate_furniture.py <spec.json> --force
+.\.venv\Scripts\python.exe domain\skills\cad-artifacts\scripts\generate_furniture.py <spec.json> --force
 ```
 
 产物名不同于规格文件名时用 `--name <artifact-name>`；仅允许字母、数字、连字符、下划线。
@@ -122,7 +122,7 @@ build123d 入口源码以 `<artifact-name>.step.py`（交互模式为 `model.ste
 
 `CLI / API / Agent -> FurnitureOrchestrator -> 设计意图 -> 板件 -> 制造/BOM -> 特征树 -> CAD Bridge -> STEP + Viewer 组件包 -> 交付验证`
 
-独立房间摆放为：`明确布局请求 -> furniture-layout -> 房间坐标/碰撞检查/SVG/互动 Viewer`。
+独立房间摆放为：`明确布局请求 -> layout-plan -> 房间坐标/碰撞检查/SVG/互动 Viewer`。
 
 Feature Tree v2 支持板件 `box` 和定向 `cut_box`；发射器先建板、再切削、最后装配加工后的板件。
 

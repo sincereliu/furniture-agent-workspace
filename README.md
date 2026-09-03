@@ -1,4 +1,4 @@
-# furniture-agent-workspace
+﻿# furniture-agent-workspace
 
 板式家具参数化规划、拆单、BOM 与 CAD 输出的本地开发工作区。
 
@@ -15,10 +15,10 @@ FurnitureOrchestrator
             +-- CadBridge -> external/text-to-cad
             +-- 验证、Project/Revision、产物清单
 
-独立 furniture-layout -> 房间摆放 / 碰撞检查 / SVG / Viewer
+独立 layout-plan -> 房间摆放 / 碰撞检查 / SVG / Viewer
 ```
 
-`domain/skills/furniture-cad/scripts/furniture_workflow/workflow_orchestrator.py` 是家具生成的唯一应用层入口。六个串联阶段实现由各自 Skill 的 `scripts/` 拥有；CLI、API 与 Agent 不直接拼装规划器、发射器或 CAD Bridge。`furniture-layout` 是明确请求时才调用的独立房间摆放能力，不是家具生成前置步骤。
+`domain/skills/cad-artifacts/scripts/furniture_workflow/workflow_orchestrator.py` 是家具生成的唯一应用层入口。六个串联阶段实现由各自 Skill 的 `scripts/` 拥有；CLI、API 与 Agent 不直接拼装规划器、发射器或 CAD Bridge。`layout-plan` 是明确请求时才调用的独立房间摆放能力，不是家具生成前置步骤。
 
 ## 六阶段交互
 
@@ -35,7 +35,7 @@ FurnitureOrchestrator
 
 阶段确认顺序遵循客户决策：`design_intent` 只确认家具类别与宽深高成品外包络；`panels_planned` 首次确认门数、层板数、抽屉数、板厚、背板、踢脚、精确净空和实体板件；`manufacturing_planned` 再确定材料、封边、连接、五金与加工。
 
-只有明确调用独立 `furniture-layout` 或 `/api/plan-layout` 时才接收房间和家具位置并生成摆放图。未提供时使用 `4200×3600×2800 mm` 的“默认卧室（系统假设）”，并将柜体沿北墙居中摆放；只提供一项时补齐另一项。独立结果包含 `layout_context` 来源标记、房间坐标、家具四角占地、六向净距、内联 SVG 透视图和自包含 HTML 互动 Viewer。普通家具生成不会运行这一步，也不会生成 `layout-plan.json`：
+只有明确调用独立 `layout-plan` 或 `/api/plan-layout` 时才接收房间和家具位置并生成摆放图。未提供时使用 `4200×3600×2800 mm` 的“默认卧室（系统假设）”，并将柜体沿北墙居中摆放；只提供一项时补齐另一项。独立结果包含 `layout_context` 来源标记、房间坐标、家具四角占地、六向净距、内联 SVG 透视图和自包含 HTML 互动 Viewer。普通家具生成不会运行这一步，也不会生成 `layout-plan.json`：
 
 ```json
 {
@@ -105,13 +105,13 @@ revision = orchestrator.apply_panel_optimization_candidate(project, 0)
 
 ```powershell
 # CLI：明确的一次性批处理，规划并生成 CAD
-.\.venv\Scripts\python.exe domain\skills\furniture-cad\scripts\generate_furniture.py <spec.json> --force
+.\.venv\Scripts\python.exe domain\skills\cad-artifacts\scripts\generate_furniture.py <spec.json> --force
 
 # API：只负责 HTTP 协议，内部同样调用 FurnitureOrchestrator
-.\.venv\Scripts\python.exe domain\skills\furniture-cad\scripts\server.py
+.\.venv\Scripts\python.exe domain\skills\cad-artifacts\scripts\server.py
 ```
 
 `POST /api/plan-layout` 返回独立房间布局 JSON；`POST /api/plan-layout/preview` 直接返回 `image/svg+xml` 静态预览；`POST /api/plan-layout/viewer` 返回可直接打开的 `text/html` 互动 Viewer。
 
-可复用阶段代码放在对应的 `domain/skills/furniture-*/scripts/`；统一 Orchestrator、CLI/API 和集成测试放在 `domain/skills/furniture-cad/scripts/`；一次性脚本和派生 CAD 源码放在 `temp/`；最终产物放在 `generated/`。
+可复用阶段代码放在对应的 `domain/skills/*/scripts/`；统一 Orchestrator、CLI/API 和集成测试放在 `domain/skills/cad-artifacts/scripts/`；一次性脚本和派生 CAD 源码放在 `temp/`；最终产物放在 `generated/`。
 

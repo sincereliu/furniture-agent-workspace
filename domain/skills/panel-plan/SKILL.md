@@ -1,5 +1,5 @@
----
-name: furniture-panel-planning
+﻿---
+name: panel-plan
 description: 用于 panels_planned 阶段。在已确认成品外包络上理解并提议门、层板、抽屉、板厚、背板、踢脚和净空方案，经结构化代码准入后生成可审查的实体板件；不负责房间摆放或制造策略。
 ---
 
@@ -9,7 +9,7 @@ description: 用于 panels_planned 阶段。在已确认成品外包络上理解
 
 ## 工作流
 
-1. 只要求 `design_intent` 已确认；独立 `furniture-layout` 结果不是前置条件。
+1. 只要求 `design_intent` 已确认；独立 `layout-plan` 结果不是前置条件。
 2. 由 LLM 根据完整上下文理解需求、消歧并推荐方案；展示未明确值的假设，不在脚本里做关键词识别、同义词映射或开放方案排序。
 3. 把选定草稿的全部规范字段写入 `stage_inputs.panels.parameters`。缺字段不得由代码静默补齐；`toe_kick_support_count=null` 和 `back_mount=auto` 必须是显式结构化值。
 4. 由 `FurnitureSpec.from_intent()` 校验意图确认状态、字段完整性/类型和客观结构冲突，首次物化完整规范。混合门/层板/整高抽屉语义无法由当前拓扑表达时先继续消歧，不得让运行时丢弃字段。
