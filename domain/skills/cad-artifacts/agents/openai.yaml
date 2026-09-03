@@ -1,0 +1,4 @@
+﻿interface:
+  display_name: "家具 CAD 生成"
+  short_description: "由已确认特征树生成 STEP 与 Viewer 拓扑"
+  default_prompt: "使用 $cad-artifacts 生成当前阶段 CAD，展示结果后暂停。"

@@ -1,4 +1,0 @@
-interface:
-  display_name: "家具设计意图"
-  short_description: "确认家具类别与成品外包络"
-  default_prompt: "使用 $furniture-design-intent 只整理并确认家具类别和宽深高外包络；不要提前询问布局、结构或制造细节。"

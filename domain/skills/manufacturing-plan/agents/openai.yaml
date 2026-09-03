@@ -1,0 +1,4 @@
+﻿interface:
+  display_name: "家具制造策略"
+  short_description: "规划材料、封边、连接、孔位和 BOM"
+  default_prompt: "使用 $manufacturing-plan 规划已确认板件的制造策略。"
