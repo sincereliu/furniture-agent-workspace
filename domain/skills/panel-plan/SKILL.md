@@ -18,6 +18,7 @@ description: 用于 panels_planned 阶段。在已确认成品外包络上生成
 
 ## 参考导航
 
+- 规范术语、兼容别名和单位口径： [术语规范表](references/terminology-glossary.md)
 - 提案字段、显式值要求和 LLM 候选起点： [提案契约](references/panel-proposal-contract.md)
 - 背板模式解析、背板基准和内部净深： [背板结构规则](references/back-construction-rules.md)
 - 板件角色、门/层板/踢脚规则和柜型拓扑边界： [板件定义规则](references/panel-definition-rules.md)

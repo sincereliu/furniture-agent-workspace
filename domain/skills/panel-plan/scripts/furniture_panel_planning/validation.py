@@ -125,7 +125,7 @@ def validate_structure(
     for name in (
         "toe_kick_height",
         "back_offset",
-        "door_margin",
+        "front_face_margin",
         "door_hinge_gap",
         "toe_kick_reveal_front",
         "toe_kick_reveal_back",
@@ -219,6 +219,33 @@ def validate_panels(
     if len(ids) != len(panels):
         report.add_error("DUPLICATE_PANEL_ID", "panel ids must be unique")
     panel_by_id = {item.id: item for item in panels}
+    report.issues.extend(_validate_doors(spec, panels).issues)
+    report.issues.extend(_validate_panel_basics(spec, panels, ids).issues)
+    carcass_ids = {
+        "left_side_panel",
+        "right_side_panel",
+        "top_panel",
+        "bottom_panel",
+    }
+    report.issues.extend(
+        _validate_carcass_panels(layout, panel_by_id, carcass_ids).issues
+    )
+    report.issues.extend(
+        _validate_back_panel(spec, layout, panel_by_id, carcass_ids).issues
+    )
+    report.issues.extend(_validate_toe_kick_panels(spec, layout, panels).issues)
+    report.issues.extend(_validate_back_rails(spec, layout, panels).issues)
+    report.issues.extend(_validate_depth_aligned_panels(spec, layout, panels).issues)
+    drawer_report = _validate_drawer_panels(spec, layout, panels)
+    report.issues.extend(drawer_report.issues)
+    return report
+
+
+def _validate_doors(
+    spec: FurnitureSpec,
+    panels: list[PanelPlacement],
+) -> ValidationReport:
+    report = ValidationReport(stage="panels_planned")
     doors = sorted(
         (item for item in panels if item.panel_type == "door"),
         key=lambda item: (item.pos_x, item.id),
@@ -229,19 +256,28 @@ def validate_panels(
             "generated door count must match the admitted panel specification",
             "n_doors",
         )
-    else:
-        for index, door in enumerate(doors):
-            expected_hinge_side = resolve_door_hinge_side(
-                spec.n_doors,
-                index,
-                spec.door_hinge_side,
+        return report
+    for index, door in enumerate(doors):
+        expected_hinge_side = resolve_door_hinge_side(
+            spec.n_doors,
+            index,
+            spec.door_hinge_side,
+        )
+        if door.door_hinge_side != expected_hinge_side:
+            report.add_error(
+                "DOOR_HINGE_SIDE_MISMATCH",
+                f"{door.id} hinge side must match the admitted door topology",
+                door.id,
             )
-            if door.door_hinge_side != expected_hinge_side:
-                report.add_error(
-                    "DOOR_HINGE_SIDE_MISMATCH",
-                    f"{door.id} hinge side must match the admitted door topology",
-                    door.id,
-                )
+    return report
+
+
+def _validate_panel_basics(
+    spec: FurnitureSpec,
+    panels: list[PanelPlacement],
+    ids: set[str],
+) -> ValidationReport:
+    report = ValidationReport(stage="panels_planned")
     for item in panels:
         if item.quantity <= 0:
             report.add_error(
@@ -273,12 +309,15 @@ def validate_panels(
                     f"{item.id} depends on unknown placement {dependency}",
                     item.id,
                 )
-    carcass_ids = {
-        "left_side_panel",
-        "right_side_panel",
-        "top_panel",
-        "bottom_panel",
-    }
+    return report
+
+
+def _validate_carcass_panels(
+    layout: CabinetStructure,
+    panel_by_id: Mapping[str, PanelPlacement],
+    carcass_ids: set[str],
+) -> ValidationReport:
+    report = ValidationReport(stage="panels_planned")
     for panel_id in sorted(carcass_ids):
         panel = panel_by_id.get(panel_id)
         if panel is None:
@@ -297,7 +336,16 @@ def validate_panels(
                 f"{panel_id} must span the confirmed carcass depth",
                 panel_id,
             )
+    return report
 
+
+def _validate_back_panel(
+    spec: FurnitureSpec,
+    layout: CabinetStructure,
+    panel_by_id: Mapping[str, PanelPlacement],
+    carcass_ids: set[str],
+) -> ValidationReport:
+    report = ValidationReport(stage="panels_planned")
     back = panel_by_id.get("back_panel")
     if back is None:
         report.add_error(
@@ -305,64 +353,72 @@ def validate_panels(
             "supported cabinet panel plan requires a back panel",
             "back_panel",
         )
-    else:
-        if layout.back_mount == "groove":
-            expected_back = (
-                layout.internal_x_start - spec.groove_depth,
-                layout.back_plane_y,
-                layout.internal_z_start - spec.groove_depth,
-                layout.internal_width + 2 * spec.groove_depth,
-                spec.back_thickness,
-                layout.internal_height + 2 * spec.groove_depth,
-            )
-        elif layout.back_mount == "insert":
-            expected_back = (
-                layout.internal_x_start,
-                layout.back_plane_y,
-                layout.internal_z_start,
-                layout.internal_width,
-                spec.back_thickness,
-                layout.internal_height,
-            )
-        else:
-            expected_back = (
-                0.0,
-                0.0,
-                0.0,
-                layout.width,
-                spec.back_thickness,
-                layout.height,
-            )
-        actual_back = (
-            back.pos_x,
-            back.pos_y,
-            back.pos_z,
-            back.size_x,
-            back.size_y,
-            back.size_z,
+        return report
+    if layout.back_mount == "groove":
+        expected_back = (
+            layout.internal_x_start - spec.groove_depth,
+            layout.back_plane_y,
+            layout.internal_z_start - spec.groove_depth,
+            layout.internal_width + 2 * spec.groove_depth,
+            spec.back_thickness,
+            layout.internal_height + 2 * spec.groove_depth,
         )
+    elif layout.back_mount == "insert":
+        expected_back = (
+            layout.internal_x_start,
+            layout.back_plane_y,
+            layout.internal_z_start,
+            layout.internal_width,
+            spec.back_thickness,
+            layout.internal_height,
+        )
+    else:
+        expected_back = (
+            0.0,
+            0.0,
+            0.0,
+            layout.width,
+            spec.back_thickness,
+            layout.height,
+        )
+    actual_back = (
+        back.pos_x,
+        back.pos_y,
+        back.pos_z,
+        back.size_x,
+        back.size_y,
+        back.size_z,
+    )
+    if any(
+        abs(actual - expected) > 1e-6
+        for actual, expected in zip(actual_back, expected_back)
+    ):
+        report.add_error(
+            "BACK_MOUNT_GEOMETRY_MISMATCH",
+            "back panel geometry does not match the confirmed mount mode",
+            "back_panel",
+        )
+    if layout.back_mount == "cover":
+        back_front_y = back.pos_y + back.size_y
         if any(
-            abs(actual - expected) > 1e-6
-            for actual, expected in zip(actual_back, expected_back)
+            panel_by_id[panel_id].pos_y < back_front_y - 1e-6
+            for panel_id in carcass_ids
+            if panel_id in panel_by_id
         ):
             report.add_error(
-                "BACK_MOUNT_GEOMETRY_MISMATCH",
-                "back panel geometry does not match the confirmed mount mode",
+                "COVER_BACK_OVERLAP",
+                "cover back must end before the cabinet carcass starts",
                 "back_panel",
             )
-        if layout.back_mount == "cover":
-            back_front_y = back.pos_y + back.size_y
-            if any(
-                panel_by_id[panel_id].pos_y < back_front_y - 1e-6
-                for panel_id in carcass_ids
-                if panel_id in panel_by_id
-            ):
-                report.add_error(
-                    "COVER_BACK_OVERLAP",
-                    "cover back must end before the cabinet carcass starts",
-                    "back_panel",
-                )
+    return report
 
+
+def _validate_toe_kick_panels(
+    spec: FurnitureSpec,
+    layout: CabinetStructure,
+    panels: list[PanelPlacement],
+) -> ValidationReport:
+    report = ValidationReport(stage="panels_planned")
     support_panels = [
         item
         for item in panels
@@ -398,7 +454,15 @@ def validate_panels(
             "toe-kick supports leave no positive clear spacing",
             "toe_kick_support_count",
         )
+    return report
 
+
+def _validate_back_rails(
+    spec: FurnitureSpec,
+    layout: CabinetStructure,
+    panels: list[PanelPlacement],
+) -> ValidationReport:
+    report = ValidationReport(stage="panels_planned")
     rail_panels = [
         item for item in panels if item.panel_type == "back_rail"
     ]
@@ -429,7 +493,15 @@ def validate_panels(
             "back rails leave no positive clear spacing",
             "back_rail",
         )
+    return report
 
+
+def _validate_depth_aligned_panels(
+    spec: FurnitureSpec,
+    layout: CabinetStructure,
+    panels: list[PanelPlacement],
+) -> ValidationReport:
+    report = ValidationReport(stage="panels_planned")
     for item in panels:
         if item.panel_type in ("fixed_shelf", "movable_shelf") and (
             abs(item.pos_y - layout.internal_y_start) > 1e-6
@@ -448,4 +520,132 @@ def validate_panels(
                 f"{item.id} must end at the finished depth",
                 item.id,
             )
+    return report
+
+
+def _validate_drawer_panels(
+    spec: FurnitureSpec,
+    layout: CabinetStructure,
+    panels: list[PanelPlacement],
+) -> ValidationReport:
+    report = ValidationReport(stage="panels_planned")
+    drawer_panels = [item for item in panels if item.panel_type.startswith("drawer_")]
+    if spec.drawer_count <= 0:
+        if drawer_panels:
+            report.add_error(
+                "UNEXPECTED_DRAWER_PANELS",
+                "drawer panels require drawer_count > 0",
+                "drawer_count",
+            )
+        return report
+
+    if any(item.panel_type == "door" for item in panels) or any(
+        item.panel_type in ("fixed_shelf", "movable_shelf") for item in panels
+    ):
+        report.add_error(
+            "DRAWER_ZONE_MIXED_WITH_DOORS_OR_SHELVES",
+            "full-height drawer output must not contain doors or shelf panels",
+            "drawer_count",
+        )
+
+    expected_total = spec.drawer_count * 5
+    if len(drawer_panels) != expected_total:
+        report.add_error(
+            "DRAWER_PANEL_COUNT_MISMATCH",
+            "generated drawer panel count must match 5 panels per drawer instance",
+            "drawer_count",
+        )
+
+    panels_by_id = {item.id: item for item in drawer_panels}
+    board = spec.board_thickness
+    slide_gap = spec.drawer_side_clearance
+    layer_gap = spec.drawer_layer_gap
+    bottom_t = spec.drawer_bottom_thickness
+    back_t = spec.drawer_back_thickness
+    back_clear = spec.drawer_back_clearance
+    band_h = layout.internal_height / spec.drawer_count
+    front_h = band_h - layer_gap
+    front_w = layout.internal_width - 2 * spec.front_face_margin
+    box_w = layout.internal_width - 2 * slide_gap
+    internal_depth = layout.internal_y_end - layout.internal_y_start
+    box_d = internal_depth - board - back_clear
+    box_back_y = layout.internal_y_start + back_clear
+    bottom_size_y = box_d - board
+
+    for index in range(spec.drawer_count):
+        front_z = layout.internal_z_start + index * band_h + (
+            layer_gap if index > 0 else 0.0
+        )
+        overlap = board if index == 0 else 0.0
+        box_h = front_h - 2 * overlap
+        box_z = front_z + overlap
+        suffix = f"z{front_z:.0f}"
+        expected = {
+            f"drawer_front_{suffix}": (
+                front_w,
+                board,
+                front_h,
+                layout.internal_x_start + spec.front_face_margin,
+                layout.carcass_y_end - board,
+                front_z,
+            ),
+            f"drawer_side_L_{suffix}": (
+                board,
+                box_d,
+                box_h,
+                layout.internal_x_start + slide_gap,
+                box_back_y,
+                box_z,
+            ),
+            f"drawer_side_R_{suffix}": (
+                board,
+                box_d,
+                box_h,
+                layout.internal_x_end - board - slide_gap,
+                box_back_y,
+                box_z,
+            ),
+            f"drawer_back_{suffix}": (
+                box_w - 2 * board,
+                back_t,
+                box_h - 2 * board,
+                layout.internal_x_start + slide_gap + board,
+                box_back_y,
+                box_z,
+            ),
+            f"drawer_bottom_{suffix}": (
+                box_w - 2 * board,
+                bottom_size_y,
+                bottom_t,
+                layout.internal_x_start + slide_gap + board,
+                box_back_y + board,
+                box_z,
+            ),
+        }
+        for panel_id, expected_geometry in expected.items():
+            panel = panels_by_id.get(panel_id)
+            if panel is None:
+                report.add_error(
+                    "MISSING_DRAWER_PANEL",
+                    f"drawer instance {suffix} is missing {panel_id}",
+                    panel_id,
+                )
+                continue
+            actual_geometry = (
+                panel.size_x,
+                panel.size_y,
+                panel.size_z,
+                panel.pos_x,
+                panel.pos_y,
+                panel.pos_z,
+            )
+            if any(
+                abs(actual - expected_value) > 1e-6
+                for actual, expected_value in zip(actual_geometry, expected_geometry)
+            ):
+                report.add_error(
+                    "DRAWER_PANEL_GEOMETRY_MISMATCH",
+                    f"{panel_id} does not match the admitted drawer dimension chain",
+                    panel_id,
+                )
     return report

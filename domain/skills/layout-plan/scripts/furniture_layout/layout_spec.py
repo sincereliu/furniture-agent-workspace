@@ -16,7 +16,11 @@ LAYOUT_PRESETS: dict[str, dict[str, int]] = {
 
 @dataclass(frozen=True)
 class LayoutSpec:
-    """Envelope plus legacy count fields; no construction inputs."""
+    """Envelope plus layout-owned count fields; no construction inputs.
+
+    ``door_count`` is still the layout serialization name. Renaming it requires a
+    coordinated layout API/storage change, not a panel-stage cleanup.
+    """
 
     furniture_type: str
     width: float

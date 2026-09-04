@@ -27,6 +27,6 @@ description: 用于 design_intent 阶段，也是家具流水线的入口。当�
 ## 边界
 
 - 运行时仅含 `DesignIntent`（含吊柜挂装方式 `mount_mode` 与挂高 `mounting_height_mm`）、`OverallSize`、目录中的可执行规范类别和外包络校验；不得导入或定义下游 `FurnitureSpec`。
-- CLI/API 完整请求由 `furniture_workflow/input_adapter.py` 拆成 `DesignIntent` 与 `stage_inputs`；扁平字段 `type/width/depth/height/mount_mode/mounting_height` 与下游参数都留在对应阶段输入，不进入 `DesignIntent`。
+- CLI/API 完整请求由 `furniture_workflow/input_adapter.py` 拆成 `DesignIntent` 与 `stage_inputs`；扁平字段 `furniture_type/width/depth/height/mount_mode/mounting_height` 与下游参数都留在对应阶段输入，不进入 `DesignIntent`。
 - 意图变化用 `FurnitureOrchestrator.revise()` 新建 Revision；不得另建规格、状态机或入口。
 - 本阶段的阻塞项只允许是类别、外包络尺寸或吊柜挂装方式。

@@ -16,7 +16,7 @@
 - `drawer_bottom_thickness`
 - `drawer_back_thickness`
 - `drawer_back_clearance`
-- `door_margin`
+- `front_face_margin`
 - `board_thickness`
 - `structure.internal_width`
 - `structure.internal_height`
@@ -27,7 +27,7 @@
 
 - 每层抽屉带高 `band_h = internal_height / drawer_count`
 - 抽屉前板高 `front_h = band_h - drawer_layer_gap`
-- 抽屉前板宽 `front_w = internal_width - 2 × door_margin`
+- 抽屉前板宽 `front_w = internal_width - 2 × front_face_margin`
 - 盒体宽 `box_w = internal_width - 2 × drawer_side_clearance`
 - 盒体深 `box_d = internal_depth - board_thickness - drawer_back_clearance`
 - 底板 Y 向尺寸 `bottom_size_y = box_d - board_thickness`
@@ -45,7 +45,7 @@
 
 ## 样例校准
 
-标准样例：落地柜 `800 × 600 × 1000 mm`，`board_thickness=18`，`back_thickness=9`，`toe_kick_height=50`，`drawer_count=3`，`drawer_side_clearance=13`，`drawer_layer_gap=1.5`，`drawer_back_clearance=0`，`door_margin=1.5`。
+标准样例：落地柜 `800 × 600 × 1000 mm`，`board_thickness=18`，`back_thickness=9`，`toe_kick_height=50`，`drawer_count=3`，`drawer_side_clearance=13`，`drawer_layer_gap=1.5`，`drawer_back_clearance=0`，`front_face_margin=1.5`。
 
 - 内部净宽 `764`
 - 内部净高 `914`

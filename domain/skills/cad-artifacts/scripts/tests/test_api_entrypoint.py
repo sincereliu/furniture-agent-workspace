@@ -69,11 +69,34 @@ class ApiEntrypointTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             server.CabinetRequest(
-                type="floor_cabinet",
+                furniture_type="floor_cabinet",
                 width=800,
                 depth=600,
                 height=1000,
                 back_mount="unsupported",
+            )
+
+    def test_request_requires_canonical_furniture_type(self) -> None:
+        canonical = server.CabinetRequest(
+            furniture_type="floor_cabinet",
+            width=800,
+            depth=600,
+            height=1000,
+        )
+
+        self.assertEqual(
+            canonical.model_dump(exclude_none=True)["furniture_type"],
+            "floor_cabinet",
+        )
+        properties = server.CabinetRequest.model_json_schema()["properties"]
+        self.assertIn("furniture_type", properties)
+        self.assertNotIn("type", properties)
+        with self.assertRaises(ValueError):
+            server.CabinetRequest(
+                type="floor_cabinet",
+                width=800,
+                depth=600,
+                height=1000,
             )
 
     def test_plan_endpoint_runs_through_the_application_workflow(self) -> None:
@@ -101,7 +124,7 @@ class ApiEntrypointTests(unittest.TestCase):
 
     def test_layout_endpoint_returns_room_position_and_svg_preview(self) -> None:
         request = server.CabinetRequest(
-            type="floor_cabinet",
+            furniture_type="floor_cabinet",
             width=1800,
             depth=600,
             height=2400,
@@ -149,7 +172,7 @@ class ApiEntrypointTests(unittest.TestCase):
 
     def test_layout_endpoint_uses_default_bedroom_without_room_input(self) -> None:
         request = server.CabinetRequest(
-            type="floor_cabinet",
+            furniture_type="floor_cabinet",
             width=1600,
             depth=600,
             height=2400,

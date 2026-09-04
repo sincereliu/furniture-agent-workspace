@@ -301,7 +301,7 @@ def _door_panels(
     if count <= 0:
         return []
 
-    margin = spec.door_margin
+    margin = spec.front_face_margin
     dw = (layout.width - margin * 2 * count) / count
     dh = layout.height - layout.toe_kick_height - margin * 2
     dy = layout.carcass_y_end + spec.door_hinge_gap
@@ -444,7 +444,7 @@ def _drawer_panels(
 
     尺寸链口径见 references/drawer-dimension-chain.md：
     - 每层净高 band_h = 内部净高 ÷ drawer_count
-    - 前板：高 = band_h − layer_gap；宽 = 内部宽 − 2×door_margin；厚 = 板厚
+    - 前板：高 = band_h − layer_gap；宽 = 内部宽 − 2×front_face_margin；厚 = 板厚
     - 盒体宽 = 内部宽 − 2×已准入的抽屉每侧净空
     - 盒体深 = 内部深 − 前板厚 − back_clearance(≥0)
     - 盒体高 = 前板高 − 2×front_overlap（底抽 18 全盖底板，顶/中 0）
@@ -465,7 +465,7 @@ def _drawer_panels(
     internal_depth = layout.internal_y_end - layout.internal_y_start
     band_h = layout.internal_height / count
     front_h = band_h - layer_gap
-    front_w = iw - 2 * spec.door_margin
+    front_w = iw - 2 * spec.front_face_margin
     box_w = iw - 2 * slide_gap
     box_d = internal_depth - board - back_clear
     box_back_y = layout.internal_y_start + back_clear
@@ -490,7 +490,7 @@ def _drawer_panels(
             id=f"drawer_front_{z_suffix}", name=f"抽屉前板({front_z:.0f}mm)",
             panel_type="drawer_front",
             size_x=front_w, size_y=board, size_z=front_h,
-            pos_x=layout.internal_x_start + spec.door_margin,
+            pos_x=layout.internal_x_start + spec.front_face_margin,
             pos_y=layout.carcass_y_end - board,
             pos_z=front_z,
             material_role="carcass",

@@ -58,10 +58,10 @@ result = orchestrator.run_next(
 
 ```json
 {
-  "type": "floor_cabinet", "width": 800, "depth": 600, "height": 2000,
+  "furniture_type": "floor_cabinet", "width": 800, "depth": 600, "height": 2000,
   "board_thickness": 18, "back_thickness": 9, "door_thickness": 18,
   "toe_kick_height": 50, "back_offset": 18,
-  "door_margin": 1.5, "door_hinge_gap": 2,
+  "front_face_margin": 1.5, "door_hinge_gap": 2,
   "groove_depth": 6, "groove_clearance": 1,
   "toe_kick_reveal_front": 1, "toe_kick_reveal_back": 30,
   "toe_kick_support_count": null, "back_mount": "auto", "back_rail_height": 70,
@@ -73,7 +73,7 @@ result = orchestrator.run_next(
 
 `width/depth/height` 必须在意图确认前明确提供；不再用类别预设替代客户确认的外包络。板件输入必须完整提交全部规范字段；代码不按柜型静默补默认方案。完整值经确定性准入后才写入 `panels_planned.spec`。
 
-契约为扁平 JSON。适配器只把 `type/width/depth/height` 转成 `DesignIntent`，将包括 `door_hinge_side` 在内的板件规范字段路由到板件，将制造选项/外观路由到制造；`room/placement` 只供独立房间布局 API 使用。可选 `constraints` 必须有阶段映射；未分类约束在协议路由时拒绝。
+契约为扁平 JSON。规范字段使用 `furniture_type/width/depth/height`；适配器只把外包络字段转成 `DesignIntent`，将包括 `door_hinge_side` 在内的板件规范字段路由到板件，将制造选项/外观路由到制造；`room/placement` 只供独立房间布局 API 使用。扁平请求不再接受历史 `type`，该字段仅在旧序列化 spec 加载时恢复。可选 `constraints` 必须有阶段映射；未分类约束在协议路由时拒绝。
 
 持久化兼容只发生在读取旧 Project 时：旧单门规格缺少 `door_hinge_side`，仅当其唯一门板已显式保存 `left/right` 才恢复；否则加载停止。旧标准双门规格迁移为规范 `null`，门板缺省侧按确定性左右拓扑恢复；更多门保持 `null`。该迁移不用于新 JSON/API 请求，也不根据位置或柜型猜测单门偏好。
 
@@ -88,6 +88,7 @@ result = orchestrator.run_next(
 - 生成请求含完整板件字段。Pydantic 拒绝非法模式，Orchestrator 对缺字段、结构冲突或几何组合错误返回 `422`。
 - 请求可含 `constraints/constraint_mappings`；协议层按目标阶段路由，不得写入 `DesignIntent` 或静默丢弃。
 - 响应 `back_mount` 为有效模式；`readiness` 返回整份制造方案的 `preliminary/accepted/factory_ready` 状态；`panels` 保留备注/封边/模式，`hardware` 保留品牌/型号/暂定说明/孔数摘要。
+- 响应中的几何字段 `size_*`、`pos_*`、`x/y/z`、`local_*`、`diameter`、`depth` 虽未统一带 `_mm` 后缀，但口径统一为 mm；`length_mm/width_mm`、`width_mm/depth_mm/height_mm` 保持显式后缀。
 - `operations` 仅为入槽模式返回目标切削；`drilled_holes` 按板件返回全局/local 孔位，`hole_color_legend` 返回孔型图例。
 
 ## 生成

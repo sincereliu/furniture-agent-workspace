@@ -54,7 +54,7 @@ class BackMountModeTests(unittest.TestCase):
                 spec = self._spec(back_mount)
                 layout = plan_layout(spec)
                 structure = CabinetStructure.from_spec(spec)
-                placements = plan_panels(spec, layout)
+                placements = plan_panels(spec, structure)
                 panels = {panel.id: panel for panel in placements}
                 carcass_y_start, carcass_y_end, internal_y_start = expected
 
@@ -180,7 +180,7 @@ class BackMountModeTests(unittest.TestCase):
             with self.subTest(back_mount=back_mount):
                 spec = self._spec(back_mount)
                 layout = plan_layout(spec)
-                placements = plan_panels(spec, layout)
+                placements = plan_panels(spec, CabinetStructure.from_spec(spec))
                 bom = plan_manufacturing(spec, placements)
                 panels = {panel.label: panel for panel in bom.panels}
 
@@ -276,7 +276,7 @@ class BackMountModeTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "back_mount"):
             invalid = self._spec("unsupported")
-            plan_panels(invalid, plan_layout(invalid))
+            plan_panels(invalid, CabinetStructure.from_spec(invalid))
 
         cover_spec = furniture_spec(
             furniture_type="floor_cabinet",
@@ -330,7 +330,7 @@ class BackMountModeTests(unittest.TestCase):
         rail_report = validate_panels(
             rail_spec,
             rail_layout,
-            plan_panels(rail_spec, rail_layout),
+            plan_panels(rail_spec, CabinetStructure.from_spec(rail_spec)),
         )
         self.assertFalse(rail_report.passed)
         self.assertIn(
@@ -341,7 +341,7 @@ class BackMountModeTests(unittest.TestCase):
     def test_panel_validation_rejects_cover_overlap(self) -> None:
         spec = self._spec("cover")
         layout = plan_layout(spec)
-        placements = plan_panels(spec, layout)
+        placements = plan_panels(spec, CabinetStructure.from_spec(spec))
 
         self.assertTrue(validate_panels(spec, layout, placements).passed)
 

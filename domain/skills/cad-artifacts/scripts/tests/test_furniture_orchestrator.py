@@ -681,7 +681,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
 
     def test_intent_from_spec_contains_only_category_and_envelope(self) -> None:
         request = {
-            "type": "wall_cabinet",
+            "furniture_type": "wall_cabinet",
             "width": 800,
             "depth": 350,
             "height": 900,
@@ -711,6 +711,39 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         )
         self.assertEqual(inputs["panels"]["parameters"]["top_gap_mm"], 300)
         self.assertEqual(inputs["panels"]["parameters"]["back_mount"], "cover")
+
+    def test_flat_requests_reject_legacy_type_field(self) -> None:
+        with self.assertRaisesRegex(ValueError, "must use furniture_type"):
+            self.orchestrator.intent_from_spec(
+                {
+                    "type": "wall_cabinet",
+                    "width": 800,
+                    "depth": 350,
+                    "height": 900,
+                }
+            )
+        with self.assertRaisesRegex(ValueError, "must use furniture_type"):
+            stage_inputs_from_spec(
+                {
+                    "type": "wall_cabinet",
+                    "width": 800,
+                    "depth": 350,
+                    "height": 900,
+                }
+            )
+
+    def test_three_door_request_fails_at_panel_admission(self) -> None:
+        result = self.orchestrator.execute_spec(
+            "三门柜体",
+            cabinet_data(n_doors=3, shelf_count=0),
+            through_stage=WorkflowStage.PANELS_PLANNED,
+        )
+
+        self.assertEqual(result.revision.workflow.current, WorkflowStage.FAILED)
+        self.assertIn(
+            "at most 2 doors",
+            result.revision.validations[-1].issues[0].message,
+        )
 
     def test_design_intent_rejects_new_downstream_fields(self) -> None:
         with self.assertRaisesRegex(ValueError, "route later decisions"):

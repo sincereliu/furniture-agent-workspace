@@ -97,7 +97,7 @@ class FurniturePlacementRequest(BaseModel):
 class CabinetRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    type: str = Field(..., description="家具类型: floor_cabinet / wall_cabinet")
+    furniture_type: str = Field(..., description="家具类型: floor_cabinet / wall_cabinet")
     width: float = Field(..., gt=0, description="总宽 mm (X)")
     depth: float = Field(..., gt=0, description="总深 mm (Y)")
     height: float = Field(..., gt=0, description="总高 mm (Z)")
@@ -115,7 +115,7 @@ class CabinetRequest(BaseModel):
     door_thickness: float | None = Field(default=None, gt=0, description="门板厚 mm")
     toe_kick_height: float | None = Field(default=None, ge=0, description="踢脚线高 mm")
     back_offset: float | None = Field(default=None, ge=0, description="背板后移 mm")
-    door_margin: float | None = Field(default=None, ge=0, description="门板四周间隙 mm")
+    front_face_margin: float | None = Field(default=None, ge=0, description="前脸四周边距 mm（门板与抽屉前板共用）")
     door_hinge_gap: float | None = Field(default=None, ge=0, description="门铰深度间隙 mm")
     shelves: list[dict[str, Any]] | None = Field(
         default=None,
@@ -179,16 +179,16 @@ class PanelResponse(BaseModel):
     label: str
     name: str
     panel_type: str
-    size_x: float
-    size_y: float
-    size_z: float
-    pos_x: float
-    pos_y: float
-    pos_z: float
+    size_x: float = Field(description="板件在世界 X 轴上的尺寸 mm")
+    size_y: float = Field(description="板件在世界 Y 轴上的尺寸 mm")
+    size_z: float = Field(description="板件在世界 Z 轴上的尺寸 mm")
+    pos_x: float = Field(description="板件最小角点的世界 X 坐标 mm")
+    pos_y: float = Field(description="板件最小角点的世界 Y 坐标 mm")
+    pos_z: float = Field(description="板件最小角点的世界 Z 坐标 mm")
     material: str
-    thickness: float
-    length_mm: float
-    width_mm: float
+    thickness: float = Field(description="板件厚度 mm")
+    length_mm: float = Field(description="制造/BOM 视图中的成品长度 mm")
+    width_mm: float = Field(description="制造/BOM 视图中的成品宽度 mm")
     edge_banding: dict
     note: str
     back_mount: Literal["groove", "insert", "cover"]
@@ -214,26 +214,26 @@ class MachiningOperationResponse(BaseModel):
     id: str
     operation_type: str
     target_panel: str
-    size_x: float
-    size_y: float
-    size_z: float
-    pos_x: float
-    pos_y: float
-    pos_z: float
+    size_x: float = Field(description="加工包络在世界 X 轴上的尺寸 mm")
+    size_y: float = Field(description="加工包络在世界 Y 轴上的尺寸 mm")
+    size_z: float = Field(description="加工包络在世界 Z 轴上的尺寸 mm")
+    pos_x: float = Field(description="加工包络最小角点的世界 X 坐标 mm")
+    pos_y: float = Field(description="加工包络最小角点的世界 Y 坐标 mm")
+    pos_z: float = Field(description="加工包络最小角点的世界 Z 坐标 mm")
     note: str
 
 
 class HoleResponse(BaseModel):
     hole_type: str
     color: str
-    x: float
-    y: float
-    z: float
-    local_x: float
-    local_y: float
-    local_z: float
-    diameter: float
-    depth: float
+    x: float = Field(description="孔中心的世界 X 坐标 mm")
+    y: float = Field(description="孔中心的世界 Y 坐标 mm")
+    z: float = Field(description="孔中心的世界 Z 坐标 mm")
+    local_x: float = Field(description="孔中心相对板件局部坐标的 X 坐标 mm")
+    local_y: float = Field(description="孔中心相对板件局部坐标的 Y 坐标 mm")
+    local_z: float = Field(description="孔中心相对板件局部坐标的 Z 坐标 mm")
+    diameter: float = Field(description="孔径 mm")
+    depth: float = Field(description="钻入深度 mm")
     direction: str
     note: str
     connection_id: str = ""
@@ -242,7 +242,7 @@ class HoleResponse(BaseModel):
 class PanelDrillingResponse(BaseModel):
     label: str
     name: str
-    box: dict[str, float]
+    box: dict[str, float] = Field(description="板件轴对齐包络；各数值坐标与尺寸均为 mm")
     holes: list[HoleResponse]
 
 
@@ -256,8 +256,8 @@ class BOMResponse(BaseModel):
     panels: list[PanelResponse]
     hardware: list[HardwareResponse]
     operations: list[MachiningOperationResponse]
-    hole_color_legend: dict[str, dict[str, str]]
-    drilled_holes: list[PanelDrillingResponse]
+    hole_color_legend: dict[str, dict[str, str]] = Field(description="孔型图例；颜色与标签映射")
+    drilled_holes: list[PanelDrillingResponse] = Field(description="按板件分组的孔位结果；几何坐标与孔径深度统一为 mm")
 
 
 class LayoutPlanResponse(BaseModel):
@@ -293,7 +293,7 @@ async def plan_cabinet(req: CabinetRequest):
     spec = req.model_dump(exclude_unset=True)
     try:
         orchestration = ORCHESTRATOR.execute_spec(
-            f"api-{req.type}",
+            f"api-{req.furniture_type}",
             spec,
         )
     except (OSError, TypeError, ValueError) as e:
@@ -387,7 +387,7 @@ async def plan_layout(req: CabinetRequest):
         panel_parameters = panel_stage_input(stage_inputs).get("parameters", {})
         layout_options = {
             key: panel_parameters[key]
-            for key in ("n_doors", "door_count")
+            for key in ("n_doors",)
             if key in panel_parameters
         }
         context = layout_stage_input(stage_inputs)
@@ -396,7 +396,7 @@ async def plan_layout(req: CabinetRequest):
             spec,
             room=context.get("room"),
             placement=context.get("placement"),
-            furniture_label=f"layout-{req.type}",
+            furniture_label=f"layout-{req.furniture_type}",
         )
         report = validate_layout_output(spec, output)
     except (TypeError, ValueError) as exc:

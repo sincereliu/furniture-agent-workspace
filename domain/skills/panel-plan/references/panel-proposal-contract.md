@@ -6,6 +6,7 @@
 
 - 提案先由 LLM 基于完整上下文整理并消歧，再作为完整对象写入 `stage_inputs.panels.parameters`。
 - 代码不补缺字段、不根据柜型推默认方案、不做自然语言别名识别。
+- 规范字段名、兼容别名和单位口径统一按 [术语规范表](terminology-glossary.md)。
 - 所有线性尺寸单位均为 mm。
 - `toe_kick_support_count=null` 与 `back_mount=auto` 都是显式结构化请求，不是运行时缺省。
 - 混合门/层板/抽屉分区、多门开启关系或其它超出当前拓扑表达能力的语义，必须先继续消歧。
@@ -14,7 +15,7 @@
 
 - 柜体与门板厚度：`board_thickness`、`back_thickness`、`door_thickness`
 - 背板与槽：`back_mount`、`back_offset`、`groove_depth`、`groove_clearance`、`back_rail_height`
-- 门缝与踢脚：`door_margin`、`door_hinge_gap`、`toe_kick_height`、`toe_kick_reveal_front`、`toe_kick_reveal_back`、`toe_kick_support_count`
+- 前脸边距与踢脚：`front_face_margin`、`door_hinge_gap`、`toe_kick_height`、`toe_kick_reveal_front`、`toe_kick_reveal_back`、`toe_kick_support_count`
 - 门与抽屉数量：`n_doors`、`drawer_count`
 - 单门铰链侧：`door_hinge_side`
 - 层板：`shelves`、`top_gap_mm`、`movable_shelf_connector`
@@ -31,7 +32,7 @@
 
 ## LLM 候选起点
 
-- 柜体/门板 18、背板 9、背板后移 18、门边缝 1.5、铰链深度缝 2、槽深 6、槽余量 1、背拉条高 70。
+- 柜体/门板 18、背板 9、背板后移 18、前脸边距 1.5、铰链深度缝 2、槽深 6、槽余量 1、背拉条高 70。
 - 抽屉每侧净空 13、层缝 1.5、底/背板厚 18、后净空 0。
 - 落地柜可从 50 高踢脚、4 层板、2 门起步；吊柜可从无踢脚、1 层板、2 门起步。
 - 以上都只是 LLM 候选起点，必须结合需求逐字段确认，不能当作运行时默认值。

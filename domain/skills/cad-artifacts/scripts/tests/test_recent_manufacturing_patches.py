@@ -4,6 +4,7 @@ import json
 import sys
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 from xml.etree import ElementTree as ET
@@ -82,7 +83,7 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
             height=1000,
             n_doors=2,
         )
-        placements = plan_panels(spec, plan_layout(spec))
+        placements = plan_panels(spec, CabinetStructure.from_spec(spec))
         doors = {
             panel.id: panel
             for panel in placements
@@ -98,7 +99,7 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
             furniture_spec(n_doors=1)
 
         right_spec = furniture_spec(n_doors=1, door_hinge_side="right")
-        placements = plan_panels(right_spec, plan_layout(right_spec))
+        placements = plan_panels(right_spec, CabinetStructure.from_spec(right_spec))
         door = next(p for p in placements if p.panel_type == "door")
         self.assertEqual(door.door_hinge_side, "right")
 
@@ -183,7 +184,7 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
             height=1000,
             n_doors=2,
         )
-        placements = plan_panels(spec, plan_layout(spec))
+        placements = plan_panels(spec, CabinetStructure.from_spec(spec))
         manufacturing = plan_manufacturing(spec, placements)
         orig = TrinityConnector.generate_holes_for_panels
 
@@ -279,7 +280,7 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
             furniture_type="floor_cabinet",
             width=800, depth=600, height=1000, n_doors=2,
         )
-        placements = plan_panels(spec, plan_layout(spec))
+        placements = plan_panels(spec, CabinetStructure.from_spec(spec))
         bom = plan_manufacturing(spec, placements)
         self.assertNotIn("抽屉滑轨", [item.name for item in bom.hardware])
 
@@ -311,7 +312,7 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
             height=1000,
             n_doors=2,
         )
-        placements = plan_panels(spec, plan_layout(spec))
+        placements = plan_panels(spec, CabinetStructure.from_spec(spec))
         manufacturing = plan_manufacturing(spec, placements)
         left_door = next(
             panel
@@ -342,7 +343,7 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
             back_thickness=9,
             n_doors=2,
         )
-        placements = plan_panels(spec, plan_layout(spec))
+        placements = plan_panels(spec, CabinetStructure.from_spec(spec))
         drilled = emit_drilled_holes(plan_manufacturing(spec, placements))
 
         self.assertTrue(
@@ -406,7 +407,7 @@ class DrawerZoneTests(unittest.TestCase):
             shelf_count=shelf_count,
             drawer_count=drawer_count,
         )
-        placements = plan_panels(spec, plan_layout(spec))
+        placements = plan_panels(spec, CabinetStructure.from_spec(spec))
         return spec, placements
 
     def test_full_height_drawer_zone_generates_five_panels_per_drawer(self) -> None:
@@ -462,6 +463,28 @@ class DrawerZoneTests(unittest.TestCase):
             band_sides = [p for p in sides if p.pos_z == front.pos_z]
             self.assertEqual(len(band_sides), 2)
             self.assertTrue(all(abs(p.size_z - front_h) < 1e-6 for p in band_sides))
+
+    def test_panel_validation_rejects_drawer_geometry_mismatch(self) -> None:
+        spec, placements = self._drawer_cabinet(3)
+        tampered = [
+            p if p.id != "drawer_bottom_z68" else replace(
+                p,
+                size_y=p.size_y - 10,
+            )
+            for p in placements
+        ]
+
+        report = validate_panels(
+            spec,
+            CabinetStructure.from_spec(spec),
+            tampered,
+        )
+
+        self.assertFalse(report.passed)
+        self.assertIn(
+            "DRAWER_PANEL_GEOMETRY_MISMATCH",
+            {issue.code for issue in report.issues},
+        )
 
     def test_drawer_zone_bom_emits_slides_per_drawer(self) -> None:
         spec, placements = self._drawer_cabinet(3)

@@ -49,7 +49,7 @@
 ## 首版尺寸链（`_drawer_panels`，值待投产确认）
 
 - 每层净高 `band_h` = 内部净高 ÷ `drawer_count`；
-- 前板：高 = `band_h − drawer_layer_gap`；宽 = 内部宽 − 2×`door_margin`；厚 = 已确认柜体板厚；
+- 前板：高 = `band_h − drawer_layer_gap`；宽 = 内部宽 − 2×`front_face_margin`；厚 = 已确认柜体板厚；
 - 盒体宽 = 内部宽 − 2×`drawer_side_clearance`；
 - 盒体深 = 内部深 − 前板厚 − `drawer_back_clearance`（须 ≥0）；
 - 盒体高 = 前板高 − 2×`front_overlap`；

@@ -4,12 +4,12 @@ from typing import Any
 
 
 def plan_furniture(spec: dict[str, Any]) -> dict[str, Any]:
-    """统一入口：根据 type 路由到柜体规划器。
+    """统一入口：根据 furniture_type 路由到柜体规划器。
 
     支持的类型: floor_cabinet / wall_cabinet
     返回标准 Feature Tree dict，兼容 emitter 和 pipeline 测试。
     """
-    furniture_type = str(spec.get("type", "")).strip().lower()
+    furniture_type = str(spec.get("furniture_type", "")).strip().lower()
 
     if furniture_type in ("floor_cabinet", "wall_cabinet"):
         return _plan_cabinet(spec, furniture_type)

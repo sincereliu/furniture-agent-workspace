@@ -19,7 +19,7 @@ def panel_parameters(furniture_type: str = "floor_cabinet", **overrides: Any) ->
     values = {
         "board_thickness": 18.0, "back_thickness": 9.0, "door_thickness": 18.0,
         "toe_kick_height": 0.0 if wall else 50.0, "back_offset": 18.0,
-        "door_margin": 1.5, "door_hinge_gap": 2.0,
+        "front_face_margin": 1.5, "door_hinge_gap": 2.0,
         "groove_depth": 6.0, "groove_clearance": 1.0,
         "toe_kick_reveal_front": 0.0 if wall else 1.0,
         "toe_kick_reveal_back": 0.0 if wall else 30.0,
@@ -56,7 +56,7 @@ def cabinet_data(furniture_type: str = "floor_cabinet", **overrides: Any) -> dic
     height = overrides.get("height", 900 if wall else 1000)
     _fill_shelves(overrides, wall=wall, height=height)
     values = {
-        "type": furniture_type, "width": 800, "depth": 350 if wall else 600,
+        "furniture_type": furniture_type, "width": 800, "depth": 350 if wall else 600,
         "height": height, **panel_parameters(furniture_type),
     }
     if wall:

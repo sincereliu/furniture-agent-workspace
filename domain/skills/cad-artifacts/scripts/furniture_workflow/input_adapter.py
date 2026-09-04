@@ -8,7 +8,7 @@ from furniture_design_intent.design_intent import DesignIntent
 from furniture_panel_planning.panel_spec import PANEL_SPEC_FIELDS
 
 
-PANEL_CONFIGURATION_FIELDS = frozenset({"n_doors", "door_count"})
+PANEL_CONFIGURATION_FIELDS = frozenset({"n_doors"})
 LAYOUT_CONTEXT_FIELDS = frozenset({"room", "placement"})
 MANUFACTURING_SPEC_FIELDS = frozenset(
     {
@@ -17,7 +17,6 @@ MANUFACTURING_SPEC_FIELDS = frozenset(
 )
 PROTOCOL_FIELDS = frozenset(
     {
-        "type",
         "furniture_type",
         "width",
         "depth",
@@ -44,10 +43,8 @@ PROTOCOL_FIELDS = frozenset(
 
 def intent_from_spec(spec: Mapping[str, Any]) -> DesignIntent:
     """Translate only category and finished-envelope values to DesignIntent."""
-    data = dict(spec)
-    furniture_type = str(
-        data.get("type", data.get("furniture_type", ""))
-    ).strip().lower()
+    data = _reject_legacy_protocol_aliases(dict(spec))
+    furniture_type = str(data.get("furniture_type", "")).strip().lower()
     size = data.get("overall_size", {})
     if not isinstance(size, Mapping):
         raise ValueError("overall_size must be an object")
@@ -72,7 +69,7 @@ def intent_from_spec(spec: Mapping[str, Any]) -> DesignIntent:
 
 def stage_inputs_from_spec(spec: Mapping[str, Any]) -> dict[str, Any]:
     """Preserve downstream requests without treating them as confirmed intent."""
-    data = dict(spec)
+    data = _reject_legacy_protocol_aliases(dict(spec))
     unknown = sorted(set(data) - PROTOCOL_FIELDS)
     if unknown:
         raise ValueError("request field has no owning stage: " + ", ".join(unknown))
@@ -187,7 +184,7 @@ def _route_constraints(data: Mapping[str, Any], output: dict[str, Any]) -> None:
 
 def _envelope_target_is_explicit(data: Mapping[str, Any], target: str) -> bool:
     if target == "furniture_type":
-        return bool(data.get("type", data.get("furniture_type")))
+        return bool(data.get("furniture_type"))
     field = target.split(".", 1)[1]
     size = data.get("overall_size", {})
     flat_name = {
@@ -214,3 +211,10 @@ def panel_stage_input(stage_inputs: Mapping[str, Any]) -> dict[str, Any]:
 def manufacturing_stage_input(stage_inputs: Mapping[str, Any]) -> dict[str, Any]:
     value = stage_inputs.get("manufacturing", {})
     return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _reject_legacy_protocol_aliases(data: dict[str, Any]) -> dict[str, Any]:
+    """Reject historical flat-request aliases now that canonical names are required."""
+    if "type" in data:
+        raise ValueError("flat requests must use furniture_type; type is no longer accepted")
+    return data

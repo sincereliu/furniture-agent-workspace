@@ -6,7 +6,7 @@
 
 - `back_mount`：规范值为 `auto/groove/insert/cover`；必须由提案显式给出，不存在运行时缺省模式。
 - `board_thickness/back_thickness/door_thickness`。
-- `back_offset/door_margin/door_hinge_gap`。
+- `back_offset/front_face_margin/door_hinge_gap`。
 - `groove_depth/groove_clearance/back_rail_height`。
 
 这些值可在完整 CLI/API 请求中提前提交，但只保存在 `stage_inputs.panels.parameters`，直到客户确认设计意图后才物化为板件阶段 `FurnitureSpec`。

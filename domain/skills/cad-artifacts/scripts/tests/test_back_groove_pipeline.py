@@ -40,7 +40,7 @@ class BackGroovePipelineTests(unittest.TestCase):
         )
         self.layout = plan_layout(self.spec)
         self.structure = CabinetStructure.from_spec(self.spec)
-        self.placements = plan_panels(self.spec, self.layout)
+        self.placements = plan_panels(self.spec, self.structure)
         self.manufacturing = plan_manufacturing(self.spec, self.placements)
         self.feature_tree = panels_to_feature_tree(
             self.manufacturing.panels,
@@ -116,8 +116,8 @@ class BackGroovePipelineTests(unittest.TestCase):
             height=1000,
             groove_clearance=600,
         )
-        groove_layout = plan_layout(invalid_groove)
-        groove_panels = plan_panels(invalid_groove, groove_layout)
+        groove_structure = CabinetStructure.from_spec(invalid_groove)
+        groove_panels = plan_panels(invalid_groove, groove_structure)
         groove_report = validate_manufacturing(
             invalid_groove,
             plan_manufacturing(invalid_groove, groove_panels),
@@ -137,11 +137,11 @@ class BackGroovePipelineTests(unittest.TestCase):
             board_thickness=18,
             toe_kick_support_count=4,
         )
-        support_layout = plan_layout(invalid_supports)
-        support_panels = plan_panels(invalid_supports, support_layout)
+        support_structure = CabinetStructure.from_spec(invalid_supports)
+        support_panels = plan_panels(invalid_supports, support_structure)
         support_report = validate_panels(
             invalid_supports,
-            support_layout,
+            support_structure,
             support_panels,
         )
         self.assertFalse(support_report.passed)

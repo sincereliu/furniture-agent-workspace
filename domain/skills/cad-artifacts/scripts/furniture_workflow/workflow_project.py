@@ -178,7 +178,11 @@ class Project:
 
 
 def _legacy_stage_inputs(raw_intent: dict[str, Any]) -> dict[str, Any]:
-    """Move schema-v1 downstream fields out of DesignIntent when loading."""
+    """Move schema-v1 downstream fields out of DesignIntent when loading.
+
+    Delete this whole compatibility path once schema-v1 persisted projects are no
+    longer supported.
+    """
     layout = dict(raw_intent.get("layout", {}))
     structure = dict(raw_intent.get("structure", {}))
     manufacturing_keys = {
@@ -191,6 +195,8 @@ def _legacy_stage_inputs(raw_intent: dict[str, Any]) -> dict[str, Any]:
     }
     room = layout.pop("room", None)
     placement = layout.pop("placement", None)
+    # ``door_count`` is retained here only for loading historical layout-shaped
+    # payloads into the canonical panel-stage ``n_doors`` input.
     for key in ("n_doors", "door_count"):
         if key in layout:
             structure[key] = layout.pop(key)

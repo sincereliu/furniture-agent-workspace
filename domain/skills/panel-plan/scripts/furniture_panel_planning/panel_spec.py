@@ -63,7 +63,7 @@ def _coerce_shelves(raw: Any) -> list[ShelfSpec]:
 PANEL_PARAMETER_FIELDS = frozenset(
     {
         "board_thickness", "back_thickness", "door_thickness",
-        "toe_kick_height", "back_offset", "door_margin", "door_hinge_gap",
+        "toe_kick_height", "back_offset", "front_face_margin", "door_hinge_gap",
         "groove_depth", "groove_clearance", "toe_kick_reveal_front",
         "toe_kick_reveal_back", "toe_kick_support_count", "back_mount",
         "back_rail_height", "drawer_count", "drawer_side_clearance",
@@ -72,7 +72,7 @@ PANEL_PARAMETER_FIELDS = frozenset(
         "door_hinge_side", "movable_shelf_connector",
     }
 )
-PANEL_SPEC_FIELDS = PANEL_PARAMETER_FIELDS | {"door_count"}
+PANEL_SPEC_FIELDS = PANEL_PARAMETER_FIELDS
 _SERIALIZED_FIELDS = PANEL_PARAMETER_FIELDS | {
     "furniture_type", "width", "depth", "height",
 }
@@ -91,7 +91,7 @@ class FurnitureSpec:
     door_thickness: float
     toe_kick_height: float
     back_offset: float
-    door_margin: float
+    front_face_margin: float
     door_hinge_gap: float
     shelves: list[ShelfSpec]
     top_gap_mm: float
@@ -120,7 +120,7 @@ class FurnitureSpec:
             )
         for name in (
             "width", "depth", "height", "board_thickness", "back_thickness",
-            "door_thickness", "toe_kick_height", "back_offset", "door_margin",
+            "door_thickness", "toe_kick_height", "back_offset", "front_face_margin",
             "door_hinge_gap", "groove_depth", "groove_clearance",
             "toe_kick_reveal_front", "toe_kick_reveal_back", "back_rail_height",
             "drawer_side_clearance", "drawer_layer_gap", "drawer_bottom_thickness",
@@ -154,14 +154,10 @@ class FurnitureSpec:
             raise ValueError("panel planning requires a confirmed DesignIntent")
         if not isinstance(options, Mapping):
             raise ValueError("panel proposal must be an object")
-        values = dict(options)
+        values = _normalize_panel_input_aliases(dict(options))
         unknown = sorted(set(values) - PANEL_SPEC_FIELDS)
         if unknown:
             raise ValueError("panel stage does not support: " + ", ".join(unknown))
-        if "door_count" in values:
-            if "n_doors" in values and values["n_doors"] != values["door_count"]:
-                raise ValueError("door_count and n_doors must match")
-            values["n_doors"] = values.pop("door_count")
         missing = sorted(PANEL_PARAMETER_FIELDS - set(values))
         if missing:
             raise ValueError(
@@ -187,11 +183,7 @@ class FurnitureSpec:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "FurnitureSpec":
         """Read a serialized complete spec without filling missing values."""
-        values = dict(data)
-        if "type" in values:
-            if "furniture_type" in values and values["furniture_type"] != values["type"]:
-                raise ValueError("type and furniture_type must match")
-            values["furniture_type"] = values.pop("type")
+        values = _normalize_legacy_serialized_spec(dict(data))
         unknown = sorted(set(values) - _SERIALIZED_FIELDS)
         missing = sorted(_SERIALIZED_FIELDS - set(values))
         if unknown:
@@ -205,6 +197,41 @@ class FurnitureSpec:
         if "shelves" in values:
             values["shelves"] = _coerce_shelves(values["shelves"])
         return cls(**values)
+
+
+def _normalize_front_face_margin_key(values: dict[str, Any]) -> dict[str, Any]:
+    """Collapse the historical door_margin name onto front_face_margin."""
+    if "door_margin" not in values:
+        return values
+    if (
+        "front_face_margin" in values
+        and values["front_face_margin"] != values["door_margin"]
+    ):
+        raise ValueError("front_face_margin and door_margin must match")
+    values["front_face_margin"] = values.pop("door_margin")
+    return values
+
+
+def _normalize_panel_input_aliases(values: dict[str, Any]) -> dict[str, Any]:
+    """Normalize legacy aliases still tolerated for active panel inputs."""
+    return _normalize_front_face_margin_key(values)
+
+
+def _normalize_legacy_serialized_spec(values: dict[str, Any]) -> dict[str, Any]:
+    """Normalize historical serialized spec aliases when loading old data."""
+    values = _normalize_front_face_margin_key(values)
+    values = _legacy_spec_loader_furniture_type(values)
+    return values
+
+
+def _legacy_spec_loader_furniture_type(values: dict[str, Any]) -> dict[str, Any]:
+    """Recover the historical serialized ``type`` field into ``furniture_type``."""
+    if "type" not in values:
+        return values
+    if "furniture_type" in values and values["furniture_type"] != values["type"]:
+        raise ValueError("type and furniture_type must match")
+    values["furniture_type"] = values.pop("type")
+    return values
 
 
 def resolve_back_mount(
@@ -249,14 +276,18 @@ def migrate_legacy_panel_hinge_side(
     panel_parameters: dict[str, Any] | None,
     panel_output: dict[str, Any] | None,
 ) -> None:
-    """Upgrade persisted pre-field panel data without guessing a preference."""
+    """Upgrade persisted pre-field panel data without guessing a preference.
+
+    ``door_count`` handling below is retained only for historical persisted panel
+    outputs. It can be removed when those legacy revisions are no longer loaded.
+    """
     output_side_available = False
     migrated_side: str | None = None
     if isinstance(panel_output, dict):
         spec = panel_output.get("spec")
         if isinstance(spec, dict):
             if "door_hinge_side" not in spec:
-                door_count = _legacy_door_count(spec)
+                door_count = _legacy_spec_loader_panel_output_door_count(spec)
                 doors = _legacy_doors(panel_output)
                 if len(doors) != door_count:
                     raise ValueError(
@@ -299,10 +330,7 @@ def migrate_legacy_panel_hinge_side(
     if output_side_available:
         panel_parameters["door_hinge_side"] = migrated_side
         return
-    door_count = panel_parameters.get(
-        "n_doors",
-        panel_parameters.get("door_count"),
-    )
+    door_count = _legacy_spec_loader_panel_input_door_count(panel_parameters)
     if (
         isinstance(door_count, int)
         and not isinstance(door_count, bool)
@@ -312,11 +340,21 @@ def migrate_legacy_panel_hinge_side(
         panel_parameters["door_hinge_side"] = None
 
 
-def _legacy_door_count(spec: Mapping[str, Any]) -> int:
+def _legacy_spec_loader_panel_output_door_count(spec: Mapping[str, Any]) -> int:
     value = spec.get("n_doors", spec.get("door_count"))
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise ValueError("legacy panel spec requires a valid n_doors for migration")
     return value
+
+
+def _legacy_spec_loader_panel_input_door_count(
+    panel_parameters: Mapping[str, Any],
+) -> Any:
+    """Recover ``n_doors`` from historical panel input payloads."""
+    return panel_parameters.get(
+        "n_doors",
+        panel_parameters.get("door_count"),
+    )
 
 
 def _legacy_doors(panel_output: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -342,7 +380,7 @@ def _validate_objective_invariants(spec: FurnitureSpec) -> None:
         "drawer_back_thickness",
     )
     non_negative = (
-        "toe_kick_height", "back_offset", "door_margin", "door_hinge_gap",
+        "toe_kick_height", "back_offset", "front_face_margin", "door_hinge_gap",
         "groove_clearance", "toe_kick_reveal_front", "toe_kick_reveal_back",
         "back_rail_height", "drawer_layer_gap", "drawer_back_clearance",
         "top_gap_mm",
@@ -365,6 +403,10 @@ def _validate_objective_invariants(spec: FurnitureSpec) -> None:
         raise ValueError("toe-kick supports require a positive toe_kick_height")
     if spec.drawer_count and (spec.shelves or spec.n_doors):
         raise ValueError("full-height drawers require no shelves and n_doors=0")
+    if spec.n_doors > 2:
+        raise ValueError(
+            "current panel topology supports at most 2 doors; disambiguate multi-door opening strategy first"
+        )
     if spec.door_hinge_side not in {None, "left", "right"}:
         raise ValueError("door_hinge_side must be 'left', 'right', or null")
     if spec.n_doors == 1:

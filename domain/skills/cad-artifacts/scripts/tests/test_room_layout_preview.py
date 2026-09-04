@@ -35,7 +35,7 @@ def wardrobe_spec(
     offset_mm: float = 500,
 ) -> dict:
     return {
-        "type": "floor_cabinet",
+        "furniture_type": "floor_cabinet",
         "width": 1800,
         "depth": 600,
         "height": 2400,
@@ -84,7 +84,7 @@ def run_independent_layout(name: str, spec: dict):
     panel_parameters = panel_stage_input(stage_inputs).get("parameters", {})
     options = {
         key: panel_parameters[key]
-        for key in ("n_doors", "door_count")
+        for key in ("n_doors",)
         if key in panel_parameters
     }
     context = layout_stage_input(stage_inputs)
@@ -121,7 +121,7 @@ class RoomLayoutPreviewTests(unittest.TestCase):
         _, output, report = run_independent_layout(
             "1600衣柜",
             {
-                "type": "floor_cabinet",
+                "furniture_type": "floor_cabinet",
                 "width": 1600,
                 "depth": 600,
                 "height": 2400,
@@ -197,7 +197,7 @@ class RoomLayoutPreviewTests(unittest.TestCase):
         _, output, report = run_independent_layout(
             "吊柜",
             {
-                "type": "wall_cabinet",
+                "furniture_type": "wall_cabinet",
                 "width": 800,
                 "depth": 350,
                 "height": 900,
@@ -220,7 +220,7 @@ class RoomLayoutPreviewTests(unittest.TestCase):
         _, output, report = run_independent_layout(
             "到顶吊柜",
             {
-                "type": "wall_cabinet",
+                "furniture_type": "wall_cabinet",
                 "width": 800,
                 "depth": 350,
                 "height": 900,

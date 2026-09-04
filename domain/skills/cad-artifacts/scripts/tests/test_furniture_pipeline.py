@@ -36,7 +36,7 @@ class FurniturePipelineTests(unittest.TestCase):
     def test_rejects_unsupported_furniture_type(self) -> None:
         with self.assertRaisesRegex(ValueError, "supported:"):
             self.planner.plan_furniture(
-                {"type": "bed", "width": 2000, "depth": 2200, "height": 500}
+                {"furniture_type": "bed", "width": 2000, "depth": 2200, "height": 500}
             )
 
 
