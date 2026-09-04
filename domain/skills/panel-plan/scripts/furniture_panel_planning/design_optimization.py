@@ -1,4 +1,4 @@
-"""Bounded multi-objective candidate generation for the panel-planning stage."""
+"""Optional side-analysis for bounded panel-stage candidate generation."""
 
 from __future__ import annotations
 

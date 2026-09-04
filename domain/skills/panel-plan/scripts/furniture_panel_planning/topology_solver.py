@@ -442,7 +442,7 @@ def _drawer_panels(
 ) -> list[PanelPlacement]:
     """Generate full-height drawer box panels（首版：无面板，前板即前脸）。
 
-    尺寸链（待确认，投产前核对）：
+    尺寸链口径见 references/drawer-dimension-chain.md：
     - 每层净高 band_h = 内部净高 ÷ drawer_count
     - 前板：高 = band_h − layer_gap；宽 = 内部宽 − 2×door_margin；厚 = 板厚
     - 盒体宽 = 内部宽 − 2×已准入的抽屉每侧净空

@@ -18,7 +18,8 @@
   门数更多但开启策略未确认时保持为空，不由制造阶段猜测多门开启关系。
 - 当前 `drawer_count>0` 的规范语义仅为整高抽屉区；必须同时提交
   空 `shelves` 与 `n_doors=0`。混合门、层板和抽屉分区先由 LLM 继续消歧，
-  不得由代码按数量优先级静默丢弃任何区域。
+  不得由代码按数量优先级静默丢弃任何区域。抽屉区尺寸链与板件构成见
+  [抽屉尺寸链](drawer-dimension-chain.md)。
 - 抽屉每侧净空、层缝、底/背板厚和后部净空分别来自已准入的
   `drawer_side_clearance/drawer_layer_gap/drawer_bottom_thickness/`
   `drawer_back_thickness/drawer_back_clearance`。板件代码不得读取制造五金目录

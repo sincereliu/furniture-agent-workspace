@@ -1,4 +1,4 @@
-"""Furniture-specific dimensional and uncertainty audit for panel-stage output."""
+"""Optional side-analysis for dimensional and uncertainty checks on panel output."""
 
 from __future__ import annotations
 
