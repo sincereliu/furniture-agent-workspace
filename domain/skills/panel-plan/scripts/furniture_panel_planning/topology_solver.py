@@ -3,9 +3,11 @@
 Reads a cabinet topology YAML and a FurnitureSpec, then computes every panel's
 3-D placement with correct semantic face directions (inner/outer/cam).
 
-The solver is universal — it does not branch on furniture_type.  All
-cabinet-specific knowledge lives in the topology YAML files under
-references/cabinet-topologies/.
+The cabinet-type topology skeleton lives in the YAML files under
+references/cabinet-topologies/. Deterministic execution rules that are shared
+across supported topologies, such as admitted door labeling and the current
+full-height drawer dimension chain, remain in code rather than being inferred
+from natural language or hidden profiles.
 """
 
 from __future__ import annotations
