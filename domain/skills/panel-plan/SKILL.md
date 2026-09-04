@@ -21,6 +21,8 @@ description: 用于 panels_planned 阶段。在已确认成品外包络上生成
 - 提案字段、显式值要求和 LLM 候选起点： [提案契约](references/panel-proposal-contract.md)
 - 背板模式解析、背板基准和内部净深： [背板结构规则](references/back-construction-rules.md)
 - 板件角色、门/层板/踢脚规则和柜型拓扑边界： [板件定义规则](references/panel-definition-rules.md)
+- 层板列表、计算层与固定/活动层板物化： [层板规则](references/shelf-planning-rules.md)
+- 踢脚区、支撑数量公式和净距： [踢脚规则](references/toe-kick-rules.md)
 - 抽屉区尺寸链、适用条件和限制： [抽屉尺寸链](references/drawer-dimension-chain.md)
 - 柜型拓扑数据： `references/cabinet-topologies/`
 - 单位审计和优化等旁路证据： [板件旁路分析](references/panel-side-analyses.md)
