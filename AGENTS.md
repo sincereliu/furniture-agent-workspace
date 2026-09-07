@@ -1,6 +1,8 @@
 # 家具 Skill 开发约定
 
-创建、修改或审查 `domain/skills/furniture-*`、家具工作流入口及其测试前，必须完整读取
+创建、修改或审查 `domain/skills/` 下家具阶段 Skill（`design-intent`、`layout-plan`、
+`panel-plan`、`manufacturing-plan`、`feature-tree`、`cad-artifacts`、`delivery-report`）、
+家具工作流入口及其测试前，必须完整读取
 [LLM 与运行时边界](.agents/skills/furniture-agent/references/llm-runtime-boundary.md)。
 
 - 遵守“LLM 提案、代码准入”：自然语言理解和可确认的方案选择归 LLM；结构化契约、确定性计算、状态、验证与副作用归代码。

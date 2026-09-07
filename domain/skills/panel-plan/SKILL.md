@@ -1,4 +1,5 @@
-﻿name: panel-plan
+﻿---
+name: panel-plan
 description: 用于 panels_planned 阶段。在已确认成品外包络上生成可审查的实体板件事实输出；门、层板、抽屉、背板、背拉条和踢脚方案先由 LLM 提案，经结构化代码准入后物化。单位审计与优化属于旁路分析，不属于核心板件生成。
 ---
 
