@@ -68,8 +68,12 @@ class CadBridgeTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0)
             self.assertTrue(output_path.is_file())
             package_path = source_path.parent / "__cadgen__" / "models" / source_path.name
-            self.assertEqual(Path(result.viewer_package_path), package_path)
-            self.assertEqual(Path(result.topology_path), package_path / "assembly.json")
+            # 统一解析短路径（Windows 8.3 短名）与长路径，避免仅在特定
+            # 用户目录上才出现的字符串比较差异。
+            self.assertEqual(Path(result.viewer_package_path).resolve(), package_path.resolve())
+            self.assertEqual(
+                Path(result.topology_path).resolve(), (package_path / "assembly.json").resolve()
+            )
             self.assertTrue((package_path / "components" / "fake.glb").is_file())
 
     def test_default_launcher_is_current_gen_entrypoint(self) -> None:
