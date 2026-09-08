@@ -1,4 +1,4 @@
-﻿---
+---
 name: panel-plan
 description: 用于 panels_planned 阶段。在已确认成品外包络上生成可审查的实体板件事实输出；门、层板、抽屉、背板、背拉条和踢脚方案先由 LLM 提案，经结构化代码准入后物化。单位审计与优化属于旁路分析，不属于核心板件生成。
 ---
@@ -25,6 +25,7 @@ description: 用于 panels_planned 阶段。在已确认成品外包络上生成
 - 层板列表、计算层与固定/活动层板物化： [层板规则](references/shelf-planning-rules.md)
 - 踢脚区、支撑数量公式和净距： [踢脚规则](references/toe-kick-rules.md)
 - 抽屉区尺寸链、适用条件和限制： [抽屉尺寸链](references/drawer-dimension-chain.md)
+- 接触与连接的默认判定、连接开关口径： [连接与接触默认规则](references/connection-contact-defaults.md)
 - 柜型拓扑数据： `references/cabinet-topologies/`
 - 单位审计和优化等旁路证据： [板件旁路分析](references/panel-side-analyses.md)
 
