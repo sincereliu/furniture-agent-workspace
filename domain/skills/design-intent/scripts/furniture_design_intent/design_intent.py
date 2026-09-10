@@ -143,9 +143,18 @@ def _mounting_errors(
     mount_mode: str | None,
     mounting_height_mm: float | None,
 ) -> list[str]:
-    """Confirmation-time rules for a wall cabinet's mounting intent."""
+    """Confirmation-time rules for mounting fields on the finished envelope."""
     if furniture_type != "wall_cabinet":
-        return []
+        errors: list[str] = []
+        if mount_mode is not None:
+            errors.append(
+                "mount_mode must be null unless furniture_type is wall_cabinet"
+            )
+        if mounting_height_mm is not None:
+            errors.append(
+                "mounting_height_mm must be null unless furniture_type is wall_cabinet"
+            )
+        return errors
     if mount_mode not in MOUNT_MODES:
         return [
             "mount_mode must be 'free_height' or 'flush_ceiling' "

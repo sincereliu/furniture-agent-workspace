@@ -9,7 +9,7 @@
 - 规范字段名、兼容别名和单位口径统一按 [术语规范表](terminology-glossary.md)。
 - 所有线性尺寸单位均为 mm。
 - `toe_kick_support_count=null` 与 `back_mount=auto` 都是显式结构化请求，不是运行时缺省。
-- 混合门/层板/抽屉分区、多门开启关系或其它超出当前拓扑表达能力的语义，必须先继续消歧。
+- 超出当前拓扑表达能力的语义必须先继续消歧；停问清单见下文「展示与停止」。
 
 ## 完整字段
 
@@ -26,13 +26,13 @@
 
 - `shelves` 每项是 `{shelf_type: fixed|movable, gap_below_mm: 数值|null}`；列表顺序、计算层和净高口径见 [层板规则](shelf-planning-rules.md)。运行时不做均分，不保留 `shelf_count`。
 - `n_doors=1` 时必须显式提交 `door_hinge_side=left/right`；其它门数必须显式提交 `null`。
-- `movable_shelf_connector` 的显式枚举为 `two_in_one` 或 `shelf_pin`；无偏好时只能由 LLM 提议候选，不得由代码静默补齐。
+- `movable_shelf_connector` 必须显式提交 `two_in_one` 或 `shelf_pin`；即使没有活动层板也不得省略。无偏好时只能由 LLM 提议候选，不得由代码静默补齐。
 - 当前 `drawer_count>0` 的规范语义只表示整高抽屉区；必须同时提交空 `shelves` 与 `n_doors=0`。
 
 ## 展示与停止
 
 - 向用户展示完整字段表，并逐项标明「用户已给」还是「假设」。
-- 混合门/层板/抽屉、三门及以上、单门未给铰链侧、有活动层板未选连接方式时，停在消歧，不要写入 `stage_inputs` 去碰运行时。
+- 超出当前拓扑表达能力或缺少必填显式值时，停在消歧，不要写入 `stage_inputs` 去碰运行时。完整清单：混合门/层板/抽屉分区；三门及以上的开启关系；单门未给铰链侧；未显式提交活动层板连接方式。
 - 代码准入后展示柜体 `id`、`back_mount` requested/effective、内部净空和板件清单（含所属柜体），再等人确认。
 
 ## LLM 候选起点

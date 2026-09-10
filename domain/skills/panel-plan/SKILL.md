@@ -19,7 +19,7 @@ description: 用于 panels_planned 阶段。当用户说“几扇门”“几层
 ## 提案与展示
 
 - 提案必须覆盖契约中的全部字段。用户没说的值标成假设，不得写成已确认事实。
-- 下列语义当前拓扑表达不了，必须先继续追问，不要交给代码猜：混合门/层板/抽屉分区、三门及以上的开启关系、单门却未给 `door_hinge_side`、有活动层板却未选 `movable_shelf_connector`。
+- 超出当前柜型表达能力、或缺少契约要求的显式值时，先继续追问，不要交给代码猜。完整停问清单只在 [提案契约](references/panel-proposal-contract.md)。
 - 展示给用户：假设列表、柜体 `id`、`back_mount` 的 requested/effective、内部净空、板件清单（id / 所属柜体 / 角色 / 尺寸 / 位置）。
 - 按当前任务读对应 reference，不要一次加载全部规则。
 

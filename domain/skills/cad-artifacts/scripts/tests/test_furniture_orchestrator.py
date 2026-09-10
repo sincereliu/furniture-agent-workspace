@@ -799,6 +799,20 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         self.assertTrue(floor.confirmed)
         self.assertIsNone(floor.to_dict()["mounting_height_mm"])
 
+        with self.assertRaisesRegex(ValueError, "mount_mode"):
+            DesignIntent(
+                furniture_type="floor_cabinet",
+                overall_size=OverallSize(800, 600, 1000),
+                mount_mode="free_height",
+                mounting_height_mm=1800,
+            ).confirm()
+        with self.assertRaisesRegex(ValueError, "mounting_height_mm"):
+            DesignIntent(
+                furniture_type="floor_cabinet",
+                overall_size=OverallSize(800, 600, 1000),
+                mounting_height_mm=1800,
+            ).confirm()
+
     def test_panel_stage_admits_complete_structured_parameters(self) -> None:
         project = self.orchestrator.create_project(
             "直接意图柜体",

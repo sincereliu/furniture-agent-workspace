@@ -17,13 +17,13 @@
   [层板规则](shelf-planning-rules.md)。
 - 门板和抽屉面板必须关联其开启策略及净空包络。
 - 单门（`n_doors=1`）必须由提案显式提交 `door_hinge_side=left/right`，
-  代码拒绝缺省；标准双门由代码确定性推导（左门左铰、右门右铰）并写入各门板；
-  当前拓扑只支持单门或标准双门；门数更多但开启策略未确认时必须先继续消歧，
-  不由制造阶段猜测多门开启关系。
+  代码拒绝缺省；标准双门由代码确定性推导（左门左铰、右门右铰）并写入各门板。
+  当前拓扑只支持单门或标准双门。更多门或未确认的开启策略见
+  [提案契约](panel-proposal-contract.md) 的停问清单，不由制造阶段猜测。
 - 当前 `drawer_count>0` 的规范语义仅为整高抽屉区；必须同时提交
-  空 `shelves` 与 `n_doors=0`。混合门、层板和抽屉分区先由 LLM 继续消歧，
-  不得由代码按数量优先级静默丢弃任何区域。抽屉区尺寸链与板件构成见
-  [抽屉尺寸链](drawer-dimension-chain.md)。
+  空 `shelves` 与 `n_doors=0`。混合分区的停问见
+  [提案契约](panel-proposal-contract.md)。不得由代码按数量优先级静默丢弃任何区域。
+  抽屉区尺寸链与板件构成见 [抽屉尺寸链](drawer-dimension-chain.md)。
 - 抽屉每侧净空、层缝、底/背板厚和后部净空分别来自已准入的
   `drawer_side_clearance/drawer_layer_gap/drawer_bottom_thickness/`
   `drawer_back_thickness/drawer_back_clearance`。板件代码不得读取制造五金目录
