@@ -31,19 +31,19 @@ def validate_layout(
     report = ValidationReport(stage="layout_planned")
     if not isinstance(spec, LayoutSpec):
         spec = LayoutSpec(
-            furniture_type=str(spec.furniture_type),
+            furniture_category=str(spec.furniture_category),
             width=float(spec.width),
             depth=float(spec.depth),
             height=float(spec.height),
             door_count=int(getattr(spec, "door_count", spec.n_doors)),
         )
     if (
-        layout.furniture_type,
+        layout.furniture_category,
         layout.width,
         layout.depth,
         layout.height,
     ) != (
-        spec.furniture_type,
+        spec.furniture_category,
         spec.width,
         spec.depth,
         spec.height,
@@ -397,7 +397,7 @@ def _validate_room_fit(
             "room_placement.room.openings",
         )
 
-    if layout.furniture_type == "wall_cabinet" and plan.placement.origin_z_mm <= 0:
+    if layout.furniture_category == "wall_cabinet" and plan.placement.origin_z_mm <= 0:
         report.add_warning(
             "WALL_CABINET_AT_FLOOR_LEVEL",
             "wall cabinet placement has no mounting elevation",

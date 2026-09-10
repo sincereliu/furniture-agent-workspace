@@ -22,7 +22,7 @@ class CabinetPipelineTests(unittest.TestCase):
     def setUp(self) -> None:
         self.result = plan_cabinet(
             furniture_spec(
-                furniture_type="floor_cabinet",
+                furniture_category="floor_cabinet",
                 width=800,
                 height=1000,
                 depth=600,
@@ -52,10 +52,10 @@ class CabinetPipelineTests(unittest.TestCase):
         self.assertEqual(self.result.bom.readiness, "preliminary")
 
     def test_rejects_non_cabinet_type(self) -> None:
-        with self.assertRaisesRegex(ValueError, "executable canonical type"):
+        with self.assertRaisesRegex(ValueError, "executable canonical category"):
             plan_cabinet(
                 furniture_spec(
-                    furniture_type="wardrobe",
+                    furniture_category="wardrobe",
                     width=1200,
                     height=2000,
                     depth=600,

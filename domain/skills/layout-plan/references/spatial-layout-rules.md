@@ -15,7 +15,7 @@
 
 - 房间：`4200×3600×2800 mm` 的矩形“默认卧室（系统假设）”，门窗和障碍物为空；
 - 位置：沿北墙居中，落地柜标高为 `0`；
-- 吊柜：沿北墙居中；若已确认意图提供了挂装方式，则按方式定位——`flush_ceiling` 贴顶（`origin_z_mm = 房高 − 柜高`），`free_height` 用挂高 `mounting_height_mm` 作 `origin_z_mm`；否则默认保留 `450 mm` 顶部净距；空间不足时降至不低于地面。
+- 吊柜：沿北墙居中；若已确认意图提供了挂装方式，则按方式定位——`flush_ceiling` 贴顶（`origin_z_mm = 房高 − 柜高`），`free_hanging_height` 用挂高 `hanging_height_mm` 作 `origin_z_mm`；否则默认保留 `450 mm` 顶部净距；空间不足时降至不低于地面。
 
 只提供 `layout.room` 或 `layout.placement` 时，仅补齐缺失项。`layout_context.room_source` 与 `layout_context.placement_source` 必须说明数据来自用户还是系统默认；默认场景不是现场实测数据，用户可在确认前修改。
 
@@ -46,7 +46,7 @@
 
 ## 运行时输出
 
-`CabinetLayout` 以 `furniture_type/width/depth/height` 作为摆放计算依据。当前序列化结构为兼容旧调用仍可含 `door_count`，但该字段不参与房间定位，也不向家具生成主流程提供数据。
+`CabinetLayout` 以 `furniture_category/width/depth/height` 作为摆放计算依据。当前序列化结构为兼容旧调用仍可含 `door_count`，但该字段不参与房间定位，也不向家具生成主流程提供数据。
 
 完整 `layout_planned` 输出保持 `layout` 向后兼容，并增加：
 

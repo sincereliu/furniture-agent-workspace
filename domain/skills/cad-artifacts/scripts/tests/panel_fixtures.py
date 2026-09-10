@@ -19,9 +19,9 @@ def _even_shelves(count: int, *, height: float, board: float, toe_kick: float):
     return shelves, gap
 
 
-def panel_parameters(furniture_type: str = "floor_cabinet", **overrides: Any) -> dict[str, Any]:
+def panel_parameters(furniture_category: str = "floor_cabinet", **overrides: Any) -> dict[str, Any]:
     """Return a complete proposal owned only by the test suite."""
-    wall = furniture_type == "wall_cabinet"
+    wall = furniture_category == "wall_cabinet"
     values = {
         "board_thickness": 18.0, "back_thickness": 9.0, "door_thickness": 18.0,
         "toe_kick_height": 0.0 if wall else 50.0, "back_offset": 18.0,
@@ -56,30 +56,30 @@ def _fill_shelves(overrides: dict[str, Any], *, wall: bool, height: float) -> No
     overrides["top_gap_mm"] = top_gap
 
 
-def cabinet_data(furniture_type: str = "floor_cabinet", **overrides: Any) -> dict[str, Any]:
-    wall = furniture_type == "wall_cabinet"
+def cabinet_data(furniture_category: str = "floor_cabinet", **overrides: Any) -> dict[str, Any]:
+    wall = furniture_category == "wall_cabinet"
     overrides = dict(overrides)
     height = overrides.get("height", 900 if wall else 1000)
     _fill_shelves(overrides, wall=wall, height=height)
     values = {
-        "furniture_type": furniture_type, "width": 800, "depth": 350 if wall else 600,
-        "height": height, **panel_parameters(furniture_type),
+        "furniture_category": furniture_category, "width": 800, "depth": 350 if wall else 600,
+        "height": height, **panel_parameters(furniture_category),
     }
     if wall:
-        values["mount_mode"] = "free_height"
-        values["mounting_height"] = 2000
+        values["hanging_mode"] = "free_hanging_height"
+        values["hanging_height_mm"] = 2000
     values.update(overrides)
     return values
 
 
 def furniture_spec(
-    *, furniture_type: str = "floor_cabinet", width: float = 800,
+    *, furniture_category: str = "floor_cabinet", width: float = 800,
     depth: float = 600, height: float = 1000, **overrides: Any,
 ) -> FurnitureSpec:
-    wall = furniture_type == "wall_cabinet"
+    wall = furniture_category == "wall_cabinet"
     overrides = dict(overrides)
     _fill_shelves(overrides, wall=wall, height=height)
     return FurnitureSpec(
-        furniture_type=furniture_type, width=width, depth=depth, height=height,
-        **panel_parameters(furniture_type, **overrides),
+        furniture_category=furniture_category, width=width, depth=depth, height=height,
+        **panel_parameters(furniture_category, **overrides),
     )

@@ -73,7 +73,7 @@ def main(
     pipeline = orchestration.pipeline
     fspec = pipeline.spec
     print(
-        f" 规划家具: {fspec.furniture_type} "
+        f" 规划家具: {fspec.furniture_category} "
         f"({fspec.width:.0f}×{fspec.height:.0f}×{fspec.depth:.0f}mm)"
     )
     print(f" 拆单完成: {pipeline.bom.panel_count} 块板件")

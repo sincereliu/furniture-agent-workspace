@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from furniture_delivery_validation.validation import ValidationReport
 
-from .design_intent import DesignIntent, SUPPORTED_TYPES
+from .design_intent import DesignIntent, EXECUTABLE_CATEGORIES
 
 
 def validate_intent(intent: DesignIntent) -> ValidationReport:
@@ -12,10 +12,10 @@ def validate_intent(intent: DesignIntent) -> ValidationReport:
     intent_errors = intent.validate()
     for error in intent_errors:
         report.add_error("INVALID_INTENT", error)
-    if intent.furniture_type not in SUPPORTED_TYPES:
+    if intent.furniture_category not in EXECUTABLE_CATEGORIES:
         report.add_error(
-            "UNSUPPORTED_FURNITURE_TYPE",
-            f"supported vertical slice: {', '.join(sorted(SUPPORTED_TYPES))}",
-            "furniture_type",
+            "UNSUPPORTED_FURNITURE_CATEGORY",
+            f"supported vertical slice: {', '.join(sorted(EXECUTABLE_CATEGORIES))}",
+            "furniture_category",
         )
     return report

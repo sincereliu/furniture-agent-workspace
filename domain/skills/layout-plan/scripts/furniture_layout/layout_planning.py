@@ -11,7 +11,7 @@ from .layout_spec import LayoutSpec
 class CabinetLayout:
     """Stage-2 envelope and functional-count contract."""
 
-    furniture_type: str
+    furniture_category: str
     width: float
     depth: float
     height: float
@@ -20,7 +20,7 @@ class CabinetLayout:
     @classmethod
     def from_spec(cls, spec: LayoutSpec) -> "CabinetLayout":
         return cls(
-            furniture_type=spec.furniture_type,
+            furniture_category=spec.furniture_category,
             width=spec.width,
             depth=spec.depth,
             height=spec.height,

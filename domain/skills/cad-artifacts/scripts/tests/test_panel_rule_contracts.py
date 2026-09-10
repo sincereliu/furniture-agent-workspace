@@ -13,7 +13,7 @@ from runtime_paths import bootstrap_runtime_paths
 
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
-from furniture_design_intent.design_intent import DesignIntent, OverallSize
+from furniture_design_intent.design_intent import DesignIntent, FinishedEnvelope
 from furniture_panel_planning.cabinet_identity import panel_role
 from furniture_panel_planning.construction_geometry import (
     drawer_panel_boxes,
@@ -35,7 +35,7 @@ from panel_fixtures import by_role, furniture_spec, panel_parameters
 class PanelRuleContractTests(unittest.TestCase):
     def test_single_auto_shelf_gap_absorbs_remaining_internal_height(self) -> None:
         spec = furniture_spec(
-            furniture_type="floor_cabinet",
+            furniture_category="floor_cabinet",
             width=800,
             depth=600,
             height=1000,
@@ -66,7 +66,7 @@ class PanelRuleContractTests(unittest.TestCase):
 
     def test_drawer_dimension_chain_matches_reference_sample(self) -> None:
         spec = furniture_spec(
-            furniture_type="floor_cabinet",
+            furniture_category="floor_cabinet",
             width=800,
             depth=600,
             height=1000,
@@ -187,7 +187,7 @@ class PanelRuleContractTests(unittest.TestCase):
 
     def test_generated_joints_carry_resolved_connection(self) -> None:
         spec = furniture_spec(
-            furniture_type="floor_cabinet",
+            furniture_category="floor_cabinet",
             width=800,
             depth=600,
             height=1000,
@@ -227,8 +227,8 @@ class PanelRuleContractTests(unittest.TestCase):
         self.assertIn("left_side_panel", {panel.role for panel in first})
 
         intent = DesignIntent(
-            furniture_type="floor_cabinet",
-            overall_size=OverallSize(800, 600, 1000),
+            furniture_category="floor_cabinet",
+            finished_envelope=FinishedEnvelope(800, 600, 1000),
             confirmed=True,
         )
         output = plan_panel_cabinets(

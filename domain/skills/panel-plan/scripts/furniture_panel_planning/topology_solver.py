@@ -32,17 +32,17 @@ from .panel_rules import resolve_door_hinge_side
 from .structure_planning import CabinetStructure
 
 
-def _load_topology(furniture_type: str) -> dict[str, Any]:
-    """Load a topology YAML file for the given furniture type."""
+def _load_topology(furniture_category: str) -> dict[str, Any]:
+    """Load a topology YAML file for the given furniture category."""
     topo_dir = (
         Path(__file__).resolve().parents[2]
         / "references"
         / "cabinet-topologies"
     )
-    path = topo_dir / f"{furniture_type}.yaml"
+    path = topo_dir / f"{furniture_category}.yaml"
     if not path.exists():
         raise FileNotFoundError(
-            f"No topology defined for furniture_type='{furniture_type}'. "
+            f"No topology defined for furniture_category='{furniture_category}'. "
             f"Expected: {path}"
         )
     with open(path, encoding="utf-8") as fp:
@@ -73,7 +73,7 @@ def solve_panel_placements(
     cabinet_id : str
         Owning cabinet instance. Panel ids are qualified onto this parent.
     """
-    topology = _load_topology(spec.furniture_type)
+    topology = _load_topology(spec.furniture_category)
     frame = CabinetFrame(**topology["frame"])
 
     placements: list[PanelPlacement] = []
@@ -462,5 +462,5 @@ def frame_sign(signed: str) -> int:
 
 def _frame_from_spec(spec: FurnitureSpec) -> CabinetFrame:
     """Build a CabinetFrame for the spec's furniture type."""
-    topology = _load_topology(spec.furniture_type)
+    topology = _load_topology(spec.furniture_category)
     return CabinetFrame(**topology["frame"])

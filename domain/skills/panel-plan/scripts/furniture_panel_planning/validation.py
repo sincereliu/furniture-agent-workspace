@@ -181,22 +181,26 @@ def validate_structure(
     report = ValidationReport(stage="panels_planned")
     if isinstance(confirmed_intent, DesignIntent):
         confirmed = (
-            confirmed_intent.furniture_type,
-            confirmed_intent.overall_size.width_mm,
-            confirmed_intent.overall_size.depth_mm,
-            confirmed_intent.overall_size.height_mm,
+            confirmed_intent.furniture_category,
+            confirmed_intent.finished_envelope.width_mm,
+            confirmed_intent.finished_envelope.depth_mm,
+            confirmed_intent.finished_envelope.height_mm,
         )
     else:
         # Compatibility for direct callers that previously passed the retired
         # serial CabinetLayout checkpoint.
         confirmed = (
-            getattr(confirmed_intent, "furniture_type", None),
+            getattr(
+                confirmed_intent,
+                "furniture_category",
+                getattr(confirmed_intent, "furniture_type", None),
+            ),
             getattr(confirmed_intent, "width", None),
             getattr(confirmed_intent, "depth", None),
             getattr(confirmed_intent, "height", None),
         )
     if (
-        spec.furniture_type,
+        spec.furniture_category,
         spec.width,
         spec.depth,
         spec.height,

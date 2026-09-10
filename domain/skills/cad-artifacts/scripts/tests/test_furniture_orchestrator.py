@@ -19,7 +19,7 @@ bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 from furniture_cad.cad_bridge import CadBridge
 from furniture_delivery_validation.validation import validate_delivery
-from furniture_design_intent.design_intent import DesignIntent, OverallSize
+from furniture_design_intent.design_intent import DesignIntent, FinishedEnvelope
 from furniture_workflow.input_adapter import stage_inputs_from_spec
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from furniture_workflow.workflow_project import Project
@@ -29,10 +29,10 @@ from furniture_panel_planning.panel_pipeline import plan_panel_stage
 from panel_fixtures import cabinet_data, panel_parameters
 
 
-def cabinet_intent(*, furniture_type: str = "floor_cabinet") -> DesignIntent:
+def cabinet_intent(*, furniture_category: str = "floor_cabinet") -> DesignIntent:
     return DesignIntent(
-        furniture_type=furniture_type,
-        overall_size=OverallSize(width_mm=800, depth_mm=600, height_mm=1000),
+        furniture_category=furniture_category,
+        finished_envelope=FinishedEnvelope(width_mm=800, depth_mm=600, height_mm=1000),
     )
 
 
@@ -410,10 +410,10 @@ class FurnitureOrchestratorTests(unittest.TestCase):
                 revised = orchestrator.revise(
                     result.project,
                     DesignIntent(
-                        furniture_type="wall_cabinet",
-                        overall_size=OverallSize(900, 350, 900),
-                        mount_mode="free_height",
-                        mounting_height_mm=2000,
+                        furniture_category="wall_cabinet",
+                        finished_envelope=FinishedEnvelope(900, 350, 900),
+                        hanging_mode="free_hanging_height",
+                        hanging_height_mm=2000,
                     ),
                 )
 
@@ -472,8 +472,8 @@ class FurnitureOrchestratorTests(unittest.TestCase):
     def test_draft_intent_preserves_null_dimensions_and_cannot_confirm(self) -> None:
         intent = DesignIntent.from_dict(
             {
-                "furniture_type": "floor_cabinet",
-                "overall_size": {
+                "furniture_category": "floor_cabinet",
+                "finished_envelope": {
                     "width_mm": 800,
                     "depth_mm": None,
                     "height_mm": 1000,
@@ -483,7 +483,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         project = self.orchestrator.create_project("未完整柜体", intent)
 
         self.assertIsNone(
-            project.latest.stage_outputs["design_intent"]["overall_size"]["depth_mm"]
+            project.latest.stage_outputs["design_intent"]["finished_envelope"]["depth_mm"]
         )
         revision = self.orchestrator.confirm_intent(project)
 
@@ -492,8 +492,8 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         self.assertIn("INVALID_INTENT", issue_codes)
 
     def test_runtime_requires_llm_to_normalize_natural_language_type(self) -> None:
-        with self.assertRaisesRegex(ValueError, "executable canonical type"):
-            cabinet_intent(furniture_type="地柜").confirm()
+        with self.assertRaisesRegex(ValueError, "executable canonical category"):
+            cabinet_intent(furniture_category="地柜").confirm()
 
     def test_unsupported_layout_decision_is_rejected_by_independent_input(self) -> None:
         with self.assertRaisesRegex(ValueError, "layout input only accepts"):
@@ -569,7 +569,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
 
     def test_unsupported_family_fails_at_design_intent_confirmation(self) -> None:
         project = self.orchestrator.create_project(
-            "床", cabinet_intent(furniture_type="bed")
+            "床", cabinet_intent(furniture_category="bed")
         )
         revision = self.orchestrator.confirm_intent(project)
 
@@ -577,7 +577,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         self.assertFalse(revision.validations[-1].passed)
         self.assertEqual(
             revision.validations[-1].issues[0].code,
-            "UNSUPPORTED_FURNITURE_TYPE",
+            "UNSUPPORTED_FURNITURE_CATEGORY",
         )
 
     def test_project_store_round_trips_stage_outputs_and_approvals(self) -> None:
@@ -681,7 +681,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
 
     def test_intent_from_spec_contains_only_category_and_envelope(self) -> None:
         request = {
-            "furniture_type": "wall_cabinet",
+            "furniture_category": "wall_cabinet",
             "width": 800,
             "depth": 350,
             "height": 900,
@@ -690,16 +690,16 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             "back_mount": "cover",
         }
         intent = self.orchestrator.intent_from_spec(request)
-        self.assertEqual(intent.overall_size.width_mm, 800)
-        self.assertEqual(intent.overall_size.depth_mm, 350)
-        self.assertEqual(intent.overall_size.height_mm, 900)
+        self.assertEqual(intent.finished_envelope.width_mm, 800)
+        self.assertEqual(intent.finished_envelope.depth_mm, 350)
+        self.assertEqual(intent.finished_envelope.height_mm, 900)
         self.assertEqual(
             set(intent.to_dict()),
             {
-                "furniture_type",
-                "overall_size",
-                "mount_mode",
-                "mounting_height_mm",
+                "furniture_category",
+                "finished_envelope",
+                "hanging_mode",
+                "hanging_height_mm",
                 "confirmed",
                 "schema_version",
             },
@@ -713,7 +713,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         self.assertEqual(inputs["panels"]["parameters"]["back_mount"], "cover")
 
     def test_flat_requests_reject_legacy_type_field(self) -> None:
-        with self.assertRaisesRegex(ValueError, "must use furniture_type"):
+        with self.assertRaisesRegex(ValueError, "must use furniture_category"):
             self.orchestrator.intent_from_spec(
                 {
                     "type": "wall_cabinet",
@@ -722,7 +722,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
                     "height": 900,
                 }
             )
-        with self.assertRaisesRegex(ValueError, "must use furniture_type"):
+        with self.assertRaisesRegex(ValueError, "must use furniture_category"):
             stage_inputs_from_spec(
                 {
                     "type": "wall_cabinet",
@@ -745,12 +745,43 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             result.revision.validations[-1].issues[0].message,
         )
 
+    def test_design_intent_loads_historical_field_names(self) -> None:
+        intent = DesignIntent.from_dict(
+            {
+                "furniture_type": "wall_cabinet",
+                "overall_size": {
+                    "width_mm": 800,
+                    "depth_mm": 350,
+                    "height_mm": 900,
+                },
+                "mount_mode": "free_height",
+                "mounting_height_mm": 1800,
+                "schema_version": 2,
+            }
+        )
+        self.assertEqual(intent.furniture_category, "wall_cabinet")
+        self.assertEqual(intent.finished_envelope.height_mm, 900)
+        self.assertEqual(intent.hanging_mode, "free_hanging_height")
+        self.assertEqual(intent.hanging_height_mm, 1800)
+        self.assertEqual(intent.schema_version, 3)
+        self.assertEqual(
+            set(intent.to_dict()),
+            {
+                "furniture_category",
+                "finished_envelope",
+                "hanging_mode",
+                "hanging_height_mm",
+                "confirmed",
+                "schema_version",
+            },
+        )
+
     def test_design_intent_rejects_new_downstream_fields(self) -> None:
         with self.assertRaisesRegex(ValueError, "route later decisions"):
             DesignIntent.from_dict(
                 {
-                    "furniture_type": "floor_cabinet",
-                    "overall_size": {
+                    "furniture_category": "floor_cabinet",
+                    "finished_envelope": {
                         "width_mm": 800,
                         "depth_mm": 600,
                         "height_mm": 1000,
@@ -759,58 +790,58 @@ class FurnitureOrchestratorTests(unittest.TestCase):
                 }
             )
 
-    def test_wall_cabinet_intent_requires_mount_mode_before_confirmation(
+    def test_wall_cabinet_intent_requires_hanging_mode_before_confirmation(
         self,
     ) -> None:
-        with self.assertRaisesRegex(ValueError, "mount_mode"):
+        with self.assertRaisesRegex(ValueError, "hanging_mode"):
             DesignIntent(
-                furniture_type="wall_cabinet",
-                overall_size=OverallSize(800, 350, 900),
+                furniture_category="wall_cabinet",
+                finished_envelope=FinishedEnvelope(800, 350, 900),
             ).confirm()
 
-        with self.assertRaisesRegex(ValueError, "mounting_height_mm"):
+        with self.assertRaisesRegex(ValueError, "hanging_height_mm"):
             DesignIntent(
-                furniture_type="wall_cabinet",
-                overall_size=OverallSize(800, 350, 900),
-                mount_mode="free_height",
+                furniture_category="wall_cabinet",
+                finished_envelope=FinishedEnvelope(800, 350, 900),
+                hanging_mode="free_hanging_height",
             ).confirm()
 
         free = DesignIntent(
-            furniture_type="wall_cabinet",
-            overall_size=OverallSize(800, 350, 900),
-            mount_mode="free_height",
-            mounting_height_mm=1800,
+            furniture_category="wall_cabinet",
+            finished_envelope=FinishedEnvelope(800, 350, 900),
+            hanging_mode="free_hanging_height",
+            hanging_height_mm=1800,
         ).confirm()
         self.assertTrue(free.confirmed)
-        self.assertEqual(free.to_dict()["mounting_height_mm"], 1800)
+        self.assertEqual(free.to_dict()["hanging_height_mm"], 1800)
 
         flush = DesignIntent(
-            furniture_type="wall_cabinet",
-            overall_size=OverallSize(800, 350, 900),
-            mount_mode="flush_ceiling",
+            furniture_category="wall_cabinet",
+            finished_envelope=FinishedEnvelope(800, 350, 900),
+            hanging_mode="flush_ceiling",
         ).confirm()
         self.assertTrue(flush.confirmed)
-        self.assertIsNone(flush.mounting_height_mm)
+        self.assertIsNone(flush.hanging_height_mm)
 
         floor = DesignIntent(
-            furniture_type="floor_cabinet",
-            overall_size=OverallSize(800, 600, 1000),
+            furniture_category="floor_cabinet",
+            finished_envelope=FinishedEnvelope(800, 600, 1000),
         ).confirm()
         self.assertTrue(floor.confirmed)
-        self.assertIsNone(floor.to_dict()["mounting_height_mm"])
+        self.assertIsNone(floor.to_dict()["hanging_height_mm"])
 
-        with self.assertRaisesRegex(ValueError, "mount_mode"):
+        with self.assertRaisesRegex(ValueError, "hanging_mode"):
             DesignIntent(
-                furniture_type="floor_cabinet",
-                overall_size=OverallSize(800, 600, 1000),
-                mount_mode="free_height",
-                mounting_height_mm=1800,
+                furniture_category="floor_cabinet",
+                finished_envelope=FinishedEnvelope(800, 600, 1000),
+                hanging_mode="free_hanging_height",
+                hanging_height_mm=1800,
             ).confirm()
-        with self.assertRaisesRegex(ValueError, "mounting_height_mm"):
+        with self.assertRaisesRegex(ValueError, "hanging_height_mm"):
             DesignIntent(
-                furniture_type="floor_cabinet",
-                overall_size=OverallSize(800, 600, 1000),
-                mounting_height_mm=1800,
+                furniture_category="floor_cabinet",
+                finished_envelope=FinishedEnvelope(800, 600, 1000),
+                hanging_height_mm=1800,
             ).confirm()
 
     def test_panel_stage_admits_complete_structured_parameters(self) -> None:

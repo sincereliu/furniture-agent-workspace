@@ -35,7 +35,7 @@ def wardrobe_spec(
     offset_mm: float = 500,
 ) -> dict:
     return {
-        "furniture_type": "floor_cabinet",
+        "furniture_category": "floor_cabinet",
         "width": 1800,
         "depth": 600,
         "height": 2400,
@@ -121,7 +121,7 @@ class RoomLayoutPreviewTests(unittest.TestCase):
         _, output, report = run_independent_layout(
             "1600衣柜",
             {
-                "furniture_type": "floor_cabinet",
+                "furniture_category": "floor_cabinet",
                 "width": 1600,
                 "depth": 600,
                 "height": 2400,
@@ -197,12 +197,12 @@ class RoomLayoutPreviewTests(unittest.TestCase):
         _, output, report = run_independent_layout(
             "吊柜",
             {
-                "furniture_type": "wall_cabinet",
+                "furniture_category": "wall_cabinet",
                 "width": 800,
                 "depth": 350,
                 "height": 900,
-                "mount_mode": "free_height",
-                "mounting_height": 1800,
+                "hanging_mode": "free_hanging_height",
+                "hanging_height_mm": 1800,
             },
         )
 
@@ -220,11 +220,11 @@ class RoomLayoutPreviewTests(unittest.TestCase):
         _, output, report = run_independent_layout(
             "到顶吊柜",
             {
-                "furniture_type": "wall_cabinet",
+                "furniture_category": "wall_cabinet",
                 "width": 800,
                 "depth": 350,
                 "height": 900,
-                "mount_mode": "flush_ceiling",
+                "hanging_mode": "flush_ceiling",
             },
         )
 

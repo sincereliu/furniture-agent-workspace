@@ -85,7 +85,9 @@ def plan_manufacturing(
     if not isinstance(connector_options, Mapping):
         connector_options = {}
     return BOMReport(
-        furniture_name=FURNITURE_NAMES.get(spec.furniture_type, spec.furniture_type),
+        furniture_name=FURNITURE_NAMES.get(
+            spec.furniture_category, spec.furniture_category
+        ),
         dimensions=dimensions,
         panels=panels,
         hardware=estimate_hardware(panels, options=connector_options),

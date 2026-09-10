@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from math import isfinite
 from typing import Any, Mapping
 
-from furniture_design_intent.design_intent import DesignIntent, SUPPORTED_TYPES
+from furniture_design_intent.design_intent import DesignIntent, EXECUTABLE_CATEGORIES
 
 from .panel_rules import resolve_door_hinge_side
 
@@ -74,7 +74,7 @@ PANEL_PARAMETER_FIELDS = frozenset(
 )
 PANEL_SPEC_FIELDS = PANEL_PARAMETER_FIELDS
 _SERIALIZED_FIELDS = PANEL_PARAMETER_FIELDS | {
-    "furniture_type", "width", "depth", "height",
+    "furniture_category", "width", "depth", "height",
 }
 
 
@@ -82,7 +82,7 @@ _SERIALIZED_FIELDS = PANEL_PARAMETER_FIELDS | {
 class FurnitureSpec:
     """Complete, executable construction specification."""
 
-    furniture_type: str
+    furniture_category: str
     width: float
     depth: float
     height: float
@@ -113,10 +113,10 @@ class FurnitureSpec:
     movable_shelf_connector: str
 
     def __post_init__(self) -> None:
-        if self.furniture_type not in SUPPORTED_TYPES:
+        if self.furniture_category not in EXECUTABLE_CATEGORIES:
             raise ValueError(
-                f"furniture_type must be an executable canonical type: "
-                f"{self.furniture_type}"
+                f"furniture_category must be an executable canonical category: "
+                f"{self.furniture_category}"
             )
         for name in (
             "width", "depth", "height", "board_thickness", "back_thickness",
@@ -164,15 +164,15 @@ class FurnitureSpec:
                 "panel proposal is incomplete; missing: " + ", ".join(missing)
             )
         dimensions = (
-            intent.overall_size.width_mm,
-            intent.overall_size.depth_mm,
-            intent.overall_size.height_mm,
+            intent.finished_envelope.width_mm,
+            intent.finished_envelope.depth_mm,
+            intent.finished_envelope.height_mm,
         )
         if any(value is None for value in dimensions):
             raise ValueError("panel planning requires a confirmed finished envelope")
         return cls.from_dict(
             {
-                "furniture_type": intent.furniture_type,
+                "furniture_category": intent.furniture_category,
                 "width": dimensions[0],
                 "depth": dimensions[1],
                 "height": dimensions[2],
@@ -220,17 +220,26 @@ def _normalize_panel_input_aliases(values: dict[str, Any]) -> dict[str, Any]:
 def _normalize_legacy_serialized_spec(values: dict[str, Any]) -> dict[str, Any]:
     """Normalize historical serialized spec aliases when loading old data."""
     values = _normalize_front_face_margin_key(values)
-    values = _legacy_spec_loader_furniture_type(values)
+    values = _legacy_spec_loader_furniture_category(values)
     return values
 
 
-def _legacy_spec_loader_furniture_type(values: dict[str, Any]) -> dict[str, Any]:
-    """Recover the historical serialized ``type`` field into ``furniture_type``."""
-    if "type" not in values:
+def _legacy_spec_loader_furniture_category(values: dict[str, Any]) -> dict[str, Any]:
+    """Recover historical ``type`` / ``furniture_type`` into ``furniture_category``."""
+    present = [
+        key
+        for key in ("furniture_category", "furniture_type", "type")
+        if key in values
+    ]
+    if not present:
         return values
-    if "furniture_type" in values and values["furniture_type"] != values["type"]:
-        raise ValueError("type and furniture_type must match")
-    values["furniture_type"] = values.pop("type")
+    first = values[present[0]]
+    for key in present[1:]:
+        if values[key] != first:
+            raise ValueError(f"furniture_category and {key} must match")
+    for key in ("furniture_type", "type"):
+        values.pop(key, None)
+    values["furniture_category"] = first
     return values
 
 
@@ -391,7 +400,7 @@ def _validate_objective_invariants(spec: FurnitureSpec) -> None:
         raise ValueError("clearances, margins and offsets cannot be negative")
     if spec.back_mount == "groove" and spec.groove_depth <= 0:
         raise ValueError("groove_depth must be positive for groove back_mount")
-    if spec.furniture_type == "wall_cabinet" and (
+    if spec.furniture_category == "wall_cabinet" and (
         spec.toe_kick_height != 0
         or spec.toe_kick_support_count not in {None, 0}
         or spec.drawer_count != 0

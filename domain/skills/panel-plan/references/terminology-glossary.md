@@ -13,11 +13,12 @@
 
 | 概念 | 规范名 | 兼容别名 | 单位/类型 | 说明 |
 | --- | --- | --- | --- | --- |
-| 家具类别 | `furniture_type` | `type` | 枚举 | `DesignIntent` 与执行期内部统一用 `furniture_type`；历史 `type` 只在旧序列化 spec 加载时恢复。 |
-| 成品总宽 | `overall_size.width_mm` | `width` | mm | 意图阶段规范表达是 `width_mm`；扁平 API 兼容 `width`。 |
-| 成品总深 | `overall_size.depth_mm` | `depth` | mm | 意图阶段规范表达是 `depth_mm`；扁平 API 兼容 `depth`。 |
-| 成品总高 | `overall_size.height_mm` | `height` | mm | 意图阶段规范表达是 `height_mm`；扁平 API 兼容 `height`。 |
-| 吊柜挂高 | `mounting_height_mm` | `mounting_height` | mm | 仅 `mount_mode=free_height` 时有效。 |
+| 家具类别 | `furniture_category` | `furniture_type`、`type` | 枚举 | `DesignIntent` 与执行期内部统一用 `furniture_category`；历史 `furniture_type`/`type` 只在旧序列化 spec 或扁平协议加载时恢复。 |
+| 成品外包络宽 | `finished_envelope.width_mm` | `overall_size.width_mm`、`width` | mm | 意图阶段规范表达是 `width_mm`；扁平 API 兼容 `width`。 |
+| 成品外包络深 | `finished_envelope.depth_mm` | `overall_size.depth_mm`、`depth` | mm | 意图阶段规范表达是 `depth_mm`；扁平 API 兼容 `depth`。 |
+| 成品外包络高 | `finished_envelope.height_mm` | `overall_size.height_mm`、`height` | mm | 意图阶段规范表达是 `height_mm`；扁平 API 兼容 `height`。 |
+| 挂装方式 | `hanging_mode` | `mount_mode` | 枚举 | 仅吊柜；规范值 `free_hanging_height`（自由挂高）/`flush_ceiling`（贴顶）。历史值 `free_height` 加载时收成 `free_hanging_height`。 |
+| 吊柜挂高 | `hanging_height_mm` | `mounting_height_mm`、`mounting_height` | mm | 仅 `hanging_mode=free_hanging_height` 时有效。 |
 | 门数量 | `n_doors` | `door_count` | 整数 | `panels_planned` 规范名是 `n_doors`；`door_count` 仅保留给 layout 序列化与旧数据迁移。 |
 | 前脸四周边距 | `front_face_margin` | `door_margin` | mm | 门板与抽屉前板共用的前脸边距；`door_margin` 仅作历史兼容名。 |
 | 层板列表 | `shelves` | 无 | 列表 | 从上到下排列的结构化层板列表。 |
@@ -54,7 +55,7 @@
 
 ## 禁止扩散的历史叫法
 
-- 新文档和新代码不要把 `furniture_type` 再写回 `type`。
+- 新文档和新代码不要把 `furniture_category` 再写回 `furniture_type` 或 `type`。
 - 新文档和新代码不要把 `n_doors` 再写成主名 `door_count`；新 panel 请求不得再提交 `door_count`。
 - 新文档和新代码不要再把 `front_face_margin` 写回历史名 `door_margin`。
 - 新文档和新代码不要在同一语境里混用“门边缝”“门缝”“前脸边距”而不指明对应字段。
@@ -64,7 +65,7 @@
 
 | 历史名 | 当前保留点 | 是否还能继续删 | 删除条件 |
 | --- | --- | --- | --- |
-| `type` | `panel_spec.py::FurnitureSpec.from_dict()` | 暂不能 | 仍需加载历史序列化 spec；等旧快照/旧 Project 不再需要恢复时再删。 |
+| `type` / `furniture_type` | `panel_spec.py::FurnitureSpec.from_dict()` 与 `DesignIntent.from_dict()` | 暂不能 | 仍需加载历史序列化 spec/意图；等旧快照/旧 Project 不再需要恢复时再删。 |
 | `door_count` | `workflow_project.py::_legacy_stage_inputs()` | 暂不能 | 仅服务 schema-v1 项目加载；停止支持 v1 项目后可删。 |
 | `door_count` | `panel_spec.py::migrate_legacy_panel_hinge_side()` 与 `_legacy_spec_loader_panel_output_door_count()` / `_legacy_spec_loader_panel_input_door_count()` | 暂不能 | 仅服务旧 panel 输出恢复；历史 Revision 退场后可删。 |
 | `door_count` | `layout_spec.py::LayoutSpec` | 暂不能 | 这是 layout 子系统当前序列化名；要删需单独做 layout API/存储协调迁移。 |

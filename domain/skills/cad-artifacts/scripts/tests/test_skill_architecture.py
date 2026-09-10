@@ -15,7 +15,7 @@ INTENT_SCRIPTS_ROOT = SKILLS_ROOT / "design-intent" / "scripts"
 if str(INTENT_SCRIPTS_ROOT) not in sys.path:
     sys.path.insert(0, str(INTENT_SCRIPTS_ROOT))
 
-from furniture_design_intent.design_intent import SUPPORTED_TYPES
+from furniture_design_intent.design_intent import EXECUTABLE_CATEGORIES
 
 STAGE_SKILLS = {
     "design_intent": "design-intent",
@@ -224,8 +224,8 @@ class SkillArchitectureTests(unittest.TestCase):
         }
         self.assertEqual(
             executable_families,
-            set(SUPPORTED_TYPES),
-            "catalog.yaml `executable: true` families must match SUPPORTED_TYPES",
+            set(EXECUTABLE_CATEGORIES),
+            "catalog.yaml `executable: true` families must match EXECUTABLE_CATEGORIES",
         )
 
     def test_each_stage_skill_owns_its_runtime_package(self) -> None:
@@ -454,7 +454,7 @@ class SkillArchitectureTests(unittest.TestCase):
         expected_terms = {
             "domain/skills/design-intent/SKILL.md": (
                 "草稿尺寸可为 `null`",
-                "furniture_type",
+                "furniture_category",
                 "成品外包络",
             ),
             "domain/skills/layout-plan/SKILL.md": (

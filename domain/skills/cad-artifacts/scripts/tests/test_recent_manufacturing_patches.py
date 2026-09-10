@@ -77,7 +77,7 @@ def panel_record(
 class PanelAndConnectorPatchTests(unittest.TestCase):
     def test_standard_doors_have_explicit_hinge_sides(self) -> None:
         spec = furniture_spec(
-            furniture_type="floor_cabinet",
+            furniture_category="floor_cabinet",
             width=800,
             depth=600,
             height=1000,
@@ -178,7 +178,7 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
     def test_trinity_rod_cam_count_mismatch_is_rejected(self) -> None:
         """删掉一个连接杆孔后，校验必须报 TRINITY_ROD_CAM_COUNT_MISMATCH。"""
         spec = furniture_spec(
-            furniture_type="floor_cabinet",
+            furniture_category="floor_cabinet",
             width=800,
             depth=600,
             height=1000,
@@ -277,7 +277,7 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
             size_x=18, size_y=600, size_z=1000,
         )]), [])
         spec = furniture_spec(
-            furniture_type="floor_cabinet",
+            furniture_category="floor_cabinet",
             width=800, depth=600, height=1000, n_doors=2,
         )
         placements = plan_panels(spec, CabinetStructure.from_spec(spec))
@@ -306,7 +306,7 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
 
     def test_manufacturing_validation_rejects_hinge_outside_door(self) -> None:
         spec = furniture_spec(
-            furniture_type="floor_cabinet",
+            furniture_category="floor_cabinet",
             width=800,
             depth=600,
             height=1000,
@@ -335,7 +335,7 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
 
     def test_emitted_panels_include_type_and_no_screw_holes(self) -> None:
         spec = furniture_spec(
-            furniture_type="floor_cabinet",
+            furniture_category="floor_cabinet",
             width=800,
             depth=600,
             height=1000,
@@ -399,7 +399,7 @@ class DrawerZoneTests(unittest.TestCase):
         shelf_count: int = 0,
     ):
         spec = furniture_spec(
-            furniture_type="floor_cabinet",
+            furniture_category="floor_cabinet",
             width=800,
             depth=600,
             height=1000,

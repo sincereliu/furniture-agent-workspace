@@ -11,7 +11,7 @@ from furniture_manufacturing.manufacturing_models import MachiningOperation, Pan
 def panels_to_feature_tree(
     panels: list[PanelRecord],
     operations: list[MachiningOperation],
-    furniture_type: str = "floor_cabinet",
+    furniture_category: str = "floor_cabinet",
     parameters: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     features = [
@@ -50,7 +50,7 @@ def panels_to_feature_tree(
     feature_ids = [feature["id"] for feature in features]
     cabinets: dict[str, list[str]] = {}
     for panel in panels:
-        parent = panel.parent_id or f"{furniture_type}_assembly"
+        parent = panel.parent_id or f"{furniture_category}_assembly"
         cabinets.setdefault(parent, []).append(panel.label)
     cabinet_nodes = [
         {"id": cabinet_id, "type": "cabinet", "children": child_ids}
@@ -62,7 +62,7 @@ def panels_to_feature_tree(
         root_id = "scene"
     return {
         "schema_version": 2,
-        "furniture_type": furniture_type,
+        "furniture_category": furniture_category,
         "units": "mm",
         "coordinate_system": {
             "origin": "lower-left-rear-ground-corner",
@@ -86,12 +86,12 @@ def emit_panels_to_source(
     panels: list[PanelRecord],
     operations: list[MachiningOperation],
     source_path: str | Path,
-    furniture_type: str = "floor_cabinet",
+    furniture_category: str = "floor_cabinet",
     parameters: dict[str, Any] | None = None,
 ) -> Path:
     from .feature_tree_emitter import write_build123d_source
 
     return write_build123d_source(
-        panels_to_feature_tree(panels, operations, furniture_type, parameters),
+        panels_to_feature_tree(panels, operations, furniture_category, parameters),
         source_path,
     )

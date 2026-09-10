@@ -17,13 +17,18 @@ MANUFACTURING_SPEC_FIELDS = frozenset(
 )
 PROTOCOL_FIELDS = frozenset(
     {
+        "furniture_category",
         "furniture_type",
         "width",
         "depth",
         "height",
+        "finished_envelope",
         "overall_size",
+        "hanging_height",
+        "hanging_height_mm",
         "mounting_height",
         "mounting_height_mm",
+        "hanging_mode",
         "mount_mode",
         "purpose",
         "layout",
@@ -39,29 +44,44 @@ PROTOCOL_FIELDS = frozenset(
         *MANUFACTURING_SPEC_FIELDS,
     }
 )
+_ENVELOPE_TARGETS = frozenset(
+    {
+        "furniture_category",
+        "furniture_type",
+    }
+)
+_ENVELOPE_PREFIXES = ("finished_envelope.", "overall_size.")
 
 
 def intent_from_spec(spec: Mapping[str, Any]) -> DesignIntent:
     """Translate only category and finished-envelope values to DesignIntent."""
     data = _reject_legacy_protocol_aliases(dict(spec))
-    furniture_type = str(data.get("furniture_type", "")).strip().lower()
-    size = data.get("overall_size", {})
+    furniture_category = str(
+        _first_present(data, "furniture_category", "furniture_type") or ""
+    ).strip().lower()
+    size = _first_present(data, "finished_envelope", "overall_size") or {}
     if not isinstance(size, Mapping):
-        raise ValueError("overall_size must be an object")
-    mount_mode = data.get("mount_mode")
-    if mount_mode is not None:
-        mount_mode = str(mount_mode).strip().lower()
+        raise ValueError("finished_envelope must be an object")
+    hanging_mode = _first_present(data, "hanging_mode", "mount_mode")
+    if hanging_mode is not None:
+        hanging_mode = str(hanging_mode).strip().lower()
+        if hanging_mode == "free_height":
+            hanging_mode = "free_hanging_height"
     return DesignIntent.from_dict(
         {
-            "furniture_type": furniture_type,
-            "overall_size": {
+            "furniture_category": furniture_category,
+            "finished_envelope": {
                 "width_mm": size.get("width_mm", data.get("width")),
                 "depth_mm": size.get("depth_mm", data.get("depth")),
                 "height_mm": size.get("height_mm", data.get("height")),
             },
-            "mount_mode": mount_mode,
-            "mounting_height_mm": data.get(
-                "mounting_height_mm", data.get("mounting_height")
+            "hanging_mode": hanging_mode,
+            "hanging_height_mm": _first_present(
+                data,
+                "hanging_height_mm",
+                "hanging_height",
+                "mounting_height_mm",
+                "mounting_height",
             ),
         }
     )
@@ -144,7 +164,7 @@ def _route_constraints(data: Mapping[str, Any], output: dict[str, Any]) -> None:
             informational.append(constraint)
             continue
         record = {"text": constraint, "target": target}
-        if target == "furniture_type" or target.startswith("overall_size."):
+        if target in _ENVELOPE_TARGETS or target.startswith(_ENVELOPE_PREFIXES):
             if not _envelope_target_is_explicit(data, target):
                 raise ValueError(f"constraint target is not explicit: {target}")
             envelope.append(record)
@@ -183,10 +203,10 @@ def _route_constraints(data: Mapping[str, Any], output: dict[str, Any]) -> None:
 
 
 def _envelope_target_is_explicit(data: Mapping[str, Any], target: str) -> bool:
-    if target == "furniture_type":
-        return bool(data.get("furniture_type"))
+    if target in _ENVELOPE_TARGETS:
+        return bool(_first_present(data, "furniture_category", "furniture_type"))
     field = target.split(".", 1)[1]
-    size = data.get("overall_size", {})
+    size = _first_present(data, "finished_envelope", "overall_size") or {}
     flat_name = {
         "width_mm": "width",
         "depth_mm": "depth",
@@ -213,8 +233,17 @@ def manufacturing_stage_input(stage_inputs: Mapping[str, Any]) -> dict[str, Any]
     return dict(value) if isinstance(value, Mapping) else {}
 
 
+def _first_present(data: Mapping[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key in data:
+            return data[key]
+    return None
+
+
 def _reject_legacy_protocol_aliases(data: dict[str, Any]) -> dict[str, Any]:
     """Reject historical flat-request aliases now that canonical names are required."""
     if "type" in data:
-        raise ValueError("flat requests must use furniture_type; type is no longer accepted")
+        raise ValueError(
+            "flat requests must use furniture_category; type is no longer accepted"
+        )
     return data

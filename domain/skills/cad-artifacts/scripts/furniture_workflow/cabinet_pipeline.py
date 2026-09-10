@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 
-from furniture_design_intent.design_intent import SUPPORTED_TYPES
+from furniture_design_intent.design_intent import EXECUTABLE_CATEGORIES
 from furniture_manufacturing.manufacturing_bom import BOMReport, plan_manufacturing
 from furniture_manufacturing.manufacturing_models import PanelRecord
 from furniture_panel_planning.panel_models import PanelPlacement
@@ -25,10 +25,10 @@ class CabinetPipelineResult:
 def plan_cabinet(spec: FurnitureSpec) -> CabinetPipelineResult:
     """Compose panel and manufacturing planning without room placement."""
     normalized = FurnitureSpec.from_dict(asdict(spec))
-    if normalized.furniture_type not in SUPPORTED_TYPES:
-        supported = ", ".join(sorted(SUPPORTED_TYPES))
+    if normalized.furniture_category not in EXECUTABLE_CATEGORIES:
+        supported = ", ".join(sorted(EXECUTABLE_CATEGORIES))
         raise ValueError(
-            f"Unsupported cabinet type: {normalized.furniture_type!r}; supported: {supported}"
+            f"Unsupported cabinet category: {normalized.furniture_category!r}; supported: {supported}"
         )
     structure = CabinetStructure.from_spec(normalized)
     placements = plan_panels(normalized, structure)

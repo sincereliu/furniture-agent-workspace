@@ -3,7 +3,7 @@
 # （见 SKILL.md / references/intent-capture-rules.md）。
 #
 # `executable: true` 是代码准入契约：必须与
-# furniture_design_intent.design_intent.SUPPORTED_TYPES 一致，
+# furniture_design_intent.design_intent.EXECUTABLE_CATEGORIES 一致，
 # 由 cad-artifacts/scripts/tests/test_skill_architecture.py 断言。
 
 families:

@@ -12,7 +12,7 @@ from .panel_spec import FurnitureSpec
 class CabinetStructure:
     """Exact carcass, internal-clearance, back, and toe-kick geometry."""
 
-    furniture_type: str
+    furniture_category: str
     width: float
     depth: float
     height: float
@@ -42,6 +42,13 @@ class CabinetStructure:
             if "n_doors" in values and values["n_doors"] != values["door_count"]:
                 raise ValueError("n_doors and door_count must match")
             values["n_doors"] = values.pop("door_count")
+        if "furniture_type" in values:
+            if (
+                "furniture_category" in values
+                and values["furniture_category"] != values["furniture_type"]
+            ):
+                raise ValueError("furniture_category and furniture_type must match")
+            values["furniture_category"] = values.pop("furniture_type")
         return cls(**values)
 
     @classmethod
@@ -60,7 +67,7 @@ class CabinetStructure:
         # geometry consumes the admitted value without silently overriding it.
         toe_kick = spec.toe_kick_height
         return cls(
-            furniture_type=spec.furniture_type,
+            furniture_category=spec.furniture_category,
             width=spec.width,
             depth=spec.depth,
             height=spec.height,

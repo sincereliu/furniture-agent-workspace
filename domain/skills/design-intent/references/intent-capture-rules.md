@@ -2,12 +2,28 @@
 
 回答“要制作哪类、占多大外部空间的家具？”；本阶段只建立客户可确认的成品外包络。
 
+## 中英规范名对照
+
+| 中文 | 规范英文 | 说明 |
+| --- | --- | --- |
+| 家具类别 | `furniture_category` | 可执行值：`floor_cabinet`（地柜/落地）、`wall_cabinet`（吊柜/上墙） |
+| 成品外包络 | `finished_envelope` | 宽深高三个尺寸的对象 |
+| 宽 | `finished_envelope.width_mm` | mm |
+| 深 | `finished_envelope.depth_mm` | mm |
+| 高 | `finished_envelope.height_mm` | mm |
+| 挂装方式 | `hanging_mode` | 仅吊柜；`free_hanging_height`（自由挂高）或 `flush_ceiling`（贴顶/到顶） |
+| 挂高 | `hanging_height_mm` | 吊柜底边离地高度；仅自由挂高时有效 |
+| 已确认 | `confirmed` | 工作流元数据 |
+| schema 版本 | `schema_version` | 工作流元数据 |
+
+历史名 `furniture_type` / `overall_size` / `mount_mode` / `mounting_height_mm` / `free_height` 只用于加载旧 Project，不是新草稿或新协议的规范名。
+
 ## 捕获内容
 
-- `furniture_type`：由 LLM 根据完整语义按**落位/安装方式**归一化为 [家具目录](intake/catalog.yaml) 中 `executable: true` 的规范类别——柜类家具中，落地的归 `floor_cabinet`、上墙的归 `wall_cabinet`；与功能、外观、所在房间无关。“靠墙/贴墙摆放”是房间里的摆放位置，不是挂墙（上墙），不得据此归入 `wall_cabinet`。归一化是语义判断，不要求字面命中；运行时只验证归一化结果是否属于可执行类别，不实现自然语言别名匹配。
-- `overall_size.width_mm/depth_mm/height_mm`：成品外包络；草稿未知值可为 `null`，确认前必须全部为正数。
-- `mount_mode`：吊柜**挂装方式**，二选一——`free_height`（自由挂高，需挂高）或 `flush_ceiling`（贴顶/到顶，无需数字）。客户说“做到顶 / 贴顶 / 到顶”归一到 `flush_ceiling`；说“挂多高 / 离地多少 / 底边距地面多少”归一到 `free_height`。
-- `mounting_height_mm`：仅 `free_height` 时有效，吊柜**底边离地高度**；测量基准是柜底，不是柜顶、也不是台面。地柜确认时 `mount_mode` 与挂高必须为空；`flush_ceiling` 无需挂高。
+- `furniture_category`：由 LLM 根据完整语义按**落位/安装方式**归一化为 [家具目录](intake/catalog.yaml) 中 `executable: true` 的规范类别——柜类家具中，落地的归 `floor_cabinet`、上墙的归 `wall_cabinet`；与功能、外观、所在房间无关。“靠墙/贴墙摆放”是房间里的摆放位置，不是挂墙（上墙），不得据此归入 `wall_cabinet`。归一化是语义判断，不要求字面命中；运行时只验证归一化结果是否属于可执行类别，不实现自然语言别名匹配。
+- `finished_envelope.width_mm/depth_mm/height_mm`：成品外包络；草稿未知值可为 `null`，确认前必须全部为正数。
+- `hanging_mode`：吊柜**挂装方式**，二选一——`free_hanging_height`（自由挂高，需挂高）或 `flush_ceiling`（贴顶/到顶，无需数字）。客户说“做到顶 / 贴顶 / 到顶”归一到 `flush_ceiling`；说“挂多高 / 离地多少 / 底边距地面多少”归一到 `free_hanging_height`。
+- `hanging_height_mm`：仅 `free_hanging_height` 时有效，吊柜**底边离地高度**；测量基准是柜底，不是柜顶、也不是台面。地柜确认时 `hanging_mode` 与挂高必须为空；`flush_ceiling` 无需挂高。
 - 坐标口径为 X 左→右、Y 后→前、Z 向上；未标注的三个尺寸按 `W×D×H` 解释并向客户展示。
 
 ## 追问与假设

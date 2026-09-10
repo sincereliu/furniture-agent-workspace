@@ -32,7 +32,7 @@ from furniture_workflow.workflow_state import WorkflowStage
 class BackMountModeTests(unittest.TestCase):
     def _spec(self, back_mount: str) -> FurnitureSpec:
         return furniture_spec(
-            furniture_type="floor_cabinet",
+            furniture_category="floor_cabinet",
             width=800,
             depth=600,
             height=1000,
@@ -126,7 +126,7 @@ class BackMountModeTests(unittest.TestCase):
                 result = orchestrator.execute_spec(
                     f"{back_mount}-back",
                     cabinet_data(
-                        spec.furniture_type,
+                        spec.furniture_category,
                         width=spec.width,
                         depth=spec.depth,
                         height=spec.height,
@@ -279,7 +279,7 @@ class BackMountModeTests(unittest.TestCase):
             plan_panels(invalid, CabinetStructure.from_spec(invalid))
 
         cover_spec = furniture_spec(
-            furniture_type="floor_cabinet",
+            furniture_category="floor_cabinet",
             width=800,
             depth=25,
             height=1000,
@@ -298,7 +298,7 @@ class BackMountModeTests(unittest.TestCase):
         )
 
         insert_spec = furniture_spec(
-            furniture_type="floor_cabinet",
+            furniture_category="floor_cabinet",
             width=800,
             depth=600,
             height=1000,
@@ -319,7 +319,7 @@ class BackMountModeTests(unittest.TestCase):
         )
 
         rail_spec = furniture_spec(
-            furniture_type="floor_cabinet",
+            furniture_category="floor_cabinet",
             width=800,
             depth=600,
             height=1000,

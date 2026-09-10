@@ -31,7 +31,7 @@ from furniture_panel_planning.structure_planning import CabinetStructure
 class BackGroovePipelineTests(unittest.TestCase):
     def setUp(self) -> None:
         self.spec = furniture_spec(
-            furniture_type="floor_cabinet",
+            furniture_category="floor_cabinet",
             width=800,
             depth=600,
             height=1000,
@@ -45,7 +45,7 @@ class BackGroovePipelineTests(unittest.TestCase):
         self.feature_tree = panels_to_feature_tree(
             self.manufacturing.panels,
             self.manufacturing.operations,
-            furniture_type=self.spec.furniture_type,
+            furniture_category=self.spec.furniture_category,
         )
 
     def test_layout_defers_exact_regions_to_panel_structure(self) -> None:
@@ -113,7 +113,7 @@ class BackGroovePipelineTests(unittest.TestCase):
 
     def test_invalid_groove_and_support_inputs_fail_in_owning_stages(self) -> None:
         invalid_groove = furniture_spec(
-            furniture_type="floor_cabinet",
+            furniture_category="floor_cabinet",
             width=800,
             depth=600,
             height=1000,
@@ -133,7 +133,7 @@ class BackGroovePipelineTests(unittest.TestCase):
         )
 
         invalid_supports = furniture_spec(
-            furniture_type="floor_cabinet",
+            furniture_category="floor_cabinet",
             width=100,
             depth=600,
             height=1000,

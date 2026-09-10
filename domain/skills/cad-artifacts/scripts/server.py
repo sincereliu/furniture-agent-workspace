@@ -23,7 +23,7 @@ bootstrap_runtime_paths(WORKSPACE_ROOT)
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from furniture_workflow.input_adapter import (
@@ -95,21 +95,39 @@ class FurniturePlacementRequest(BaseModel):
 
 
 class CabinetRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    furniture_type: str = Field(..., description="家具类型: floor_cabinet / wall_cabinet")
+    furniture_category: str = Field(
+        ...,
+        validation_alias=AliasChoices("furniture_category", "furniture_type"),
+        description="家具类别: floor_cabinet（地柜） / wall_cabinet（吊柜）",
+    )
     width: float = Field(..., gt=0, description="总宽 mm (X)")
     depth: float = Field(..., gt=0, description="总深 mm (Y)")
     height: float = Field(..., gt=0, description="总高 mm (Z)")
-    mounting_height: float | None = Field(
+    hanging_height_mm: float | None = Field(
         default=None,
         gt=0,
-        description="吊柜底边离地高度（挂高）mm；地柜无需提供",
+        validation_alias=AliasChoices(
+            "hanging_height_mm",
+            "hanging_height",
+            "mounting_height_mm",
+            "mounting_height",
+        ),
+        description="挂高：吊柜底边离地高度 mm；地柜无需提供",
     )
-    mount_mode: Literal["free_height", "flush_ceiling"] | None = Field(
+    hanging_mode: Literal["free_hanging_height", "flush_ceiling"] | None = Field(
         default=None,
-        description="吊柜挂装方式：free_height（自由挂高）/ flush_ceiling（贴顶到顶）",
+        validation_alias=AliasChoices("hanging_mode", "mount_mode"),
+        description="吊柜挂装方式：free_hanging_height（自由挂高）/ flush_ceiling（贴顶到顶）",
     )
+
+    @field_validator("hanging_mode", mode="before")
+    @classmethod
+    def _normalize_hanging_mode(cls, value: Any) -> Any:
+        if value == "free_height":
+            return "free_hanging_height"
+        return value
     board_thickness: float | None = Field(default=None, gt=0, description="柜体板厚 mm")
     back_thickness: float | None = Field(default=None, gt=0, description="背板厚 mm")
     door_thickness: float | None = Field(default=None, gt=0, description="门板厚 mm")
@@ -293,7 +311,7 @@ async def plan_cabinet(req: CabinetRequest):
     spec = req.model_dump(exclude_unset=True)
     try:
         orchestration = ORCHESTRATOR.execute_spec(
-            f"api-{req.furniture_type}",
+            f"api-{req.furniture_category}",
             spec,
         )
     except (OSError, TypeError, ValueError) as e:
@@ -396,7 +414,7 @@ async def plan_layout(req: CabinetRequest):
             spec,
             room=context.get("room"),
             placement=context.get("placement"),
-            furniture_label=f"layout-{req.furniture_type}",
+            furniture_label=f"layout-{req.furniture_category}",
         )
         report = validate_layout_output(spec, output)
     except (TypeError, ValueError) as exc:

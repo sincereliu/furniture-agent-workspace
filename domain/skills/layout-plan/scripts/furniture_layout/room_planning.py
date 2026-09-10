@@ -430,7 +430,7 @@ def build_room_placement(
     xs = [point[0] for point in footprint]
     ys = [point[1] for point in footprint]
     return RoomPlacementPlan(
-        furniture_label=furniture_label or layout.furniture_type,
+        furniture_label=furniture_label or layout.furniture_category,
         room=room,
         placement=placement,
         furniture_footprint=footprint,

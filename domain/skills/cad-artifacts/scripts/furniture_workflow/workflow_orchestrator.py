@@ -170,7 +170,7 @@ class FurnitureOrchestrator:
             if isinstance(revised_spec, dict) and isinstance(parameters, dict):
                 for key, value in revised_spec.items():
                     if key in {
-                        "furniture_type",
+                        "furniture_category",
                         "width",
                         "depth",
                         "height",
@@ -525,7 +525,7 @@ class FurnitureOrchestrator:
             feature_tree = panels_to_feature_tree(
                 manufacturing.panels,
                 manufacturing.operations,
-                furniture_type=spec.furniture_type,
+                furniture_category=spec.furniture_category,
                 parameters={
                     "width": spec.width,
                     "depth": spec.depth,
