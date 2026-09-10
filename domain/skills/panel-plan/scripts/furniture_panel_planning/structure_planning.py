@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any, Mapping
 
 from .panel_spec import FurnitureSpec
 
@@ -31,7 +32,17 @@ class CabinetStructure:
     toe_kick_height: float
     toe_kick_rear_y: float
     toe_kick_front_y: float
-    door_count: int
+    n_doors: int
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "CabinetStructure":
+        """Load structure output, recovering the historical door_count name."""
+        values = dict(data)
+        if "door_count" in values:
+            if "n_doors" in values and values["n_doors"] != values["door_count"]:
+                raise ValueError("n_doors and door_count must match")
+            values["n_doors"] = values.pop("door_count")
+        return cls(**values)
 
     @classmethod
     def from_spec(cls, spec: FurnitureSpec) -> "CabinetStructure":
@@ -69,5 +80,5 @@ class CabinetStructure:
             toe_kick_height=toe_kick,
             toe_kick_rear_y=carcass_y_start + spec.toe_kick_reveal_back,
             toe_kick_front_y=carcass_y_end - spec.toe_kick_reveal_front,
-            door_count=spec.n_doors,
+            n_doors=spec.n_doors,
         )

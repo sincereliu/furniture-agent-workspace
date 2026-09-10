@@ -16,6 +16,7 @@
 - 目录键（`hardware_catalog.yaml`）全英文：顶层按套 `three_in_one` / `two_in_one` / `shelf_pin`，套内规格组 `standard`，零件键 `cam` / `rod` / `nut` / `pin`；每个零件分 `part`（实物，BOM/采购）与 `hole`（打孔，钻孔）两层，配合余量直接写入 `hole` 数值，不做代码派生。
 - 孔类型（`hole_type`）按 `<套名>_<零件>`：`three_in_one_cam` / `three_in_one_rod` / `three_in_one_nut`、`two_in_one_cam` / `two_in_one_rod`、`shelf_pin`；进入 `drilled-holes.json` / GLB 标签 / 校验计数。内嵌背板三合一与柜体三合一统一为 `three_in_one_*`，靠 `HoleSpec.connection_id`（`<female>→<male>#<排次>`，确定性、非随机）区分来源。
 - 活动层板连接方式由 `FurnitureSpec.movable_shelf_connector`（`two_in_one`/`shelf_pin`）显式选择，经制造阶段盖章到 `PanelRecord`；`TwoInOneConnector`/`ShelfPinConnector` 只处理选中自己的板件，避免两者同时出孔/BOM。
+- 板件阶段已解析的 `PanelJoint.connection` 决定这条接触要不要固定；`off` 的接触不进入三合一打孔。轴方向和 `cam_face` 只用于选择三合一五金，不再回答「连不连」。
 
 ## 生成与产物
 

@@ -13,6 +13,12 @@ from runtime_paths import bootstrap_runtime_paths
 
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
+from furniture_panel_planning.construction_geometry import (
+    drawer_panel_boxes,
+    toe_kick_support_boxes,
+)
+from furniture_panel_planning.joint_topology import default_joint_connection
+from furniture_panel_planning.panel_models import PanelPlacement
 from furniture_panel_planning.panel_planning import plan_panels
 from furniture_panel_planning.panel_rules import (
     resolve_toe_kick_support_count,
@@ -133,6 +139,94 @@ class PanelRuleContractTests(unittest.TestCase):
             ),
             (18.0, 513.0, 50.0, 391.0, 48.0, 0.0),
         )
+
+        expected_front = next(
+            box for box in drawer_panel_boxes(spec, structure)
+            if box.panel_id == "drawer_front_z68"
+        )
+        expected_support = toe_kick_support_boxes(spec, structure)[0]
+        self.assertEqual(
+            tuple(round(value, 3) for value in expected_front.geometry),
+            (761.0, 18.0, 303.167, 19.5, 562.0, 68.0),
+        )
+        self.assertEqual(
+            tuple(round(value, 3) for value in expected_support.geometry),
+            (18.0, 513.0, 50.0, 391.0, 48.0, 0.0),
+        )
+
+    def test_default_joint_connection_matches_contact_table(self) -> None:
+        side = PanelPlacement(
+            id="left_side_panel", name="左侧板", panel_type="side",
+            size_x=18, size_y=500, size_z=1000, inner_face="+x",
+        )
+        top = PanelPlacement(
+            id="top_panel", name="顶板", panel_type="top",
+            size_x=764, size_y=500, size_z=18, inner_face="-z", cam_face="-z",
+        )
+        back = PanelPlacement(
+            id="back_panel", name="背板", panel_type="back",
+            size_x=764, size_y=9, size_z=914, inner_face="+y",
+        )
+        shelf = PanelPlacement(
+            id="shelf_z200", name="层板", panel_type="fixed_shelf",
+            size_x=764, size_y=500, size_z=18, inner_face="-z", cam_face="-z",
+        )
+        rail = PanelPlacement(
+            id="back_rail_1", name="背拉条1", panel_type="back_rail",
+            size_x=764, size_y=18, size_z=70, inner_face="+y",
+        )
+        self.assertEqual(default_joint_connection(side, top), "on")
+        self.assertEqual(default_joint_connection(side, shelf), "on")
+        self.assertEqual(default_joint_connection(back, shelf), "off")
+        self.assertEqual(default_joint_connection(shelf, back), "off")
+        self.assertEqual(default_joint_connection(rail, back), "off")
+        self.assertEqual(default_joint_connection(back, rail), "off")
+
+    def test_generated_joints_carry_resolved_connection(self) -> None:
+        spec = furniture_spec(
+            furniture_type="floor_cabinet",
+            width=800,
+            depth=600,
+            height=1000,
+            n_doors=2,
+            back_mount="groove",
+        )
+        structure = CabinetStructure.from_spec(spec)
+        placements = {panel.id: panel for panel in plan_panels(spec, structure)}
+        back = placements["back_panel"]
+        shelf_joints = [
+            joint for joint in back.joints
+            if {joint.female_id, joint.male_id} & {
+                panel.id for panel in placements.values()
+                if panel.panel_type == "fixed_shelf"
+            }
+        ]
+        self.assertTrue(shelf_joints)
+        self.assertTrue(all(joint.connection == "off" for joint in shelf_joints))
+        side = placements["left_side_panel"]
+        top_joints = [
+            joint for joint in side.joints
+            if "top_panel" in {joint.female_id, joint.male_id}
+        ]
+        self.assertTrue(top_joints)
+        self.assertTrue(all(joint.connection == "on" for joint in top_joints))
+
+    def test_shelf_entries_require_shelf_type(self) -> None:
+        with self.assertRaises(ValueError):
+            furniture_spec(
+                shelves=[{"type": "fixed", "gap_below_mm": 100.0}],
+                top_gap_mm=100.0,
+            )
+
+    def test_structure_from_dict_migrates_legacy_door_count(self) -> None:
+        spec = furniture_spec(n_doors=2)
+        structure = CabinetStructure.from_spec(spec)
+        payload = structure.__dict__.copy()
+        payload["door_count"] = payload.pop("n_doors")
+        restored = CabinetStructure.from_dict(payload)
+        self.assertEqual(restored.n_doors, 2)
+        with self.assertRaises(ValueError):
+            CabinetStructure.from_dict({**payload, "n_doors": 1, "door_count": 2})
 
 
 if __name__ == "__main__":

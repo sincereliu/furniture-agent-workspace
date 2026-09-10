@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Sequence
 
 from .panel_models import PanelPlacement
@@ -16,9 +16,9 @@ from .panel_models import PanelPlacement
 class PanelJoint:
     """一条面-边邻接：female 的面碰 male 的端面。
 
-    对于三合一连接件：
-    - female（面接触方）→ 预埋螺母孔
-    - male  （边接触方）→ 连接杆孔 + 偏心轮孔
+    `connection` 是已解析的连不连（on/off）。几何接触由 compute_joints 得出，
+    默认连接由 resolve_joint_connections 写入。制造阶段只消费该结果来决定
+    要不要固定；用什么五金仍由制造连接件决定。
     """
 
     female_id: str   # 面板 ID（面被接触的那块板）
@@ -30,6 +30,11 @@ class PanelJoint:
     male_has_cam: bool = False  # male 是否有 cam_face（三合一标志）
     male_cam_face: str | None = None  # male 的偏心轮安装面（"+z"/"-z"）
     male_size_z: float = 0.0           # male 在 z 方向的尺寸（横板=板厚）
+    connection: str = "on"  # resolved on/off; missing on old payloads means on
+
+    def __post_init__(self) -> None:
+        if self.connection not in {"on", "off"}:
+            raise ValueError("connection must be 'on' or 'off'")
 
 
 # ── 容差 ──────────────────────────────────────────────────────────
@@ -148,7 +153,47 @@ def compute_joints(placements: Sequence[PanelPlacement]) -> list[PanelJoint]:
                 )
             )
 
-    return joints
+    return resolve_joint_connections(placements, joints)
+
+
+def _is_drawer_panel(panel: PanelPlacement) -> bool:
+    return "drawer" in panel.panel_type
+
+
+def default_joint_connection(
+    female: PanelPlacement,
+    male: PanelPlacement,
+) -> str:
+    """Return the stage default for one contact. See connection-contact-defaults.md."""
+    if _is_drawer_panel(female) != _is_drawer_panel(male):
+        return "off"
+    types = {female.panel_type, male.panel_type}
+    if types == {"back", "fixed_shelf"} or types == {"back", "back_rail"}:
+        return "off"
+    return "on"
+
+
+def resolve_joint_connections(
+    placements: Sequence[PanelPlacement],
+    joints: Sequence[PanelJoint],
+) -> list[PanelJoint]:
+    """Write the resolved on/off default onto each geometric contact."""
+    by_id = {panel.id: panel for panel in placements}
+    return [
+        replace(
+            joint,
+            connection=default_joint_connection(
+                by_id[joint.female_id],
+                by_id[joint.male_id],
+            ),
+        )
+        for joint in joints
+    ]
+
+
+def joint_is_connected(joint: PanelJoint) -> bool:
+    """True when the resolved switch says this contact should be fixed."""
+    return getattr(joint, "connection", "on") == "on"
 
 
 def is_female(panel_id: str, joints: Sequence[PanelJoint]) -> bool:

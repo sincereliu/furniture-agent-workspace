@@ -676,7 +676,7 @@ class FurnitureOrchestrator:
     @staticmethod
     def _structure_from_revision(revision: Revision) -> CabinetStructure:
         output = revision.stage_outputs[WorkflowStage.PANELS_PLANNED.value]
-        return CabinetStructure(**output["structure"])
+        return CabinetStructure.from_dict(output["structure"])
 
     @staticmethod
     def _placements_from_revision(revision: Revision) -> list[PanelPlacement]:

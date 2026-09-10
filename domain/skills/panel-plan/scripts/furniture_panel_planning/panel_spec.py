@@ -43,7 +43,7 @@ def _coerce_shelves(raw: Any) -> list[ShelfSpec]:
             continue
         if not isinstance(item, Mapping):
             raise ValueError("each shelf entry must be an object")
-        shelf_type = item.get("shelf_type", item.get("type"))
+        shelf_type = item.get("shelf_type")
         if shelf_type not in VALID_SHELF_TYPES:
             raise ValueError(
                 "shelf type must be one of: " + ", ".join(sorted(VALID_SHELF_TYPES))

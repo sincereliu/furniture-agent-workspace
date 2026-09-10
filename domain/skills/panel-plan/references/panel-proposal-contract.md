@@ -23,12 +23,16 @@
 
 ## 字段口径
 
-- `shelves` 按从上到下的视觉顺序排列；每项是 `{shelf_type: fixed|movable, gap_below_mm: 数值|null}`。
-- `gap_below_mm` 表示“本层板底面到下方紧邻一层顶面”的净高；最下层到底板顶面，顶格由 `top_gap_mm` 表示。
-- 恰好一项 `gap_below_mm` 可为 `null`/`auto`，表示计算层；运行时不做均分，不保留 `shelf_count`。
+- `shelves` 每项是 `{shelf_type: fixed|movable, gap_below_mm: 数值|null}`；列表顺序、计算层和净高口径见 [层板规则](shelf-planning-rules.md)。运行时不做均分，不保留 `shelf_count`。
 - `n_doors=1` 时必须显式提交 `door_hinge_side=left/right`；其它门数必须显式提交 `null`。
 - `movable_shelf_connector` 的显式枚举为 `two_in_one` 或 `shelf_pin`；无偏好时只能由 LLM 提议候选，不得由代码静默补齐。
 - 当前 `drawer_count>0` 的规范语义只表示整高抽屉区；必须同时提交空 `shelves` 与 `n_doors=0`。
+
+## 展示与停止
+
+- 向用户展示完整字段表，并逐项标明「用户已给」还是「假设」。
+- 混合门/层板/抽屉、三门及以上、单门未给铰链侧、有活动层板未选连接方式时，停在消歧，不要写入 `stage_inputs` 去碰运行时。
+- 代码准入后展示 `back_mount` requested/effective、内部净空和板件清单，再等人确认。
 
 ## LLM 候选起点
 

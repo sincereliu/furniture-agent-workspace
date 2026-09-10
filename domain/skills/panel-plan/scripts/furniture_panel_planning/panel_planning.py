@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from .cabinet_panel_planner import build_cabinet_panels
 from .panel_models import PanelPlacement
 from .panel_spec import FurnitureSpec
 from .structure_planning import CabinetStructure
+from .topology_solver import solve_panel_placements
 
 
 def plan_panels(
@@ -17,4 +17,4 @@ def plan_panels(
         raise TypeError(
             "plan_panels requires CabinetStructure; independent room layout is not a valid panel input"
         )
-    return build_cabinet_panels(spec, layout)
+    return solve_panel_placements(spec, layout)

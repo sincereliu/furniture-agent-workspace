@@ -16,6 +16,7 @@ from furniture_manufacturing.connectors.base import (
     make_connection_id,
 )
 from furniture_manufacturing.manufacturing_models import HardwareRecord, MachiningOperation, PanelRecord
+from furniture_panel_planning.joint_topology import joint_is_connected
 
 
 # ── Joint helpers ──────────────────────────────────────────────────
@@ -44,7 +45,10 @@ def _trinity_female(panel: PanelRecord) -> bool:
     """
     if panel.joints:
         return any(
-            j.female_id == panel.label and j.face[1] == "x" and j.male_has_cam
+            j.female_id == panel.label
+            and j.face[1] == "x"
+            and j.male_has_cam
+            and joint_is_connected(j)
             for j in _joints_of(panel)
         )
     # fallback: no joint topology available
@@ -58,7 +62,10 @@ def _trinity_male(panel: PanelRecord) -> bool:
     """
     if panel.joints:
         return any(
-            j.male_id == panel.label and j.edge_axis == "x" and j.male_has_cam
+            j.male_id == panel.label
+            and j.edge_axis == "x"
+            and j.male_has_cam
+            and joint_is_connected(j)
             for j in _joints_of(panel)
         )
     # fallback: no joint topology available
@@ -79,10 +86,13 @@ def _gather_joints(panels: list[PanelRecord]) -> list:
 
 
 def _trinity_joints(panels: list[PanelRecord]) -> list:
-    """筛选三合一相关的连接（x 轴方向，male_has_cam）。"""
+    """筛选三合一相关的连接（已解析为连接，且 x 轴、male_has_cam）。"""
     return [
         j for j in _gather_joints(panels)
-        if j.face[1] == "x" and j.edge_axis == "x" and j.male_has_cam
+        if joint_is_connected(j)
+        and j.face[1] == "x"
+        and j.edge_axis == "x"
+        and j.male_has_cam
     ]
 
 
@@ -94,7 +104,9 @@ def _male_edge_signs(panel: PanelRecord) -> Set[int]:
     if panel.joints:
         signs = {
             j.edge_sign for j in _joints_of(panel)
-            if j.male_id == panel.label and j.edge_axis == "x"
+            if j.male_id == panel.label
+            and j.edge_axis == "x"
+            and joint_is_connected(j)
         }
         if signs:
             return signs
@@ -111,12 +123,13 @@ def _other_axis(a: str, t: str) -> str:
 
 
 def _is_trinity_joint(joint: Any, by_label: Dict[str, PanelRecord]) -> bool:
-    """某 joint 是否是三合一连接。
+    """某 joint 是否用三合一五金固定。
 
-    抽屉盒是滑动子装配，内部 x/y 轴接触均为连接（前/后/底↔侧）；
-    柜体结构连接仅 x 轴（侧板↔横板）——背板等 y 向接触（如层板后
-    端面搁在背板前面）是接触不是连接，不生成三合一。
+    连不连只看已解析的 `connection`。轴方向和 cam_face 只回答用什么五金：
+    抽屉盒内部 x/y 接触可用三合一；柜体结构三合一走 x 轴（侧板↔横板）。
     """
+    if not joint_is_connected(joint):
+        return False
     if not joint.male_has_cam:
         return False
     female = by_label[joint.female_id]

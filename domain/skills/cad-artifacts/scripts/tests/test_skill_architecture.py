@@ -34,6 +34,14 @@ STAGE_REFERENCES = {
     "layout-plan": ("references/spatial-layout-rules.md",),
     "panel-plan": (
         "references/panel-definition-rules.md",
+        "references/panel-proposal-contract.md",
+        "references/back-construction-rules.md",
+        "references/shelf-planning-rules.md",
+        "references/toe-kick-rules.md",
+        "references/drawer-dimension-chain.md",
+        "references/connection-contact-defaults.md",
+        "references/terminology-glossary.md",
+        "references/panel-side-analyses.md",
     ),
     "manufacturing-plan": ("references/manufacturing-rules.md",),
     "feature-tree": ("references/feature-tree-rules.md",),
@@ -305,7 +313,9 @@ class SkillArchitectureTests(unittest.TestCase):
             / "scripts"
             / "furniture_manufacturing"
         )
-        self.assertTrue((panel_package / "cabinet_panel_planner.py").is_file())
+        self.assertTrue((panel_package / "topology_solver.py").is_file())
+        self.assertFalse((panel_package / "cabinet_panel_planner.py").exists())
+        self.assertFalse((panel_package / "panel_face.py").exists())
         self.assertFalse((panel_package / "manufacturing_edge_banding.py").exists())
         self.assertTrue((manufacturing_package / "manufacturing_edge_banding.py").is_file())
 

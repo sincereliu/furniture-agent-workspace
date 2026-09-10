@@ -8,6 +8,12 @@ from typing import Any, Mapping
 from furniture_delivery_validation.validation import ValidationReport
 from furniture_design_intent.design_intent import DesignIntent
 
+from .construction_geometry import (
+    back_rail_boxes,
+    drawer_panel_boxes,
+    shelf_panel_boxes,
+    toe_kick_support_boxes,
+)
 from .panel_models import PanelPlacement
 from .panel_spec import FurnitureSpec, resolve_back_mount
 from .panel_rules import (
@@ -37,7 +43,7 @@ def validate_panel_output(
         if not isinstance(raw_panels, list):
             raise ValueError("panel stage output requires panels")
         spec = FurnitureSpec.from_dict(raw_spec)
-        structure = CabinetStructure(**raw_structure)
+        structure = CabinetStructure.from_dict(raw_structure)
         panels = [PanelPlacement.from_dict(item) for item in raw_panels]
     except (TypeError, ValueError) as exc:
         report.add_error("INVALID_PANEL_STAGE_OUTPUT", str(exc))
@@ -236,9 +242,43 @@ def validate_panels(
     report.issues.extend(_validate_toe_kick_panels(spec, layout, panels).issues)
     report.issues.extend(_validate_back_rails(spec, layout, panels).issues)
     report.issues.extend(_validate_depth_aligned_panels(spec, layout, panels).issues)
+    report.issues.extend(_validate_shelf_panels(spec, layout, panels).issues)
     drawer_report = _validate_drawer_panels(spec, layout, panels)
     report.issues.extend(drawer_report.issues)
     return report
+
+
+def _panel_geometry(panel: PanelPlacement) -> tuple[float, float, float, float, float, float]:
+    return (
+        panel.size_x,
+        panel.size_y,
+        panel.size_z,
+        panel.pos_x,
+        panel.pos_y,
+        panel.pos_z,
+    )
+
+
+def _mismatch_boxes(
+    report: ValidationReport,
+    code: str,
+    actual_by_id: Mapping[str, PanelPlacement],
+    boxes,
+) -> None:
+    for box in boxes:
+        panel = actual_by_id.get(box.panel_id)
+        if panel is None:
+            report.add_error(code, f"missing {box.panel_id}", box.panel_id)
+            continue
+        if any(
+            abs(actual - expected) > 1e-6
+            for actual, expected in zip(_panel_geometry(panel), box.geometry)
+        ):
+            report.add_error(
+                code,
+                f"{box.panel_id} does not match the admitted construction geometry",
+                box.panel_id,
+            )
 
 
 def _validate_doors(
@@ -454,6 +494,12 @@ def _validate_toe_kick_panels(
             "toe-kick supports leave no positive clear spacing",
             "toe_kick_support_count",
         )
+    _mismatch_boxes(
+        report,
+        "TOE_KICK_SUPPORT_GEOMETRY_MISMATCH",
+        {item.id: item for item in support_panels},
+        toe_kick_support_boxes(spec, layout),
+    )
     return report
 
 
@@ -493,6 +539,12 @@ def _validate_back_rails(
             "back rails leave no positive clear spacing",
             "back_rail",
         )
+    _mismatch_boxes(
+        report,
+        "BACK_RAIL_GEOMETRY_MISMATCH",
+        {item.id: item for item in rail_panels},
+        back_rail_boxes(spec, layout),
+    )
     return report
 
 
@@ -523,6 +575,39 @@ def _validate_depth_aligned_panels(
     return report
 
 
+def _validate_shelf_panels(
+    spec: FurnitureSpec,
+    layout: CabinetStructure,
+    panels: list[PanelPlacement],
+) -> ValidationReport:
+    report = ValidationReport(stage="panels_planned")
+    if spec.drawer_count > 0:
+        return report
+    shelf_panels = [
+        item
+        for item in panels
+        if item.panel_type in ("fixed_shelf", "movable_shelf")
+    ]
+    try:
+        expected = shelf_panel_boxes(spec, layout)
+    except ValueError as exc:
+        report.add_error("INVALID_SHELF_GAPS", str(exc), "shelves")
+        return report
+    if len(shelf_panels) != len(expected):
+        report.add_error(
+            "SHELF_PANEL_COUNT_MISMATCH",
+            "generated shelf count must match the admitted shelves list",
+            "shelves",
+        )
+    _mismatch_boxes(
+        report,
+        "SHELF_PANEL_GEOMETRY_MISMATCH",
+        {item.id: item for item in shelf_panels},
+        expected,
+    )
+    return report
+
+
 def _validate_drawer_panels(
     spec: FurnitureSpec,
     layout: CabinetStructure,
@@ -548,104 +633,21 @@ def _validate_drawer_panels(
             "drawer_count",
         )
 
-    expected_total = spec.drawer_count * 5
-    if len(drawer_panels) != expected_total:
+    try:
+        expected = drawer_panel_boxes(spec, layout)
+    except ValueError as exc:
+        report.add_error("INVALID_DRAWER_GEOMETRY", str(exc), "drawer_count")
+        return report
+    if len(drawer_panels) != len(expected):
         report.add_error(
             "DRAWER_PANEL_COUNT_MISMATCH",
             "generated drawer panel count must match 5 panels per drawer instance",
             "drawer_count",
         )
-
-    panels_by_id = {item.id: item for item in drawer_panels}
-    board = spec.board_thickness
-    slide_gap = spec.drawer_side_clearance
-    layer_gap = spec.drawer_layer_gap
-    bottom_t = spec.drawer_bottom_thickness
-    back_t = spec.drawer_back_thickness
-    back_clear = spec.drawer_back_clearance
-    band_h = layout.internal_height / spec.drawer_count
-    front_h = band_h - layer_gap
-    front_w = layout.internal_width - 2 * spec.front_face_margin
-    box_w = layout.internal_width - 2 * slide_gap
-    internal_depth = layout.internal_y_end - layout.internal_y_start
-    box_d = internal_depth - board - back_clear
-    box_back_y = layout.internal_y_start + back_clear
-    bottom_size_y = box_d - board
-
-    for index in range(spec.drawer_count):
-        front_z = layout.internal_z_start + index * band_h + (
-            layer_gap if index > 0 else 0.0
-        )
-        overlap = board if index == 0 else 0.0
-        box_h = front_h - 2 * overlap
-        box_z = front_z + overlap
-        suffix = f"z{front_z:.0f}"
-        expected = {
-            f"drawer_front_{suffix}": (
-                front_w,
-                board,
-                front_h,
-                layout.internal_x_start + spec.front_face_margin,
-                layout.carcass_y_end - board,
-                front_z,
-            ),
-            f"drawer_side_L_{suffix}": (
-                board,
-                box_d,
-                box_h,
-                layout.internal_x_start + slide_gap,
-                box_back_y,
-                box_z,
-            ),
-            f"drawer_side_R_{suffix}": (
-                board,
-                box_d,
-                box_h,
-                layout.internal_x_end - board - slide_gap,
-                box_back_y,
-                box_z,
-            ),
-            f"drawer_back_{suffix}": (
-                box_w - 2 * board,
-                back_t,
-                box_h - 2 * board,
-                layout.internal_x_start + slide_gap + board,
-                box_back_y,
-                box_z,
-            ),
-            f"drawer_bottom_{suffix}": (
-                box_w - 2 * board,
-                bottom_size_y,
-                bottom_t,
-                layout.internal_x_start + slide_gap + board,
-                box_back_y + board,
-                box_z,
-            ),
-        }
-        for panel_id, expected_geometry in expected.items():
-            panel = panels_by_id.get(panel_id)
-            if panel is None:
-                report.add_error(
-                    "MISSING_DRAWER_PANEL",
-                    f"drawer instance {suffix} is missing {panel_id}",
-                    panel_id,
-                )
-                continue
-            actual_geometry = (
-                panel.size_x,
-                panel.size_y,
-                panel.size_z,
-                panel.pos_x,
-                panel.pos_y,
-                panel.pos_z,
-            )
-            if any(
-                abs(actual - expected_value) > 1e-6
-                for actual, expected_value in zip(actual_geometry, expected_geometry)
-            ):
-                report.add_error(
-                    "DRAWER_PANEL_GEOMETRY_MISMATCH",
-                    f"{panel_id} does not match the admitted drawer dimension chain",
-                    panel_id,
-                )
+    _mismatch_boxes(
+        report,
+        "DRAWER_PANEL_GEOMETRY_MISMATCH",
+        {item.id: item for item in drawer_panels},
+        expected,
+    )
     return report

@@ -63,3 +63,4 @@
 | `door_count` | `workflow_project.py::_legacy_stage_inputs()` | 暂不能 | 仅服务 schema-v1 项目加载；停止支持 v1 项目后可删。 |
 | `door_count` | `panel_spec.py::migrate_legacy_panel_hinge_side()` 与 `_legacy_spec_loader_panel_output_door_count()` / `_legacy_spec_loader_panel_input_door_count()` | 暂不能 | 仅服务旧 panel 输出恢复；历史 Revision 退场后可删。 |
 | `door_count` | `layout_spec.py::LayoutSpec` | 暂不能 | 这是 layout 子系统当前序列化名；要删需单独做 layout API/存储协调迁移。 |
+| `door_count` | 旧 `stage_outputs.panels_planned.structure` | 暂不能 | `CabinetStructure.from_dict()` 把历史 `door_count` 收成 `n_doors`；两键冲突则拒绝。新输出只写 `n_doors`。 |

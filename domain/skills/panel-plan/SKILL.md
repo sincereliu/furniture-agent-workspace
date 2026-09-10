@@ -1,6 +1,6 @@
 ---
 name: panel-plan
-description: 用于 panels_planned 阶段。在已确认成品外包络上生成可审查的实体板件事实输出；门、层板、抽屉、背板、背拉条和踢脚方案先由 LLM 提案，经结构化代码准入后物化。单位审计与优化属于旁路分析，不属于核心板件生成。
+description: 用于 panels_planned 阶段。当用户说“几扇门”“几层板”“要不要抽屉”“背板怎么装”“踢脚多高”“板厚多少”，或需要从已确认外包络生成可审查板件时使用。门、层板、抽屉、背板、背拉条和踢脚先由 LLM 提案，经结构化代码准入后物化。单位审计与优化属于旁路分析，不属于核心板件生成。
 ---
 
 # 家具板件规划
@@ -16,6 +16,13 @@ description: 用于 panels_planned 阶段。在已确认成品外包络上生成
 5. 依据 [背板结构规则](references/back-construction-rules.md)、[板件定义规则](references/panel-definition-rules.md)、[抽屉尺寸链](references/drawer-dimension-chain.md) 和 `references/cabinet-topologies/` 生成 `spec/structure/back_mount_resolution/panels`；当背板模式需要时，同时物化背拉条并纳入同一阶段校验。
 6. 运行时统一校验结构规格、精确净空、板件标识/尺寸/位置/依赖和背板几何。展示后暂停，等待用户确认；未通过不得进入制造、BOM、特征树或 CAD。
 
+## 提案与展示
+
+- 提案必须覆盖契约中的全部字段。用户没说的值标成假设，不得写成已确认事实。
+- 下列语义当前拓扑表达不了，必须先继续追问，不要交给代码猜：混合门/层板/抽屉分区、三门及以上的开启关系、单门却未给 `door_hinge_side`、有活动层板却未选 `movable_shelf_connector`。
+- 展示给用户：假设列表、`back_mount` 的 requested/effective、内部净空、板件清单（id / 角色 / 尺寸 / 位置）。
+- 按当前任务读对应 reference，不要一次加载全部规则。
+
 ## 参考导航
 
 - 规范术语、兼容别名和单位口径： [术语规范表](references/terminology-glossary.md)
@@ -25,8 +32,8 @@ description: 用于 panels_planned 阶段。在已确认成品外包络上生成
 - 层板列表、计算层与固定/活动层板物化： [层板规则](references/shelf-planning-rules.md)
 - 踢脚区、支撑数量公式和净距： [踢脚规则](references/toe-kick-rules.md)
 - 抽屉区尺寸链、适用条件和限制： [抽屉尺寸链](references/drawer-dimension-chain.md)
-- 接触与连接的默认判定、连接开关口径： [连接与接触默认规则](references/connection-contact-defaults.md)
-- 柜型拓扑数据： `references/cabinet-topologies/`
+- 接触与连接的默认判定： [连接与接触默认规则](references/connection-contact-defaults.md)
+- 柜型拓扑骨架： `references/cabinet-topologies/`（围合面、有无踢脚、整高抽屉区类型；门/层板/抽屉几何由求解器执行，不能只加 YAML 就支持新柜型）
 - 单位审计和优化等旁路证据： [板件旁路分析](references/panel-side-analyses.md)
 
 ## 旁路分析
@@ -39,6 +46,7 @@ description: 用于 panels_planned 阶段。在已确认成品外包络上生成
 
 - 运行时在 `scripts/furniture_panel_planning/`；`panel_spec.py` 拥有规范 schema、完整性/客观不变量准入和背板模式解析。历史 Project/Revision 的有界 schema 迁移仍暂留在该文件内，仅服务旧序列化恢复，不参与新提案决策；`structure_planning.py` 是精确净空的唯一所有者。代码不得按自然语言、柜型或内置 profile 选择方案。
 - `panels_planned` 的核心事实输出只包括 `spec`、`structure`、`back_mount_resolution` 和 `panels`；其中 `panels` 明确包含背板、背拉条、柜体板件、门板、层板、抽屉前板/盒体板件和踢脚板件。分析记录属于旁路证据，不并入板件事实。
+- 接触由几何推导；每条接触带已解析的 `connection=on/off`。制造阶段只消费该开关决定要不要固定，不按轴方向或板名猜「连不连」。本轮没有逐条连接的提案覆盖字段。
 - 旧持久化 Project 缺少 `spec.door_hinge_side` 时只做有界 schema 迁移：单门仅从唯一门板已有的显式 `left/right` 恢复，缺失或冲突即停止；标准双门的规格迁移为 `null`，板件缺省侧按确定性左右拓扑恢复；更多门保持 `null`。新提案和扁平 API 契约仍必须显式提交该字段，迁移不得猜测新的单门偏好。
 - 修改规划用 `revise_stage_output()`，使本阶段及下游失效。
 - 不在此阶段确定连接件孔位、封边细节、最终 BOM 或 CAD 操作。

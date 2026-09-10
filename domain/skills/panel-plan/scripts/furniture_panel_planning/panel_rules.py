@@ -55,15 +55,15 @@ def back_rail_clear_spacing(
 
 
 def resolve_door_hinge_side(
-    door_count: int,
+    n_doors: int,
     door_index: int,
     single_door_side: str | None,
 ) -> str | None:
     """Return the admitted hinge side for one door in left-to-right order."""
-    if door_index < 0 or door_index >= door_count:
+    if door_index < 0 or door_index >= n_doors:
         raise ValueError("door_index must identify an existing door")
-    if door_count == 1:
+    if n_doors == 1:
         return single_door_side
-    if door_count == 2:
+    if n_doors == 2:
         return "left" if door_index == 0 else "right"
     return None
