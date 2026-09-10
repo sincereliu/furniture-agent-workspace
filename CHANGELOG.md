@@ -1,5 +1,14 @@
 # 更新日志
 
+## 20260910.2 — 柜体父子归属
+
+柜体成为板件阶段的父对象：每块板属于一台柜，多柜时 id 不再撞名。
+
+- `panels_planned` 增加 `cabinets[]`；每台柜有 `id` 和自己的 `spec/structure/back_mount_resolution/panels`。顶层字段镜像第一台柜。
+- 板件带 `parent_id`、`role`；全局 `id` 为 `{cabinet_id}__{role}`。连接、依赖、槽加工、特征树按全局 id；制造按柜分组后再按 `role` 查找。
+- 可选提案字段 `cabinet_id` 是身份，准入前弹出。缺省 `cabinet_1`。`plan_panel_cabinets()` 可一次规划多台；交互主流程仍是一份意图一台柜。
+- 特征树增加 `cabinets` 分组，根节点 id 为柜体 id（多柜时为 `scene`）。
+
 ## 20260910.1 — panel-plan 连接开关落地、几何单源、Skill 操作面
 
 把上次 panel-plan 审计里的五条建议收进同一轮：连接默认可执行、公式不再双写、Skill 补操作面、术语/死代码清理、YAML 能力写实。

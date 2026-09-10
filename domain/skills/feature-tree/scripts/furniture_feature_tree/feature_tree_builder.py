@@ -22,6 +22,8 @@ def panels_to_feature_tree(
             "position": {"x": panel.pos_x, "y": panel.pos_y, "z": panel.pos_z},
             "depends_on": list(panel.depends_on),
             "tags": [panel.panel_type],
+            "parent_id": panel.parent_id,
+            "role": panel.role,
         }
         for panel in panels
     ]
@@ -46,6 +48,18 @@ def panels_to_feature_tree(
         for operation in operations
     ]
     feature_ids = [feature["id"] for feature in features]
+    cabinets: dict[str, list[str]] = {}
+    for panel in panels:
+        parent = panel.parent_id or f"{furniture_type}_assembly"
+        cabinets.setdefault(parent, []).append(panel.label)
+    cabinet_nodes = [
+        {"id": cabinet_id, "type": "cabinet", "children": child_ids}
+        for cabinet_id, child_ids in cabinets.items()
+    ]
+    if len(cabinet_nodes) == 1:
+        root_id = cabinet_nodes[0]["id"]
+    else:
+        root_id = "scene"
     return {
         "schema_version": 2,
         "furniture_type": furniture_type,
@@ -59,8 +73,9 @@ def panels_to_feature_tree(
         "parameters": parameters or {},
         "features": features,
         "operations": operation_nodes,
+        "cabinets": cabinet_nodes,
         "root": {
-            "id": f"{furniture_type}_assembly",
+            "id": root_id,
             "type": "compound",
             "children": feature_ids,
         },

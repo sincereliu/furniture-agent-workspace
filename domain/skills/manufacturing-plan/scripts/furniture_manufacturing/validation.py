@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from furniture_delivery_validation.validation import ValidationReport
+from furniture_panel_planning.cabinet_identity import index_by_role, panel_role
 from furniture_panel_planning.panel_spec import FurnitureSpec, resolve_back_mount
 from furniture_panel_planning.panel_models import PanelPlacement
 
@@ -130,7 +131,7 @@ def validate_manufacturing(
         if "back_groove" in operation.id
     ]
     actual_back_groove_ids = {
-        operation.id for operation in back_groove_operations
+        panel_role(operation.id) for operation in back_groove_operations
     }
     back_mount = resolve_back_mount(
         spec.back_mount,
@@ -189,7 +190,7 @@ def validate_manufacturing(
             "every manufacturing panel must retain the resolved back_mount",
             "panels",
         )
-    back_panel = manufacturing_by_id.get("back_panel")
+    back_panel = index_by_role(bom.panels).get("back_panel")
     expected_back_edges = (
         {} if back_mount == "groove"
         else {"四边": "ABS 1.0mm同色"}

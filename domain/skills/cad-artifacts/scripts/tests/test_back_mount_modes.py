@@ -15,7 +15,7 @@ from runtime_paths import bootstrap_runtime_paths
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 from furniture_panel_planning.panel_spec import FurnitureSpec
-from panel_fixtures import cabinet_data, furniture_spec
+from panel_fixtures import by_role, cabinet_data, furniture_spec
 from furniture_layout.layout_pipeline import plan_layout
 from furniture_layout.validation import validate_layout
 from furniture_manufacturing.manufacturing_bom import (
@@ -55,7 +55,7 @@ class BackMountModeTests(unittest.TestCase):
                 layout = plan_layout(spec)
                 structure = CabinetStructure.from_spec(spec)
                 placements = plan_panels(spec, structure)
-                panels = {panel.id: panel for panel in placements}
+                panels = by_role(placements)
                 carcass_y_start, carcass_y_end, internal_y_start = expected
 
                 self.assertEqual(structure.carcass_y_start, carcass_y_start)
@@ -114,10 +114,10 @@ class BackMountModeTests(unittest.TestCase):
     def test_all_modes_pass_through_manufacturing_validation(self) -> None:
         orchestrator = FurnitureOrchestrator(workspace_root=WORKSPACE_ROOT)
         expected_groove_ids = {
-            "left_side_back_groove",
-            "right_side_back_groove",
-            "top_back_groove",
-            "bottom_back_groove",
+            "cabinet_1__left_side_back_groove",
+            "cabinet_1__right_side_back_groove",
+            "cabinet_1__top_back_groove",
+            "cabinet_1__bottom_back_groove",
         }
 
         for back_mount in ("groove", "insert", "cover"):
@@ -182,7 +182,7 @@ class BackMountModeTests(unittest.TestCase):
                 layout = plan_layout(spec)
                 placements = plan_panels(spec, CabinetStructure.from_spec(spec))
                 bom = plan_manufacturing(spec, placements)
-                panels = {panel.label: panel for panel in bom.panels}
+                panels = by_role(bom.panels)
 
                 self.assertEqual(
                     panels["back_panel"].edge_banding,
@@ -347,7 +347,7 @@ class BackMountModeTests(unittest.TestCase):
 
         overlapping = [
             replace(panel, pos_y=0.0)
-            if panel.id == "left_side_panel"
+            if panel.role == "left_side_panel"
             else panel
             for panel in placements
         ]

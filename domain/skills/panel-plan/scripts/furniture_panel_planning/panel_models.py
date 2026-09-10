@@ -24,6 +24,8 @@ class PanelPlacement:
     orientation: str = "xyz"
     depends_on: list[str] = field(default_factory=list)
     note: str = ""
+    role: str = ""  # cabinet-local role, e.g. left_side_panel
+    parent_id: str = ""  # owning cabinet instance id
     door_hinge_side: str | None = None   # "left" / "right", only for door panels
     door_overlay: str | None = None      # "full" / "half" / "inset", only for door panels
     inner_face: str = ""                 # panel face pointing toward cabinet interior
@@ -45,4 +47,15 @@ class PanelPlacement:
             item if isinstance(item, PanelJoint) else PanelJoint(**item)
             for item in raw_joints
         ]
+        from .cabinet_identity import (
+            DEFAULT_CABINET_ID,
+            panel_cabinet_id,
+            panel_role,
+        )
+
+        panel_id = str(values.get("id", ""))
+        if not values.get("role"):
+            values["role"] = panel_role(panel_id)
+        if not values.get("parent_id"):
+            values["parent_id"] = panel_cabinet_id(panel_id) or DEFAULT_CABINET_ID
         return cls(**values)

@@ -85,7 +85,7 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
         )
         placements = plan_panels(spec, CabinetStructure.from_spec(spec))
         doors = {
-            panel.id: panel
+            panel.role: panel
             for panel in placements
             if panel.panel_type == "door"
         }
@@ -317,7 +317,7 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
         left_door = next(
             panel
             for panel in manufacturing.panels
-            if panel.label == "left_door"
+            if panel.role == "left_door" or panel.label.endswith("left_door")
         )
         left_door.size_x = 30
 
@@ -425,14 +425,14 @@ class DrawerZoneTests(unittest.TestCase):
         # label 契约：drawer_<角色>_z{位置}（实例 key = z 后缀）
         for panel in drawer_panels:
             self.assertRegex(
-                panel.id,
+                panel.role,
                 r"^drawer_(front|side_L|side_R|back|bottom)_z\d+$",
             )
         # 3 个抽屉实例，每个 5 块板共享 z 后缀
         from collections import Counter
 
         instance_keys = Counter(
-            panel.id.rsplit("_", 1)[1] for panel in drawer_panels
+            panel.role.rsplit("_", 1)[1] for panel in drawer_panels
         )
         self.assertEqual(len(instance_keys), 3)
         self.assertTrue(all(count == 5 for count in instance_keys.values()))
@@ -467,7 +467,7 @@ class DrawerZoneTests(unittest.TestCase):
     def test_panel_validation_rejects_drawer_geometry_mismatch(self) -> None:
         spec, placements = self._drawer_cabinet(3)
         tampered = [
-            p if p.id != "drawer_bottom_z68" else replace(
+            p if p.role != "drawer_bottom_z68" else replace(
                 p,
                 size_y=p.size_y - 10,
             )
@@ -525,7 +525,7 @@ class DrawerZoneTests(unittest.TestCase):
         # 底板轮孔在底面（cam_face=-z → z_local=0，钻入方向 +z）
         bottom_cams = [
             h for h in holes
-            if h.panel_label == "drawer_bottom_z68"
+            if h.panel_label.endswith("drawer_bottom_z68")
             and h.hole_type == "three_in_one_cam"
         ]
         self.assertEqual(len(bottom_cams), 8)  # 4 连接 × 2 排

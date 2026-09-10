@@ -28,6 +28,10 @@
 | 踢脚支撑数量 | `toe_kick_support_count` | 无 | 整数或 `null` | `null` 是“显式请求自动计算”，不是缺省。 |
 | 单门铰链侧 | `door_hinge_side` | 无 | 枚举或 `null` | 仅 `n_doors=1` 时允许 `left/right`。 |
 | 活动层板连接方式 | `movable_shelf_connector` | 无 | 枚举 | 规范值 `two_in_one/shelf_pin`。 |
+| 柜体实例 | `cabinet_id` / `cabinets[].id` | 无 | 标识符 | 柜体父对象身份；缺省 `cabinet_1`。不得包含 `__`。 |
+| 板件柜内角色 | `role` | 无 | 字符串 | 柜内稳定角色名，如 `left_side_panel`。 |
+| 板件所属柜体 | `parent_id` | 无 | 标识符 | 必须等于所属 `cabinets[].id`。 |
+| 板件全局标识 | `id` | 无 | 字符串 | 新输出为 `{cabinet_id}__{role}`；旧输出可仍是裸角色名。 |
 
 ## 几何字段口径
 
@@ -46,6 +50,7 @@
 - `back_offset` 表示背板基准相对柜体背侧的偏移；`cover` 模式下背板位于 `Y=0`，不再消费该偏移来决定内部起点。
 - `panel` 在本阶段指制造板件记录，不指 CAD 实体、网格或 feature tree 节点。
 - `structure` 在本阶段指确定性柜体结构几何与内部净空，不指房间布局结果。
+- `cabinets[]` 是板件阶段的对象树；顶层 `spec/structure/panels` 只镜像第一台柜，改归属以 `cabinets[]` 为准。
 
 ## 禁止扩散的历史叫法
 

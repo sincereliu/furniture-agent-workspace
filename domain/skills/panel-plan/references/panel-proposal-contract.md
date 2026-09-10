@@ -20,6 +20,7 @@
 - 单门铰链侧：`door_hinge_side`
 - 层板：`shelves`、`top_gap_mm`、`movable_shelf_connector`
 - 抽屉尺寸链输入：`drawer_side_clearance`、`drawer_layer_gap`、`drawer_bottom_thickness`、`drawer_back_thickness`、`drawer_back_clearance`
+- 柜体身份（可选）：`cabinet_id`；这不是构造字段，运行时在准入 `FurnitureSpec` 前弹出。缺省 `cabinet_1`。不得包含 `__`。
 
 ## 字段口径
 
@@ -32,7 +33,7 @@
 
 - 向用户展示完整字段表，并逐项标明「用户已给」还是「假设」。
 - 混合门/层板/抽屉、三门及以上、单门未给铰链侧、有活动层板未选连接方式时，停在消歧，不要写入 `stage_inputs` 去碰运行时。
-- 代码准入后展示 `back_mount` requested/effective、内部净空和板件清单，再等人确认。
+- 代码准入后展示柜体 `id`、`back_mount` requested/effective、内部净空和板件清单（含所属柜体），再等人确认。
 
 ## LLM 候选起点
 

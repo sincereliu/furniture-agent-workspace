@@ -13,12 +13,15 @@ from runtime_paths import bootstrap_runtime_paths
 
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
+from furniture_design_intent.design_intent import DesignIntent, OverallSize
+from furniture_panel_planning.cabinet_identity import panel_role
 from furniture_panel_planning.construction_geometry import (
     drawer_panel_boxes,
     toe_kick_support_boxes,
 )
 from furniture_panel_planning.joint_topology import default_joint_connection
 from furniture_panel_planning.panel_models import PanelPlacement
+from furniture_panel_planning.panel_pipeline import plan_panel_cabinets
 from furniture_panel_planning.panel_planning import plan_panels
 from furniture_panel_planning.panel_rules import (
     resolve_toe_kick_support_count,
@@ -26,7 +29,7 @@ from furniture_panel_planning.panel_rules import (
 )
 from furniture_panel_planning.panel_spec import resolve_shelf_gaps
 from furniture_panel_planning.structure_planning import CabinetStructure
-from panel_fixtures import furniture_spec
+from panel_fixtures import by_role, furniture_spec, panel_parameters
 
 
 class PanelRuleContractTests(unittest.TestCase):
@@ -73,7 +76,7 @@ class PanelRuleContractTests(unittest.TestCase):
         )
 
         structure = CabinetStructure.from_spec(spec)
-        placements = {panel.id: panel for panel in plan_panels(spec, structure)}
+        placements = by_role(plan_panels(spec, structure))
 
         front_bottom = placements["drawer_front_z68"]
         side_bottom = placements["drawer_side_L_z68"]
@@ -192,7 +195,7 @@ class PanelRuleContractTests(unittest.TestCase):
             back_mount="groove",
         )
         structure = CabinetStructure.from_spec(spec)
-        placements = {panel.id: panel for panel in plan_panels(spec, structure)}
+        placements = by_role(plan_panels(spec, structure))
         back = placements["back_panel"]
         shelf_joints = [
             joint for joint in back.joints
@@ -206,10 +209,41 @@ class PanelRuleContractTests(unittest.TestCase):
         side = placements["left_side_panel"]
         top_joints = [
             joint for joint in side.joints
-            if "top_panel" in {joint.female_id, joint.male_id}
+            if placements["top_panel"].id in {joint.female_id, joint.male_id}
         ]
         self.assertTrue(top_joints)
         self.assertTrue(all(joint.connection == "on" for joint in top_joints))
+
+    def test_two_cabinets_qualify_panel_ids_under_distinct_parents(self) -> None:
+        spec = furniture_spec()
+        structure = CabinetStructure.from_spec(spec)
+        first = plan_panels(spec, structure, cabinet_id="cab_a")
+        second = plan_panels(spec, structure, cabinet_id="cab_b")
+        self.assertTrue(all(panel.parent_id == "cab_a" for panel in first))
+        self.assertTrue(all(panel.parent_id == "cab_b" for panel in second))
+        self.assertEqual({panel.role for panel in first}, {panel.role for panel in second})
+        self.assertFalse({panel.id for panel in first} & {panel.id for panel in second})
+        self.assertTrue(all(panel.id.startswith("cab_a__") for panel in first))
+        self.assertIn("left_side_panel", {panel.role for panel in first})
+
+        intent = DesignIntent(
+            furniture_type="floor_cabinet",
+            overall_size=OverallSize(800, 600, 1000),
+            confirmed=True,
+        )
+        output = plan_panel_cabinets(
+            (
+                (intent, {**panel_parameters(), "cabinet_id": "cab_a"}),
+                (intent, {**panel_parameters(), "cabinet_id": "cab_b"}),
+            )
+        )
+        self.assertEqual([item["id"] for item in output["cabinets"]], ["cab_a", "cab_b"])
+        roles_a = {panel_role(item["id"]) for item in output["cabinets"][0]["panels"]}
+        roles_b = {panel_role(item["id"]) for item in output["cabinets"][1]["panels"]}
+        self.assertEqual(roles_a, roles_b)
+        ids_a = {item["id"] for item in output["cabinets"][0]["panels"]}
+        ids_b = {item["id"] for item in output["cabinets"][1]["panels"]}
+        self.assertFalse(ids_a & ids_b)
 
     def test_shelf_entries_require_shelf_type(self) -> None:
         with self.assertRaises(ValueError):

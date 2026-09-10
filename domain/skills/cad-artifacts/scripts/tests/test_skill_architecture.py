@@ -314,6 +314,7 @@ class SkillArchitectureTests(unittest.TestCase):
             / "furniture_manufacturing"
         )
         self.assertTrue((panel_package / "topology_solver.py").is_file())
+        self.assertTrue((panel_package / "cabinet_identity.py").is_file())
         self.assertFalse((panel_package / "cabinet_panel_planner.py").exists())
         self.assertFalse((panel_package / "panel_face.py").exists())
         self.assertFalse((panel_package / "manufacturing_edge_banding.py").exists())

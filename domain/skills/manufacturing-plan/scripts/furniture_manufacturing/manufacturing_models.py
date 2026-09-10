@@ -34,6 +34,8 @@ class PanelRecord:
     cam_face: str | None = None
     joints: list = field(default_factory=list)  # list[PanelJoint], face-to-edge adjacencies
     movable_shelf_connector: str = ""
+    role: str = ""
+    parent_id: str = ""
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PanelRecord":
@@ -49,6 +51,17 @@ class PanelRecord:
             item if isinstance(item, PanelJoint) else PanelJoint(**item)
             for item in raw_joints
         ]
+        from furniture_panel_planning.cabinet_identity import (
+            DEFAULT_CABINET_ID,
+            panel_cabinet_id,
+            panel_role,
+        )
+
+        label = str(values.get("label", ""))
+        if not values.get("role"):
+            values["role"] = panel_role(label)
+        if not values.get("parent_id"):
+            values["parent_id"] = panel_cabinet_id(label) or DEFAULT_CABINET_ID
         return cls(**values)
 
     @property

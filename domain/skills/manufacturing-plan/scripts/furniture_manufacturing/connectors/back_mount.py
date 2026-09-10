@@ -21,6 +21,7 @@ from furniture_manufacturing.manufacturing_models import (
     MachiningOperation,
     PanelRecord,
 )
+from furniture_panel_planning.cabinet_identity import index_by_role
 
 
 class BackMountConnector(Connector):
@@ -152,21 +153,30 @@ class BackMountConnector(Connector):
         return []
 
     def _insert_holes(self, panels: List[PanelRecord]) -> List[HoleSpec]:
+        grouped: Dict[str, List[PanelRecord]] = {}
+        for panel in panels:
+            grouped.setdefault(panel.parent_id or "_", []).append(panel)
+        result: List[HoleSpec] = []
+        for group in grouped.values():
+            result.extend(self._insert_holes_for_cabinet(group))
+        return result
+
+    def _insert_holes_for_cabinet(self, panels: List[PanelRecord]) -> List[HoleSpec]:
         """内嵌背板：四边三合一成对孔。
 
         连接点在背板局部坐标定义（背板为装配锚点，局部为唯一真源），
         配合板按"同一世界点 − 板件原点"折算到各自局部坐标，
         世界坐标统一由各板的 to_global 派生。
         """
-        by_label = {panel.label: panel for panel in panels}
-        back = by_label.get("back_panel")
+        by_role = index_by_role(panels)
+        back = by_role.get("back_panel")
         if back is None:
             return []
         targets = {
-            "left": by_label.get("left_side_panel"),
-            "right": by_label.get("right_side_panel"),
-            "top": by_label.get("top_panel"),
-            "bottom": by_label.get("bottom_panel"),
+            "left": by_role.get("left_side_panel"),
+            "right": by_role.get("right_side_panel"),
+            "top": by_role.get("top_panel"),
+            "bottom": by_role.get("bottom_panel"),
         }
         rules = self.rules.get("back_mount_drilling", {}).get("insert", {})
         first = float(rules.get("first_hole_mm", 64))

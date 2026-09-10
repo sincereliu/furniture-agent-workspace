@@ -8,6 +8,12 @@ from typing import Any, Mapping
 from furniture_delivery_validation.validation import ValidationReport
 from furniture_design_intent.design_intent import DesignIntent
 
+from .cabinet_identity import (
+    cabinets_from_output,
+    index_by_role,
+    panel_role,
+    qualify_panel_id,
+)
 from .construction_geometry import (
     back_rail_boxes,
     drawer_panel_boxes,
@@ -33,35 +39,55 @@ def validate_panel_output(
     """Validate the complete construction-and-panels stage checkpoint."""
     report = ValidationReport(stage="panels_planned")
     try:
-        raw_spec = output.get("spec")
-        raw_structure = output.get("structure")
-        raw_panels = output.get("panels")
-        if not isinstance(raw_spec, Mapping):
-            raise ValueError("panel stage output requires spec")
-        if not isinstance(raw_structure, Mapping):
-            raise ValueError("panel stage output requires structure")
-        if not isinstance(raw_panels, list):
-            raise ValueError("panel stage output requires panels")
-        spec = FurnitureSpec.from_dict(raw_spec)
-        structure = CabinetStructure.from_dict(raw_structure)
-        panels = [PanelPlacement.from_dict(item) for item in raw_panels]
-    except (TypeError, ValueError) as exc:
+        cabinets = cabinets_from_output(output)
+        if not cabinets:
+            raise ValueError("panel stage output requires at least one cabinet")
+        cabinet_ids = [str(item.get("id", "")) for item in cabinets]
+        if any(not item for item in cabinet_ids):
+            raise ValueError("each cabinet requires an id")
+        if len(set(cabinet_ids)) != len(cabinet_ids):
+            raise ValueError("cabinet ids must be unique")
+        parsed: list[tuple[str, FurnitureSpec, CabinetStructure, list[PanelPlacement], Mapping[str, Any]]] = []
+        for cabinet in cabinets:
+            raw_spec = cabinet.get("spec")
+            raw_structure = cabinet.get("structure")
+            raw_panels = cabinet.get("panels")
+            if not isinstance(raw_spec, Mapping):
+                raise ValueError(f"{cabinet.get('id')} requires spec")
+            if not isinstance(raw_structure, Mapping):
+                raise ValueError(f"{cabinet.get('id')} requires structure")
+            if not isinstance(raw_panels, list):
+                raise ValueError(f"{cabinet.get('id')} requires panels")
+            parsed.append(
+                (
+                    str(cabinet["id"]),
+                    FurnitureSpec.from_dict(raw_spec),
+                    CabinetStructure.from_dict(raw_structure),
+                    [PanelPlacement.from_dict(item) for item in raw_panels],
+                    cabinet,
+                )
+            )
+    except (TypeError, ValueError, KeyError) as exc:
         report.add_error("INVALID_PANEL_STAGE_OUTPUT", str(exc))
         return report
 
-    structure_report = validate_structure(confirmed_intent, spec, structure)
-    panel_report = validate_panels(spec, structure, panels)
-    report.issues.extend(structure_report.issues)
-    report.issues.extend(panel_report.issues)
-
-    resolution = output.get("back_mount_resolution")
-    if not isinstance(resolution, Mapping):
-        report.add_error(
-            "MISSING_BACK_MOUNT_RESOLUTION",
-            "panel stage must show requested and effective back mount",
-            "back_mount_resolution",
+    seen_ids: set[str] = set()
+    for cabinet_id, spec, structure, panels, cabinet in parsed:
+        report.issues.extend(
+            _validate_cabinet_membership(cabinet_id, panels, seen_ids).issues
         )
-    else:
+        report.issues.extend(
+            validate_structure(confirmed_intent, spec, structure).issues
+        )
+        report.issues.extend(validate_panels(spec, structure, panels).issues)
+        resolution = cabinet.get("back_mount_resolution")
+        if not isinstance(resolution, Mapping):
+            report.add_error(
+                "MISSING_BACK_MOUNT_RESOLUTION",
+                f"{cabinet_id} must show requested and effective back mount",
+                "back_mount_resolution",
+            )
+            continue
         try:
             expected_mount = resolve_back_mount(
                 resolution.get("requested"),
@@ -81,8 +107,67 @@ def validate_panel_output(
             ):
                 report.add_error(
                     "BACK_MOUNT_RESOLUTION_MISMATCH",
-                    "requested/effective back mount must match the admitted spec",
+                    f"{cabinet_id} requested/effective back mount must match the admitted spec",
                     "back_mount_resolution",
+                )
+    return report
+
+
+def _validate_cabinet_membership(
+    cabinet_id: str,
+    panels: list[PanelPlacement],
+    seen_ids: set[str],
+) -> ValidationReport:
+    report = ValidationReport(stage="panels_planned")
+    roles: set[str] = set()
+    for panel in panels:
+        if panel.id in seen_ids:
+            report.add_error(
+                "DUPLICATE_PANEL_ID",
+                f"{panel.id} is not unique across cabinets",
+                panel.id,
+            )
+        seen_ids.add(panel.id)
+        if panel.parent_id != cabinet_id:
+            report.add_error(
+                "PANEL_PARENT_MISMATCH",
+                f"{panel.id} parent_id must be {cabinet_id}",
+                panel.id,
+            )
+        if not panel.role:
+            report.add_error(
+                "MISSING_PANEL_ROLE",
+                f"{panel.id} requires a cabinet-local role",
+                panel.id,
+            )
+            continue
+        if panel.role in roles:
+            report.add_error(
+                "DUPLICATE_PANEL_ROLE",
+                f"{cabinet_id} has duplicate role {panel.role}",
+                panel.id,
+            )
+        roles.add(panel.role)
+        if panel_role(panel.id) != panel.role:
+            report.add_error(
+                "PANEL_ROLE_MISMATCH",
+                f"{panel.id} role must match {panel.role}",
+                panel.id,
+            )
+        expected_id = qualify_panel_id(cabinet_id, panel.role)
+        if panel.id not in {expected_id, panel.role}:
+            report.add_error(
+                "PANEL_ID_NOT_QUALIFIED",
+                f"{panel.id} must be {expected_id}",
+                panel.id,
+            )
+        for dependency in panel.depends_on:
+            dep_parent = dependency.split("__", 1)[0] if "__" in dependency else cabinet_id
+            if dep_parent != cabinet_id:
+                report.add_error(
+                    "CROSS_CABINET_DEPENDENCY",
+                    f"{panel.id} depends on {dependency} outside {cabinet_id}",
+                    panel.id,
                 )
     return report
 
@@ -225,19 +310,20 @@ def validate_panels(
     if len(ids) != len(panels):
         report.add_error("DUPLICATE_PANEL_ID", "panel ids must be unique")
     panel_by_id = {item.id: item for item in panels}
+    panel_by_role = index_by_role(panels)
     report.issues.extend(_validate_doors(spec, panels).issues)
     report.issues.extend(_validate_panel_basics(spec, panels, ids).issues)
-    carcass_ids = {
+    carcass_roles = {
         "left_side_panel",
         "right_side_panel",
         "top_panel",
         "bottom_panel",
     }
     report.issues.extend(
-        _validate_carcass_panels(layout, panel_by_id, carcass_ids).issues
+        _validate_carcass_panels(layout, panel_by_role, carcass_roles).issues
     )
     report.issues.extend(
-        _validate_back_panel(spec, layout, panel_by_id, carcass_ids).issues
+        _validate_back_panel(spec, layout, panel_by_role, carcass_roles).issues
     )
     report.issues.extend(_validate_toe_kick_panels(spec, layout, panels).issues)
     report.issues.extend(_validate_back_rails(spec, layout, panels).issues)
@@ -354,17 +440,17 @@ def _validate_panel_basics(
 
 def _validate_carcass_panels(
     layout: CabinetStructure,
-    panel_by_id: Mapping[str, PanelPlacement],
-    carcass_ids: set[str],
+    panel_by_role: Mapping[str, PanelPlacement],
+    carcass_roles: set[str],
 ) -> ValidationReport:
     report = ValidationReport(stage="panels_planned")
-    for panel_id in sorted(carcass_ids):
-        panel = panel_by_id.get(panel_id)
+    for role in sorted(carcass_roles):
+        panel = panel_by_role.get(role)
         if panel is None:
             report.add_error(
                 "MISSING_CARCASS_PANEL",
-                f"panel plan is missing {panel_id}",
-                panel_id,
+                f"panel plan is missing {role}",
+                role,
             )
             continue
         if (
@@ -373,8 +459,8 @@ def _validate_carcass_panels(
         ):
             report.add_error(
                 "CARCASS_DEPTH_MISMATCH",
-                f"{panel_id} must span the confirmed carcass depth",
-                panel_id,
+                f"{panel.id} must span the confirmed carcass depth",
+                panel.id,
             )
     return report
 
@@ -382,11 +468,11 @@ def _validate_carcass_panels(
 def _validate_back_panel(
     spec: FurnitureSpec,
     layout: CabinetStructure,
-    panel_by_id: Mapping[str, PanelPlacement],
-    carcass_ids: set[str],
+    panel_by_role: Mapping[str, PanelPlacement],
+    carcass_roles: set[str],
 ) -> ValidationReport:
     report = ValidationReport(stage="panels_planned")
-    back = panel_by_id.get("back_panel")
+    back = panel_by_role.get("back_panel")
     if back is None:
         report.add_error(
             "MISSING_BACK_PANEL",
@@ -441,9 +527,9 @@ def _validate_back_panel(
     if layout.back_mount == "cover":
         back_front_y = back.pos_y + back.size_y
         if any(
-            panel_by_id[panel_id].pos_y < back_front_y - 1e-6
-            for panel_id in carcass_ids
-            if panel_id in panel_by_id
+            panel_by_role[role].pos_y < back_front_y - 1e-6
+            for role in carcass_roles
+            if role in panel_by_role
         ):
             report.add_error(
                 "COVER_BACK_OVERLAP",
@@ -462,7 +548,7 @@ def _validate_toe_kick_panels(
     support_panels = [
         item
         for item in panels
-        if item.id.startswith("toe_kick_support_")
+        if (item.role or panel_role(item.id)).startswith("toe_kick_support_")
     ]
     expected_support_count = (
         resolve_toe_kick_support_count(
@@ -497,7 +583,7 @@ def _validate_toe_kick_panels(
     _mismatch_boxes(
         report,
         "TOE_KICK_SUPPORT_GEOMETRY_MISMATCH",
-        {item.id: item for item in support_panels},
+        {item.role or item.id: item for item in support_panels},
         toe_kick_support_boxes(spec, layout),
     )
     return report
@@ -542,7 +628,7 @@ def _validate_back_rails(
     _mismatch_boxes(
         report,
         "BACK_RAIL_GEOMETRY_MISMATCH",
-        {item.id: item for item in rail_panels},
+        {item.role or item.id: item for item in rail_panels},
         back_rail_boxes(spec, layout),
     )
     return report
@@ -602,7 +688,7 @@ def _validate_shelf_panels(
     _mismatch_boxes(
         report,
         "SHELF_PANEL_GEOMETRY_MISMATCH",
-        {item.id: item for item in shelf_panels},
+        {item.role or item.id: item for item in shelf_panels},
         expected,
     )
     return report
@@ -647,7 +733,7 @@ def _validate_drawer_panels(
     _mismatch_boxes(
         report,
         "DRAWER_PANEL_GEOMETRY_MISMATCH",
-        {item.id: item for item in drawer_panels},
+        {item.role or item.id: item for item in drawer_panels},
         expected,
     )
     return report

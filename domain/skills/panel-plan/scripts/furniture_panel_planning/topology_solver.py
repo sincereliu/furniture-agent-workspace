@@ -18,6 +18,7 @@ from typing import Any
 import yaml
 
 from .cabinet_frame import CabinetFrame, _negate as negate_axis
+from .cabinet_identity import DEFAULT_CABINET_ID, bind_panels_to_cabinet
 from .construction_geometry import (
     back_rail_boxes,
     drawer_panel_boxes,
@@ -59,6 +60,7 @@ def _resolve_semantic_face(face_name: str, frame: CabinetFrame) -> str:
 def solve_panel_placements(
     spec: FurnitureSpec,
     layout: CabinetStructure,
+    cabinet_id: str = DEFAULT_CABINET_ID,
 ) -> list[PanelPlacement]:
     """Compute all panel placements from topology + spec + layout.
 
@@ -68,11 +70,8 @@ def solve_panel_placements(
         Normalized cabinet dimensions and parameter choices.
     layout : CabinetStructure
         Panel-stage construction geometry and exact clear regions.
-
-    Returns
-    -------
-    list[PanelPlacement]
-        Every physical panel with size, position, and face semantics.
+    cabinet_id : str
+        Owning cabinet instance. Panel ids are qualified onto this parent.
     """
     topology = _load_topology(spec.furniture_type)
     frame = CabinetFrame(**topology["frame"])
@@ -122,6 +121,8 @@ def solve_panel_placements(
     else:
         if spec.shelves:
             placements.extend(_shelves_from_spec(spec, layout, frame))
+
+    bind_panels_to_cabinet(placements, cabinet_id)
 
     # ── Connection topology ──────────────────────────────────────
     joints = compute_joints(placements)

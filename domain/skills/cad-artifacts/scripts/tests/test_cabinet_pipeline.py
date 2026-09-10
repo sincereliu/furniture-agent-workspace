@@ -14,7 +14,7 @@ from runtime_paths import bootstrap_runtime_paths
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 from furniture_panel_planning.panel_spec import FurnitureSpec
-from panel_fixtures import furniture_spec
+from panel_fixtures import by_role, furniture_spec
 from furniture_workflow.cabinet_pipeline import plan_cabinet
 
 
@@ -32,7 +32,7 @@ class CabinetPipelineTests(unittest.TestCase):
         )
 
     def test_floor_cabinet_uses_expected_coordinate_convention(self) -> None:
-        placements = {placement.id: placement for placement in self.result.placements}
+        placements = by_role(self.result.placements)
 
         left = placements["left_side_panel"]
         self.assertEqual((left.pos_x, left.pos_y, left.pos_z), (0.0, 0.0, 0.0))

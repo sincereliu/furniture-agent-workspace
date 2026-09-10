@@ -17,7 +17,7 @@ from runtime_paths import bootstrap_runtime_paths
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 from furniture_panel_planning.panel_spec import FurnitureSpec
-from panel_fixtures import furniture_spec
+from panel_fixtures import by_role, furniture_spec
 from furniture_feature_tree.feature_tree_builder import panels_to_feature_tree
 from furniture_feature_tree.feature_tree_emitter import write_build123d_source
 from furniture_layout.layout_pipeline import plan_layout
@@ -56,11 +56,14 @@ class BackGroovePipelineTests(unittest.TestCase):
         self.assertIn("internal_width", asdict(self.structure))
 
     def test_panel_stage_owns_back_and_toe_kick_dimensions(self) -> None:
-        panels = {panel.id: panel for panel in self.placements}
+        panels = by_role(self.placements)
         back = panels["back_panel"]
         self.assertEqual((back.size_x, back.size_y, back.size_z), (776.0, 9.0, 926.0))
         self.assertEqual((back.pos_x, back.pos_y, back.pos_z), (12.0, 18.0, 62.0))
-        supports = [panel for panel in self.placements if panel.id.startswith("toe_kick_support_")]
+        supports = [
+            panel for panel in self.placements
+            if panel.role.startswith("toe_kick_support_")
+        ]
         self.assertEqual(len(supports), 1)
         self.assertEqual((supports[0].pos_x, supports[0].size_y), (391.0, 513.0))
 
@@ -69,14 +72,14 @@ class BackGroovePipelineTests(unittest.TestCase):
         self.assertEqual(
             set(operations),
             {
-                "left_side_back_groove",
-                "right_side_back_groove",
-                "top_back_groove",
-                "bottom_back_groove",
+                "cabinet_1__left_side_back_groove",
+                "cabinet_1__right_side_back_groove",
+                "cabinet_1__top_back_groove",
+                "cabinet_1__bottom_back_groove",
             },
         )
-        self.assertEqual(operations["left_side_back_groove"].size_y, 10.0)
-        self.assertEqual(operations["left_side_back_groove"].size_x, 6.0)
+        self.assertEqual(operations["cabinet_1__left_side_back_groove"].size_y, 10.0)
+        self.assertEqual(operations["cabinet_1__left_side_back_groove"].size_x, 6.0)
 
     def test_feature_tree_preserves_groove_cut_operations(self) -> None:
         self.assertEqual(self.feature_tree["schema_version"], 2)

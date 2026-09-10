@@ -48,10 +48,15 @@ class DrawerSlideConnector(Connector):
         """抽屉实例标识 = label 最后一个 "_" 分段（位置后缀）。
 
         约定：drawer_side_z300 / drawer_front_z300 同属抽屉 z300。
-        无后缀（如 drawer_side）时以 label 自身为 key。
+        无后缀（如 drawer_side）时以 role 自身为 key。
         """
-        parts = panel.label.split("_")
-        return parts[-1] if len(parts) >= 2 else panel.label
+        from furniture_panel_planning.cabinet_identity import panel_role
+
+        role = panel.role or panel_role(panel.label)
+        parts = role.split("_")
+        return f"{panel.parent_id}:{parts[-1]}" if panel.parent_id else (
+            parts[-1] if len(parts) >= 2 else role
+        )
 
     def match(self, panels: List[PanelRecord]) -> Dict[str, Any]:
         drawer_panels = [p for p in panels if self._is_drawer_panel(p)]

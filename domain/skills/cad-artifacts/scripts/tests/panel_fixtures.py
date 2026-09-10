@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from furniture_panel_planning.cabinet_identity import index_by_role
 from furniture_panel_planning.panel_spec import FurnitureSpec
+
+
+def by_role(items):
+    """Index placements or manufacturing panels by cabinet-local role."""
+    return index_by_role(items)
 
 
 def _even_shelves(count: int, *, height: float, board: float, toe_kick: float):

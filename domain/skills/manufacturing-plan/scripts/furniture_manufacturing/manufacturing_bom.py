@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, List, Mapping
 
+from furniture_panel_planning.cabinet_identity import index_by_role, qualify_panel_id
 from furniture_panel_planning.panel_spec import FurnitureSpec, resolve_back_mount
 from furniture_panel_planning.panel_models import PanelPlacement
 
@@ -157,6 +158,8 @@ def _manufacturing_panel(spec: FurnitureSpec, back_mount: str, placement: PanelP
         outer_face=placement.outer_face,
         cam_face=placement.cam_face,
         joints=list(placement.joints),
+        role=placement.role,
+        parent_id=placement.parent_id,
     )
 
 
@@ -173,58 +176,71 @@ def _back_groove_operations(
 ) -> list[MachiningOperation]:
     if back_mount != "groove":
         return []
-    by_id = {panel.id: panel for panel in placements}
+    operations: list[MachiningOperation] = []
+    by_parent: dict[str, list[PanelPlacement]] = {}
+    for panel in placements:
+        by_parent.setdefault(panel.parent_id or "", []).append(panel)
     required = {"left_side_panel", "right_side_panel", "top_panel", "bottom_panel", "back_panel"}
-    if not required.issubset(by_id):
-        return []
-    back = by_id["back_panel"]
     board = spec.board_thickness
     depth = spec.groove_depth
     groove_width = spec.back_thickness + spec.groove_clearance
     groove_y = spec.back_offset
     common = {"operation_type": "cut_box", "size_y": groove_width, "pos_y": groove_y}
-    return [
-        MachiningOperation(
-            id="left_side_back_groove",
-            target_panel="left_side_panel",
-            size_x=depth,
-            size_z=back.size_z,
-            pos_x=board - depth,
-            pos_z=back.pos_z,
-            note="左侧板背板槽",
-            **common,
-        ),
-        MachiningOperation(
-            id="right_side_back_groove",
-            target_panel="right_side_panel",
-            size_x=depth,
-            size_z=back.size_z,
-            pos_x=spec.width - board,
-            pos_z=back.pos_z,
-            note="右侧板背板槽",
-            **common,
-        ),
-        MachiningOperation(
-            id="top_back_groove",
-            target_panel="top_panel",
-            size_x=spec.width - 2 * board,
-            size_z=depth,
-            pos_x=board,
-            pos_z=spec.height - board,
-            note="顶板背板槽",
-            **common,
-        ),
-        MachiningOperation(
-            id="bottom_back_groove",
-            target_panel="bottom_panel",
-            size_x=spec.width - 2 * board,
-            size_z=depth,
-            pos_x=board,
-            pos_z=by_id["bottom_panel"].pos_z + board - depth,
-            note="底板背板槽",
-            **common,
-        ),
-    ]
+    for cabinet_id, cabinet_panels in by_parent.items():
+        by_role = index_by_role(cabinet_panels, parent_id=cabinet_id or None)
+        if not required.issubset(by_role):
+            continue
+        back = by_role["back_panel"]
+        prefix = f"{cabinet_id}__" if cabinet_id else ""
+
+        def _target(role: str) -> str:
+            return qualify_panel_id(cabinet_id, role) if cabinet_id else role
+
+        operations.extend(
+            [
+                MachiningOperation(
+                    id=f"{prefix}left_side_back_groove",
+                    target_panel=_target("left_side_panel"),
+                    size_x=depth,
+                    size_z=back.size_z,
+                    pos_x=board - depth,
+                    pos_z=back.pos_z,
+                    note="左侧板背板槽",
+                    **common,
+                ),
+                MachiningOperation(
+                    id=f"{prefix}right_side_back_groove",
+                    target_panel=_target("right_side_panel"),
+                    size_x=depth,
+                    size_z=back.size_z,
+                    pos_x=spec.width - board,
+                    pos_z=back.pos_z,
+                    note="右侧板背板槽",
+                    **common,
+                ),
+                MachiningOperation(
+                    id=f"{prefix}top_back_groove",
+                    target_panel=_target("top_panel"),
+                    size_x=spec.width - 2 * board,
+                    size_z=depth,
+                    pos_x=board,
+                    pos_z=spec.height - board,
+                    note="顶板背板槽",
+                    **common,
+                ),
+                MachiningOperation(
+                    id=f"{prefix}bottom_back_groove",
+                    target_panel=_target("bottom_panel"),
+                    size_x=spec.width - 2 * board,
+                    size_z=depth,
+                    pos_x=board,
+                    pos_z=by_role["bottom_panel"].pos_z + board - depth,
+                    note="底板背板槽",
+                    **common,
+                ),
+            ]
+        )
+    return operations
 
 
 def estimate_hardware(
