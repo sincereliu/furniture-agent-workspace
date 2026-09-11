@@ -5,6 +5,8 @@ from __future__ import annotations
 from math import isfinite, sqrt
 from typing import Any, Mapping
 
+from .cabinet_identity import require_primary_handoff
+
 
 _LINEAR_UNIT_TO_MM = {
     "mm": 1.0,
@@ -90,13 +92,7 @@ def audit_panel_quantities(
     """
 
     config = dict(config or {})
-    spec = panel_output.get("spec")
-    structure = panel_output.get("structure")
-    panels = panel_output.get("panels")
-    if not isinstance(spec, Mapping) or not isinstance(structure, Mapping):
-        raise ValueError("panel output requires spec and structure objects")
-    if not isinstance(panels, list):
-        raise ValueError("panel output requires a panels list")
+    spec, structure, panels = require_primary_handoff(panel_output)
 
     registry, engine = _unit_engine()
     issues: list[dict[str, str]] = []

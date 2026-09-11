@@ -65,23 +65,25 @@ def index_by_role(items: Iterable[Any], *, parent_id: str | None = None) -> dict
     return indexed
 
 
+_PANEL_OUTPUT_FIELDS = frozenset({"cabinets"})
+
+
 def cabinets_from_output(output: Mapping[str, Any]) -> list[dict[str, Any]]:
-    """Return cabinet units from current or legacy panels_planned output."""
+    """Return cabinet units from panels_planned output. No flattened top-level copy."""
+    unknown = sorted(set(output) - _PANEL_OUTPUT_FIELDS)
+    if unknown:
+        raise ValueError(
+            "panel stage output does not support: " + ", ".join(unknown)
+        )
     raw = output.get("cabinets")
-    if isinstance(raw, list) and raw:
-        return [dict(item) for item in raw if isinstance(item, Mapping)]
-    if not isinstance(output.get("spec"), Mapping):
-        return []
-    cabinet_id = admit_cabinet_id(output.get("cabinet_id"), fallback=DEFAULT_CABINET_ID)
-    return [
-        {
-            "id": cabinet_id,
-            "spec": output.get("spec"),
-            "structure": output.get("structure"),
-            "back_mount_resolution": output.get("back_mount_resolution"),
-            "panels": list(output.get("panels") or []),
-        }
-    ]
+    if not isinstance(raw, list) or not raw:
+        raise ValueError("panel stage output requires cabinets")
+    cabinets: list[dict[str, Any]] = []
+    for item in raw:
+        if not isinstance(item, Mapping):
+            raise ValueError("each cabinet must be an object")
+        cabinets.append(dict(item))
+    return cabinets
 
 
 def primary_cabinet(output: Mapping[str, Any]) -> dict[str, Any]:
@@ -89,6 +91,24 @@ def primary_cabinet(output: Mapping[str, Any]) -> dict[str, Any]:
     if not cabinets:
         raise ValueError("panel stage output requires at least one cabinet")
     return cabinets[0]
+
+
+def require_primary_handoff(
+    output: Mapping[str, Any],
+) -> tuple[Mapping[str, Any], Mapping[str, Any], list[Any]]:
+    """Return spec, structure, and panels from the first cabinet."""
+    cabinet = primary_cabinet(output)
+    spec = cabinet.get("spec")
+    structure = cabinet.get("structure")
+    panels = cabinet.get("panels")
+    cabinet_id = cabinet.get("id") or DEFAULT_CABINET_ID
+    if not isinstance(spec, Mapping):
+        raise ValueError(f"{cabinet_id} requires spec")
+    if not isinstance(structure, Mapping):
+        raise ValueError(f"{cabinet_id} requires structure")
+    if not isinstance(panels, list):
+        raise ValueError(f"{cabinet_id} requires panels")
+    return spec, structure, panels
 
 
 def bind_panels_to_cabinet(placements: list[Any], cabinet_id: str) -> list[Any]:

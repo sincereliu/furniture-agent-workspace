@@ -33,6 +33,10 @@ from furniture_manufacturing.production_simulation import simulate_production
 from furniture_manufacturing.prototype_experiment import design_prototype_experiment
 from furniture_manufacturing.test_statistics import analyze_prototype_results
 from furniture_manufacturing.validation import validate_manufacturing
+from furniture_panel_planning.cabinet_identity import (
+    primary_cabinet,
+    require_primary_handoff,
+)
 from furniture_panel_planning.design_optimization import (
     materialize_optimization_candidate,
     optimize_panel_design,
@@ -175,7 +179,7 @@ class FurnitureOrchestrator:
         )
         revision.stage_outputs[changed_stage.value] = deepcopy(output)
         if changed_stage == WorkflowStage.PANELS_PLANNED:
-            revised_spec = output.get("spec", {})
+            revised_spec = primary_cabinet(output).get("spec", {})
             panel_input = revision.stage_inputs.setdefault("panels", {})
             parameters = panel_input.setdefault("parameters", {})
             if isinstance(revised_spec, dict) and isinstance(parameters, dict):
@@ -964,20 +968,24 @@ class FurnitureOrchestrator:
 
     @staticmethod
     def _spec_from_revision(revision: Revision) -> FurnitureSpec:
-        output = revision.stage_outputs[WorkflowStage.PANELS_PLANNED.value]
-        return FurnitureSpec.from_dict(output["spec"])
+        spec, _, _ = require_primary_handoff(
+            revision.stage_outputs[WorkflowStage.PANELS_PLANNED.value]
+        )
+        return FurnitureSpec.from_dict(spec)
 
     @staticmethod
     def _structure_from_revision(revision: Revision) -> CabinetStructure:
-        output = revision.stage_outputs[WorkflowStage.PANELS_PLANNED.value]
-        return CabinetStructure.from_dict(output["structure"])
+        _, structure, _ = require_primary_handoff(
+            revision.stage_outputs[WorkflowStage.PANELS_PLANNED.value]
+        )
+        return CabinetStructure.from_dict(structure)
 
     @staticmethod
     def _placements_from_revision(revision: Revision) -> list[PanelPlacement]:
-        output = revision.stage_outputs[WorkflowStage.PANELS_PLANNED.value]
-        return [
-            PanelPlacement.from_dict(item) for item in output.get("panels", [])
-        ]
+        _, _, panels = require_primary_handoff(
+            revision.stage_outputs[WorkflowStage.PANELS_PLANNED.value]
+        )
+        return [PanelPlacement.from_dict(item) for item in panels]
 
     @staticmethod
     def _panels_from_revision(revision: Revision) -> list[PanelRecord]:

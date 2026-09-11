@@ -59,12 +59,4 @@ def plan_panel_cabinets(
                 "panels": [asdict(item) for item in panels],
             }
         )
-    primary = cabinets[0]
-    return {
-        "cabinets": cabinets,
-        "cabinet_id": primary["id"],
-        "spec": primary["spec"],
-        "structure": primary["structure"],
-        "back_mount_resolution": primary["back_mount_resolution"],
-        "panels": primary["panels"],
-    }
+    return {"cabinets": cabinets}

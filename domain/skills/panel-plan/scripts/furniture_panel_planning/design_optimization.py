@@ -11,6 +11,7 @@ from typing import Any, Mapping
 
 from furniture_design_intent.design_intent import DesignIntent
 
+from .cabinet_identity import require_primary_handoff
 from .panel_pipeline import plan_panel_stage
 from .panel_spec import PANEL_PARAMETER_FIELDS
 
@@ -61,8 +62,7 @@ def _normalize_domains(raw: Any) -> dict[str, list[Any]]:
 
 
 def _metrics(output: Mapping[str, Any]) -> dict[str, float]:
-    panels = output["panels"]
-    structure = output["structure"]
+    _, structure, panels = require_primary_handoff(output)
     material_volume = sum(
         float(item["size_x"])
         * float(item["size_y"])
@@ -211,9 +211,7 @@ def optimize_panel_design(
             f"max_evaluations={max_evaluations}"
         )
 
-    base_spec = panel_output.get("spec")
-    if not isinstance(base_spec, Mapping):
-        raise ValueError("panel output requires a spec object")
+    base_spec, _, _ = require_primary_handoff(panel_output)
     base_options = {
         name: base_spec[name]
         for name in PANEL_PARAMETER_FIELDS
@@ -227,6 +225,7 @@ def optimize_panel_design(
         options = {**base_options, **changes}
         try:
             output = plan_panel_stage(intent, options)
+            spec, _, _ = require_primary_handoff(output)
             metrics = _metrics(output)
         except (KeyError, TypeError, ValueError) as exc:
             rejected.append({"parameters": changes, "reason": str(exc)})
@@ -238,9 +237,9 @@ def optimize_panel_design(
             {
                 "parameters": changes,
                 "resolved_parameters": {
-                    name: output["spec"][name]
+                    name: spec[name]
                     for name in PANEL_PARAMETER_FIELDS
-                    if name in output["spec"]
+                    if name in spec
                 },
                 "objectives": {name: metrics[name] for name in objectives},
                 "metrics": metrics,

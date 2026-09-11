@@ -39,8 +39,6 @@ def validate_panel_output(
     report = ValidationReport(stage="panels_planned")
     try:
         cabinets = cabinets_from_output(output)
-        if not cabinets:
-            raise ValueError("panel stage output requires at least one cabinet")
         cabinet_ids = [str(item.get("id", "")) for item in cabinets]
         if any(not item for item in cabinet_ids):
             raise ValueError("each cabinet requires an id")

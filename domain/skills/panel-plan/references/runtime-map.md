@@ -8,6 +8,10 @@
 - `plan_panel_cabinets()`：多柜组合；`cabinet_id` 在准入 `FurnitureSpec` 前弹出。
 - Orchestrator 从 `revision.stage_inputs.panels.parameters` 取提案。首次生成先写入该对象再 `run_next()`，或 `retry_stage("panels_planned", stage_input={"parameters": ...})`。
 
+## 交接
+
+下游（制造、旁路分析、`revise_stage_output`）只通过 `cabinets_from_output()` / `require_primary_handoff()` 读板件结果。检查点只有 `cabinets[]`；交互主流程取第一台柜的 `spec` 与 `panels`。顶层不得再写 `spec/structure/panels/cabinet_id`。
+
 ## 模块
 
 | 模块 | 职责 | 边界理由 |

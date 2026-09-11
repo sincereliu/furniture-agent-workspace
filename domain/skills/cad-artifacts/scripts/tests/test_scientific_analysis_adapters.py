@@ -190,9 +190,9 @@ class ScientificAnalysisAdapterTests(unittest.TestCase):
         project = self._project_through(WorkflowStage.PANELS_PLANNED)
         revision = project.latest
         self.orchestrator.run_stage_analysis(project, "panel_unit_audit")
-        revision.stage_outputs[WorkflowStage.PANELS_PLANNED.value]["spec"][
-            "board_thickness"
-        ] = 19.0
+        revision.stage_outputs[WorkflowStage.PANELS_PLANNED.value]["cabinets"][0][
+            "spec"
+        ]["board_thickness"] = 19.0
 
         report = validate_delivery(
             revision.manifest,

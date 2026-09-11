@@ -20,7 +20,8 @@ from furniture_panel_planning.construction_geometry import (
     drawer_panel_boxes,
     toe_kick_support_boxes,
 )
-from furniture_panel_planning.panel_pipeline import plan_panel_cabinets
+from furniture_panel_planning.cabinet_identity import require_primary_handoff
+from furniture_panel_planning.panel_pipeline import plan_panel_cabinets, plan_panel_stage
 from furniture_panel_planning.panel_planning import plan_panels
 from furniture_panel_planning.panel_rules import (
     resolve_toe_kick_support_count,
@@ -183,6 +184,7 @@ class PanelRuleContractTests(unittest.TestCase):
                 (intent, {**panel_parameters(), "cabinet_id": "cab_b"}),
             )
         )
+        self.assertEqual(set(output), {"cabinets"})
         self.assertEqual([item["id"] for item in output["cabinets"]], ["cab_a", "cab_b"])
         roles_a = {panel_role(item["id"]) for item in output["cabinets"][0]["panels"]}
         roles_b = {panel_role(item["id"]) for item in output["cabinets"][1]["panels"]}
@@ -226,6 +228,30 @@ class PanelRuleContractTests(unittest.TestCase):
         listed = set(re.findall(r"`([a-z][a-z0-9_]*)`", match.group("body")))
         self.assertEqual(listed, PANEL_PARAMETER_FIELDS | {"cabinet_id"})
         self.assertTrue(listed.isdisjoint(MANUFACTURING_SPEC_FIELDS))
+
+    def test_panel_output_is_only_cabinets(self) -> None:
+        intent = DesignIntent(
+            furniture_category="floor_cabinet",
+            finished_envelope=FinishedEnvelope(800, 600, 1000),
+            confirmed=True,
+        )
+        output = plan_panel_stage(intent, panel_parameters())
+        self.assertEqual(set(output), {"cabinets"})
+        spec, structure, panels = require_primary_handoff(output)
+        self.assertEqual(spec["board_thickness"], 18.0)
+        self.assertIn("internal_width", structure)
+        self.assertTrue(panels)
+
+        with self.assertRaisesRegex(ValueError, "requires cabinets"):
+            require_primary_handoff({})
+        with self.assertRaisesRegex(ValueError, "does not support"):
+            require_primary_handoff(
+                {
+                    "cabinets": output["cabinets"],
+                    "spec": spec,
+                    "panels": panels,
+                }
+            )
 
 
 if __name__ == "__main__":

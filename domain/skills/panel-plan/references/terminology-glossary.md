@@ -49,7 +49,7 @@
 - `back_offset` 表示背板基准相对柜体背侧的偏移；`cover` 模式下背板位于 `Y=0`，不再消费该偏移来决定内部起点。
 - `panel` 在本阶段指制造板件记录，不指 CAD 实体、网格或 feature tree 节点。
 - `structure` 在本阶段指确定性柜体结构几何与内部净空，不指房间布局结果。
-- `cabinets[]` 是板件阶段的对象树；顶层 `spec/structure/panels` 只镜像第一台柜，改归属以 `cabinets[]` 为准。
+- `cabinets[]` 是板件阶段的对象树和检查点唯一形状；`spec/structure/panels` 只写在各柜体内。
 
 ## 禁止扩散的历史叫法
 

@@ -4,7 +4,7 @@
 
 ## 总原则
 
-- `panels_planned` 的唯一事实来源仍是 `spec`、`structure`、`back_mount_resolution` 和 `panels`。
+- `panels_planned` 的唯一事实来源是 `cabinets[]` 里每台柜的 `spec`、`structure`、`back_mount_resolution` 和 `panels`。
 - 旁路分析只读取当前阶段输出，写入 `stage_analyses.panels_planned`。
 - 旁路分析不能静默修改板件事实输出，不能替代结构化准入，也不能直接变成制造或 CAD 输入。
 

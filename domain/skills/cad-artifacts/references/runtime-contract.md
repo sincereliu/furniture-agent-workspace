@@ -89,7 +89,7 @@ store/<project-id>/
 }
 ```
 
-`width/depth/height` 必须在意图确认前明确提供；不再用类别预设替代客户确认的外包络。板件输入必须完整提交全部规范字段；代码不按柜型静默补默认方案。完整值经确定性准入后才写入 `panels_planned.spec`。
+`width/depth/height` 必须在意图确认前明确提供；不再用类别预设替代客户确认的外包络。板件输入必须完整提交全部规范字段；代码不按柜型静默补默认方案。完整值经确定性准入后才写入 `panels_planned.cabinets[].spec`。
 
 契约为扁平 JSON。规范字段使用 `furniture_category/width/depth/height`；适配器只把外包络字段转成 `DesignIntent`，把板件规范字段路由到 `stage_inputs.panels`，把制造选项（含 `door_hinge_side`、`movable_shelf_connector`）和外观路由到 `stage_inputs.manufacturing`；`room/placement` 只供独立房间布局 API 使用。扁平请求不再接受历史 `type`，该字段仅在旧序列化 spec 加载时恢复。历史 `furniture_type`/`overall_size`/`mount_mode`/`mounting_height` 仍可映射到规范名。可选 `constraints` 必须有阶段映射；未分类约束在协议路由时拒绝。扁平示例里的 `door_hinge_side` 是制造选项，不是板件规范字段。
 
