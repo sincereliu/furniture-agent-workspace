@@ -15,6 +15,7 @@ description: 用于 design_intent 阶段，也是家具流水线的入口。当�
 2. **生成草稿**：字段只有 `furniture_category`、成品外包络 `finished_envelope`、吊柜挂装方式 `hanging_mode` 与挂高 `hanging_height_mm`、以及工作流元数据。
 3. **预校验**：草稿尺寸可为 `null`；确认前只查——类别已归一化、宽/深/高均为正数、吊柜挂装完整（自由挂高时挂高为正数）、地柜挂装字段为空。
 4. **展示并等确认**：只展示外包络与挂装方式。用户没给的值标成假设；缺尺寸或吊柜挂装时先追问，不要编造后当作已确认事实。
+5. **冻结**：`confirm_stage(design_intent)` 通过后，Orchestrator 把这份 `DesignIntent` 写成不可改的 JSON。之后板件阶段只读冻结意图；要再出一版板件用 `retry_stage()`，不要回头改意图。文件位置见 [运行时契约](../cad-artifacts/references/runtime-contract.md)。
 
 ## 本阶段不做什么
 
@@ -28,5 +29,5 @@ description: 用于 design_intent 阶段，也是家具流水线的入口。当�
 
 - 运行时仅含 `DesignIntent`（含吊柜挂装方式 `hanging_mode` 与挂高 `hanging_height_mm`）、`FinishedEnvelope`、目录中的可执行规范类别和外包络校验；不得导入或定义下游 `FurnitureSpec`。
 - CLI/API 完整请求由 `furniture_workflow/input_adapter.py` 拆成 `DesignIntent` 与 `stage_inputs`。扁平的 `furniture_category`、宽深高、挂装方式和挂高映射为设计意图的规范字段；门数、板厚等下游参数写入对应阶段输入，不进入 `DesignIntent`。
-- 意图变化用 `FurnitureOrchestrator.revise()` 新建 Revision；不得另建规格、状态机或入口。
+- 确认后的 `DesignIntent` 是冻结 JSON，由 Orchestrator 持久化；意图变化用 `FurnitureOrchestrator.revise()` 新建 Revision，不得另建规格、状态机或入口。
 - 本阶段的阻塞项只允许是类别、外包络尺寸或吊柜挂装方式。

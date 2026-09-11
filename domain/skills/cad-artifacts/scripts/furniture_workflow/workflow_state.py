@@ -101,6 +101,12 @@ class WorkflowState:
     def record(self, note: str) -> None:
         self.history.append(WorkflowEvent(self.current, utc_now(), note))
 
+    def move_to(self, stage: WorkflowStage, note: str = "") -> None:
+        if self.current == WorkflowStage.FAILED:
+            raise ValueError("failed workflow cannot move")
+        self.current = stage
+        self.history.append(WorkflowEvent(stage, utc_now(), note))
+
     def fail(self, note: str) -> None:
         self.current = WorkflowStage.FAILED
         self.history.append(WorkflowEvent(WorkflowStage.FAILED, utc_now(), note))

@@ -19,5 +19,5 @@ description: 用于 feature_tree_planned 阶段。当用户说"建模顺序""哪
 ## 边界
 
 - 运行时在 `scripts/furniture_feature_tree/`。
-- 修改特征树时使用 `revise_stage_output()`，使本阶段及下游失效。
+- 同一已确认制造结果上再试特征树用 `retry_stage()`；直接改已有特征树用 `revise_stage_output()`，使本阶段及下游失效。
 - 不直调发射器、CAD Bridge、外部 CAD CLI，也不定义第二套格式或运行时。

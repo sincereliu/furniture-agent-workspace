@@ -22,7 +22,7 @@ FurnitureOrchestrator
 
 ## 六阶段交互
 
-交互式 Agent 每次只运行一个阶段：`confirm_stage()` 确认当前阶段，`run_next()` 进入下一阶段。阶段完成后，用户检查 Revision 中对应的 `stage_outputs`；未确认时再次调用不会越过当前检查点。
+交互式 Agent 每次只运行一个阶段：`confirm_stage()` 确认当前阶段，`run_next()` 进入下一阶段。意图确认后冻成 JSON；对同一份冻结意图可用 `retry_stage()` 再试板件等规划阶段，用 `select_stage_attempt()` 选用某次尝试。阶段完成后，用户检查 Revision 中对应的 `stage_outputs`；未确认时 `run_next()` 不会越过当前检查点。
 
 ```text
 1. design_intent
@@ -61,7 +61,7 @@ FurnitureOrchestrator
 }
 ```
 
-设计意图变化使用 `revise()` 从第 1 阶段建立新 Revision。修改 `panels_planned`、`manufacturing_planned` 或 `feature_tree_planned` 时使用 `revise_stage_output()`：新 Revision 只保留修改点之前已确认的结果，修改点及全部下游重新确认或生成。独立房间布局直接重新运行，不建立或使主流程 Revision 失效。完整批处理请求中的后续参数保存在 `stage_inputs`，不会污染 `DesignIntent`；`stage_inputs`、`stage_outputs`、`approved_stages` 和工作流历史会随 Project JSON 一起保存。
+设计意图变化使用 `revise()` 从第 1 阶段建立新 Revision。同一冻结意图上再试规划使用 `retry_stage()`；直接改已有 `panels_planned`、`manufacturing_planned` 或 `feature_tree_planned` 结果时使用 `revise_stage_output()`：新 Revision 只保留修改点之前已确认的结果，修改点及全部下游重新确认或生成。独立房间布局直接重新运行，不建立或使主流程 Revision 失效。完整批处理请求中的后续参数保存在 `stage_inputs`，不会污染 `DesignIntent`；`stage_inputs`、`stage_outputs`、`stage_attempts`、`approved_stages` 和工作流历史会随 Project JSON 一起保存，冻结意图与各次 attempt 另有独立 JSON 文件。
 
 `generate_furniture.py` 和 `execute_spec()` 是明确的一次性批处理入口，可以自动确认已通过验证的中间阶段；它们不用于交互式逐步设计。
 

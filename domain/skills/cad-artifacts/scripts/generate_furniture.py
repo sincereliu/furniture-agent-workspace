@@ -21,6 +21,7 @@ from runtime_paths import bootstrap_runtime_paths
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
+from furniture_workflow.workflow_store import JsonProjectStore
 
 
 def main(
@@ -50,7 +51,8 @@ def main(
 
     try:
         application = orchestrator or FurnitureOrchestrator(
-            workspace_root=WORKSPACE_ROOT
+            workspace_root=WORKSPACE_ROOT,
+            project_store=JsonProjectStore(WORKSPACE_ROOT / "store"),
         )
         orchestration = application.execute_spec(
             artifact_name,

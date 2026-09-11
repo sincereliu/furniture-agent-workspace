@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import json
 import shutil
 import sys
 import tempfile
@@ -66,12 +67,16 @@ def fake_orchestrator(temporary_root: Path) -> FurnitureOrchestrator:
     return FurnitureOrchestrator(
         workspace_root=WORKSPACE_ROOT,
         cad_bridge=bridge,
+        project_store=None,
     )
 
 
 class FurnitureOrchestratorTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.orchestrator = FurnitureOrchestrator(workspace_root=WORKSPACE_ROOT)
+        self.orchestrator = FurnitureOrchestrator(
+            workspace_root=WORKSPACE_ROOT,
+            project_store=None,
+        )
 
     def test_interactive_workflow_pauses_at_every_stage(self) -> None:
         project = self.orchestrator.create_project(
@@ -482,7 +487,11 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         self.orchestrator.confirm_intent(project)
         revision = self.orchestrator.run_next(project).revision
 
-        self.assertEqual(revision.workflow.current, WorkflowStage.FAILED)
+        self.assertEqual(revision.workflow.current, WorkflowStage.DESIGN_INTENT)
+        self.assertTrue(revision.is_stage_approved(WorkflowStage.DESIGN_INTENT))
+        attempt = revision.latest_attempt(WorkflowStage.PANELS_PLANNED)
+        self.assertIsNotNone(attempt)
+        self.assertFalse(attempt.passed)
         self.assertIn("panel stage does not support", revision.validations[-1].issues[0].message)
 
     def test_unclassified_constraint_is_rejected_by_protocol_routing(self) -> None:
@@ -519,7 +528,13 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             ),
             through_stage=WorkflowStage.PANELS_PLANNED,
         )
-        self.assertEqual(result.revision.workflow.current, WorkflowStage.FAILED)
+        self.assertEqual(
+            result.revision.workflow.current,
+            WorkflowStage.DESIGN_INTENT,
+        )
+        self.assertFalse(
+            result.revision.latest_attempt(WorkflowStage.PANELS_PLANNED).passed
+        )
         self.assertIn(
             "must be numeric",
             result.revision.validations[-1].issues[0].message,
@@ -531,7 +546,13 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             cabinet_data(back_mount="groove", groove_depth="invalid"),
             through_stage=WorkflowStage.PANELS_PLANNED,
         )
-        self.assertEqual(result.revision.workflow.current, WorkflowStage.FAILED)
+        self.assertEqual(
+            result.revision.workflow.current,
+            WorkflowStage.DESIGN_INTENT,
+        )
+        self.assertFalse(
+            result.revision.latest_attempt(WorkflowStage.PANELS_PLANNED).passed
+        )
         self.assertIn(
             "must be numeric",
             result.revision.validations[-1].issues[0].message,
@@ -632,7 +653,13 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             through_stage=WorkflowStage.PANELS_PLANNED,
         )
 
-        self.assertEqual(result.revision.workflow.current, WorkflowStage.FAILED)
+        self.assertEqual(
+            result.revision.workflow.current,
+            WorkflowStage.DESIGN_INTENT,
+        )
+        self.assertFalse(
+            result.revision.latest_attempt(WorkflowStage.PANELS_PLANNED).passed
+        )
         self.assertIn(
             "at most 2 doors",
             result.revision.validations[-1].issues[0].message,
@@ -754,6 +781,116 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         panel_output = result.revision.stage_outputs["panels_planned"]
         self.assertEqual(panel_output["spec"]["board_thickness"], 18.0)
         self.assertEqual(panel_output["structure"]["back_mount"], "groove")
+        self.assertEqual(
+            result.revision.selected_attempts["panels_planned"],
+            1,
+        )
+
+    def test_confirming_intent_freezes_json_and_panel_retries_reuse_it(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            store = JsonProjectStore(temporary_directory)
+            orchestrator = FurnitureOrchestrator(
+                workspace_root=WORKSPACE_ROOT,
+                project_store=store,
+            )
+            project = orchestrator.create_project(
+                "可重试柜体",
+                cabinet_intent(),
+                stage_inputs=stage_inputs_from_spec(panel_parameters(n_doors=2)),
+            )
+            orchestrator.confirm_intent(project)
+            frozen_path = store.intent_path(
+                project.id,
+                project.latest.intent_sha256,
+            )
+            self.assertTrue(frozen_path.is_file())
+            frozen = json.loads(frozen_path.read_text(encoding="utf-8"))
+            self.assertTrue(frozen["confirmed"])
+            self.assertEqual(frozen["furniture_category"], "floor_cabinet")
+            intent_sha = project.latest.intent_sha256
+
+            first = orchestrator.run_next(project)
+            self.assertEqual(
+                first.revision.stage_outputs["panels_planned"]["spec"]["n_doors"],
+                2,
+            )
+            second = orchestrator.retry_stage(
+                project,
+                WorkflowStage.PANELS_PLANNED,
+                stage_input={"parameters": panel_parameters(n_doors=1)},
+            )
+            self.assertEqual(second.revision.id, first.revision.id)
+            self.assertEqual(second.revision.intent_sha256, intent_sha)
+            self.assertEqual(len(second.revision.attempts_for("panels_planned")), 2)
+            self.assertEqual(
+                second.revision.stage_outputs["panels_planned"]["spec"]["n_doors"],
+                1,
+            )
+            self.assertFalse(
+                second.revision.is_stage_approved(WorkflowStage.PANELS_PLANNED)
+            )
+            attempt_dir = store.attempt_dir(
+                project.id,
+                second.revision.id,
+                "panels_planned",
+                2,
+            )
+            self.assertTrue((attempt_dir / "output.json").is_file())
+
+            orchestrator.select_stage_attempt(
+                project,
+                WorkflowStage.PANELS_PLANNED,
+                1,
+            )
+            self.assertEqual(
+                project.latest.stage_outputs["panels_planned"]["spec"]["n_doors"],
+                2,
+            )
+
+    def test_failed_panel_attempt_can_be_retried_without_new_intent(self) -> None:
+        project = self.orchestrator.create_project(
+            "失败后重试",
+            cabinet_intent(),
+            stage_inputs=stage_inputs_from_spec(
+                {"structure": {"mystery_joint": "unknown"}}
+            ),
+        )
+        self.orchestrator.confirm_intent(project)
+        failed = self.orchestrator.run_next(project).revision
+        self.assertEqual(failed.workflow.current, WorkflowStage.DESIGN_INTENT)
+        self.assertFalse(failed.latest_attempt("panels_planned").passed)
+
+        recovered = self.orchestrator.retry_stage(
+            project,
+            WorkflowStage.PANELS_PLANNED,
+            stage_input={"parameters": panel_parameters()},
+        ).revision
+        self.assertEqual(recovered.id, failed.id)
+        self.assertEqual(recovered.workflow.current, WorkflowStage.PANELS_PLANNED)
+        self.assertTrue(recovered.latest_attempt("panels_planned").passed)
+        self.assertIn("panels_planned", recovered.stage_outputs)
+
+    def test_new_intent_revision_does_not_keep_panel_attempts(self) -> None:
+        project = self.orchestrator.create_project(
+            "改意图",
+            cabinet_intent(),
+            stage_inputs=stage_inputs_from_spec(panel_parameters()),
+        )
+        self.orchestrator.confirm_intent(project)
+        self.orchestrator.run_next(project)
+        parent = project.latest
+        self.assertTrue(parent.attempts_for("panels_planned"))
+
+        revised = self.orchestrator.revise(
+            project,
+            DesignIntent(
+                furniture_category="floor_cabinet",
+                finished_envelope=FinishedEnvelope(900, 600, 1000),
+            ),
+        )
+        self.assertEqual(revised.parent_revision_id, parent.id)
+        self.assertEqual(revised.attempts_for("panels_planned"), [])
+        self.assertNotIn("panels_planned", revised.stage_outputs)
 
 
 if __name__ == "__main__":

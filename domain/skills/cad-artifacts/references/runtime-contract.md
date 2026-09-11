@@ -23,13 +23,15 @@
 5. `cad_generated`
 6. `delivery_validated`
 
-输出在 `revision.stage_outputs[stage.value]`，待后续处理的参数在 `revision.stage_inputs`，确认在 `approved_stages`，历史在 `workflow.history`；`JsonProjectStore` 一并持久化。
+输出在 `revision.stage_outputs[stage.value]`，待后续处理的参数在 `revision.stage_inputs`，确认在 `approved_stages`，规划尝试在 `stage_attempts`，历史在 `workflow.history`。`JsonProjectStore` 把 Project 写到 `store/<project-id>/project.json`，确认意图时额外写出冻结文件，每次规划尝试写出独立 attempt 目录。
 
 交互调用：
 
 ```python
-orchestrator.confirm_stage(project)
-result = orchestrator.run_next(project)
+orchestrator.confirm_stage(project)          # 确认当前检查点；意图确认后冻结 JSON
+result = orchestrator.run_next(project)     # 生成下一阶段的第一次尝试
+orchestrator.retry_stage(project, "panels_planned", stage_input={"parameters": ...})
+orchestrator.select_stage_attempt(project, "panels_planned", 1)
 ```
 
 进入 CAD 阶段须显式给出输出：
@@ -44,9 +46,25 @@ result = orchestrator.run_next(
 
 `run_next()`/默认 `run_until()` 不越过未确认检查点。Agent 返回当前输出后等待确认，不用批处理代替确认。
 
-- 意图变化：`revise(project, new_intent)`，从 `design_intent` 开始。
-- `panels_planned`、`manufacturing_planned`、`feature_tree_planned` 变化：`revise_stage_output(project, stage, edited_output)`。
+- 意图确认：`confirm_stage(project, "design_intent")` 把 `confirmed=true` 的 `DesignIntent` 冻成 `store/<project-id>/intents/<intent-sha256>.json`。之后板件及后续规划只读这份冻结意图。
+- 同一冻结意图再试规划：`retry_stage(project, stage, stage_input=...)`。适用于未确认或需作废下游的 `panels_planned`、`manufacturing_planned`、`feature_tree_planned`。失败只记录该次 attempt，不把 Revision 标为 `FAILED`。
+- 选用某次通过的尝试：`select_stage_attempt(project, stage, number)`，再 `confirm_stage()`。
+- 意图变化：`revise(project, new_intent)`，从 `design_intent` 开始，下游尝试作废。
+- 直接改已有规划结果：`revise_stage_output(project, stage, edited_output)`。
 - 新 Revision 仅复制修改点前的已确认输出；修改阶段和下游重做。旧产物标为 stale，不手改 STEP、GLB、BOM 或源码。
+
+冻结意图与 attempt 文件：
+
+```text
+store/<project-id>/
+  project.json
+  intents/<intent-sha256>.json
+  revisions/<revision-id>/attempts/panels_planned/001/input.json
+  revisions/<revision-id>/attempts/panels_planned/001/output.json
+  revisions/<revision-id>/attempts/panels_planned/001/status.json
+```
+
+未传入 `project_store` 时只更新内存中的 Revision；交互服务默认使用仓库根目录下已忽略的 `store/`。
 
 `execute_spec()` 仅供明确 CLI/API 批处理，会自动确认校验通过的中间阶段；交互 Agent 禁用。
 

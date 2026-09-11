@@ -52,7 +52,7 @@ from .input_adapter import (
     stage_inputs_from_spec,
 )
 from .workflow_artifact_writer import prepare_artifact_dir, write_artifacts
-from .workflow_project import Project, Revision
+from .workflow_project import Project, Revision, StageAttempt
 from .workflow_state import (
     STAGE_SEQUENCE,
     WorkflowStage,
@@ -61,12 +61,18 @@ from .workflow_state import (
     stage_index,
     utc_now,
 )
+from .workflow_store import JsonProjectStore
 
 
 EDITABLE_STAGE_OUTPUTS = {
     WorkflowStage.PANELS_PLANNED,
     WorkflowStage.MANUFACTURING_PLANNED,
     WorkflowStage.FEATURE_TREE_PLANNED,
+}
+RETRYABLE_STAGES = EDITABLE_STAGE_OUTPUTS
+STAGE_INPUT_KEYS = {
+    WorkflowStage.PANELS_PLANNED: "panels",
+    WorkflowStage.MANUFACTURING_PLANNED: "manufacturing",
 }
 
 ANALYSIS_STAGE_OWNERS = {
@@ -112,11 +118,13 @@ class FurnitureOrchestrator:
         self,
         workspace_root: str | Path | None = None,
         cad_bridge: CadBridge | None = None,
+        project_store: JsonProjectStore | None = None,
     ) -> None:
         self.workspace_root = Path(
             workspace_root or Path(__file__).resolve().parents[5]
         ).resolve()
         self.cad_bridge = cad_bridge or CadBridge(workspace_root=self.workspace_root)
+        self.project_store = project_store
 
     def create_project(
         self,
@@ -127,11 +135,14 @@ class FurnitureOrchestrator:
     ) -> Project:
         project = Project(name=name)
         project.add_revision(intent, stage_inputs=stage_inputs)
+        self._persist(project)
         return project
 
     def revise(self, project: Project, intent: DesignIntent) -> Revision:
         """Start a new revision at stage 1; all parent artifacts become stale."""
-        return project.add_revision(intent)
+        revision = project.add_revision(intent)
+        self._persist(project)
+        return revision
 
     def revise_stage_output(
         self,
@@ -191,6 +202,18 @@ class FurnitureOrchestrator:
             )
         if changed_stage == WorkflowStage.FEATURE_TREE_PLANNED:
             revision.feature_tree = deepcopy(output)
+        revision.stage_attempts[changed_stage.value] = [
+            StageAttempt(
+                number=1,
+                stage=changed_stage.value,
+                intent_sha256=revision.intent_sha256,
+                inputs=deepcopy(self._stage_input_for(revision, changed_stage)),
+                output=deepcopy(output),
+                passed=True,
+            )
+        ]
+        revision.selected_attempts[changed_stage.value] = 1
+        self._persist(project)
         return revision
 
     def run_stage_analysis(
@@ -353,11 +376,12 @@ class FurnitureOrchestrator:
             raise ValueError(f"current stage has no output: {requested.value}")
 
         report = self._latest_stage_validation(revision, requested)
-        if report is None:
+        if report is None or not report.passed:
             report = self._validate_stage_output(revision, requested)
             revision.validations.append(report)
         if not report.passed:
             revision.workflow.fail(f"{requested.value} validation failed")
+            self._persist(project)
             return revision
 
         if requested == WorkflowStage.DESIGN_INTENT:
@@ -366,6 +390,7 @@ class FurnitureOrchestrator:
 
         revision.approve_stage(requested)
         revision.workflow.record(f"{requested.value} confirmed")
+        self._persist(project)
         return revision
 
     def run_next(
@@ -384,7 +409,7 @@ class FurnitureOrchestrator:
         current_index = stage_index(revision.workflow.current)
         if current_index == len(STAGE_SEQUENCE) - 1:
             return self._result(project)
-        return self.run_until(
+        result = self.run_until(
             project,
             STAGE_SEQUENCE[current_index + 1],
             output_root=output_root,
@@ -393,6 +418,100 @@ class FurnitureOrchestrator:
             force=force,
             auto_confirm=False,
         )
+        self._persist(project)
+        return result
+
+    def retry_stage(
+        self,
+        project: Project,
+        stage: str | WorkflowStage,
+        *,
+        stage_input: dict[str, Any] | None = None,
+        output_root: str | Path | None = None,
+        artifact_name: str | None = None,
+        generate_cad: bool = False,
+        force: bool = False,
+    ) -> OrchestrationResult:
+        """Re-run a planning stage against the frozen confirmed intent."""
+        revision = project.latest
+        if revision.workflow.current == WorkflowStage.FAILED:
+            raise ValueError("failed revision must be replaced with a new revision")
+        requested = parse_stage(stage)
+        if requested not in RETRYABLE_STAGES:
+            retryable = ", ".join(item.value for item in RETRYABLE_STAGES)
+            raise ValueError(f"stage is not retryable; use one of: {retryable}")
+        predecessor = STAGE_SEQUENCE[stage_index(requested) - 1]
+        if not revision.is_stage_approved(predecessor):
+            raise ValueError(
+                f"retry requires confirmed predecessor: {predecessor.value}"
+            )
+        if stage_input is not None:
+            self._apply_retry_input(revision, requested, stage_input)
+        if (
+            revision.is_stage_approved(requested)
+            or stage_index(revision.workflow.current) > stage_index(requested)
+        ):
+            self._invalidate_from(revision, requested)
+        self._execute_stage(
+            project,
+            revision,
+            requested,
+            output_root=output_root,
+            artifact_name=artifact_name,
+            generate_cad=generate_cad,
+            force=force,
+        )
+        self._persist(project)
+        return self._result(project)
+
+    def select_stage_attempt(
+        self,
+        project: Project,
+        stage: str | WorkflowStage,
+        number: int,
+    ) -> Revision:
+        """Promote a passed attempt to the current unconfirmed candidate."""
+        revision = project.latest
+        if revision.workflow.current == WorkflowStage.FAILED:
+            raise ValueError("failed revision must be replaced with a new revision")
+        requested = parse_stage(stage)
+        if requested not in RETRYABLE_STAGES:
+            retryable = ", ".join(item.value for item in RETRYABLE_STAGES)
+            raise ValueError(f"stage is not retryable; use one of: {retryable}")
+        attempt = next(
+            (
+                item
+                for item in revision.attempts_for(requested)
+                if item.number == number
+            ),
+            None,
+        )
+        if attempt is None:
+            raise ValueError(f"stage has no attempt {number}: {requested.value}")
+        if not attempt.passed or attempt.output is None:
+            raise ValueError("cannot select a failed attempt")
+        if attempt.intent_sha256 != revision.intent_sha256:
+            raise ValueError("attempt does not match the frozen intent")
+        if (
+            revision.is_stage_approved(requested)
+            or stage_index(revision.workflow.current) > stage_index(requested)
+        ):
+            self._invalidate_from(revision, requested)
+        revision.selected_attempts[requested.value] = attempt.number
+        revision.stage_outputs[requested.value] = deepcopy(attempt.output)
+        if requested == WorkflowStage.FEATURE_TREE_PLANNED:
+            revision.feature_tree = deepcopy(attempt.output)
+        if revision.workflow.current != requested:
+            revision.workflow.move_to(
+                requested,
+                f"{requested.value} attempt {attempt.number} selected",
+            )
+        else:
+            revision.workflow.record(
+                f"{requested.value} attempt {attempt.number} selected"
+            )
+        self._persist(project)
+        return revision
 
     def run(
         self,
@@ -444,6 +563,11 @@ class FurnitureOrchestrator:
                 if not revision.is_stage_approved(current):
                     break
                 next_stage = STAGE_SEQUENCE[stage_index(current) + 1]
+                if (
+                    next_stage in RETRYABLE_STAGES
+                    and revision.attempts_for(next_stage)
+                ):
+                    break
                 attempted_stage = next_stage
                 self._execute_stage(
                     project,
@@ -456,6 +580,9 @@ class FurnitureOrchestrator:
                 )
                 if revision.workflow.current == WorkflowStage.FAILED:
                     break
+                latest_attempt = revision.latest_attempt(next_stage)
+                if latest_attempt is not None and not latest_attempt.passed:
+                    break
                 if auto_confirm:
                     self.confirm_stage(project, next_stage)
                 else:
@@ -467,6 +594,7 @@ class FurnitureOrchestrator:
                 and not revision.is_stage_approved(target)
             ):
                 self.confirm_stage(project, target)
+            self._persist(project)
             return self._result(project)
         except (OSError, TypeError, ValueError) as exc:
             report = ValidationReport(
@@ -474,7 +602,20 @@ class FurnitureOrchestrator:
             )
             report.add_error("STAGE_EXECUTION_FAILED", str(exc))
             revision.validations.append(report)
+            if attempted_stage in RETRYABLE_STAGES:
+                self._record_attempt(
+                    revision,
+                    attempted_stage,
+                    inputs=self._stage_input_for(revision, attempted_stage),
+                    error=str(exc),
+                )
+                revision.workflow.record(
+                    f"{attempted_stage.value} attempt failed"
+                )
+                self._persist(project)
+                return self._result(project)
             revision.workflow.fail(str(exc))
+            self._persist(project)
             return self._result(project)
 
     def _execute_stage(
@@ -490,14 +631,19 @@ class FurnitureOrchestrator:
     ) -> None:
         if stage == WorkflowStage.PANELS_PLANNED:
             stage_input = panel_stage_input(revision.stage_inputs)
-            output = plan_panel_stage(
-                revision.intent,
-                stage_input.get("parameters", {}),
-            )
-            self._complete_stage(
+            try:
+                output = plan_panel_stage(
+                    revision.intent,
+                    stage_input.get("parameters", {}),
+                )
+            except (TypeError, ValueError) as exc:
+                self._fail_retryable_stage(revision, stage, stage_input, str(exc))
+                return
+            self._complete_retryable_stage(
                 revision,
                 stage,
                 output,
+                stage_input,
                 "construction, exact clearances, and physical panels planned",
             )
             return
@@ -505,16 +651,21 @@ class FurnitureOrchestrator:
         if stage == WorkflowStage.MANUFACTURING_PLANNED:
             spec = self._spec_from_revision(revision)
             stage_input = manufacturing_stage_input(revision.stage_inputs)
-            bom = plan_manufacturing(
-                spec,
-                self._placements_from_revision(revision),
-                requested_options=stage_input.get("parameters", {}),
-                appearance=stage_input.get("appearance", {}),
-            )
-            self._complete_stage(
+            try:
+                bom = plan_manufacturing(
+                    spec,
+                    self._placements_from_revision(revision),
+                    requested_options=stage_input.get("parameters", {}),
+                    appearance=stage_input.get("appearance", {}),
+                )
+            except (TypeError, ValueError) as exc:
+                self._fail_retryable_stage(revision, stage, stage_input, str(exc))
+                return
+            self._complete_retryable_stage(
                 revision,
                 stage,
                 asdict(bom),
+                stage_input,
                 "materials, hardware, and preliminary BOM planned",
             )
             return
@@ -522,22 +673,26 @@ class FurnitureOrchestrator:
         if stage == WorkflowStage.FEATURE_TREE_PLANNED:
             spec = self._spec_from_revision(revision)
             manufacturing = self._bom_from_revision(revision)
-            feature_tree = panels_to_feature_tree(
-                manufacturing.panels,
-                manufacturing.operations,
-                furniture_category=spec.furniture_category,
-                parameters={
-                    "width": spec.width,
-                    "depth": spec.depth,
-                    "height": spec.height,
-                    "board_thickness": spec.board_thickness,
-                },
-            )
-            revision.feature_tree = feature_tree
-            self._complete_stage(
+            try:
+                feature_tree = panels_to_feature_tree(
+                    manufacturing.panels,
+                    manufacturing.operations,
+                    furniture_category=spec.furniture_category,
+                    parameters={
+                        "width": spec.width,
+                        "depth": spec.depth,
+                        "height": spec.height,
+                        "board_thickness": spec.board_thickness,
+                    },
+                )
+            except (TypeError, ValueError) as exc:
+                self._fail_retryable_stage(revision, stage, {}, str(exc))
+                return
+            self._complete_retryable_stage(
                 revision,
                 stage,
                 feature_tree,
+                {},
                 "Feature Tree v2 with target-specific machining cuts planned",
             )
             return
@@ -606,20 +761,159 @@ class FurnitureOrchestrator:
 
         raise ValueError(f"stage is not executable: {stage.value}")
 
-    def _complete_stage(
+    def _complete_retryable_stage(
         self,
         revision: Revision,
         stage: WorkflowStage,
         output: dict[str, Any],
+        inputs: dict[str, Any],
         note: str,
     ) -> None:
         revision.stage_outputs[stage.value] = deepcopy(output)
         report = self._validate_stage_output(revision, stage)
         revision.validations.append(report)
-        if not report.passed:
-            revision.workflow.fail(f"{stage.value} validation failed")
+        attempt = self._record_attempt(
+            revision,
+            stage,
+            inputs=inputs,
+            output=output,
+            report=report,
+        )
+        if not attempt.passed:
+            selected = revision.selected_attempt(stage)
+            if selected is None or selected.output is None:
+                revision.stage_outputs.pop(stage.value, None)
+                if stage == WorkflowStage.FEATURE_TREE_PLANNED:
+                    revision.feature_tree = None
+            else:
+                revision.stage_outputs[stage.value] = deepcopy(selected.output)
+                if stage == WorkflowStage.FEATURE_TREE_PLANNED:
+                    revision.feature_tree = deepcopy(selected.output)
+            revision.workflow.record(
+                f"{stage.value} attempt {attempt.number} failed"
+            )
             return
+        if stage == WorkflowStage.FEATURE_TREE_PLANNED:
+            revision.feature_tree = deepcopy(output)
         revision.workflow.advance(stage, note)
+
+    def _fail_retryable_stage(
+        self,
+        revision: Revision,
+        stage: WorkflowStage,
+        inputs: dict[str, Any],
+        error: str,
+    ) -> None:
+        report = ValidationReport(stage=stage.value)
+        report.add_error("STAGE_EXECUTION_FAILED", error)
+        revision.validations.append(report)
+        attempt = self._record_attempt(
+            revision,
+            stage,
+            inputs=inputs,
+            error=error,
+        )
+        revision.workflow.record(
+            f"{stage.value} attempt {attempt.number} failed"
+        )
+
+    def _record_attempt(
+        self,
+        revision: Revision,
+        stage: WorkflowStage,
+        *,
+        inputs: Mapping[str, Any],
+        output: dict[str, Any] | None = None,
+        error: str | None = None,
+        report: ValidationReport | None = None,
+    ) -> StageAttempt:
+        passed = error is None and (report is None or report.passed)
+        if not passed and error is None and report is not None:
+            error = "; ".join(issue.message for issue in report.issues)
+        attempt = StageAttempt(
+            number=len(revision.attempts_for(stage)) + 1,
+            stage=stage.value,
+            intent_sha256=revision.intent_sha256,
+            inputs=deepcopy(dict(inputs)),
+            output=deepcopy(output) if output is not None else None,
+            passed=passed,
+            error=error,
+        )
+        revision.attempts_for(stage).append(attempt)
+        if attempt.passed:
+            revision.selected_attempts[stage.value] = attempt.number
+        return attempt
+
+    def _invalidate_from(self, revision: Revision, stage: WorkflowStage) -> None:
+        index = stage_index(stage)
+        revision.approved_stages = [
+            value
+            for value in revision.approved_stages
+            if parse_stage(value) in STAGE_SEQUENCE
+            and stage_index(parse_stage(value)) < index
+        ]
+        revision.stage_outputs = {
+            key: value
+            for key, value in revision.stage_outputs.items()
+            if parse_stage(key) not in STAGE_SEQUENCE
+            or stage_index(parse_stage(key)) < index
+        }
+        revision.stage_attempts = {
+            key: value
+            for key, value in revision.stage_attempts.items()
+            if parse_stage(key) not in STAGE_SEQUENCE
+            or stage_index(parse_stage(key)) < index
+            or key == stage.value
+        }
+        revision.selected_attempts = {
+            key: value
+            for key, value in revision.selected_attempts.items()
+            if key in revision.stage_attempts and key != stage.value
+        }
+        if index <= stage_index(WorkflowStage.FEATURE_TREE_PLANNED):
+            revision.feature_tree = None
+        predecessor = STAGE_SEQUENCE[index - 1]
+        if (
+            revision.workflow.current != WorkflowStage.FAILED
+            and (
+                revision.workflow.current not in STAGE_SEQUENCE
+                or stage_index(revision.workflow.current) >= index
+            )
+        ):
+            revision.workflow.move_to(
+                predecessor,
+                f"{stage.value} retry; downstream outputs invalidated",
+            )
+
+    def _apply_retry_input(
+        self,
+        revision: Revision,
+        stage: WorkflowStage,
+        stage_input: Mapping[str, Any],
+    ) -> None:
+        key = STAGE_INPUT_KEYS.get(stage)
+        if key is None:
+            raise ValueError(f"stage does not accept retry inputs: {stage.value}")
+        payload = deepcopy(dict(stage_input))
+        if key == "panels" and "parameters" not in payload:
+            payload = {"parameters": payload}
+        revision.stage_inputs[key] = payload
+
+    def _stage_input_for(
+        self,
+        revision: Revision,
+        stage: WorkflowStage,
+    ) -> dict[str, Any]:
+        if stage == WorkflowStage.PANELS_PLANNED:
+            return panel_stage_input(revision.stage_inputs)
+        if stage == WorkflowStage.MANUFACTURING_PLANNED:
+            return manufacturing_stage_input(revision.stage_inputs)
+        return {}
+
+    def _persist(self, project: Project) -> None:
+        if self.project_store is None:
+            return
+        self.project_store.save(project)
 
     @staticmethod
     def _latest_stage_validation(

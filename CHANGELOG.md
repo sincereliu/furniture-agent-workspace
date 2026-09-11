@@ -1,5 +1,18 @@
 # 更新日志
 
+## 20260911.1 — 冻结意图与可重试规划尝试
+
+确认后的设计意图冻成独立 JSON；板件等规划阶段可对同一份意图多次尝试，不必从意图重来。
+
+- `confirm_stage(design_intent)` 写出 `store/<project-id>/intents/<sha256>.json`。
+- `retry_stage()` / `select_stage_attempt()` 管理 `panels_planned`、`manufacturing_planned`、`feature_tree_planned` 的 attempt；失败只废该次尝试。
+- `JsonProjectStore` 同时保存 `project.json` 与各次 `attempts/<stage>/<nnn>/{input,output,status}.json`。
+- 交互 Agent 可在冻结意图上反复试板件；改尺寸仍用 `revise()`。
+
+### 边界
+
+- 新增代码理由：`state`（attempt / 选中指针 / 下游失效）、`side_effect`（冻结 JSON 与 attempt 文件）、`schema`（`StageAttempt` 序列化）、`validation`（确认时校验当前候选）。无自然语言映射，无柜型默认方案。
+
 ## 20260910.2 — 柜体父子归属
 
 柜体成为板件阶段的父对象：每块板属于一台柜，多柜时 id 不再撞名。

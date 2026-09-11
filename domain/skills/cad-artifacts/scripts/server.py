@@ -26,6 +26,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
+from furniture_workflow.workflow_store import JsonProjectStore
 from furniture_workflow.input_adapter import (
     layout_stage_input,
     panel_stage_input,
@@ -45,7 +46,10 @@ app = FastAPI(
         "落地柜/吊柜规划、三种背板安装、BOM、加工与孔位输出"
     ),
 )
-ORCHESTRATOR = FurnitureOrchestrator(workspace_root=WORKSPACE_ROOT)
+ORCHESTRATOR = FurnitureOrchestrator(
+    workspace_root=WORKSPACE_ROOT,
+    project_store=JsonProjectStore(WORKSPACE_ROOT / "store"),
+)
 
 # 静态文件服务 — 挂载 generated 目录，供访问 STEP/GLB 文件
 OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)

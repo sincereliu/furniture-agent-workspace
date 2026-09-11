@@ -20,6 +20,53 @@ def _id(prefix: str) -> str:
     return f"{prefix}_{uuid4().hex}"
 
 
+def _stage_key(stage: str | WorkflowStage) -> str:
+    return stage.value if isinstance(stage, WorkflowStage) else str(stage)
+
+
+@dataclass
+class StageAttempt:
+    """One planner execution against a frozen upstream checkpoint."""
+
+    number: int
+    stage: str
+    intent_sha256: str
+    inputs: dict[str, Any] = field(default_factory=dict)
+    output: dict[str, Any] | None = None
+    passed: bool = False
+    error: str | None = None
+    created_at: str = field(default_factory=utc_now)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "number": self.number,
+            "stage": self.stage,
+            "intent_sha256": self.intent_sha256,
+            "inputs": deepcopy(self.inputs),
+            "output": deepcopy(self.output),
+            "passed": self.passed,
+            "error": self.error,
+            "created_at": self.created_at,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "StageAttempt":
+        return cls(
+            number=int(data["number"]),
+            stage=str(data["stage"]),
+            intent_sha256=str(data["intent_sha256"]),
+            inputs=deepcopy(dict(data.get("inputs") or {})),
+            output=(
+                deepcopy(data["output"])
+                if isinstance(data.get("output"), dict)
+                else None
+            ),
+            passed=bool(data.get("passed", False)),
+            error=data.get("error"),
+            created_at=str(data.get("created_at") or utc_now()),
+        )
+
+
 @dataclass
 class Revision:
     number: int
@@ -35,6 +82,8 @@ class Revision:
     stage_outputs: dict[str, Any] = field(default_factory=dict)
     stage_analyses: dict[str, dict[str, dict[str, Any]]] = field(default_factory=dict)
     approved_stages: list[str] = field(default_factory=list)
+    stage_attempts: dict[str, list[StageAttempt]] = field(default_factory=dict)
+    selected_attempts: dict[str, int] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.manifest is None:
@@ -55,6 +104,24 @@ class Revision:
     def approve_stage(self, stage: WorkflowStage) -> None:
         if stage.value not in self.approved_stages:
             self.approved_stages.append(stage.value)
+
+    def attempts_for(self, stage: str | WorkflowStage) -> list[StageAttempt]:
+        key = _stage_key(stage)
+        return self.stage_attempts.setdefault(key, [])
+
+    def selected_attempt(self, stage: str | WorkflowStage) -> StageAttempt | None:
+        key = _stage_key(stage)
+        number = self.selected_attempts.get(key)
+        if number is None:
+            return None
+        return next(
+            (item for item in self.attempts_for(key) if item.number == number),
+            None,
+        )
+
+    def latest_attempt(self, stage: str | WorkflowStage) -> StageAttempt | None:
+        attempts = self.attempts_for(stage)
+        return attempts[-1] if attempts else None
 
     @property
     def intent_sha256(self) -> str:
@@ -79,6 +146,11 @@ class Revision:
             "stage_outputs": self.stage_outputs,
             "stage_analyses": self.stage_analyses,
             "approved_stages": self.approved_stages,
+            "stage_attempts": {
+                stage: [item.to_dict() for item in attempts]
+                for stage, attempts in self.stage_attempts.items()
+            },
+            "selected_attempts": dict(self.selected_attempts),
         }
 
     @classmethod
@@ -119,6 +191,16 @@ class Revision:
                 parse_stage(str(value)).value
                 for value in data.get("approved_stages", [])
             ],
+            stage_attempts={
+                str(stage): [
+                    StageAttempt.from_dict(item) for item in list(records)
+                ]
+                for stage, records in dict(data.get("stage_attempts", {})).items()
+            },
+            selected_attempts={
+                str(stage): int(number)
+                for stage, number in dict(data.get("selected_attempts", {})).items()
+            },
         )
 
 
