@@ -91,9 +91,7 @@ store/<project-id>/
 
 `width/depth/height` 必须在意图确认前明确提供；不再用类别预设替代客户确认的外包络。板件输入必须完整提交全部规范字段；代码不按柜型静默补默认方案。完整值经确定性准入后才写入 `panels_planned.spec`。
 
-契约为扁平 JSON。规范字段使用 `furniture_category/width/depth/height`；适配器只把外包络字段转成 `DesignIntent`，将包括 `door_hinge_side` 在内的板件规范字段路由到板件，将制造选项/外观路由到制造；`room/placement` 只供独立房间布局 API 使用。扁平请求不再接受历史 `type`，该字段仅在旧序列化 spec 加载时恢复。历史 `furniture_type`/`overall_size`/`mount_mode`/`mounting_height` 仍可映射到规范名。可选 `constraints` 必须有阶段映射；未分类约束在协议路由时拒绝。
-
-持久化兼容只发生在读取旧 Project 时：旧单门规格缺少 `door_hinge_side`，仅当其唯一门板已显式保存 `left/right` 才恢复；否则加载停止。旧标准双门规格迁移为规范 `null`，门板缺省侧按确定性左右拓扑恢复；更多门保持 `null`。该迁移不用于新 JSON/API 请求，也不根据位置或柜型猜测单门偏好。
+契约为扁平 JSON。规范字段使用 `furniture_category/width/depth/height`；适配器只把外包络字段转成 `DesignIntent`，把板件规范字段路由到 `stage_inputs.panels`，把制造选项（含 `door_hinge_side`、`movable_shelf_connector`）和外观路由到 `stage_inputs.manufacturing`；`room/placement` 只供独立房间布局 API 使用。扁平请求不再接受历史 `type`，该字段仅在旧序列化 spec 加载时恢复。历史 `furniture_type`/`overall_size`/`mount_mode`/`mounting_height` 仍可映射到规范名。可选 `constraints` 必须有阶段映射；未分类约束在协议路由时拒绝。扁平示例里的 `door_hinge_side` 是制造选项，不是板件规范字段。
 
 `back_mount` 接受 `auto/groove/insert/cover`，但不进入意图或布局输出。板件阶段在背板薄于柜体板时把 `auto` 解析为 `groove`，否则为 `insert`，并输出 requested/effective；`back_rail_height/groove_depth/groove_clearance` 仅对有效 `groove` 生效，`back_rail_height=0` 关闭背拉条。
 

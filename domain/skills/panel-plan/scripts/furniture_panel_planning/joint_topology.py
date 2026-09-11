@@ -16,9 +16,9 @@ from .panel_models import PanelPlacement
 class PanelJoint:
     """一条面-边邻接：female 的面碰 male 的端面。
 
-    `connection` 是已解析的连不连（on/off）。几何接触由 compute_joints 得出，
-    默认连接由 resolve_joint_connections 写入。制造阶段只消费该结果来决定
-    要不要固定；用什么五金仍由制造连接件决定。
+    `connection` 是制造阶段写入的连不连（on/off）。本阶段 `compute_joints()`
+    只填几何邻接；字段默认 `on` 仅作序列化占位，制造层
+    `default_joint_connection` 会按面板类型重解析。用什么五金仍由制造连接件决定。
     """
 
     female_id: str   # 面板 ID（面被接触的那块板）

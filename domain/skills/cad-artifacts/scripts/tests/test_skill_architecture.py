@@ -39,11 +39,14 @@ STAGE_REFERENCES = {
         "references/shelf-planning-rules.md",
         "references/toe-kick-rules.md",
         "references/drawer-dimension-chain.md",
-        "references/connection-contact-defaults.md",
         "references/terminology-glossary.md",
         "references/panel-side-analyses.md",
+        "references/runtime-map.md",
     ),
-    "manufacturing-plan": ("references/manufacturing-rules.md",),
+    "manufacturing-plan": (
+        "references/manufacturing-rules.md",
+        "references/connection-contact-defaults.md",
+    ),
     "feature-tree": ("references/feature-tree-rules.md",),
     "cad-artifacts": ("references/runtime-contract.md",),
     "delivery-report": ("references/delivery-checklist.md",),
@@ -203,6 +206,14 @@ class SkillArchitectureTests(unittest.TestCase):
                 / "design-intent"
                 / "references"
                 / "cabinet_topologies"
+            ).exists()
+        )
+        self.assertFalse(
+            (
+                SKILLS_ROOT
+                / "panel-plan"
+                / "references"
+                / "connection-contact-defaults.md"
             ).exists()
         )
 

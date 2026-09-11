@@ -17,16 +17,13 @@
 - 背板与槽：`back_mount`、`back_offset`、`groove_depth`、`groove_clearance`、`back_rail_height`
 - 前脸边距与踢脚：`front_face_margin`、`door_hinge_gap`、`toe_kick_height`、`toe_kick_reveal_front`、`toe_kick_reveal_back`、`toe_kick_support_count`
 - 门与抽屉数量：`n_doors`、`drawer_count`
-- 单门铰链侧：`door_hinge_side`
 - 层板：`shelves`、`top_gap_mm`
 - 抽屉尺寸链输入：`drawer_side_clearance`、`drawer_layer_gap`、`drawer_bottom_thickness`、`drawer_back_thickness`、`drawer_back_clearance`
-- 柜体身份（可选）：`cabinet_id`；这不是构造字段，运行时在准入 `FurnitureSpec` 前弹出。缺省 `cabinet_1`。不得包含 `__`。
+- 柜体身份（可选）：`cabinet_id`；这不是构造字段，运行时在准入前弹出，缺省 cabinet_1，不得包含 __。
 
 ## 字段口径
 
 - `shelves` 每项是 `{shelf_type: fixed|movable, gap_below_mm: 数值|null}`；列表顺序、计算层和净高口径见 [层板规则](shelf-planning-rules.md)。运行时不做均分，不保留 `shelf_count`。
-- `n_doors=1` 时必须显式提交 `door_hinge_side=left/right`；其它门数必须显式提交 `null`。
-- 活动层板连接方式 `movable_shelf_connector` 已迁至制造阶段（见制造 `SKILL.md` 与 `feature-contract.md` 爆炸半径判据），不属本阶段字段。
 - 当前 `drawer_count>0` 的规范语义只表示整高抽屉区；必须同时提交空 `shelves` 与 `n_doors=0`。
 
 ## 展示与停止

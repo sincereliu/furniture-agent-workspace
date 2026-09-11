@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -25,8 +26,12 @@ from furniture_panel_planning.panel_rules import (
     resolve_toe_kick_support_count,
     toe_kick_support_clear_spacing,
 )
-from furniture_panel_planning.panel_spec import resolve_shelf_gaps
+from furniture_panel_planning.panel_spec import (
+    PANEL_PARAMETER_FIELDS,
+    resolve_shelf_gaps,
+)
 from furniture_panel_planning.structure_planning import CabinetStructure
+from furniture_workflow.input_adapter import MANUFACTURING_SPEC_FIELDS
 from panel_fixtures import by_role, furniture_spec, panel_parameters
 
 
@@ -202,6 +207,25 @@ class PanelRuleContractTests(unittest.TestCase):
         self.assertEqual(restored.n_doors, 2)
         with self.assertRaises(ValueError):
             CabinetStructure.from_dict({**payload, "n_doors": 1, "door_count": 2})
+
+    def test_proposal_contract_complete_fields_match_runtime(self) -> None:
+        contract = (
+            WORKSPACE_ROOT
+            / "domain"
+            / "skills"
+            / "panel-plan"
+            / "references"
+            / "panel-proposal-contract.md"
+        ).read_text(encoding="utf-8")
+        match = re.search(
+            r"^## 完整字段\r?\n(?P<body>.*?)(?=^## )",
+            contract,
+            flags=re.MULTILINE | re.DOTALL,
+        )
+        self.assertIsNotNone(match, "panel-proposal-contract.md missing ## 完整字段")
+        listed = set(re.findall(r"`([a-z][a-z0-9_]*)`", match.group("body")))
+        self.assertEqual(listed, PANEL_PARAMETER_FIELDS | {"cabinet_id"})
+        self.assertTrue(listed.isdisjoint(MANUFACTURING_SPEC_FIELDS))
 
 
 if __name__ == "__main__":

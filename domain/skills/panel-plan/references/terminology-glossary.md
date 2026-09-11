@@ -27,7 +27,6 @@
 | 背板安装方式 | `back_mount` | 无 | 枚举 | 规范值 `auto/groove/insert/cover`。 |
 | 背板安装解析 | `back_mount_resolution.requested/effective` | 无 | 对象 | `requested` 保留请求值，`effective` 保留生效值。 |
 | 踢脚支撑数量 | `toe_kick_support_count` | 无 | 整数或 `null` | `null` 是“显式请求自动计算”，不是缺省。 |
-| 单门铰链侧 | `door_hinge_side` | 无 | 枚举或 `null` | 仅 `n_doors=1` 时允许 `left/right`。 |
 | 柜体实例 | `cabinet_id` / `cabinets[].id` | 无 | 标识符 | 柜体父对象身份；缺省 `cabinet_1`。不得包含 `__`。 |
 | 板件柜内角色 | `role` | 无 | 字符串 | 柜内稳定角色名，如 `left_side_panel`。 |
 | 板件所属柜体 | `parent_id` | 无 | 标识符 | 必须等于所属 `cabinets[].id`。 |

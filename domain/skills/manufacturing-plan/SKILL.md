@@ -25,6 +25,7 @@ description: 用于 manufacturing_planned 阶段。当用户说"用什么五金"
 ## 关键规则
 
 - 材料厚度来自已确认的 `panels_planned` 输出；铰链侧 `door_hinge_side` 是制造输入/派生（单门输入、双门按位置派生），不从意图重建或硬编码覆盖。
+- 接触默认连不连见 [连接与接触默认规则](references/connection-contact-defaults.md)。
 - 三合一在高度方向按系统 32 排钻分布、深度方向前后双排；铰链孔、背板槽与背板连接、封边的精确口径见 [制造规则](references/manufacturing-rules.md)。
 - 入槽背板不封边；其余背板及背拉条四边封边；cover 外盖螺钉与 groove 背拉条螺钉属组装现场工艺，不生成孔位与五金。
 - 活动层板连接方式 `movable_shelf_connector` 是制造阶段输入（`two_in_one`/`shelf_pin`），经 `requested_options` 传入并盖章到 `PanelRecord`；有活动层板却未提供时运行时拒绝，不静默省略。
