@@ -121,7 +121,7 @@ store/<project-id>/
 
 - `<artifact-name>.design-intent.json`
 - `<artifact-name>.panel-plan.json`
-- `<artifact-name>.manufacturing-plan.json`
+- `<artifact-name>.manufacture-plan.json`
 - `<artifact-name>.feature-tree.json`
 - `<artifact-name>.bom.md`
 - `<artifact-name>.drilled-holes.json`

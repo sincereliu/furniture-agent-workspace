@@ -31,4 +31,4 @@
 - 新提案路径仍接受 `door_margin` → `front_face_margin`（扁平协议与历史夹具）；规范名是 `front_face_margin`。
 - `CabinetStructure.from_dict()` 把历史 `door_count` 收成 `n_doors`。
 
-连不连默认规则在制造 [连接与接触默认规则](../manufacturing-plan/references/connection-contact-defaults.md)。
+连不连默认规则在制造 [连接与接触默认规则](../manufacture-plan/references/connection-contact-defaults.md)。

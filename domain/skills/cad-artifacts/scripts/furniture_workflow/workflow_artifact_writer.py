@@ -59,7 +59,7 @@ def write_artifacts(
     if artifact_name:
         intent_path = artifact_dir / f"{artifact_name}.design-intent.json"
         panel_path = artifact_dir / f"{artifact_name}.panel-plan.json"
-        manufacturing_path = artifact_dir / f"{artifact_name}.manufacturing-plan.json"
+        manufacturing_path = artifact_dir / f"{artifact_name}.manufacture-plan.json"
         feature_tree_path = artifact_dir / f"{artifact_name}.feature-tree.json"
         bom_path = artifact_dir / f"{artifact_name}.bom.md"
         source_key = artifact_name
@@ -68,7 +68,7 @@ def write_artifacts(
     else:
         intent_path = artifact_dir / "design-intent.json"
         panel_path = artifact_dir / "panel-plan.json"
-        manufacturing_path = artifact_dir / "manufacturing-plan.json"
+        manufacturing_path = artifact_dir / "manufacture-plan.json"
         feature_tree_path = artifact_dir / "feature-tree.json"
         bom_path = artifact_dir / "bom.md"
         source_key = revision.id

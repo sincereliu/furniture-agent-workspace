@@ -1,4 +1,4 @@
-"""Validation owned by the manufacturing-planning stage."""
+"""Validation owned by the manufacture-plan stage."""
 
 from __future__ import annotations
 

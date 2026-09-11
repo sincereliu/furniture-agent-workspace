@@ -27,7 +27,7 @@ STAGE_SKILL_NAMES = (
     "design-intent",
     "layout-plan",
     "panel-plan",
-    "manufacturing-plan",
+    "manufacture-plan",
     "feature-tree",
     "cad-artifacts",
     "delivery-report",

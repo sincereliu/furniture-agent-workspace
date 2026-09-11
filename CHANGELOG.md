@@ -1,5 +1,13 @@
 # 更新日志
 
+## 20260911.2 — 制造 Skill 更名为 manufacture-plan
+
+Skill 目录与快照文件名改为名词 `manufacture-plan`，与 `panel-plan`、`layout-plan` 对齐；阶段 ID `manufacturing_planned`、产物 kind `manufacturing_plan` 与运行时包 `furniture_manufacturing` 不变。
+
+### 边界
+
+- 无新增运行时逻辑。重命名属于 `schema` 可发现性（Skill 目录名与阶段映射）和产物文件名约定；不改自然语言理解或默认方案。
+
 ## 20260911.1 — 冻结意图与可重试规划尝试
 
 确认后的设计意图冻成独立 JSON；板件等规划阶段可对同一份意图多次尝试，不必从意图重来。

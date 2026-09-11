@@ -15,7 +15,7 @@ BOM、校验、导出、设备路线都是它们的派生或标注。
 | 层 | 回答的问题 | 归属 |
 |----|-----------|------|
 | 设计层 | 谁和谁接触（装配关系）、背板模式 | design-intent / panel-plan |
-| 工艺层 | 连不连、铰链侧、具体用哪种五金（含活动层板连接件）、连在哪、打什么孔、买多少 | manufacturing-plan |
+| 工艺层 | 连不连、铰链侧、具体用哪种五金（含活动层板连接件）、连在哪、打什么孔、买多少 | manufacture-plan |
 | 物理层 | 真做出来 | 工厂（仓库之外，只出机器文件） |
 
 分界线的判据是「改变面板几何 vs 只改变加工/五金」：**改变面板几何（尺寸/位置/拓扑）
@@ -32,7 +32,7 @@ panel-plan 失效、从面板重跑——面板其实没变，白跑且修订语
 | 选型放哪 | 改五金后的重跑范围 | 对不对 |
 |---------|-------------------|--------|
 | panel-plan（现状） | panel-plan + manufacturing + feature-tree + CAD + delivery | ❌ 面板没变却全重跑 |
-| manufacturing-plan（应然） | manufacturing + feature-tree + CAD + delivery | ✅ 面板不动 |
+| manufacture-plan（应然） | manufacturing + feature-tree + CAD + delivery | ✅ 面板不动 |
 
 判据一句话：**只影响制造的东西就放制造阶段，让爆炸半径止于制造；只有真正改变面板
 结构的东西才放 panel-plan。** 也可表述为「改变面板几何 vs 只改变加工/五金」——
