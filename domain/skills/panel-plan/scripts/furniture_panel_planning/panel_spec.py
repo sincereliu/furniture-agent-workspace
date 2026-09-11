@@ -145,7 +145,7 @@ class FurnitureSpec:
             raise ValueError("panel planning requires a confirmed DesignIntent")
         if not isinstance(options, Mapping):
             raise ValueError("panel proposal must be an object")
-        values = _normalize_panel_input_aliases(dict(options))
+        values = dict(options)
         unknown = sorted(set(values) - PANEL_SPEC_FIELDS)
         if unknown:
             raise ValueError("panel stage does not support: " + ", ".join(unknown))
@@ -174,7 +174,7 @@ class FurnitureSpec:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "FurnitureSpec":
         """Read a serialized complete spec without filling missing values."""
-        values = _normalize_legacy_serialized_spec(dict(data))
+        values = dict(data)
         unknown = sorted(set(values) - _SERIALIZED_FIELDS)
         missing = sorted(_SERIALIZED_FIELDS - set(values))
         if unknown:
@@ -188,54 +188,6 @@ class FurnitureSpec:
         if "shelves" in values:
             values["shelves"] = _coerce_shelves(values["shelves"])
         return cls(**values)
-
-
-def _normalize_front_face_margin_key(values: dict[str, Any]) -> dict[str, Any]:
-    """Collapse the historical door_margin name onto front_face_margin."""
-    if "door_margin" not in values:
-        return values
-    if (
-        "front_face_margin" in values
-        and values["front_face_margin"] != values["door_margin"]
-    ):
-        raise ValueError("front_face_margin and door_margin must match")
-    values["front_face_margin"] = values.pop("door_margin")
-    return values
-
-
-def _normalize_panel_input_aliases(values: dict[str, Any]) -> dict[str, Any]:
-    """Normalize legacy aliases still tolerated for active panel inputs."""
-    return _normalize_front_face_margin_key(values)
-
-
-def _normalize_legacy_serialized_spec(values: dict[str, Any]) -> dict[str, Any]:
-    """Normalize historical serialized spec aliases when loading old data."""
-    values = _normalize_front_face_margin_key(values)
-    values = _legacy_spec_loader_furniture_category(values)
-    # movable_shelf_connector 已迁到制造阶段（见 feature-contract.md 爆炸半径判据）；
-    # 旧持久化 spec 仍带它时直接丢弃，制造阶段以其自身输入为准。
-    values.pop("movable_shelf_connector", None)
-    values.pop("door_hinge_side", None)
-    return values
-
-
-def _legacy_spec_loader_furniture_category(values: dict[str, Any]) -> dict[str, Any]:
-    """Recover historical ``type`` / ``furniture_type`` into ``furniture_category``."""
-    present = [
-        key
-        for key in ("furniture_category", "furniture_type", "type")
-        if key in values
-    ]
-    if not present:
-        return values
-    first = values[present[0]]
-    for key in present[1:]:
-        if values[key] != first:
-            raise ValueError(f"furniture_category and {key} must match")
-    for key in ("furniture_type", "type"):
-        values.pop(key, None)
-    values["furniture_category"] = first
-    return values
 
 
 def resolve_back_mount(

@@ -46,15 +46,11 @@ class PanelPlacement:
             item if isinstance(item, PanelJoint) else PanelJoint(**item)
             for item in raw_joints
         ]
-        from .cabinet_identity import (
-            DEFAULT_CABINET_ID,
-            panel_cabinet_id,
-            panel_role,
-        )
-
-        panel_id = str(values.get("id", ""))
-        if not values.get("role"):
-            values["role"] = panel_role(panel_id)
-        if not values.get("parent_id"):
-            values["parent_id"] = panel_cabinet_id(panel_id) or DEFAULT_CABINET_ID
+        panel_id = str(values.get("id", "")).strip()
+        if not panel_id:
+            raise ValueError("panel requires id")
+        if not str(values.get("role", "")).strip():
+            raise ValueError(f"{panel_id} requires role")
+        if not str(values.get("parent_id", "")).strip():
+            raise ValueError(f"{panel_id} requires parent_id")
         return cls(**values)

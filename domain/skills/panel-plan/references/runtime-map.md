@@ -27,10 +27,4 @@
 | `validation.py` | 检查点不变量 | validation |
 | `quantitative_audit.py` / `design_optimization.py` | 旁路分析 | 只写 `stage_analyses` |
 
-## 历史兼容（不参与新提案决策）
-
-- `FurnitureSpec.from_dict()` 恢复 `type` / `furniture_type`，丢弃旧 `movable_shelf_connector` / `door_hinge_side`。
-- 新提案路径仍接受 `door_margin` → `front_face_margin`（扁平协议与历史夹具）；规范名是 `front_face_margin`。
-- `CabinetStructure.from_dict()` 把历史 `door_count` 收成 `n_doors`。
-
 连不连默认规则在制造 [连接与接触默认规则](../manufacture-plan/references/connection-contact-defaults.md)。

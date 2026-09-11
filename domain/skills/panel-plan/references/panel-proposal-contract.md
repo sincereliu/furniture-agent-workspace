@@ -6,7 +6,7 @@
 
 - 提案先由 LLM 基于完整上下文整理并消歧，再作为完整对象写入 `stage_inputs.panels.parameters`。
 - 代码不补缺字段、不根据柜型推默认方案、不做自然语言别名识别。
-- 规范字段名、兼容别名和单位口径统一按 [术语规范表](terminology-glossary.md)。
+- 规范字段名和单位口径统一按 [术语规范表](terminology-glossary.md)。提案、序列化 spec 和 structure 只接受规范名，不接受历史别名。
 - 所有线性尺寸单位均为 mm。
 - `toe_kick_support_count=null` 与 `back_mount=auto` 都是显式结构化请求，不是运行时缺省。
 - 超出当前拓扑表达能力的语义必须先继续消歧；停问清单见下文「展示与停止」。

@@ -39,7 +39,7 @@ def qualify_panel_id(cabinet_id: str, role: str) -> str:
 
 
 def panel_role(panel_id: str) -> str:
-    """Return the cabinet-local role from a qualified or legacy panel id."""
+    """Return the cabinet-local role from a qualified panel id, or the id itself if it is already a role."""
     if PANEL_ID_SEPARATOR in panel_id:
         return panel_id.split(PANEL_ID_SEPARATOR, 1)[1]
     return panel_id

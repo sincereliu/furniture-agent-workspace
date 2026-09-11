@@ -14,6 +14,7 @@ from runtime_paths import bootstrap_runtime_paths
 
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
+from furniture_design_intent.design_intent import DesignIntent, FinishedEnvelope
 from furniture_panel_planning.panel_spec import FurnitureSpec
 from panel_fixtures import by_role, cabinet_data, furniture_spec
 from furniture_layout.layout_pipeline import plan_layout
@@ -40,6 +41,13 @@ class BackMountModeTests(unittest.TestCase):
             back_thickness=18 if back_mount == "insert" else 9,
             shelf_count=1,
             n_doors=2,
+        )
+
+    def _intent(self, spec: FurnitureSpec) -> DesignIntent:
+        return DesignIntent(
+            furniture_category=spec.furniture_category,
+            finished_envelope=FinishedEnvelope(spec.width, spec.depth, spec.height),
+            confirmed=True,
         )
 
     def test_all_modes_preserve_the_finished_depth_envelope(self) -> None:
@@ -285,9 +293,8 @@ class BackMountModeTests(unittest.TestCase):
             height=1000,
             back_mount="cover",
         )
-        cover_layout = plan_layout(cover_spec)
         cover_report = validate_structure(
-            cover_layout,
+            self._intent(cover_spec),
             cover_spec,
             CabinetStructure.from_spec(cover_spec),
         )
@@ -306,9 +313,8 @@ class BackMountModeTests(unittest.TestCase):
             back_thickness=18,
             back_offset=570,
         )
-        insert_layout = plan_layout(insert_spec)
         insert_report = validate_structure(
-            insert_layout,
+            self._intent(insert_spec),
             insert_spec,
             CabinetStructure.from_spec(insert_spec),
         )
@@ -326,11 +332,11 @@ class BackMountModeTests(unittest.TestCase):
             back_mount="groove",
             back_rail_height=1000,
         )
-        rail_layout = plan_layout(rail_spec)
+        rail_structure = CabinetStructure.from_spec(rail_spec)
         rail_report = validate_panels(
             rail_spec,
-            rail_layout,
-            plan_panels(rail_spec, CabinetStructure.from_spec(rail_spec)),
+            rail_structure,
+            plan_panels(rail_spec, rail_structure),
         )
         self.assertFalse(rail_report.passed)
         self.assertIn(
@@ -340,10 +346,10 @@ class BackMountModeTests(unittest.TestCase):
 
     def test_panel_validation_rejects_cover_overlap(self) -> None:
         spec = self._spec("cover")
-        layout = plan_layout(spec)
-        placements = plan_panels(spec, CabinetStructure.from_spec(spec))
+        structure = CabinetStructure.from_spec(spec)
+        placements = plan_panels(spec, structure)
 
-        self.assertTrue(validate_panels(spec, layout, placements).passed)
+        self.assertTrue(validate_panels(spec, structure, placements).passed)
 
         overlapping = [
             replace(panel, pos_y=0.0)
@@ -351,7 +357,7 @@ class BackMountModeTests(unittest.TestCase):
             else panel
             for panel in placements
         ]
-        report = validate_panels(spec, layout, overlapping)
+        report = validate_panels(spec, structure, overlapping)
         issue_codes = {issue.code for issue in report.issues}
 
         self.assertFalse(report.passed)

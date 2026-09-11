@@ -152,14 +152,18 @@ def _validate_cabinet_membership(
                 panel.id,
             )
         expected_id = qualify_panel_id(cabinet_id, panel.role)
-        if panel.id not in {expected_id, panel.role}:
+        if panel.id != expected_id:
             report.add_error(
                 "PANEL_ID_NOT_QUALIFIED",
                 f"{panel.id} must be {expected_id}",
                 panel.id,
             )
         for dependency in panel.depends_on:
-            dep_parent = dependency.split("__", 1)[0] if "__" in dependency else cabinet_id
+            dep_parent = (
+                dependency.split("__", 1)[0]
+                if "__" in dependency
+                else None
+            )
             if dep_parent != cabinet_id:
                 report.add_error(
                     "CROSS_CABINET_DEPENDENCY",
@@ -170,32 +174,18 @@ def _validate_cabinet_membership(
 
 
 def validate_structure(
-    confirmed_intent: DesignIntent | Any,
+    confirmed_intent: DesignIntent,
     spec: FurnitureSpec,
     structure: CabinetStructure,
 ) -> ValidationReport:
     """Validate exact geometry against the confirmed finished envelope."""
     report = ValidationReport(stage="panels_planned")
-    if isinstance(confirmed_intent, DesignIntent):
-        confirmed = (
-            confirmed_intent.furniture_category,
-            confirmed_intent.finished_envelope.width_mm,
-            confirmed_intent.finished_envelope.depth_mm,
-            confirmed_intent.finished_envelope.height_mm,
-        )
-    else:
-        # Compatibility for direct callers that previously passed the retired
-        # serial CabinetLayout checkpoint.
-        confirmed = (
-            getattr(
-                confirmed_intent,
-                "furniture_category",
-                getattr(confirmed_intent, "furniture_type", None),
-            ),
-            getattr(confirmed_intent, "width", None),
-            getattr(confirmed_intent, "depth", None),
-            getattr(confirmed_intent, "height", None),
-        )
+    confirmed = (
+        confirmed_intent.furniture_category,
+        confirmed_intent.finished_envelope.width_mm,
+        confirmed_intent.finished_envelope.depth_mm,
+        confirmed_intent.finished_envelope.height_mm,
+    )
     if (
         spec.furniture_category,
         spec.width,
@@ -297,13 +287,14 @@ def validate_structure(
 
 def validate_panels(
     spec: FurnitureSpec,
-    layout: CabinetStructure | Any,
+    layout: CabinetStructure,
     panels: list[PanelPlacement],
 ) -> ValidationReport:
     report = ValidationReport(stage="panels_planned")
     if not isinstance(layout, CabinetStructure):
-        spec = FurnitureSpec.from_dict(asdict(spec))
-        layout = CabinetStructure.from_spec(spec)
+        raise TypeError(
+            "validate_panels requires CabinetStructure; independent room layout is not a valid panel input"
+        )
     if not panels:
         report.add_error("EMPTY_PANEL_PLAN", "panel plan contains no panels")
         return report
@@ -537,7 +528,7 @@ def _validate_toe_kick_panels(
     support_panels = [
         item
         for item in panels
-        if (item.role or panel_role(item.id)).startswith("toe_kick_support_")
+        if item.role.startswith("toe_kick_support_")
     ]
     expected_support_count = (
         resolve_toe_kick_support_count(
@@ -572,7 +563,7 @@ def _validate_toe_kick_panels(
     _mismatch_boxes(
         report,
         "TOE_KICK_SUPPORT_GEOMETRY_MISMATCH",
-        {item.role or item.id: item for item in support_panels},
+        {item.role: item for item in support_panels},
         toe_kick_support_boxes(spec, layout),
     )
     return report
@@ -617,7 +608,7 @@ def _validate_back_rails(
     _mismatch_boxes(
         report,
         "BACK_RAIL_GEOMETRY_MISMATCH",
-        {item.role or item.id: item for item in rail_panels},
+        {item.role: item for item in rail_panels},
         back_rail_boxes(spec, layout),
     )
     return report
@@ -677,7 +668,7 @@ def _validate_shelf_panels(
     _mismatch_boxes(
         report,
         "SHELF_PANEL_GEOMETRY_MISMATCH",
-        {item.role or item.id: item for item in shelf_panels},
+        {item.role: item for item in shelf_panels},
         expected,
     )
     return report
@@ -722,7 +713,7 @@ def _validate_drawer_panels(
     _mismatch_boxes(
         report,
         "DRAWER_PANEL_GEOMETRY_MISMATCH",
-        {item.role or item.id: item for item in drawer_panels},
+        {item.role: item for item in drawer_panels},
         expected,
     )
     return report

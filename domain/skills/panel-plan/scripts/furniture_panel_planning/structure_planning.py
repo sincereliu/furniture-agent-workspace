@@ -36,20 +36,8 @@ class CabinetStructure:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "CabinetStructure":
-        """Load structure output, recovering the historical door_count name."""
-        values = dict(data)
-        if "door_count" in values:
-            if "n_doors" in values and values["n_doors"] != values["door_count"]:
-                raise ValueError("n_doors and door_count must match")
-            values["n_doors"] = values.pop("door_count")
-        if "furniture_type" in values:
-            if (
-                "furniture_category" in values
-                and values["furniture_category"] != values["furniture_type"]
-            ):
-                raise ValueError("furniture_category and furniture_type must match")
-            values["furniture_category"] = values.pop("furniture_type")
-        return cls(**values)
+        """Load the current structure output shape."""
+        return cls(**dict(data))
 
     @classmethod
     def from_spec(cls, spec: FurnitureSpec) -> "CabinetStructure":

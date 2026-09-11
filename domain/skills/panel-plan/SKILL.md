@@ -25,14 +25,14 @@ description: 用于 panels_planned 阶段。当用户说“几扇门”“几层
 
 ## 参考导航
 
-- 规范术语、兼容别名和单位口径： [术语规范表](references/terminology-glossary.md)
+- 规范术语和单位口径： [术语规范表](references/terminology-glossary.md)
 - 提案字段、显式值要求和 LLM 候选起点： [提案契约](references/panel-proposal-contract.md)
 - 背板模式解析、背板基准、内部净深和背拉条约束： [背板结构规则](references/back-construction-rules.md)
 - 板件角色、门/层板/踢脚规则和柜型拓扑边界： [板件定义规则](references/panel-definition-rules.md)
 - 层板列表、计算层与固定/活动层板物化： [层板规则](references/shelf-planning-rules.md)
 - 踢脚区、支撑数量公式和净距： [踢脚规则](references/toe-kick-rules.md)
 - 抽屉区尺寸链、适用条件和限制： [抽屉尺寸链](references/drawer-dimension-chain.md)
-- 模块职责与历史兼容： [运行时映射](references/runtime-map.md)
+- 模块职责与入口： [运行时映射](references/runtime-map.md)
 - 柜型拓扑骨架： `references/cabinet-topologies/`（围合面、有无踢脚、整高抽屉区类型；门/层板/抽屉几何由求解器执行，不能只加 YAML 就支持新柜型）
 - 单位审计和优化等旁路证据： [板件旁路分析](references/panel-side-analyses.md)
 
@@ -44,7 +44,7 @@ description: 用于 panels_planned 阶段。当用户说“几扇门”“几层
 
 ## 边界
 
-- 运行时在 `scripts/furniture_panel_planning/`；模块职责、入口和历史 schema 迁移见 [运行时映射](references/runtime-map.md)。代码不得按自然语言、柜型或内置 profile 选择方案。
+- 运行时在 `scripts/furniture_panel_planning/`；模块职责和入口见 [运行时映射](references/runtime-map.md)。代码不得按自然语言、柜型或内置 profile 选择方案。
 - `panels_planned` 的对象树是 `cabinets[]`：每个柜体是父对象，带 `id` 以及自己的 `spec/structure/back_mount_resolution/panels`。板件带 `parent_id`（所属柜体）和 `role`（柜内角色，如 `left_side_panel`）；全局 `id` 为 `{cabinet_id}__{role}`，避免多柜撞名。检查点只写这棵树，不在顶层再抄一份 `spec/panels`。下游读法见 [运行时映射](references/runtime-map.md)。分析记录属于旁路证据，不并入板件事实。
 - 可选结构化字段 `cabinet_id` 是身份，不是构造参数，写入提案后由运行时弹出再准入 `FurnitureSpec`。缺省为 `cabinet_1`。交互式主流程目前仍是一份意图对应一台柜；多柜可经 `plan_panel_cabinets()` 组合，不同外包络仍要多份已确认意图。
 - 接触由几何推导（拓扑）；「连不连」见制造 [连接与接触默认规则](../manufacture-plan/references/connection-contact-defaults.md)。本轮没有逐条连接的提案覆盖字段。

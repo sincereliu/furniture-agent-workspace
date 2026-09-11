@@ -28,6 +28,7 @@ from furniture_panel_planning.panel_rules import (
     toe_kick_support_clear_spacing,
 )
 from furniture_panel_planning.panel_spec import (
+    FurnitureSpec,
     PANEL_PARAMETER_FIELDS,
     resolve_shelf_gaps,
 )
@@ -200,15 +201,48 @@ class PanelRuleContractTests(unittest.TestCase):
                 top_gap_mm=100.0,
             )
 
-    def test_structure_from_dict_migrates_legacy_door_count(self) -> None:
+    def test_panel_runtime_rejects_historical_field_names(self) -> None:
         spec = furniture_spec(n_doors=2)
+        payload = spec.__dict__.copy()
+        payload["furniture_type"] = payload["furniture_category"]
+        with self.assertRaisesRegex(ValueError, "does not support"):
+            FurnitureSpec.from_dict(payload)
+        payload = spec.__dict__.copy()
+        payload["type"] = payload["furniture_category"]
+        with self.assertRaisesRegex(ValueError, "does not support"):
+            FurnitureSpec.from_dict(payload)
+        payload = spec.__dict__.copy()
+        payload["door_margin"] = payload["front_face_margin"]
+        with self.assertRaisesRegex(ValueError, "does not support"):
+            FurnitureSpec.from_dict(payload)
+        payload = spec.__dict__.copy()
+        payload["movable_shelf_connector"] = "two_in_one"
+        with self.assertRaisesRegex(ValueError, "does not support"):
+            FurnitureSpec.from_dict(payload)
+        payload = spec.__dict__.copy()
+        payload["door_hinge_side"] = "left"
+        with self.assertRaisesRegex(ValueError, "does not support"):
+            FurnitureSpec.from_dict(payload)
+
         structure = CabinetStructure.from_spec(spec)
-        payload = structure.__dict__.copy()
-        payload["door_count"] = payload.pop("n_doors")
-        restored = CabinetStructure.from_dict(payload)
-        self.assertEqual(restored.n_doors, 2)
-        with self.assertRaises(ValueError):
-            CabinetStructure.from_dict({**payload, "n_doors": 1, "door_count": 2})
+        structure_payload = structure.__dict__.copy()
+        structure_payload["door_count"] = structure_payload.pop("n_doors")
+        with self.assertRaises(TypeError):
+            CabinetStructure.from_dict(structure_payload)
+        structure_payload = structure.__dict__.copy()
+        structure_payload["furniture_type"] = structure_payload["furniture_category"]
+        with self.assertRaises(TypeError):
+            CabinetStructure.from_dict(structure_payload)
+
+        intent = DesignIntent(
+            furniture_category="floor_cabinet",
+            finished_envelope=FinishedEnvelope(800, 600, 1000),
+            confirmed=True,
+        )
+        params = panel_parameters()
+        params["door_margin"] = params.pop("front_face_margin")
+        with self.assertRaisesRegex(ValueError, "does not support"):
+            FurnitureSpec.from_intent(intent, params)
 
     def test_proposal_contract_complete_fields_match_runtime(self) -> None:
         contract = (
