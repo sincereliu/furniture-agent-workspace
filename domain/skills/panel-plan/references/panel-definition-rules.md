@@ -21,10 +21,11 @@
   空 `shelves` 与 `n_doors=0`。混合分区的停问见
   [提案契约](panel-proposal-contract.md)。不得由代码按数量优先级静默丢弃任何区域。
   抽屉区尺寸链与板件构成见 [抽屉尺寸链](drawer-dimension-chain.md)。
-- 抽屉每侧净空、层缝、底/背板厚和后部净空分别来自已准入的
-  `drawer_side_clearance/drawer_layer_gap/drawer_bottom_thickness/`
-  `drawer_back_thickness/drawer_back_clearance`。板件代码不得读取制造五金目录
-  来猜测这些值；制造阶段只能选择与已确认几何兼容的滑轨。
+- 抽屉每侧净空、层缝和后部净空分别来自已准入的
+  `drawer_side_clearance/drawer_layer_gap/drawer_back_clearance`。
+  抽屉前板、侧板、后板和底板厚度走料板，见 [料档与工艺卡](sheet-stock-catalog.md)。
+  板件代码不得读取制造五金目录来猜测这些值；制造阶段只能选择与已确认几何兼容的滑轨。
+  当前拓扑没有独立抽屉面板；有面板仍为后续需求。
 - BOM 和五金记录应与 CAD 实体分离。
 - 背板结构、精确净空和三种模式尺寸统一按 [背板结构规则](back-construction-rules.md)；本文件不复制解析公式。
 - 入槽背拉条夹在左右侧板之间；数量、等距布置和净距按

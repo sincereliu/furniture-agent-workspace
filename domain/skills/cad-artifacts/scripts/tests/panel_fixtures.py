@@ -11,6 +11,21 @@ def by_role(items):
     return index_by_role(items)
 
 
+def _bind_inherited_stock(values: dict[str, Any], overrides: dict[str, Any]) -> None:
+    """Keep test fixtures aligned with the shop process card."""
+    board = values["board_thickness"]
+    if "door_thickness" not in overrides:
+        values["door_thickness"] = board
+    if "drawer_bottom_thickness" not in overrides:
+        values["drawer_bottom_thickness"] = board
+    if "drawer_back_thickness" not in overrides:
+        values["drawer_back_thickness"] = board
+    if "back_thickness" not in overrides:
+        values["back_thickness"] = (
+            board if values.get("back_mount") == "insert" else 9.0
+        )
+
+
 def _even_shelves(count: int, *, height: float, board: float, toe_kick: float):
     """均分 count 层固定层板：所有格子（含顶格、底格）净高相等。"""
     internal_height = height - toe_kick - 2 * board
@@ -36,6 +51,7 @@ def panel_parameters(furniture_category: str = "floor_cabinet", **overrides: Any
         "shelves": [], "top_gap_mm": 0.0,
     }
     values.update(overrides)
+    _bind_inherited_stock(values, overrides)
     return values
 
 
@@ -70,6 +86,7 @@ def cabinet_data(furniture_category: str = "floor_cabinet", **overrides: Any) ->
         values["hanging_mode"] = "free_hanging_height"
         values["hanging_height_mm"] = 2000
     values.update(overrides)
+    _bind_inherited_stock(values, overrides)
     return values
 
 

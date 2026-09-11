@@ -12,7 +12,7 @@
 
 - `shelves`
 - `top_gap_mm`
-- `board_thickness`
+- `board_thickness`（料板厚；层板不单独立项）
 - `structure.internal_height`
 - `structure.internal_width`
 - `structure.internal_y_start`

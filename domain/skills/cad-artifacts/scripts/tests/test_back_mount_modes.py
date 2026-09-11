@@ -38,7 +38,6 @@ class BackMountModeTests(unittest.TestCase):
             depth=600,
             height=1000,
             back_mount=back_mount,
-            back_thickness=18 if back_mount == "insert" else 9,
             shelf_count=1,
             n_doors=2,
         )
@@ -310,8 +309,7 @@ class BackMountModeTests(unittest.TestCase):
             depth=600,
             height=1000,
             back_mount="insert",
-            back_thickness=18,
-            back_offset=570,
+            back_offset=572,
         )
         insert_report = validate_structure(
             self._intent(insert_spec),

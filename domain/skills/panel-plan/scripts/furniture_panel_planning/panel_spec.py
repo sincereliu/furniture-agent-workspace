@@ -13,6 +13,11 @@ VALID_BACK_MOUNTS = frozenset({"groove", "insert", "cover"})
 
 VALID_SHELF_TYPES = frozenset({"fixed", "movable"})
 
+# Shop sheet-stock catalog. See references/sheet-stock-catalog.md.
+CARCASS_STOCK_MM = frozenset({18.0, 22.0})
+BACK_STOCK_MM = 9.0
+PROCESS_CARD_CARCASS_MM = 18.0
+
 
 @dataclass(frozen=True)
 class ShelfSpec:
@@ -52,19 +57,28 @@ def _coerce_shelves(raw: Any) -> list[ShelfSpec]:
         result.append(ShelfSpec(shelf_type=shelf_type, gap_below_mm=gap_below))
     return result
 
-# Every field is an LLM/user proposal decision. Runtime rejects omissions instead
-# of selecting a cabinet profile or filling construction defaults.
-PANEL_PARAMETER_FIELDS = frozenset(
+# Construction fields that remain required on every proposal. Sheet-stock
+# fields may be omitted and are expanded from the shop process card.
+PANEL_REQUIRED_PARAMETER_FIELDS = frozenset(
     {
-        "board_thickness", "back_thickness", "door_thickness",
         "toe_kick_height", "back_offset", "front_face_margin", "door_hinge_gap",
         "groove_depth", "groove_clearance", "toe_kick_reveal_front",
         "toe_kick_reveal_back", "toe_kick_support_count", "back_mount",
         "back_rail_height", "drawer_count", "drawer_side_clearance",
-        "drawer_layer_gap", "drawer_bottom_thickness", "drawer_back_thickness",
-        "drawer_back_clearance", "shelves", "top_gap_mm", "n_doors",
+        "drawer_layer_gap", "drawer_back_clearance", "shelves", "top_gap_mm",
+        "n_doors",
     }
 )
+PANEL_STOCK_FIELDS = frozenset(
+    {
+        "board_thickness",
+        "back_thickness",
+        "door_thickness",
+        "drawer_bottom_thickness",
+        "drawer_back_thickness",
+    }
+)
+PANEL_PARAMETER_FIELDS = PANEL_REQUIRED_PARAMETER_FIELDS | PANEL_STOCK_FIELDS
 PANEL_SPEC_FIELDS = PANEL_PARAMETER_FIELDS
 _SERIALIZED_FIELDS = PANEL_PARAMETER_FIELDS | {
     "furniture_category", "width", "depth", "height",
@@ -129,6 +143,7 @@ class FurnitureSpec:
         self.back_mount = resolve_back_mount(self.back_mount)
         self.shelves = _coerce_shelves(self.shelves)
         _validate_objective_invariants(self)
+        _validate_sheet_stock(self)
 
     @classmethod
     def from_intent(
@@ -136,7 +151,7 @@ class FurnitureSpec:
         intent: DesignIntent,
         options: Mapping[str, Any] | None,
     ) -> "FurnitureSpec":
-        """Admit a complete proposal against a confirmed finished envelope."""
+        """Admit a proposal against a confirmed finished envelope."""
         if not isinstance(intent, DesignIntent) or not intent.confirmed:
             raise ValueError("panel planning requires a confirmed DesignIntent")
         if not isinstance(options, Mapping):
@@ -145,7 +160,8 @@ class FurnitureSpec:
         unknown = sorted(set(values) - PANEL_SPEC_FIELDS)
         if unknown:
             raise ValueError("panel stage does not support: " + ", ".join(unknown))
-        missing = sorted(PANEL_PARAMETER_FIELDS - set(values))
+        values = expand_sheet_stock(values)
+        missing = sorted(PANEL_REQUIRED_PARAMETER_FIELDS - set(values))
         if missing:
             raise ValueError(
                 "panel proposal is incomplete; missing: " + ", ".join(missing)
@@ -193,6 +209,110 @@ def resolve_back_mount(requested: str) -> str:
             f"back_mount must be one of: {', '.join(sorted(VALID_BACK_MOUNTS))}"
         )
     return requested
+
+
+def expand_sheet_stock(options: Mapping[str, Any]) -> dict[str, Any]:
+    """Fill omitted sheet-stock fields from the shop process card.
+
+    Structured protocol: carcass 18; rolled back 9 for groove/cover;
+    insert back and drawer box inherit carcass; door inherits carcass
+    unless an admitted catalog value is supplied. Serialized specs must
+    already be complete and do not go through this expansion.
+    """
+    values = dict(options)
+    board = _admit_optional_stock(
+        values.pop("board_thickness", None),
+        "board_thickness",
+        PROCESS_CARD_CARCASS_MM,
+        CARCASS_STOCK_MM,
+    )
+    values["board_thickness"] = board
+    back_default, back_allowed = _back_stock_for_mount(values.get("back_mount"), board)
+    values["back_thickness"] = _admit_optional_stock(
+        values.pop("back_thickness", None),
+        "back_thickness",
+        back_default,
+        back_allowed,
+    )
+    values["door_thickness"] = _admit_optional_stock(
+        values.pop("door_thickness", None),
+        "door_thickness",
+        board,
+        CARCASS_STOCK_MM,
+    )
+    for name in ("drawer_bottom_thickness", "drawer_back_thickness"):
+        values[name] = _admit_optional_stock(
+            values.pop(name, None),
+            name,
+            board,
+            frozenset({board}),
+        )
+    return values
+
+
+def thickness_for_material_role(spec: FurnitureSpec, material_role: str) -> float:
+    """Return the admitted stock thickness for a panel material role."""
+    if material_role == "back":
+        return spec.back_thickness
+    if material_role == "door":
+        return spec.door_thickness
+    return spec.board_thickness
+
+
+def _back_stock_for_mount(back_mount: Any, board: float) -> tuple[float, frozenset[float]]:
+    """Groove/cover use rolled 9mm back; insert uses carcass stock."""
+    if back_mount == "insert":
+        return board, frozenset({board})
+    return BACK_STOCK_MM, frozenset({BACK_STOCK_MM})
+
+
+def _admit_optional_stock(
+    raw: Any,
+    name: str,
+    default: float,
+    allowed: frozenset[float],
+) -> float:
+    if raw is None:
+        return default
+    value = _finite_mm(raw, name)
+    if value not in allowed:
+        if name in {"drawer_bottom_thickness", "drawer_back_thickness"}:
+            raise ValueError(f"{name} must equal board_thickness")
+        raise ValueError(_stock_choice_error(name, allowed))
+    return value
+
+
+def _finite_mm(value: Any, name: str) -> float:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not isfinite(value)
+    ):
+        raise ValueError(f"{name} must be numeric and finite")
+    return float(value)
+
+
+def _stock_choice_error(name: str, allowed: frozenset[float]) -> str:
+    shown = ", ".join(
+        str(int(item) if float(item).is_integer() else item)
+        for item in sorted(allowed)
+    )
+    if len(allowed) == 1:
+        return f"{name} must be {shown}"
+    return f"{name} must be one of: {shown}"
+
+
+def _validate_sheet_stock(spec: FurnitureSpec) -> None:
+    if spec.board_thickness not in CARCASS_STOCK_MM:
+        raise ValueError(_stock_choice_error("board_thickness", CARCASS_STOCK_MM))
+    _, back_allowed = _back_stock_for_mount(spec.back_mount, spec.board_thickness)
+    if spec.back_thickness not in back_allowed:
+        raise ValueError(_stock_choice_error("back_thickness", back_allowed))
+    if spec.door_thickness not in CARCASS_STOCK_MM:
+        raise ValueError(_stock_choice_error("door_thickness", CARCASS_STOCK_MM))
+    for name in ("drawer_bottom_thickness", "drawer_back_thickness"):
+        if getattr(spec, name) != spec.board_thickness:
+            raise ValueError(f"{name} must equal board_thickness")
 
 
 def resolve_shelf_gaps(spec: FurnitureSpec, internal_height: float) -> list[float]:

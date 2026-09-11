@@ -26,6 +26,9 @@
 | 背板安装方式 | `back_mount` | 枚举 | 规范值 `groove/insert/cover`。 |
 | 背板安装解析 | `back_mount_resolution.requested/effective` | 对象 | `requested` 保留请求值，`effective` 保留生效值。 |
 | 踢脚支撑数量 | `toe_kick_support_count` | 整数 | 必须是非负整数。无踢脚时为 `0`。 |
+| 料板厚 | `board_thickness` | mm | 柜体料档，目录 `18/22`，工艺卡默认 `18`。侧板、顶底、层板、踢脚、背拉条和抽屉盒都用这一档。不是每块板的独立厚度。 |
+| 卷后背板厚 | `back_thickness` | mm | `groove/cover` 为常量 `9`；`insert` 等于料板厚。提案可省略。 |
+| 门板厚 | `door_thickness` | mm | 料板目录 `18/22`。省略则等于 `board_thickness`。 |
 | 柜体实例 | `cabinet_id` / `cabinets[].id` | 标识符 | 柜体父对象身份；缺省 `cabinet_1`。不得包含 `__`。 |
 | 板件柜内角色 | `role` | 字符串 | 柜内稳定角色名，如 `left_side_panel`。输出必须写出。 |
 | 板件所属柜体 | `parent_id` | 标识符 | 必须等于所属 `cabinets[].id`。输出必须写出。 |

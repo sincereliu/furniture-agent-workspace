@@ -21,7 +21,7 @@ from .construction_geometry import (
     toe_kick_support_boxes,
 )
 from .panel_models import PanelPlacement
-from .panel_spec import FurnitureSpec, resolve_back_mount
+from .panel_spec import FurnitureSpec, resolve_back_mount, thickness_for_material_role
 from .panel_rules import (
     back_rail_clear_spacing,
     resolve_back_rail_count,
@@ -410,6 +410,14 @@ def _validate_panel_basics(
                     f"{item.id} depends on unknown placement {dependency}",
                     item.id,
                 )
+        expected = thickness_for_material_role(spec, item.material_role)
+        actual = min(item.size_x, item.size_y, item.size_z)
+        if abs(actual - expected) > 0.5:
+            report.add_error(
+                "PANEL_STOCK_THICKNESS_MISMATCH",
+                f"{item.id} thickness {actual:g} must match {item.material_role} stock {expected:g}",
+                item.id,
+            )
     return report
 
 

@@ -18,7 +18,7 @@
 
 | 模块 | 职责 | 边界理由 |
 | --- | --- | --- |
-| `panel_spec.py` | schema、完整性、客观冲突、`back_mount` 准入 | schema / validation |
+| `panel_spec.py` | schema、完整性、客观冲突、`back_mount` 准入、料档目录与工艺卡展开 | schema / validation / structured_protocol |
 | `structure_planning.py` | 精确净空与柜体区域 | calculation |
 | `panel_rules.py` | 踢脚支撑数量、背拉条数量与净距 | calculation |
 | `construction_geometry.py` | 层板/抽屉/踢脚/背拉条盒子 | calculation |

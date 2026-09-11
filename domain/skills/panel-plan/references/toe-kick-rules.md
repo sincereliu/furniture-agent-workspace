@@ -13,7 +13,7 @@
 - `toe_kick_reveal_front`
 - `toe_kick_reveal_back`
 - `toe_kick_support_count`
-- `board_thickness`
+- `board_thickness`（料板厚；踢脚板与支撑不单独立项）
 - `structure.internal_width`
 - `structure.carcass_y_start`
 - `structure.carcass_y_end`

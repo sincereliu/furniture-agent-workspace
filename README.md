@@ -90,7 +90,7 @@ record = orchestrator.run_stage_analysis(
     project,
     "panel_optimization",
     {
-        "variables": {"board_thickness": [15.0, 18.0, 21.0]},
+        "variables": {"board_thickness": [18.0, 22.0]},
         "objectives": ["material_volume_m3", "negative_internal_volume_m3"],
     },
 )

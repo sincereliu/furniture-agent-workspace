@@ -13,8 +13,8 @@
 - `drawer_count`
 - `drawer_side_clearance`
 - `drawer_layer_gap`
-- `drawer_bottom_thickness`
-- `drawer_back_thickness`
+- `drawer_bottom_thickness`（准入后等于料板厚）
+- `drawer_back_thickness`（准入后等于料板厚）
 - `drawer_back_clearance`
 - `front_face_margin`
 - `board_thickness`

@@ -118,7 +118,6 @@ class ApiEntrypointTests(unittest.TestCase):
                 server.CabinetRequest(
                     **cabinet_data(
                         "wall_cabinet",
-                        back_thickness=18,
                         back_mount="insert",
                     ),
                 )

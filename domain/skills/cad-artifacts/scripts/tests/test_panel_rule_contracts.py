@@ -29,6 +29,7 @@ from furniture_panel_planning.panel_rules import (
 from furniture_panel_planning.panel_spec import (
     FurnitureSpec,
     PANEL_PARAMETER_FIELDS,
+    PANEL_STOCK_FIELDS,
     resolve_shelf_gaps,
 )
 from furniture_panel_planning.structure_planning import CabinetStructure
@@ -255,6 +256,73 @@ class PanelRuleContractTests(unittest.TestCase):
         params["shelves"] = [{"shelf_type": "fixed", "gap_below_mm": "auto"}]
         params["top_gap_mm"] = 100.0
         with self.assertRaises(ValueError):
+            FurnitureSpec.from_intent(intent, params)
+
+    def test_sheet_stock_process_card_expands_omitted_fields(self) -> None:
+        intent = DesignIntent(
+            furniture_category="floor_cabinet",
+            finished_envelope=FinishedEnvelope(800, 600, 1000),
+            confirmed=True,
+        )
+        params = panel_parameters()
+        for name in PANEL_STOCK_FIELDS:
+            params.pop(name)
+        spec = FurnitureSpec.from_intent(intent, params)
+        self.assertEqual(spec.board_thickness, 18.0)
+        self.assertEqual(spec.back_thickness, 9.0)
+        self.assertEqual(spec.door_thickness, 18.0)
+        self.assertEqual(spec.drawer_bottom_thickness, 18.0)
+        self.assertEqual(spec.drawer_back_thickness, 18.0)
+
+    def test_sheet_stock_carcass_22_binds_box_and_keeps_back_at_9(self) -> None:
+        spec = furniture_spec(board_thickness=22)
+        self.assertEqual(spec.board_thickness, 22.0)
+        self.assertEqual(spec.door_thickness, 22.0)
+        self.assertEqual(spec.back_thickness, 9.0)
+        self.assertEqual(spec.drawer_bottom_thickness, 22.0)
+        self.assertEqual(spec.drawer_back_thickness, 22.0)
+        structure = CabinetStructure.from_spec(spec)
+        panels = by_role(plan_panels(spec, structure))
+        self.assertEqual(panels["left_side_panel"].size_x, 22.0)
+        back = next(
+            panel for panel in panels.values() if panel.material_role == "back"
+        )
+        self.assertEqual(back.size_y, 9.0)
+
+    def test_sheet_stock_door_may_be_22_when_carcass_is_18(self) -> None:
+        spec = furniture_spec(door_thickness=22)
+        self.assertEqual(spec.board_thickness, 18.0)
+        self.assertEqual(spec.door_thickness, 22.0)
+        doors = [
+            panel
+            for panel in plan_panels(spec, CabinetStructure.from_spec(spec))
+            if panel.material_role == "door"
+        ]
+        self.assertTrue(doors)
+        self.assertTrue(
+            all(min(panel.size_x, panel.size_y, panel.size_z) == 22.0 for panel in doors)
+        )
+
+    def test_sheet_stock_insert_back_follows_carcass_stock(self) -> None:
+        spec = furniture_spec(back_mount="insert")
+        self.assertEqual(spec.back_thickness, 18.0)
+        spec = furniture_spec(back_mount="insert", board_thickness=22)
+        self.assertEqual(spec.back_thickness, 22.0)
+        with self.assertRaisesRegex(ValueError, "back_thickness must be 22"):
+            furniture_spec(back_mount="insert", board_thickness=22, back_thickness=9)
+
+    def test_sheet_stock_rejects_values_outside_catalog(self) -> None:
+        with self.assertRaisesRegex(ValueError, "board_thickness must be one of"):
+            furniture_spec(board_thickness=16)
+        with self.assertRaisesRegex(ValueError, "back_thickness must be 9"):
+            furniture_spec(back_thickness=18)
+        intent = DesignIntent(
+            furniture_category="floor_cabinet",
+            finished_envelope=FinishedEnvelope(800, 600, 1000),
+            confirmed=True,
+        )
+        params = panel_parameters(board_thickness=22, drawer_bottom_thickness=18)
+        with self.assertRaisesRegex(ValueError, "drawer_bottom_thickness must equal"):
             FurnitureSpec.from_intent(intent, params)
 
     def test_proposal_contract_complete_fields_match_runtime(self) -> None:

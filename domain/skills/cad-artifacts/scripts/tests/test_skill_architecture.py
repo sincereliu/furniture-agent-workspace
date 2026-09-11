@@ -35,6 +35,7 @@ STAGE_REFERENCES = {
     "panel-plan": (
         "references/panel-definition-rules.md",
         "references/panel-proposal-contract.md",
+        "references/sheet-stock-catalog.md",
         "references/back-construction-rules.md",
         "references/shelf-planning-rules.md",
         "references/toe-kick-rules.md",

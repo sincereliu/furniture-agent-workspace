@@ -132,9 +132,9 @@ class CabinetRequest(BaseModel):
         if value == "free_height":
             return "free_hanging_height"
         return value
-    board_thickness: float | None = Field(default=None, gt=0, description="柜体板厚 mm")
-    back_thickness: float | None = Field(default=None, gt=0, description="背板厚 mm")
-    door_thickness: float | None = Field(default=None, gt=0, description="门板厚 mm")
+    board_thickness: float | None = Field(default=None, gt=0, description="料板厚 mm，目录 18/22，省略则 18")
+    back_thickness: float | None = Field(default=None, gt=0, description="卷后背板厚 mm，必须为 9，可省略")
+    door_thickness: float | None = Field(default=None, gt=0, description="门板厚 mm，目录 18/22，省略则同料板")
     toe_kick_height: float | None = Field(default=None, ge=0, description="踢脚线高 mm")
     back_offset: float | None = Field(default=None, ge=0, description="背板后移 mm")
     front_face_margin: float | None = Field(default=None, ge=0, description="前脸四周边距 mm（门板与抽屉前板共用）")
@@ -170,8 +170,8 @@ class CabinetRequest(BaseModel):
     toe_kick_support_count: int | None = Field(default=None, ge=0, description="踢脚支撑板数量")
     drawer_side_clearance: float | None = Field(default=None, gt=0, description="抽屉每侧净空 mm")
     drawer_layer_gap: float | None = Field(default=None, ge=0, description="抽屉层间缝 mm")
-    drawer_bottom_thickness: float | None = Field(default=None, gt=0, description="抽屉底板厚 mm")
-    drawer_back_thickness: float | None = Field(default=None, gt=0, description="抽屉背板厚 mm")
+    drawer_bottom_thickness: float | None = Field(default=None, gt=0, description="抽屉底板厚 mm，省略则同料板")
+    drawer_back_thickness: float | None = Field(default=None, gt=0, description="抽屉背板厚 mm，省略则同料板")
     drawer_back_clearance: float | None = Field(default=None, ge=0, description="抽屉后部净空 mm")
     appearance: dict[str, Any] = Field(
         default_factory=dict,

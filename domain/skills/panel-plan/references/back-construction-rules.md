@@ -5,7 +5,7 @@
 ## 阶段输入
 
 - `back_mount`：规范值为 `groove/insert/cover`；必须由提案显式给出，不存在运行时缺省或 `auto` 解析。
-- `board_thickness/back_thickness/door_thickness`。
+- `board_thickness/back_thickness/door_thickness`：来自已准入料档；背板厚为卷后背板 `9` mm，见 [料档与工艺卡](sheet-stock-catalog.md)。
 - `back_offset/front_face_margin/door_hinge_gap`。
 - `groove_depth/groove_clearance/back_rail_height`。
 

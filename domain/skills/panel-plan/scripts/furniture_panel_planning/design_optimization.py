@@ -223,6 +223,14 @@ def optimize_panel_design(
     for values in product(*(domains[name] for name in names)):
         changes = dict(zip(names, values))
         options = {**base_options, **changes}
+        if "board_thickness" in changes:
+            for inherited in (
+                "door_thickness",
+                "drawer_bottom_thickness",
+                "drawer_back_thickness",
+            ):
+                if inherited not in changes:
+                    options.pop(inherited, None)
         try:
             output = plan_panel_stage(intent, options)
             spec, _, _ = require_primary_handoff(output)
