@@ -1,6 +1,6 @@
 # LLM 与运行时边界
 
-适用于创建、修改和审查所有 `domain/skills/` 下家具阶段 Skill（`design-intent`、`layout-plan`、`panel-plan`、`manufacture_plan`、`feature-tree`、`cad-artifacts`、`delivery-report`）及家具工作流代码。
+适用于创建、修改和审查所有 `domain/skills/` 下家具阶段 Skill（`design-intent`、`layout-plan`、`panel-plan`、`manufacture-plan`、`feature-tree`、`cad-artifacts`、`delivery-report`）及家具工作流代码。
 
 ## 总原则
 

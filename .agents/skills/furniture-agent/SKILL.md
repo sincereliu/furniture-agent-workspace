@@ -1,4 +1,4 @@
----
+﻿---
 name: furniture-agent
 description: 路由本仓库六阶段家具生成主流程、独立房间摆放布局与所需 CAD 技能。适用于设计意图、板件、制造/BOM、特征树、CAD/STEP、交付验证，以及按需的房间摆放预览和 Viewer 交接。
 ---
@@ -13,7 +13,7 @@ description: 路由本仓库六阶段家具生成主流程、独立房间摆放�
 
    - `design_intent`：`domain/skills/design-intent/SKILL.md`
    - `panels_planned`：`domain/skills/panel-plan/SKILL.md`
-   - `manufacturing_planned`：`domain/skills/manufacture_plan/SKILL.md`
+   - `manufacturing_planned`：`domain/skills/manufacture-plan/SKILL.md`
    - `feature_tree_planned`：`domain/skills/feature-tree/SKILL.md`
    - `cad_generated`：`domain/skills/cad-artifacts/SKILL.md`
    - `delivery_validated`：`domain/skills/delivery-report/SKILL.md`

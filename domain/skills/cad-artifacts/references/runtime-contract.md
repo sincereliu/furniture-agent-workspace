@@ -1,4 +1,4 @@
-# 家具运行时契约
+﻿# 家具运行时契约
 
 回答“当前工作区实际执行什么？”；声称支持、规范化输入、生成或报告产物前读取。这里只定义运行时契约、命令、路径和限制。
 
@@ -123,7 +123,7 @@ store/<project-id>/
 
 - `<artifact-name>.design-intent.json`
 - `<artifact-name>.panel-plan.json`
-- `<artifact-name>.manufacture_plan.json`
+- `<artifact-name>.manufacture-plan.json`
 - `<artifact-name>.feature-tree.json`
 - `<artifact-name>.bom.md`
 - `<artifact-name>.drilled-holes.json`

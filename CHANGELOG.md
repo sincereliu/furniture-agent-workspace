@@ -16,9 +16,9 @@ CAD 的 `panel-plan.json` 快照、板件旁路分析和交付里的分析哈希
 
 - 新增代码理由：`state`（确认哈希与下游失效时清除）、`side_effect`（写出 `panels/<sha256>.json`）、`structured_protocol`（制造从冻结 JSON 还原 `FurnitureSpec` / `PanelPlacement`）。无自然语言映射，无默认制造方案。
 
-## 20260911.2 — 制造 Skill 更名为 manufacture_plan
+## 20260911.2 — 制造 Skill 更名为 manufacture-plan
 
-Skill 目录与快照文件名改为名词 `manufacture_plan`，与 `panel-plan`、`layout-plan` 对齐；阶段 ID `manufacturing_planned`、产物 kind `manufacturing_plan` 与运行时包 `furniture_manufacturing` 不变。
+Skill 目录与快照文件名改为名词 `manufacture-plan`，与 `panel-plan`、`layout-plan` 对齐；阶段 ID `manufacturing_planned`、产物 kind `manufacturing_plan` 与运行时包 `furniture_manufacturing` 不变。
 
 ### 边界
 
