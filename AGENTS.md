@@ -1,7 +1,7 @@
 # 家具 Skill 开发约定
 
 创建、修改或审查 `domain/skills/` 下家具阶段 Skill（`design-intent`、`layout-plan`、
-`panel-plan`、`manufacture-plan`、`feature-tree`、`cad-artifacts`、`delivery-report`）、
+`panel-plan`、`manufacture_plan`、`feature-tree`、`cad-artifacts`、`delivery-report`）、
 家具工作流入口及其测试前，必须完整读取
 [LLM 与运行时边界](.agents/skills/furniture-agent/references/llm-runtime-boundary.md)。
 

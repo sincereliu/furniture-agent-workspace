@@ -47,6 +47,6 @@ description: 用于 panels_planned 阶段。当用户说“几扇门”“几层
 - 运行时在 `scripts/furniture_panel_planning/`；模块职责、入口和历史 schema 迁移见 [运行时映射](references/runtime-map.md)。代码不得按自然语言、柜型或内置 profile 选择方案。
 - `panels_planned` 的对象树是 `cabinets[]`：每个柜体是父对象，带 `id` 以及自己的 `spec/structure/back_mount_resolution/panels`。板件带 `parent_id`（所属柜体）和 `role`（柜内角色，如 `left_side_panel`）；全局 `id` 为 `{cabinet_id}__{role}`，避免多柜撞名。检查点只写这棵树，不在顶层再抄一份 `spec/panels`。下游读法见 [运行时映射](references/runtime-map.md)。分析记录属于旁路证据，不并入板件事实。
 - 可选结构化字段 `cabinet_id` 是身份，不是构造参数，写入提案后由运行时弹出再准入 `FurnitureSpec`。缺省为 `cabinet_1`。交互式主流程目前仍是一份意图对应一台柜；多柜可经 `plan_panel_cabinets()` 组合，不同外包络仍要多份已确认意图。
-- 接触由几何推导（拓扑）；「连不连」见制造 [连接与接触默认规则](../manufacture-plan/references/connection-contact-defaults.md)。本轮没有逐条连接的提案覆盖字段。
+- 接触由几何推导（拓扑）；「连不连」见制造 [连接与接触默认规则](../manufacture_plan/references/connection-contact-defaults.md)。本轮没有逐条连接的提案覆盖字段。
 - 同一冻结意图上再试一版用 `retry_stage()`；直接改已生成的板件结果用 `revise_stage_output()`，使本阶段及下游失效。
 - 不在此阶段确定连接件孔位、封边细节、最终 BOM 或 CAD 操作。

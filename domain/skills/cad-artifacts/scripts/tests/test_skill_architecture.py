@@ -20,7 +20,7 @@ from furniture_design_intent.design_intent import EXECUTABLE_CATEGORIES
 STAGE_SKILLS = {
     "design_intent": "design-intent",
     "panels_planned": "panel-plan",
-    "manufacturing_planned": "manufacture-plan",
+    "manufacturing_planned": "manufacture_plan",
     "feature_tree_planned": "feature-tree",
     "cad_generated": "cad-artifacts",
     "delivery_validated": "delivery-report",
@@ -43,7 +43,7 @@ STAGE_REFERENCES = {
         "references/panel-side-analyses.md",
         "references/runtime-map.md",
     ),
-    "manufacture-plan": (
+    "manufacture_plan": (
         "references/manufacturing-rules.md",
         "references/connection-contact-defaults.md",
     ),
@@ -56,7 +56,7 @@ STAGE_RUNTIME_PACKAGES = {
     "design-intent": "furniture_design_intent",
     "layout-plan": "furniture_layout",
     "panel-plan": "furniture_panel_planning",
-    "manufacture-plan": "furniture_manufacturing",
+    "manufacture_plan": "furniture_manufacturing",
     "feature-tree": "furniture_feature_tree",
     "cad-artifacts": "furniture_cad",
     "delivery-report": "furniture_delivery_validation",
@@ -150,15 +150,15 @@ class SkillArchitectureTests(unittest.TestCase):
                 "furniture_panel_planning/design_optimization.py",
             ),
             (
-                "manufacture-plan",
+                "manufacture_plan",
                 "furniture_manufacturing/prototype_experiment.py",
             ),
             (
-                "manufacture-plan",
+                "manufacture_plan",
                 "furniture_manufacturing/test_statistics.py",
             ),
             (
-                "manufacture-plan",
+                "manufacture_plan",
                 "furniture_manufacturing/production_simulation.py",
             ),
         )
@@ -255,7 +255,7 @@ class SkillArchitectureTests(unittest.TestCase):
             "design-intent": "furniture_design_intent/validation.py",
             "layout-plan": "furniture_layout/validation.py",
             "panel-plan": "furniture_panel_planning/validation.py",
-            "manufacture-plan": "furniture_manufacturing/validation.py",
+            "manufacture_plan": "furniture_manufacturing/validation.py",
             "feature-tree": "furniture_feature_tree/validation.py",
             "cad-artifacts": "furniture_cad/validation.py",
             "delivery-report": (
@@ -320,7 +320,7 @@ class SkillArchitectureTests(unittest.TestCase):
         )
         manufacturing_package = (
             SKILLS_ROOT
-            / "manufacture-plan"
+            / "manufacture_plan"
             / "scripts"
             / "furniture_manufacturing"
         )
@@ -385,7 +385,7 @@ class SkillArchitectureTests(unittest.TestCase):
 
         manufacturing_validation = (
             SKILLS_ROOT
-            / "manufacture-plan"
+            / "manufacture_plan"
             / "scripts"
             / "furniture_manufacturing"
             / "validation.py"
@@ -394,7 +394,7 @@ class SkillArchitectureTests(unittest.TestCase):
         # 五金专属几何规则随各 Connector 自洽（仍属制造阶段运行时）
         hinge_connector = (
             SKILLS_ROOT
-            / "manufacture-plan"
+            / "manufacture_plan"
             / "scripts"
             / "furniture_manufacturing"
             / "connectors"
@@ -423,11 +423,11 @@ class SkillArchitectureTests(unittest.TestCase):
                 "back_mount",
                 "背拉条",
             ),
-            "domain/skills/manufacture-plan/SKILL.md": (
+            "domain/skills/manufacture_plan/SKILL.md": (
                 "groove",
                 "背拉条",
             ),
-            "domain/skills/manufacture-plan/references/runtime-map.md": (
+            "domain/skills/manufacture_plan/references/runtime-map.md": (
                 "BackMountConnector",
                 "generate_holes_for_panels",
             ),
@@ -473,7 +473,7 @@ class SkillArchitectureTests(unittest.TestCase):
                 "不参与房间定位",
                 "左后下落地角",
             ),
-            "domain/skills/manufacture-plan/SKILL.md": (
+            "domain/skills/manufacture_plan/SKILL.md": (
                 "readiness=preliminary/accepted/factory_ready",
                 "FurnitureOrchestrator.run_next()",
                 "references/runtime-map.md",
