@@ -113,14 +113,18 @@ class ApiEntrypointTests(unittest.TestCase):
         self.assertEqual(response.back_mount, "groove")
         self.assertGreater(response.panel_count, 0)
 
-        auto_insert = asyncio.run(
+        insert = asyncio.run(
             server.plan_cabinet(
                 server.CabinetRequest(
-                    **cabinet_data("wall_cabinet", back_thickness=18),
+                    **cabinet_data(
+                        "wall_cabinet",
+                        back_thickness=18,
+                        back_mount="insert",
+                    ),
                 )
             )
         )
-        self.assertEqual(auto_insert.back_mount, "insert")
+        self.assertEqual(insert.back_mount, "insert")
 
     def test_layout_endpoint_returns_room_position_and_svg_preview(self) -> None:
         request = server.CabinetRequest(

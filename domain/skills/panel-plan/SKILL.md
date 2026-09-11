@@ -19,7 +19,7 @@ description: 用于 panels_planned 阶段。当用户说“几扇门”“几层
 ## 提案与展示
 
 - 提案必须覆盖契约中的全部字段。用户没说的值按 [提案契约](references/panel-proposal-contract.md) 的候选起点写成具体值并标成假设，一次确认。
-- 停问清单与 `null`/`auto` 口径只在提案契约。
+- 停问清单与 `null` 口径只在提案契约。
 - 展示给用户：一份假设清单；代码准入后再展示柜体 `id`、`back_mount` requested/effective、内部净空和板件清单（含所属柜体）。
 - 按当前任务读对应 reference，不要一次加载全部规则。
 

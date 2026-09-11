@@ -23,16 +23,16 @@
 - 每项 `gap_below_mm` 表示“本层板底面到下方紧邻一层顶面”的净高。
 - 最下层的 `gap_below_mm` 指到底板顶面。
 - 顶格单独由 `top_gap_mm` 表示。
-- 恰好一项 `gap_below_mm` 可为 `null`/`auto`，表示计算层；运行时用剩余内部净高求出该层，不做均分推断。
+- 恰好一项 `gap_below_mm` 可为 `null`，表示计算层；运行时用剩余内部净高求出该层，不做均分推断。
 
 ## 计算规则
 
 - 若存在且仅存在一项 `gap_below_mm=null`，则
-  `auto_gap = internal_height - top_gap_mm - N × board_thickness - 其余显式净高之和`
+  `computed_gap = internal_height - top_gap_mm - N × board_thickness - 其余显式净高之和`
 - 若没有计算层，则要求
   `top_gap_mm + N × board_thickness + 所有 gap_below_mm 之和`
   与 `internal_height` 在 `0.5 mm` 容差内相等。
-- 若计算出的 `auto_gap < 0`，则该提案非法。
+- 若计算出的 `computed_gap < 0`，则该提案非法。
 
 ## 板件物化
 

@@ -133,11 +133,7 @@ def validate_manufacturing(
     actual_back_groove_ids = {
         panel_role(operation.id) for operation in back_groove_operations
     }
-    back_mount = resolve_back_mount(
-        spec.back_mount,
-        spec.back_thickness,
-        spec.board_thickness,
-    )
+    back_mount = resolve_back_mount(spec.back_mount)
     if (
         back_mount == "groove"
         and actual_back_groove_ids != expected_back_groove_ids

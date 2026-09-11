@@ -17,7 +17,7 @@
 ## 多目标候选分析
 
 - 用户要求在材料用量、内部空间和复杂度间比较候选时，先读 `../../external/scientific-agent-skills/skills/pymoo/SKILL.md`。
-- 由 LLM 明确目标、变量和约束，再用 `scripts/furniture_panel_planning/design_optimization.py` 生成 `panel_optimization`。
+- 由 LLM 明确目标、变量、约束和引擎（`exact` 或 `pymoo`），再用 `scripts/furniture_panel_planning/design_optimization.py` 生成 `panel_optimization`。引擎必须显式给出，不接受 `auto`。
 - 结果是候选集与 Pareto 摘要，不是新的板件事实输出。
 - 只有用户明确选中候选后，才可通过 `revise_stage_output()` 物化新的 `panels_planned` 结果。
 

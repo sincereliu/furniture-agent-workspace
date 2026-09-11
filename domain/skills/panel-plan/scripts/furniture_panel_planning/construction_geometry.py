@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from .panel_rules import (
     back_rail_clear_spacing,
     resolve_back_rail_count,
-    resolve_toe_kick_support_count,
     toe_kick_support_clear_spacing,
 )
 from .panel_spec import FurnitureSpec, resolve_shelf_gaps
@@ -174,7 +173,7 @@ def toe_kick_support_boxes(
     """Return equally spaced toe-kick supports, or an empty list."""
     if layout.toe_kick_height <= 0:
         return []
-    count = resolve_toe_kick_support_count(spec.toe_kick_support_count, layout.width)
+    count = spec.toe_kick_support_count
     if count <= 0:
         return []
     board = spec.board_thickness

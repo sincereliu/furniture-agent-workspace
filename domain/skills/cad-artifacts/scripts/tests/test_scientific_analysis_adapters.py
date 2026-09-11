@@ -122,7 +122,7 @@ class ScientificAnalysisAdapterTests(unittest.TestCase):
             project,
             "panel_optimization",
             {
-                "engine": "auto",
+                "engine": "exact",
                 "variables": {"board_thickness": [15.0, 18.0]},
                 "objectives": [
                     "material_volume_m3",

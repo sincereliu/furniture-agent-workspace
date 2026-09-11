@@ -141,7 +141,7 @@ class CabinetRequest(BaseModel):
     door_hinge_gap: float | None = Field(default=None, ge=0, description="门铰深度间隙 mm")
     shelves: list[dict[str, Any]] | None = Field(
         default=None,
-        description="层板列表（从上到下）：[{shelf_type: fixed|movable, gap_below_mm: 净高mm|null=auto}]",
+        description="层板列表（从上到下）：[{shelf_type: fixed|movable, gap_below_mm: 净高mm|null}]",
     )
     top_gap_mm: float | None = Field(default=None, ge=0, description="顶格净高 mm（最上层板顶面到顶板底面）")
     n_doors: int | None = Field(default=None, ge=0, description="门板数量")
@@ -156,11 +156,9 @@ class CabinetRequest(BaseModel):
     )
     groove_depth: float | None = Field(default=None, gt=0, description="背板入槽深度 mm")
     groove_clearance: float | None = Field(default=None, ge=0, description="槽宽相对背板厚度的余量 mm")
-    back_mount: Literal["auto", "groove", "insert", "cover"] | None = Field(
+    back_mount: Literal["groove", "insert", "cover"] | None = Field(
         default=None,
-        description=(
-            "板件阶段的背板安装方式；auto 按背板厚度解析为 groove 或 insert"
-        ),
+        description="板件阶段的背板安装方式：groove / insert / cover",
     )
     back_rail_height: float | None = Field(
         default=None,
@@ -169,7 +167,7 @@ class CabinetRequest(BaseModel):
     )
     toe_kick_reveal_front: float | None = Field(default=None, ge=0, description="前踢脚板后缩 mm")
     toe_kick_reveal_back: float | None = Field(default=None, ge=0, description="后踢脚板前移 mm")
-    toe_kick_support_count: int | None = Field(default=None, ge=0, description="踢脚支撑板数量；空值为自动")
+    toe_kick_support_count: int | None = Field(default=None, ge=0, description="踢脚支撑板数量")
     drawer_side_clearance: float | None = Field(default=None, gt=0, description="抽屉每侧净空 mm")
     drawer_layer_gap: float | None = Field(default=None, ge=0, description="抽屉层间缝 mm")
     drawer_bottom_thickness: float | None = Field(default=None, gt=0, description="抽屉底板厚 mm")

@@ -3,18 +3,6 @@
 from __future__ import annotations
 
 
-def resolve_toe_kick_support_count(
-    explicit: int | None,
-    cabinet_width: float,
-) -> int:
-    """Return an explicit count or calculate one when the proposal used null."""
-    if explicit is not None:
-        return explicit
-    if cabinet_width < 600:
-        return 0
-    return 1 + int((cabinet_width - 600) // 300)
-
-
 def toe_kick_support_clear_spacing(
     internal_width: float,
     support_count: int,

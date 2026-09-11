@@ -21,11 +21,11 @@
 | 门数量 | `n_doors` | 整数 | `panels_planned` 规范名是 `n_doors`。本阶段不接受 `door_count`。 |
 | 前脸四周边距 | `front_face_margin` | mm | 门板与抽屉前板共用的前脸边距。本阶段不接受 `door_margin`。 |
 | 层板列表 | `shelves` | 列表 | 从上到下排列的结构化层板列表。 |
-| 层板下净高 | `gap_below_mm` | mm 或 `null` | 字段名固定为 `gap_below_mm`；`null` 表示计算层。输入值 `"auto"` 与 `null` 同义。 |
+| 层板下净高 | `gap_below_mm` | mm 或 `null` | 字段名固定为 `gap_below_mm`；`null` 表示计算层。 |
 | 顶格净高 | `top_gap_mm` | mm | 最上层板顶面到顶板底面的净高。 |
-| 背板安装方式 | `back_mount` | 枚举 | 规范值 `auto/groove/insert/cover`。 |
+| 背板安装方式 | `back_mount` | 枚举 | 规范值 `groove/insert/cover`。 |
 | 背板安装解析 | `back_mount_resolution.requested/effective` | 对象 | `requested` 保留请求值，`effective` 保留生效值。 |
-| 踢脚支撑数量 | `toe_kick_support_count` | 整数或 `null` | `null` 是“显式请求自动计算”，不是缺省。 |
+| 踢脚支撑数量 | `toe_kick_support_count` | 整数 | 必须是非负整数。无踢脚时为 `0`。 |
 | 柜体实例 | `cabinet_id` / `cabinets[].id` | 标识符 | 柜体父对象身份；缺省 `cabinet_1`。不得包含 `__`。 |
 | 板件柜内角色 | `role` | 字符串 | 柜内稳定角色名，如 `left_side_panel`。输出必须写出。 |
 | 板件所属柜体 | `parent_id` | 标识符 | 必须等于所属 `cabinets[].id`。输出必须写出。 |
@@ -56,3 +56,5 @@
 - `door_margin`：用 `front_face_margin`。
 - `door_count`：用 `n_doors`。layout 子系统仍用 `door_count` 作为自己的序列化名，但不进入本阶段提案或 structure。
 - `movable_shelf_connector`、`door_hinge_side`：制造阶段输入，不是板件 spec 字段。
+- `back_mount=auto`、`gap_below_mm="auto"`：不再接受；背板必须写 `groove`/`insert`/`cover`，计算层只写 `null`。
+- `toe_kick_support_count=null`：不再接受；必须写非负整数。

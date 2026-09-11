@@ -24,7 +24,6 @@ from furniture_panel_planning.cabinet_identity import require_primary_handoff
 from furniture_panel_planning.panel_pipeline import plan_panel_cabinets, plan_panel_stage
 from furniture_panel_planning.panel_planning import plan_panels
 from furniture_panel_planning.panel_rules import (
-    resolve_toe_kick_support_count,
     toe_kick_support_clear_spacing,
 )
 from furniture_panel_planning.panel_spec import (
@@ -59,15 +58,20 @@ class PanelRuleContractTests(unittest.TestCase):
             [200.0, 410.0, 150.0],
         )
 
-    def test_toe_kick_support_rule_matches_reference_thresholds(self) -> None:
-        self.assertEqual(resolve_toe_kick_support_count(None, 599.0), 0)
-        self.assertEqual(resolve_toe_kick_support_count(None, 600.0), 1)
-        self.assertEqual(resolve_toe_kick_support_count(None, 899.0), 1)
-        self.assertEqual(resolve_toe_kick_support_count(None, 900.0), 2)
+    def test_toe_kick_support_count_must_be_explicit(self) -> None:
         self.assertEqual(
             toe_kick_support_clear_spacing(764.0, 1, 18.0),
             373.0,
         )
+        intent = DesignIntent(
+            furniture_category="floor_cabinet",
+            finished_envelope=FinishedEnvelope(800, 600, 1000),
+            confirmed=True,
+        )
+        params = panel_parameters()
+        params["toe_kick_support_count"] = None
+        with self.assertRaisesRegex(ValueError, "toe_kick_support_count"):
+            FurnitureSpec.from_intent(intent, params)
 
     def test_drawer_dimension_chain_matches_reference_sample(self) -> None:
         spec = furniture_spec(
@@ -242,6 +246,15 @@ class PanelRuleContractTests(unittest.TestCase):
         params = panel_parameters()
         params["door_margin"] = params.pop("front_face_margin")
         with self.assertRaisesRegex(ValueError, "does not support"):
+            FurnitureSpec.from_intent(intent, params)
+        params = panel_parameters()
+        params["back_mount"] = "auto"
+        with self.assertRaisesRegex(ValueError, "back_mount"):
+            FurnitureSpec.from_intent(intent, params)
+        params = panel_parameters()
+        params["shelves"] = [{"shelf_type": "fixed", "gap_below_mm": "auto"}]
+        params["top_gap_mm"] = 100.0
+        with self.assertRaises(ValueError):
             FurnitureSpec.from_intent(intent, params)
 
     def test_proposal_contract_complete_fields_match_runtime(self) -> None:

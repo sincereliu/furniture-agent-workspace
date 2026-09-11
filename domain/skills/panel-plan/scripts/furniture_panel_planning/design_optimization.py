@@ -144,9 +144,9 @@ def _select_front(
     objectives: list[str],
     requested_engine: str,
 ) -> tuple[list[dict[str, Any]], str, str | None]:
-    if requested_engine not in {"auto", "exact", "pymoo"}:
-        raise ValueError("engine must be auto, exact, or pymoo")
-    if requested_engine in {"auto", "pymoo"} and candidates:
+    if requested_engine not in {"exact", "pymoo"}:
+        raise ValueError("engine must be exact or pymoo")
+    if requested_engine == "pymoo" and candidates:
         try:
             import numpy as np
             from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting
@@ -250,7 +250,7 @@ def optimize_panel_design(
     front, engine, unavailable_reason = _select_front(
         candidates,
         objectives,
-        str(config.get("engine", "auto")).strip().lower(),
+        str(config.get("engine", "")).strip().lower(),
     )
     max_candidates = int(config.get("max_candidates", 25))
     if not 1 <= max_candidates <= 100:

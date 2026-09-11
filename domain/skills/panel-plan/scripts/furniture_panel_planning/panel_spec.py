@@ -9,7 +9,7 @@ from typing import Any, Mapping
 from furniture_design_intent.design_intent import DesignIntent, EXECUTABLE_CATEGORIES
 
 
-VALID_BACK_MOUNTS = frozenset({"auto", "groove", "insert", "cover"})
+VALID_BACK_MOUNTS = frozenset({"groove", "insert", "cover"})
 
 VALID_SHELF_TYPES = frozenset({"fixed", "movable"})
 
@@ -23,11 +23,11 @@ class ShelfSpec:
     """
 
     shelf_type: str                # "fixed" | "movable"
-    gap_below_mm: float | None     # None = auto（计算层）
+    gap_below_mm: float | None     # None = 计算层
 
 
 def _coerce_shelves(raw: Any) -> list[ShelfSpec]:
-    """把 shelves 输入规范化为 ShelfSpec 列表（自动解析 gap_below_mm 的 auto）。"""
+    """把 shelves 输入规范化为 ShelfSpec 列表。"""
     if not isinstance(raw, (list, tuple)):
         raise ValueError("shelves must be a list")
     result: list[ShelfSpec] = []
@@ -43,12 +43,12 @@ def _coerce_shelves(raw: Any) -> list[ShelfSpec]:
                 "shelf type must be one of: " + ", ".join(sorted(VALID_SHELF_TYPES))
             )
         gap = item.get("gap_below_mm")
-        if gap is None or gap == "auto":
+        if gap is None:
             gap_below: float | None = None
         else:
             gap_below = float(gap)
             if gap_below < 0:
-                raise ValueError("gap_below_mm must be non-negative or 'auto'")
+                raise ValueError("gap_below_mm must be non-negative or null")
         result.append(ShelfSpec(shelf_type=shelf_type, gap_below_mm=gap_below))
     return result
 
@@ -94,7 +94,7 @@ class FurnitureSpec:
     groove_clearance: float
     toe_kick_reveal_front: float
     toe_kick_reveal_back: float
-    toe_kick_support_count: int | None
+    toe_kick_support_count: int
     back_mount: str
     back_rail_height: float
     drawer_side_clearance: float
@@ -124,13 +124,9 @@ class FurnitureSpec:
                 or not isfinite(value)
             ):
                 raise ValueError(f"{name} must be numeric and finite")
-        for name in ("n_doors", "drawer_count"):
+        for name in ("n_doors", "drawer_count", "toe_kick_support_count"):
             _require_count(getattr(self, name), name)
-        if self.toe_kick_support_count is not None:
-            _require_count(self.toe_kick_support_count, "toe_kick_support_count")
-        self.back_mount = resolve_back_mount(
-            self.back_mount, self.back_thickness, self.board_thickness
-        )
+        self.back_mount = resolve_back_mount(self.back_mount)
         self.shelves = _coerce_shelves(self.shelves)
         _validate_objective_invariants(self)
 
@@ -190,35 +186,31 @@ class FurnitureSpec:
         return cls(**values)
 
 
-def resolve_back_mount(
-    requested: str,
-    back_thickness: float,
-    board_thickness: float,
-) -> str:
-    """Resolve the explicitly requested strategy by a deterministic rule."""
+def resolve_back_mount(requested: str) -> str:
+    """Admit an explicit back-mount strategy."""
     if requested not in VALID_BACK_MOUNTS:
         raise ValueError(
             f"back_mount must be one of: {', '.join(sorted(VALID_BACK_MOUNTS))}"
         )
-    if requested != "auto":
-        return requested
-    return "insert" if back_thickness >= board_thickness else "groove"
+    return requested
 
 
 def resolve_shelf_gaps(spec: FurnitureSpec, internal_height: float) -> list[float]:
-    """返回每层板下方净高（从上到下），并解析 auto 层为「剩余」。
+    """返回每层板下方净高（从上到下），并解析空值计算层为「剩余」。
 
-    auto = 内净高 − top_gap_mm − N×板厚 − 其余显式净高之和。
+    computed = 内净高 − top_gap_mm − N×板厚 − 其余显式净高之和。
     """
     board = spec.board_thickness
     count = len(spec.shelves)
     explicit = [s.gap_below_mm for s in spec.shelves if s.gap_below_mm is not None]
-    auto_count = count - len(explicit)
-    if auto_count == 1:
-        auto = internal_height - spec.top_gap_mm - count * board - sum(explicit)
-        if auto < 0:
+    computed_count = count - len(explicit)
+    if computed_count == 1:
+        computed = internal_height - spec.top_gap_mm - count * board - sum(explicit)
+        if computed < 0:
             raise ValueError("shelf gaps exceed the internal height")
-        return [auto if s.gap_below_mm is None else s.gap_below_mm for s in spec.shelves]
+        return [
+            computed if s.gap_below_mm is None else s.gap_below_mm for s in spec.shelves
+        ]
     total = spec.top_gap_mm + count * board + sum(explicit)
     if abs(total - internal_height) > 0.5:
         raise ValueError(
@@ -253,13 +245,13 @@ def _validate_objective_invariants(spec: FurnitureSpec) -> None:
         raise ValueError("groove_depth must be positive for groove back_mount")
     if spec.furniture_category == "wall_cabinet" and (
         spec.toe_kick_height != 0
-        or spec.toe_kick_support_count not in {None, 0}
+        or spec.toe_kick_support_count != 0
         or spec.drawer_count != 0
     ):
         raise ValueError(
             "wall_cabinet cannot contain a toe kick or full-height drawers"
         )
-    if spec.toe_kick_height == 0 and spec.toe_kick_support_count not in {None, 0}:
+    if spec.toe_kick_height == 0 and spec.toe_kick_support_count != 0:
         raise ValueError("toe-kick supports require a positive toe_kick_height")
     if spec.drawer_count and (spec.shelves or spec.n_doors):
         raise ValueError("full-height drawers require no shelves and n_doors=0")
@@ -268,4 +260,4 @@ def _validate_objective_invariants(spec: FurnitureSpec) -> None:
             "current panel topology supports at most 2 doors; disambiguate multi-door opening strategy first"
         )
     if sum(1 for s in spec.shelves if s.gap_below_mm is None) > 1:
-        raise ValueError("at most one shelf gap may be 'auto'")
+        raise ValueError("at most one shelf gap may be null")

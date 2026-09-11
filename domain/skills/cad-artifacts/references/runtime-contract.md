@@ -8,7 +8,7 @@
 
 - `floor_cabinet`：固定模板，含背板、踢脚板、层板、门板。
 - `wall_cabinet`：固定模板，含背板、层板、门板，无踢脚板。
-- 均支持有效 `groove/insert/cover`；`auto` 仅解析模式。
+- 均支持显式 `groove/insert/cover`。
 
 它们不是任意家具配置器。承诺变体前检查 `planner.py` 和模板；其他类别未实现前只做意图/建模方案。
 
@@ -84,7 +84,7 @@ store/<project-id>/
   "front_face_margin": 1.5, "door_hinge_gap": 2,
   "groove_depth": 6, "groove_clearance": 1,
   "toe_kick_reveal_front": 1, "toe_kick_reveal_back": 30,
-  "toe_kick_support_count": null, "back_mount": "auto", "back_rail_height": 70,
+  "toe_kick_support_count": 1, "back_mount": "groove", "back_rail_height": 70,
   "drawer_count": 0, "drawer_side_clearance": 13, "drawer_layer_gap": 1.5,
   "drawer_bottom_thickness": 18, "drawer_back_thickness": 18,
   "drawer_back_clearance": 0, "shelves": [{"shelf_type": "fixed", "gap_below_mm": 200}], "top_gap_mm": 200, "n_doors": 2, "door_hinge_side": null
@@ -95,7 +95,7 @@ store/<project-id>/
 
 契约为扁平 JSON。规范字段使用 `furniture_category/width/depth/height`；适配器只把外包络字段转成 `DesignIntent`，把板件规范字段路由到 `stage_inputs.panels`，把制造选项（含 `door_hinge_side`、`movable_shelf_connector`）和外观路由到 `stage_inputs.manufacturing`；`room/placement` 只供独立房间布局 API 使用。扁平请求不再接受历史 `type`，该字段仅在旧序列化 spec 加载时恢复。历史 `furniture_type`/`overall_size`/`mount_mode`/`mounting_height` 仍可映射到规范名。可选 `constraints` 必须有阶段映射；未分类约束在协议路由时拒绝。扁平示例里的 `door_hinge_side` 是制造选项，不是板件规范字段。
 
-`back_mount` 接受 `auto/groove/insert/cover`，但不进入意图或布局输出。板件阶段在背板薄于柜体板时把 `auto` 解析为 `groove`，否则为 `insert`，并输出 requested/effective；`back_rail_height/groove_depth/groove_clearance` 仅对有效 `groove` 生效，`back_rail_height=0` 关闭背拉条。
+`back_mount` 接受 `groove/insert/cover`，但不进入意图或布局输出。板件阶段不从板厚推断模式；`back_rail_height/groove_depth/groove_clearance` 仅对 `groove` 生效，`back_rail_height=0` 关闭背拉条。
 
 仅总体尺寸为数值且变体匹配实时模板时执行；否则停在相应规划层并说明边界。
 

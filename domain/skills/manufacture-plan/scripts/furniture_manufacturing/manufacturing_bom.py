@@ -152,9 +152,7 @@ def plan_manufacturing(
         movable_shelf_connector = ""
     door_hinge_side = options.get("door_hinge_side")
     hinge_side_by_label = _derive_door_hinge_sides(placements, door_hinge_side)
-    back_mount = resolve_back_mount(
-        spec.back_mount, spec.back_thickness, spec.board_thickness
-    )
+    back_mount = resolve_back_mount(spec.back_mount)
     panels = [
         _manufacturing_panel(
             spec, back_mount, movable_shelf_connector,

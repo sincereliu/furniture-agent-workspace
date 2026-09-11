@@ -25,7 +25,6 @@ from .panel_spec import FurnitureSpec, resolve_back_mount
 from .panel_rules import (
     back_rail_clear_spacing,
     resolve_back_rail_count,
-    resolve_toe_kick_support_count,
     toe_kick_support_clear_spacing,
 )
 from .structure_planning import CabinetStructure
@@ -86,11 +85,7 @@ def validate_panel_output(
             )
             continue
         try:
-            expected_mount = resolve_back_mount(
-                resolution.get("requested"),
-                spec.back_thickness,
-                spec.board_thickness,
-            )
+            expected_mount = resolve_back_mount(resolution.get("requested"))
         except ValueError as exc:
             report.add_error(
                 "INVALID_BACK_MOUNT_RESOLUTION",
@@ -531,12 +526,7 @@ def _validate_toe_kick_panels(
         if item.role.startswith("toe_kick_support_")
     ]
     expected_support_count = (
-        resolve_toe_kick_support_count(
-            spec.toe_kick_support_count,
-            layout.width,
-        )
-        if layout.toe_kick_height > 0
-        else 0
+        spec.toe_kick_support_count if layout.toe_kick_height > 0 else 0
     )
     if expected_support_count < 0:
         report.add_error(

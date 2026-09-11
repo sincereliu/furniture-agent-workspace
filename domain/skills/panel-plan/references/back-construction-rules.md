@@ -4,19 +4,18 @@
 
 ## 阶段输入
 
-- `back_mount`：规范值为 `auto/groove/insert/cover`；必须由提案显式给出，不存在运行时缺省模式。
+- `back_mount`：规范值为 `groove/insert/cover`；必须由提案显式给出，不存在运行时缺省或 `auto` 解析。
 - `board_thickness/back_thickness/door_thickness`。
 - `back_offset/front_face_margin/door_hinge_gap`。
 - `groove_depth/groove_clearance/back_rail_height`。
 
 这些值可在完整 CLI/API 请求中提前提交，但只保存在 `stage_inputs.panels.parameters`，直到客户确认设计意图后才物化为板件阶段 `FurnitureSpec`。
 
-## 模式解析
+## 模式
 
-- `groove/insert/cover` 保持显式选择。
-- 显式 `auto`：`back_thickness < board_thickness` 时解析为 `groove`，否则为 `insert`。这是用户确认后调用的确定性公式，不是代码自行选择结构方案。
-- 输出必须同时展示 `back_mount_resolution.requested/effective`；下游只消费有效模式。
-- `groove_depth/groove_clearance/back_rail_height` 只在有效模式为 `groove` 时参与几何；其他模式仍要求它们是合法规范数值，但不因数值范围与入槽加工关系而阻塞。
+- 提案必须显式选择 `groove`、`insert` 或 `cover`。运行时不从板厚推断模式。
+- 输出仍写 `back_mount_resolution.requested/effective`；两者必须等于已准入的 `back_mount`。下游消费该值。
+- `groove_depth/groove_clearance/back_rail_height` 只在模式为 `groove` 时参与几何；其他模式仍要求它们是合法规范数值，但不因数值范围与入槽加工关系而阻塞。
 
 ## 精确结构
 
