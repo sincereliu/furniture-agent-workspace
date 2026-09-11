@@ -8,14 +8,8 @@ from typing import Any, Mapping
 
 from furniture_design_intent.design_intent import DesignIntent, EXECUTABLE_CATEGORIES
 
-from .panel_rules import resolve_door_hinge_side
-
 
 VALID_BACK_MOUNTS = frozenset({"auto", "groove", "insert", "cover"})
-
-# 活动层板连接方式：二选一。默认候选为 two_in_one，但必须是显式+待确认的提案值，
-# 不得由代码静默补齐（见 panel-plan SKILL.md）。
-VALID_MOVABLE_SHELF_CONNECTORS = frozenset({"two_in_one", "shelf_pin"})
 
 VALID_SHELF_TYPES = frozenset({"fixed", "movable"})
 
@@ -69,7 +63,6 @@ PANEL_PARAMETER_FIELDS = frozenset(
         "back_rail_height", "drawer_count", "drawer_side_clearance",
         "drawer_layer_gap", "drawer_bottom_thickness", "drawer_back_thickness",
         "drawer_back_clearance", "shelves", "top_gap_mm", "n_doors",
-        "door_hinge_side", "movable_shelf_connector",
     }
 )
 PANEL_SPEC_FIELDS = PANEL_PARAMETER_FIELDS
@@ -109,8 +102,6 @@ class FurnitureSpec:
     drawer_bottom_thickness: float
     drawer_back_thickness: float
     drawer_back_clearance: float
-    door_hinge_side: str | None
-    movable_shelf_connector: str
 
     def __post_init__(self) -> None:
         if self.furniture_category not in EXECUTABLE_CATEGORIES:
@@ -221,6 +212,10 @@ def _normalize_legacy_serialized_spec(values: dict[str, Any]) -> dict[str, Any]:
     """Normalize historical serialized spec aliases when loading old data."""
     values = _normalize_front_face_margin_key(values)
     values = _legacy_spec_loader_furniture_category(values)
+    # movable_shelf_connector 已迁到制造阶段（见 feature-contract.md 爆炸半径判据）；
+    # 旧持久化 spec 仍带它时直接丢弃，制造阶段以其自身输入为准。
+    values.pop("movable_shelf_connector", None)
+    values.pop("door_hinge_side", None)
     return values
 
 
@@ -281,102 +276,6 @@ def resolve_shelf_gaps(spec: FurnitureSpec, internal_height: float) -> list[floa
     return list(explicit)
 
 
-def migrate_legacy_panel_hinge_side(
-    panel_parameters: dict[str, Any] | None,
-    panel_output: dict[str, Any] | None,
-) -> None:
-    """Upgrade persisted pre-field panel data without guessing a preference.
-
-    ``door_count`` handling below is retained only for historical persisted panel
-    outputs. It can be removed when those legacy revisions are no longer loaded.
-    """
-    output_side_available = False
-    migrated_side: str | None = None
-    if isinstance(panel_output, dict):
-        spec = panel_output.get("spec")
-        if isinstance(spec, dict):
-            if "door_hinge_side" not in spec:
-                door_count = _legacy_spec_loader_panel_output_door_count(spec)
-                doors = _legacy_doors(panel_output)
-                if len(doors) != door_count:
-                    raise ValueError(
-                        "legacy panel output door count does not match its specification"
-                    )
-                if door_count == 1:
-                    migrated_side = doors[0].get("door_hinge_side")
-                    if migrated_side not in {"left", "right"}:
-                        raise ValueError(
-                            "legacy single-door output requires one explicit panel "
-                            "door_hinge_side for migration"
-                        )
-                ordered_doors = sorted(
-                    doors,
-                    key=lambda panel: (
-                        float(panel.get("pos_x", 0.0)),
-                        str(panel.get("id", "")),
-                    ),
-                )
-                for index, door in enumerate(ordered_doors):
-                    expected_side = resolve_door_hinge_side(
-                        door_count,
-                        index,
-                        migrated_side,
-                    )
-                    actual_side = door.get("door_hinge_side")
-                    if door_count == 2 and actual_side is None:
-                        door["door_hinge_side"] = expected_side
-                    elif actual_side != expected_side:
-                        raise ValueError(
-                            "legacy panel output has inconsistent door_hinge_side values"
-                        )
-                spec["door_hinge_side"] = migrated_side
-            else:
-                migrated_side = spec["door_hinge_side"]
-            output_side_available = True
-
-    if not isinstance(panel_parameters, dict) or "door_hinge_side" in panel_parameters:
-        return
-    if output_side_available:
-        panel_parameters["door_hinge_side"] = migrated_side
-        return
-    door_count = _legacy_spec_loader_panel_input_door_count(panel_parameters)
-    if (
-        isinstance(door_count, int)
-        and not isinstance(door_count, bool)
-        and door_count >= 0
-        and door_count != 1
-    ):
-        panel_parameters["door_hinge_side"] = None
-
-
-def _legacy_spec_loader_panel_output_door_count(spec: Mapping[str, Any]) -> int:
-    value = spec.get("n_doors", spec.get("door_count"))
-    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-        raise ValueError("legacy panel spec requires a valid n_doors for migration")
-    return value
-
-
-def _legacy_spec_loader_panel_input_door_count(
-    panel_parameters: Mapping[str, Any],
-) -> Any:
-    """Recover ``n_doors`` from historical panel input payloads."""
-    return panel_parameters.get(
-        "n_doors",
-        panel_parameters.get("door_count"),
-    )
-
-
-def _legacy_doors(panel_output: Mapping[str, Any]) -> list[dict[str, Any]]:
-    panels = panel_output.get("panels")
-    if not isinstance(panels, list):
-        return []
-    return [
-        panel
-        for panel in panels
-        if isinstance(panel, dict) and panel.get("panel_type") == "door"
-    ]
-
-
 def _require_count(value: Any, name: str) -> None:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise ValueError(f"{name} must be a non-negative integer")
@@ -415,22 +314,6 @@ def _validate_objective_invariants(spec: FurnitureSpec) -> None:
     if spec.n_doors > 2:
         raise ValueError(
             "current panel topology supports at most 2 doors; disambiguate multi-door opening strategy first"
-        )
-    if spec.door_hinge_side not in {None, "left", "right"}:
-        raise ValueError("door_hinge_side must be 'left', 'right', or null")
-    if spec.n_doors == 1:
-        if spec.door_hinge_side not in {"left", "right"}:
-            raise ValueError(
-                "a single door requires an explicit door_hinge_side 'left' or 'right'"
-            )
-    elif spec.door_hinge_side is not None:
-        raise ValueError(
-            "door_hinge_side only applies to a single door; use null otherwise"
-        )
-    if spec.movable_shelf_connector not in VALID_MOVABLE_SHELF_CONNECTORS:
-        raise ValueError(
-            "movable_shelf_connector must be one of: "
-            + ", ".join(sorted(VALID_MOVABLE_SHELF_CONNECTORS))
         )
     if sum(1 for s in spec.shelves if s.gap_below_mm is None) > 1:
         raise ValueError("at most one shelf gap may be 'auto'")

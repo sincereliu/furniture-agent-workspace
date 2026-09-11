@@ -11,7 +11,6 @@ from uuid import uuid4
 
 from furniture_delivery_validation.validation import ValidationReport
 from furniture_design_intent.design_intent import DesignIntent
-from furniture_panel_planning.panel_spec import migrate_legacy_panel_hinge_side
 
 from .workflow_artifacts import ArtifactManifest
 from .workflow_state import WorkflowStage, WorkflowState, parse_stage, utc_now
@@ -91,12 +90,6 @@ class Revision:
         else:
             stage_inputs = deepcopy(stage_inputs)
         stage_outputs = deepcopy(dict(data.get("stage_outputs", {})))
-        panel_input = stage_inputs.get("panels")
-        panel_parameters = (
-            panel_input.get("parameters") if isinstance(panel_input, dict) else None
-        )
-        panel_output = stage_outputs.get(WorkflowStage.PANELS_PLANNED.value)
-        migrate_legacy_panel_hinge_side(panel_parameters, panel_output)
         return cls(
             id=str(data["id"]),
             number=int(data["number"]),

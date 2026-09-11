@@ -1,4 +1,4 @@
-﻿---
+---
 name: manufacturing-plan
 description: 用于 manufacturing_planned 阶段。当用户说"用什么五金""三合一连接件""铰链怎么装""封边怎么做""出BOM清单""打孔位置"时触发。根据已确认板件制定材料、封边、连接、五金、孔位和 BOM，不构造特征树或 CAD。
 ---
@@ -14,7 +14,8 @@ description: 用于 manufacturing_planned 阶段。当用户说"用什么五金"
    - 材料：类别、等级、厚度、纹理、可见面、饰面；
    - 封边：封哪些边、封边厚度及余量；
    - 连接：螺钉、木榫、偏心件（三合一/二合一）、槽/企口、胶合；
-   - 五金：铰链、滑轨、拉手、层板托、固定、防倾倒及荷载；
+   - 活动层板连接：`movable_shelf_connector`（`two_in_one` 二合一 / `shelf_pin` 隔板钉），有活动层板时必须显式选择，不得由代码静默补齐；
+   - 五金：铰链、滑轨、拉手、层板托、固定、防倾倒及荷载；单门铰链侧 `door_hinge_side`（`left`/`right`）是制造输入，双门由制造按门板位置派生；
    - 公差/净空：门缝、安装/设备缝隙、地墙不平、安全余量。
    口径见 [制造规则](references/manufacturing-rules.md)；不做关键词识别、同义词映射或开放方案排序。
 3. 五金变体与打孔参数以 `scripts/furniture_manufacturing/hardware_catalog.yaml`、`hardware_rules.yaml` 为准：LLM 只选变体并把数值假设标为待确认，不硬编码或猜测参数。
@@ -23,9 +24,10 @@ description: 用于 manufacturing_planned 阶段。当用户说"用什么五金"
 
 ## 关键规则
 
-- 材料厚度、单门/标准双门的铰链侧 `door_hinge_side` 均来自已确认的 `panels_planned` 输出，不从意图重建或硬编码覆盖；旧数据缺省时才按门板位置回退。
+- 材料厚度来自已确认的 `panels_planned` 输出；铰链侧 `door_hinge_side` 是制造输入/派生（单门输入、双门按位置派生），不从意图重建或硬编码覆盖。
 - 三合一在高度方向按系统 32 排钻分布、深度方向前后双排；铰链孔、背板槽与背板连接、封边的精确口径见 [制造规则](references/manufacturing-rules.md)。
 - 入槽背板不封边；其余背板及背拉条四边封边；cover 外盖螺钉与 groove 背拉条螺钉属组装现场工艺，不生成孔位与五金。
+- 活动层板连接方式 `movable_shelf_connector` 是制造阶段输入（`two_in_one`/`shelf_pin`），经 `requested_options` 传入并盖章到 `PanelRecord`；有活动层板却未提供时运行时拒绝，不静默省略。
 - `readiness` 作用于整份方案/BOM，不伪装成每条五金或封边记录均已单独审批。
 
 ## 子流程（按触发词加载，不进主流程）

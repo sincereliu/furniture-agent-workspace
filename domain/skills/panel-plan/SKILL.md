@@ -19,7 +19,7 @@ description: 用于 panels_planned 阶段。当用户说“几扇门”“几层
 ## 提案与展示
 
 - 提案必须覆盖契约中的全部字段。用户没说的值标成假设，不得写成已确认事实。
-- 超出当前柜型表达能力、或缺少契约要求的显式值时，先继续追问，不要交给代码猜。完整停问清单只在 [提案契约](references/panel-proposal-contract.md)。
+- 超出当前柜型表达能力、或缺少契约要求的显式值时，先继续追问，不要交给代码猜。完整停问清单只在 [提案契约](references/panel-proposal-contract.md)。（活动层板连接方式 `movable_shelf_connector` 与单门铰链侧 `door_hinge_side` 已归属制造阶段，不在本阶段追问。）
 - 展示给用户：假设列表、柜体 `id`、`back_mount` 的 requested/effective、内部净空、板件清单（id / 所属柜体 / 角色 / 尺寸 / 位置）。
 - 按当前任务读对应 reference，不要一次加载全部规则。
 
@@ -47,7 +47,6 @@ description: 用于 panels_planned 阶段。当用户说“几扇门”“几层
 - 运行时在 `scripts/furniture_panel_planning/`；`panel_spec.py` 拥有规范 schema、完整性/客观不变量准入和背板模式解析。历史 Project/Revision 的有界 schema 迁移仍暂留在该文件内，仅服务旧序列化恢复，不参与新提案决策；`structure_planning.py` 是精确净空的唯一所有者。代码不得按自然语言、柜型或内置 profile 选择方案。
 - `panels_planned` 的对象树是 `cabinets[]`：每个柜体是父对象，带 `id` 以及自己的 `spec/structure/back_mount_resolution/panels`。板件带 `parent_id`（所属柜体）和 `role`（柜内角色，如 `left_side_panel`）；全局 `id` 为 `{cabinet_id}__{role}`，避免多柜撞名。顶层 `spec/structure/panels` 只是第一台柜的只读视图，不是第二份事实。分析记录属于旁路证据，不并入板件事实。
 - 可选结构化字段 `cabinet_id` 是身份，不是构造参数，写入提案后由运行时弹出再准入 `FurnitureSpec`。缺省为 `cabinet_1`。交互式主流程目前仍是一份意图对应一台柜；多柜可经 `plan_panel_cabinets()` 组合，不同外包络仍要多份已确认意图。
-- 接触由几何推导；每条接触带已解析的 `connection=on/off`。制造阶段只消费该开关决定要不要固定，不按轴方向或板名猜「连不连」。本轮没有逐条连接的提案覆盖字段。
-- 旧持久化 Project 缺少 `spec.door_hinge_side` 时只做有界 schema 迁移：单门仅从唯一门板已有的显式 `left/right` 恢复，缺失或冲突即停止；标准双门的规格迁移为 `null`，板件缺省侧按确定性左右拓扑恢复；更多门保持 `null`。新提案和扁平 API 契约仍必须显式提交该字段，迁移不得猜测新的单门偏好。
+- 接触由几何推导（拓扑）；「连不连」`connection` 由制造阶段按面板类型重解析（见制造层 `default_joint_connection`），不在本阶段解析。本轮没有逐条连接的提案覆盖字段。
 - 修改规划用 `revise_stage_output()`，使本阶段及下游失效。
 - 不在此阶段确定连接件孔位、封边细节、最终 BOM 或 CAD 操作。

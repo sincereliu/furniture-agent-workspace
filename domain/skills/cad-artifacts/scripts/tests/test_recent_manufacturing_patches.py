@@ -75,7 +75,7 @@ def panel_record(
 
 
 class PanelAndConnectorPatchTests(unittest.TestCase):
-    def test_standard_doors_have_explicit_hinge_sides(self) -> None:
+    def test_standard_doors_derive_hinge_sides_in_manufacturing(self) -> None:
         spec = furniture_spec(
             furniture_category="floor_cabinet",
             width=800,
@@ -84,28 +84,31 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
             n_doors=2,
         )
         placements = plan_panels(spec, CabinetStructure.from_spec(spec))
+        bom = plan_manufacturing(spec, placements)
         doors = {
             panel.role: panel
-            for panel in placements
+            for panel in bom.panels
             if panel.panel_type == "door"
         }
 
         self.assertEqual(doors["left_door"].door_hinge_side, "left")
         self.assertEqual(doors["right_door"].door_hinge_side, "right")
 
-    def test_single_door_requires_explicit_hinge_side(self) -> None:
-        # 单门铰链侧是开放偏好，必须由提案显式提交，缺省不得由代码补默认值
-        with self.assertRaises(ValueError):
-            furniture_spec(n_doors=1)
+    def test_single_door_hinge_side_is_a_manufacturing_option(self) -> None:
+        spec = furniture_spec(n_doors=1)
+        placements = plan_panels(spec, CabinetStructure.from_spec(spec))
 
-        right_spec = furniture_spec(n_doors=1, door_hinge_side="right")
-        placements = plan_panels(right_spec, CabinetStructure.from_spec(right_spec))
-        door = next(p for p in placements if p.panel_type == "door")
+        # 单门铰链侧是制造输入：未提供时运行时拒绝
+        with self.assertRaisesRegex(ValueError, "door_hinge_side"):
+            plan_manufacturing(spec, placements)
+
+        bom = plan_manufacturing(
+            spec,
+            placements,
+            requested_options={"door_hinge_side": "right"},
+        )
+        door = next(p for p in bom.panels if p.panel_type == "door")
         self.assertEqual(door.door_hinge_side, "right")
-
-        # 双门铰链侧由代码确定性推导，不接受显式标量覆盖
-        with self.assertRaises(ValueError):
-            furniture_spec(n_doors=2, door_hinge_side="left")
 
     def test_trinity_uses_two_depth_rows_and_explicit_hole_faces(self) -> None:
         connector = TrinityConnector()

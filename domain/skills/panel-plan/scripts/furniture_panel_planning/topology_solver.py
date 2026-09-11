@@ -28,7 +28,6 @@ from .construction_geometry import (
 from .joint_topology import compute_joints
 from .panel_models import PanelPlacement
 from .panel_spec import FurnitureSpec
-from .panel_rules import resolve_door_hinge_side
 from .structure_planning import CabinetStructure
 
 
@@ -307,18 +306,12 @@ def _door_panels(
             pid = "left_door" if index == 0 else "right_door"
             pname = "左门板" if index == 0 else "右门板"
             x = margin if index == 0 else layout.width - margin - dw
-        hinge_side = resolve_door_hinge_side(
-            count,
-            index,
-            spec.door_hinge_side,
-        )
         panels.append(PanelPlacement(
             id=pid, name=pname, panel_type="door",
             size_x=dw, size_y=spec.door_thickness, size_z=dh,
             pos_x=x, pos_y=dy, pos_z=layout.toe_kick_height + margin,
             material_role="door",
             depends_on=["left_side_panel", "right_side_panel"],
-            door_hinge_side=hinge_side,
             inner_face=inner, outer_face=outer, cam_face=None,
             note=f"门板，{dw:.0f}×{dh:.0f}×{spec.door_thickness:.0f}mm",
         ))

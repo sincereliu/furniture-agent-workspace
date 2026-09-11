@@ -8,15 +8,15 @@
 - 具体连接件：`TrinityConnector`（三合一）、`HingeConnector`（铰链）、`TwoInOneConnector`（二合一）、`ShelfPinConnector`（隔板钉）、`BackMountConnector`（背板）、`DrawerSlideConnector`（滑轨）。
 - 新增五金：实现对应 `Connector` 并注册进 `ALL_CONNECTORS`。
 - 孔位用 `HoleSpec` 描述；`is_face_hole=True` 表示板面钻孔（导出 TypeNo=1 垂直孔），`False` 表示板边钻孔（TypeNo=2 水平孔）。
-- 旧数据缺省 `door_hinge_side` 时，`HingeConnector` 按门板位置回退。
+- 铰链侧 `door_hinge_side` 由制造层派生：单门从 `requested_options` 输入（`left`/`right`），双门按门板 X 位置派生；`HingeConnector` 读 `PanelRecord.door_hinge_side`，缺省时按门板位置回退。
 
 ## 五金命名约定
 
 - 五金按「套」组织：三合一（偏心轮+连接杆+预埋螺母）、二合一（偏心轮+连接杆，固定塑料件并入连接杆）、隔板钉（单钉）。
 - 目录键（`hardware_catalog.yaml`）全英文：顶层按套 `three_in_one` / `two_in_one` / `shelf_pin`，套内规格组 `standard`，零件键 `cam` / `rod` / `nut` / `pin`；每个零件分 `part`（实物，BOM/采购）与 `hole`（打孔，钻孔）两层，配合余量直接写入 `hole` 数值，不做代码派生。
 - 孔类型（`hole_type`）按 `<套名>_<零件>`：`three_in_one_cam` / `three_in_one_rod` / `three_in_one_nut`、`two_in_one_cam` / `two_in_one_rod`、`shelf_pin`；进入 `drilled-holes.json` / GLB 标签 / 校验计数。内嵌背板三合一与柜体三合一统一为 `three_in_one_*`，靠 `HoleSpec.connection_id`（`<female>→<male>#<排次>`，确定性、非随机）区分来源。
-- 活动层板连接方式由 `FurnitureSpec.movable_shelf_connector`（`two_in_one`/`shelf_pin`）显式选择，经制造阶段盖章到 `PanelRecord`；`TwoInOneConnector`/`ShelfPinConnector` 只处理选中自己的板件，避免两者同时出孔/BOM。
-- 板件阶段已解析的 `PanelJoint.connection` 决定这条接触要不要固定；`off` 的接触不进入三合一打孔。轴方向和 `cam_face` 只用于选择三合一五金，不再回答「连不连」。
+- 活动层板连接方式由制造阶段输入 `movable_shelf_connector`（`two_in_one`/`shelf_pin`）显式选择，经 `plan_manufacturing` 盖章到 `PanelRecord`；`TwoInOneConnector`/`ShelfPinConnector` 只处理选中自己的板件，避免两者同时出孔/BOM。有活动层板却未提供时运行时拒绝。
+- `PanelJoint.connection`（连不连）由制造层在 `plan_manufacturing` 按面板类型重解析；`off` 的接触不进入三合一打孔。轴方向和 `cam_face` 只用于选择三合一五金，不再回答「连不连」。
 
 ## 生成与产物
 

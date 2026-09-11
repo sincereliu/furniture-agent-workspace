@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from typing import Any, Mapping
 
 from furniture_design_intent.design_intent import EXECUTABLE_CATEGORIES
 from furniture_manufacturing.manufacturing_bom import BOMReport, plan_manufacturing
@@ -22,7 +23,11 @@ class CabinetPipelineResult:
     bom: BOMReport
 
 
-def plan_cabinet(spec: FurnitureSpec) -> CabinetPipelineResult:
+def plan_cabinet(
+    spec: FurnitureSpec,
+    *,
+    requested_options: Mapping[str, Any] | None = None,
+) -> CabinetPipelineResult:
     """Compose panel and manufacturing planning without room placement."""
     normalized = FurnitureSpec.from_dict(asdict(spec))
     if normalized.furniture_category not in EXECUTABLE_CATEGORIES:
@@ -32,7 +37,7 @@ def plan_cabinet(spec: FurnitureSpec) -> CabinetPipelineResult:
         )
     structure = CabinetStructure.from_spec(normalized)
     placements = plan_panels(normalized, structure)
-    bom = plan_manufacturing(normalized, placements)
+    bom = plan_manufacturing(normalized, placements, requested_options=requested_options)
     return CabinetPipelineResult(
         spec=normalized,
         structure=structure,

@@ -28,7 +28,6 @@
 | 背板安装解析 | `back_mount_resolution.requested/effective` | 无 | 对象 | `requested` 保留请求值，`effective` 保留生效值。 |
 | 踢脚支撑数量 | `toe_kick_support_count` | 无 | 整数或 `null` | `null` 是“显式请求自动计算”，不是缺省。 |
 | 单门铰链侧 | `door_hinge_side` | 无 | 枚举或 `null` | 仅 `n_doors=1` 时允许 `left/right`。 |
-| 活动层板连接方式 | `movable_shelf_connector` | 无 | 枚举 | 规范值 `two_in_one/shelf_pin`。 |
 | 柜体实例 | `cabinet_id` / `cabinets[].id` | 无 | 标识符 | 柜体父对象身份；缺省 `cabinet_1`。不得包含 `__`。 |
 | 板件柜内角色 | `role` | 无 | 字符串 | 柜内稳定角色名，如 `left_side_panel`。 |
 | 板件所属柜体 | `parent_id` | 无 | 标识符 | 必须等于所属 `cabinets[].id`。 |
@@ -67,6 +66,5 @@
 | --- | --- | --- | --- |
 | `type` / `furniture_type` | `panel_spec.py::FurnitureSpec.from_dict()` 与 `DesignIntent.from_dict()` | 暂不能 | 仍需加载历史序列化 spec/意图；等旧快照/旧 Project 不再需要恢复时再删。 |
 | `door_count` | `workflow_project.py::_legacy_stage_inputs()` | 暂不能 | 仅服务 schema-v1 项目加载；停止支持 v1 项目后可删。 |
-| `door_count` | `panel_spec.py::migrate_legacy_panel_hinge_side()` 与 `_legacy_spec_loader_panel_output_door_count()` / `_legacy_spec_loader_panel_input_door_count()` | 暂不能 | 仅服务旧 panel 输出恢复；历史 Revision 退场后可删。 |
 | `door_count` | `layout_spec.py::LayoutSpec` | 暂不能 | 这是 layout 子系统当前序列化名；要删需单独做 layout API/存储协调迁移。 |
 | `door_count` | 旧 `stage_outputs.panels_planned.structure` | 暂不能 | `CabinetStructure.from_dict()` 把历史 `door_count` 收成 `n_doors`；两键冲突则拒绝。新输出只写 `n_doors`。 |

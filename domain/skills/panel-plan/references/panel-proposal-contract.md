@@ -18,7 +18,7 @@
 - 前脸边距与踢脚：`front_face_margin`、`door_hinge_gap`、`toe_kick_height`、`toe_kick_reveal_front`、`toe_kick_reveal_back`、`toe_kick_support_count`
 - 门与抽屉数量：`n_doors`、`drawer_count`
 - 单门铰链侧：`door_hinge_side`
-- 层板：`shelves`、`top_gap_mm`、`movable_shelf_connector`
+- 层板：`shelves`、`top_gap_mm`
 - 抽屉尺寸链输入：`drawer_side_clearance`、`drawer_layer_gap`、`drawer_bottom_thickness`、`drawer_back_thickness`、`drawer_back_clearance`
 - 柜体身份（可选）：`cabinet_id`；这不是构造字段，运行时在准入 `FurnitureSpec` 前弹出。缺省 `cabinet_1`。不得包含 `__`。
 
@@ -26,13 +26,13 @@
 
 - `shelves` 每项是 `{shelf_type: fixed|movable, gap_below_mm: 数值|null}`；列表顺序、计算层和净高口径见 [层板规则](shelf-planning-rules.md)。运行时不做均分，不保留 `shelf_count`。
 - `n_doors=1` 时必须显式提交 `door_hinge_side=left/right`；其它门数必须显式提交 `null`。
-- `movable_shelf_connector` 必须显式提交 `two_in_one` 或 `shelf_pin`；即使没有活动层板也不得省略。无偏好时只能由 LLM 提议候选，不得由代码静默补齐。
+- 活动层板连接方式 `movable_shelf_connector` 已迁至制造阶段（见制造 `SKILL.md` 与 `feature-contract.md` 爆炸半径判据），不属本阶段字段。
 - 当前 `drawer_count>0` 的规范语义只表示整高抽屉区；必须同时提交空 `shelves` 与 `n_doors=0`。
 
 ## 展示与停止
 
 - 向用户展示完整字段表，并逐项标明「用户已给」还是「假设」。
-- 超出当前拓扑表达能力或缺少必填显式值时，停在消歧，不要写入 `stage_inputs` 去碰运行时。完整清单：混合门/层板/抽屉分区；三门及以上的开启关系；单门未给铰链侧；未显式提交活动层板连接方式。
+- 超出当前拓扑表达能力或缺少必填显式值时，停在消歧，不要写入 `stage_inputs` 去碰运行时。完整清单：混合门/层板/抽屉分区；三门及以上的开启关系。
 - 代码准入后展示柜体 `id`、`back_mount` requested/effective、内部净空和板件清单（含所属柜体），再等人确认。
 
 ## LLM 候选起点

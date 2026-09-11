@@ -25,7 +25,6 @@ from .panel_spec import FurnitureSpec, resolve_back_mount
 from .panel_rules import (
     back_rail_clear_spacing,
     resolve_back_rail_count,
-    resolve_door_hinge_side,
     resolve_toe_kick_support_count,
     toe_kick_support_clear_spacing,
 )
@@ -387,18 +386,6 @@ def _validate_doors(
             "n_doors",
         )
         return report
-    for index, door in enumerate(doors):
-        expected_hinge_side = resolve_door_hinge_side(
-            spec.n_doors,
-            index,
-            spec.door_hinge_side,
-        )
-        if door.door_hinge_side != expected_hinge_side:
-            report.add_error(
-                "DOOR_HINGE_SIDE_MISMATCH",
-                f"{door.id} hinge side must match the admitted door topology",
-                door.id,
-            )
     return report
 
 

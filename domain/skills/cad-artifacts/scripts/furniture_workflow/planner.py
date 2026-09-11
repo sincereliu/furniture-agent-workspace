@@ -32,8 +32,13 @@ def _plan_cabinet(spec: dict[str, Any], furniture_category: str) -> dict[str, An
     payload = dict(spec)
     if "furniture_category" not in payload and "furniture_type" in payload:
         payload["furniture_category"] = payload.pop("furniture_type")
+    # movable_shelf_connector / door_hinge_side 已迁到制造阶段；从平面请求抽出，单独传制造。
+    requested_options: dict[str, Any] = {}
+    for key in ("movable_shelf_connector", "door_hinge_side"):
+        if payload.get(key) is not None:
+            requested_options[key] = payload.get(key)
     fspec = FurnitureSpec.from_dict(payload)
-    result = plan_cabinet(fspec)
+    result = plan_cabinet(fspec, requested_options=requested_options or None)
 
     return panels_to_feature_tree(
         result.panels,

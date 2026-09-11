@@ -13,6 +13,8 @@ LAYOUT_CONTEXT_FIELDS = frozenset({"room", "placement"})
 MANUFACTURING_SPEC_FIELDS = frozenset(
     {
         "options",
+        "movable_shelf_connector",
+        "door_hinge_side",
     }
 )
 PROTOCOL_FIELDS = frozenset(

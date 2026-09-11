@@ -33,8 +33,6 @@ def panel_parameters(furniture_category: str = "floor_cabinet", **overrides: Any
         "drawer_count": 0, "drawer_side_clearance": 13.0, "drawer_layer_gap": 1.5,
         "drawer_bottom_thickness": 18.0, "drawer_back_thickness": 18.0,
         "drawer_back_clearance": 0.0, "n_doors": 2,
-        "door_hinge_side": None,
-        "movable_shelf_connector": "two_in_one",
         "shelves": [], "top_gap_mm": 0.0,
     }
     values.update(overrides)
@@ -63,7 +61,10 @@ def cabinet_data(furniture_category: str = "floor_cabinet", **overrides: Any) ->
     _fill_shelves(overrides, wall=wall, height=height)
     values = {
         "furniture_category": furniture_category, "width": 800, "depth": 350 if wall else 600,
-        "height": height, **panel_parameters(furniture_category),
+        "height": height,
+        "movable_shelf_connector": "two_in_one",
+        "door_hinge_side": None,
+        **panel_parameters(furniture_category),
     }
     if wall:
         values["hanging_mode"] = "free_hanging_height"

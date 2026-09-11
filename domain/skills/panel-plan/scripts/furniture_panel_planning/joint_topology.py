@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Sequence
 
 from .panel_models import PanelPlacement
@@ -153,46 +153,15 @@ def compute_joints(placements: Sequence[PanelPlacement]) -> list[PanelJoint]:
                 )
             )
 
-    return resolve_joint_connections(placements, joints)
-
-
-def _is_drawer_panel(panel: PanelPlacement) -> bool:
-    return "drawer" in panel.panel_type
-
-
-def default_joint_connection(
-    female: PanelPlacement,
-    male: PanelPlacement,
-) -> str:
-    """Return the stage default for one contact. See connection-contact-defaults.md."""
-    if _is_drawer_panel(female) != _is_drawer_panel(male):
-        return "off"
-    types = {female.panel_type, male.panel_type}
-    if types == {"back", "fixed_shelf"} or types == {"back", "back_rail"}:
-        return "off"
-    return "on"
-
-
-def resolve_joint_connections(
-    placements: Sequence[PanelPlacement],
-    joints: Sequence[PanelJoint],
-) -> list[PanelJoint]:
-    """Write the resolved on/off default onto each geometric contact."""
-    by_id = {panel.id: panel for panel in placements}
-    return [
-        replace(
-            joint,
-            connection=default_joint_connection(
-                by_id[joint.female_id],
-                by_id[joint.male_id],
-            ),
-        )
-        for joint in joints
-    ]
+    return joints
 
 
 def joint_is_connected(joint: PanelJoint) -> bool:
-    """True when the resolved switch says this contact should be fixed."""
+    """True when the resolved switch says this contact should be fixed.
+
+    ``connection`` 现在由制造层在 `plan_manufacturing` 中重解析（见制造层
+    `default_joint_connection`）；panel-plan 只产连接拓扑，不再解析连不连。
+    """
     return getattr(joint, "connection", "on") == "on"
 
 

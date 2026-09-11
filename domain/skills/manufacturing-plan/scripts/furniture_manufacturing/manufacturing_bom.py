@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, List, Mapping
 
 from furniture_panel_planning.cabinet_identity import index_by_role, qualify_panel_id
@@ -33,9 +33,14 @@ MANUFACTURING_READINESS_LABELS = {
     "factory_ready": "工厂已确认可投产",
 }
 
+VALID_MOVABLE_SHELF_CONNECTORS = frozenset({"two_in_one", "shelf_pin"})
+VALID_DOOR_HINGE_SIDES = frozenset({"left", "right"})
+
 MANUFACTURING_OPTION_FIELDS = frozenset(
     {
         "options",
+        "movable_shelf_connector",
+        "door_hinge_side",
     }
 )
 
@@ -61,6 +66,67 @@ class BOMReport:
         return len(self.hardware)
 
 
+def _is_drawer_panel(panel: PanelRecord) -> bool:
+    return "drawer" in panel.panel_type
+
+
+def default_joint_connection(female: PanelRecord, male: PanelRecord) -> str:
+    """制造层解析连不连：抽屉跨装配接触不固定；背板↔固定层板/背拉条不固定。"""
+    if _is_drawer_panel(female) != _is_drawer_panel(male):
+        return "off"
+    types = {female.panel_type, male.panel_type}
+    if types == {"back", "fixed_shelf"} or types == {"back", "back_rail"}:
+        return "off"
+    return "on"
+
+
+def _derive_door_hinge_sides(
+    placements: list[PanelPlacement],
+    single_door_side: str | None,
+) -> dict[str, str | None]:
+    """按门板 X 位置推导每块门板的铰链侧。
+
+    单门：必须显式提供 door_hinge_side（left/right）；双门：左门=left、右门=right。
+    panel-plan 不再携带 door_hinge_side，这里由制造层派生。
+    """
+    doors = sorted(
+        (p for p in placements if p.panel_type == "door"),
+        key=lambda p: (p.pos_x, p.id),
+    )
+    if not doors:
+        return {}
+    if len(doors) == 1:
+        if single_door_side not in VALID_DOOR_HINGE_SIDES:
+            raise ValueError(
+                "door_hinge_side must be 'left' or 'right' for a single door"
+            )
+        return {doors[0].id: single_door_side}
+    if len(doors) == 2:
+        return {doors[0].id: "left", doors[1].id: "right"}
+    raise ValueError("door_hinge_side derivation supports at most 2 doors")
+
+
+def _resolve_joint_connections(panels: list[PanelRecord]) -> None:
+    """在制造层按面板类型重解析每条接触的连不连（原在 panel-plan 解析）。
+
+    panel-plan 只产连接拓扑（female/male/face/edge）；连不连是制造层关注点
+    （只影响孔位与五金，不影响面板几何），故在此重解析并写回每个 PanelRecord。
+    """
+    by_label = {panel.label: panel for panel in panels}
+    for panel in panels:
+        resolved = []
+        for joint in panel.joints:
+            female = by_label.get(joint.female_id)
+            male = by_label.get(joint.male_id)
+            connection = (
+                default_joint_connection(female, male)
+                if female is not None and male is not None
+                else "on"
+            )
+            resolved.append(replace(joint, connection=connection))
+        panel.joints = resolved
+
+
 def plan_manufacturing(
     spec: FurnitureSpec,
     placements: list[PanelPlacement],
@@ -75,10 +141,28 @@ def plan_manufacturing(
         raise ValueError(
             "manufacturing stage does not support: " + ", ".join(unknown)
         )
+    movable_shelf_connector = options.get("movable_shelf_connector", "")
+    if movable_shelf_connector not in VALID_MOVABLE_SHELF_CONNECTORS:
+        has_movable = any(item.panel_type == "movable_shelf" for item in placements)
+        if has_movable:
+            raise ValueError(
+                "movable_shelf_connector must be 'two_in_one' or 'shelf_pin' "
+                "when movable shelves exist"
+            )
+        movable_shelf_connector = ""
+    door_hinge_side = options.get("door_hinge_side")
+    hinge_side_by_label = _derive_door_hinge_sides(placements, door_hinge_side)
     back_mount = resolve_back_mount(
         spec.back_mount, spec.back_thickness, spec.board_thickness
     )
-    panels = [_manufacturing_panel(spec, back_mount, item) for item in placements]
+    panels = [
+        _manufacturing_panel(
+            spec, back_mount, movable_shelf_connector,
+            hinge_side_by_label.get(item.id), item,
+        )
+        for item in placements
+    ]
+    _resolve_joint_connections(panels)
     operations = _back_groove_operations(spec, back_mount, placements)
     dimensions = f"{spec.width:.0f}×{spec.height:.0f}×{spec.depth:.0f}mm"
     connector_options = options.get("options", {})
@@ -99,7 +183,13 @@ def plan_manufacturing(
     )
 
 
-def _manufacturing_panel(spec: FurnitureSpec, back_mount: str, placement: PanelPlacement) -> PanelRecord:
+def _manufacturing_panel(
+    spec: FurnitureSpec,
+    back_mount: str,
+    movable_shelf_connector: str,
+    door_hinge_side: str | None,
+    placement: PanelPlacement,
+) -> PanelRecord:
     if placement.material_role == "back":
         material = f"{spec.back_thickness:g}mm背板"
         thickness = spec.back_thickness
@@ -152,10 +242,10 @@ def _manufacturing_panel(spec: FurnitureSpec, back_mount: str, placement: PanelP
         pos_y=placement.pos_y,
         pos_z=placement.pos_z,
         depends_on=list(placement.depends_on),
-        door_hinge_side=placement.door_hinge_side,
+        door_hinge_side=door_hinge_side,
         door_overlay=placement.door_overlay,
         back_mount=back_mount,
-        movable_shelf_connector=spec.movable_shelf_connector,
+        movable_shelf_connector=movable_shelf_connector,
         inner_face=placement.inner_face,
         outer_face=placement.outer_face,
         cam_face=placement.cam_face,

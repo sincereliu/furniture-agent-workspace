@@ -19,8 +19,6 @@ from furniture_panel_planning.construction_geometry import (
     drawer_panel_boxes,
     toe_kick_support_boxes,
 )
-from furniture_panel_planning.joint_topology import default_joint_connection
-from furniture_panel_planning.panel_models import PanelPlacement
 from furniture_panel_planning.panel_pipeline import plan_panel_cabinets
 from furniture_panel_planning.panel_planning import plan_panels
 from furniture_panel_planning.panel_rules import (
@@ -156,63 +154,6 @@ class PanelRuleContractTests(unittest.TestCase):
             tuple(round(value, 3) for value in expected_support.geometry),
             (18.0, 513.0, 50.0, 391.0, 48.0, 0.0),
         )
-
-    def test_default_joint_connection_matches_contact_table(self) -> None:
-        side = PanelPlacement(
-            id="left_side_panel", name="左侧板", panel_type="side",
-            size_x=18, size_y=500, size_z=1000, inner_face="+x",
-        )
-        top = PanelPlacement(
-            id="top_panel", name="顶板", panel_type="top",
-            size_x=764, size_y=500, size_z=18, inner_face="-z", cam_face="-z",
-        )
-        back = PanelPlacement(
-            id="back_panel", name="背板", panel_type="back",
-            size_x=764, size_y=9, size_z=914, inner_face="+y",
-        )
-        shelf = PanelPlacement(
-            id="shelf_z200", name="层板", panel_type="fixed_shelf",
-            size_x=764, size_y=500, size_z=18, inner_face="-z", cam_face="-z",
-        )
-        rail = PanelPlacement(
-            id="back_rail_1", name="背拉条1", panel_type="back_rail",
-            size_x=764, size_y=18, size_z=70, inner_face="+y",
-        )
-        self.assertEqual(default_joint_connection(side, top), "on")
-        self.assertEqual(default_joint_connection(side, shelf), "on")
-        self.assertEqual(default_joint_connection(back, shelf), "off")
-        self.assertEqual(default_joint_connection(shelf, back), "off")
-        self.assertEqual(default_joint_connection(rail, back), "off")
-        self.assertEqual(default_joint_connection(back, rail), "off")
-
-    def test_generated_joints_carry_resolved_connection(self) -> None:
-        spec = furniture_spec(
-            furniture_category="floor_cabinet",
-            width=800,
-            depth=600,
-            height=1000,
-            n_doors=2,
-            back_mount="groove",
-        )
-        structure = CabinetStructure.from_spec(spec)
-        placements = by_role(plan_panels(spec, structure))
-        back = placements["back_panel"]
-        shelf_joints = [
-            joint for joint in back.joints
-            if {joint.female_id, joint.male_id} & {
-                panel.id for panel in placements.values()
-                if panel.panel_type == "fixed_shelf"
-            }
-        ]
-        self.assertTrue(shelf_joints)
-        self.assertTrue(all(joint.connection == "off" for joint in shelf_joints))
-        side = placements["left_side_panel"]
-        top_joints = [
-            joint for joint in side.joints
-            if placements["top_panel"].id in {joint.female_id, joint.male_id}
-        ]
-        self.assertTrue(top_joints)
-        self.assertTrue(all(joint.connection == "on" for joint in top_joints))
 
     def test_two_cabinets_qualify_panel_ids_under_distinct_parents(self) -> None:
         spec = furniture_spec()
