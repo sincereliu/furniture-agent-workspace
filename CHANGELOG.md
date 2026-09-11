@@ -1,5 +1,21 @@
 # 更新日志
 
+## 20260911.4 — 板件冻结文件成为制造之后的统一来源
+
+CAD 的 `panel-plan.json` 快照、板件旁路分析和交付里的分析哈希都按 `confirmed_panel_sha256` 读冻结板件，不再用确认后被改过的内存副本。
+
+### 边界
+
+- 新增代码理由：`state`（下游读确认哈希）、`side_effect`（CAD 快照写出冻结件）、`structured_protocol`（分析/交付对同一份冻结 JSON 做摘要）。无自然语言映射。
+
+## 20260911.3 — 冻结已确认板件 JSON，制造重试复用
+
+`confirm_stage(panels_planned)` 把板件结果冻成 `store/<project-id>/panels/<sha256>.json`，并记下 `confirmed_panel_sha256`。制造按该哈希读冻结文件，文件缺失则失败；`retry_stage(manufacturing_planned)` 不重跑 `panel-plan`。
+
+### 边界
+
+- 新增代码理由：`state`（确认哈希与下游失效时清除）、`side_effect`（写出 `panels/<sha256>.json`）、`structured_protocol`（制造从冻结 JSON 还原 `FurnitureSpec` / `PanelPlacement`）。无自然语言映射，无默认制造方案。
+
 ## 20260911.2 — 制造 Skill 更名为 manufacture-plan
 
 Skill 目录与快照文件名改为名词 `manufacture-plan`，与 `panel-plan`、`layout-plan` 对齐；阶段 ID `manufacturing_planned`、产物 kind `manufacturing_plan` 与运行时包 `furniture_manufacturing` 不变。

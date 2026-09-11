@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import json
 import sys
 import tempfile
 import unittest
@@ -16,7 +17,10 @@ from runtime_paths import bootstrap_runtime_paths
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 from furniture_delivery_validation.validation import validate_delivery
-from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
+from furniture_workflow.workflow_orchestrator import (
+    FurnitureOrchestrator,
+    _stable_digest,
+)
 from furniture_workflow.workflow_state import WorkflowStage
 from furniture_workflow.workflow_store import JsonProjectStore
 from panel_fixtures import cabinet_data
@@ -77,6 +81,35 @@ class ScientificAnalysisAdapterTests(unittest.TestCase):
             WorkflowStage.PANELS_PLANNED.value
         ]["panel_unit_audit"]
         self.assertEqual(loaded_record["source_sha256"], record["source_sha256"])
+
+    def test_panel_analysis_reads_frozen_panel_not_mutated_live(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            store = JsonProjectStore(temporary_directory)
+            orchestrator = FurnitureOrchestrator(
+                workspace_root=WORKSPACE_ROOT,
+                project_store=store,
+            )
+            project = orchestrator.execute_spec(
+                "冻结分析柜",
+                cabinet_spec(),
+                through_stage=WorkflowStage.PANELS_PLANNED,
+            ).project
+            digest = project.latest.confirmed_panel_sha256
+            self.assertIsNotNone(digest)
+            frozen = json.loads(
+                store.panel_path(project.id, digest).read_text(encoding="utf-8")
+            )
+            original_thickness = frozen["cabinets"][0]["spec"]["board_thickness"]
+            project.latest.stage_outputs["panels_planned"]["cabinets"][0]["spec"][
+                "board_thickness"
+            ] = original_thickness + 81
+
+            record = orchestrator.run_stage_analysis(project, "panel_unit_audit")
+            self.assertEqual(record["source_sha256"], _stable_digest(frozen))
+            self.assertNotEqual(
+                record["source_sha256"],
+                _stable_digest(project.latest.stage_outputs["panels_planned"]),
+            )
 
     def test_pareto_candidate_requires_explicit_new_revision(self) -> None:
         project = self._project_through(WorkflowStage.MANUFACTURING_PLANNED)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import re
+from typing import Any
 
 from furniture_feature_tree.feature_tree_emitter import write_build123d_source
 from furniture_manufacturing.drilled_holes_glb import (
@@ -55,6 +56,7 @@ def write_artifacts(
     artifact_dir: Path,
     *,
     artifact_name: str | None = None,
+    panel_output: dict[str, Any] | None = None,
 ) -> tuple[Path, Path]:
     if artifact_name:
         intent_path = artifact_dir / f"{artifact_name}.design-intent.json"
@@ -84,12 +86,13 @@ def write_artifacts(
         json.dumps(revision.intent.to_dict(), ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+    panels = (
+        panel_output
+        if panel_output is not None
+        else revision.stage_outputs[WorkflowStage.PANELS_PLANNED.value]
+    )
     panel_path.write_text(
-        json.dumps(
-            revision.stage_outputs[WorkflowStage.PANELS_PLANNED.value],
-            ensure_ascii=False,
-            indent=2,
-        ),
+        json.dumps(panels, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
     manufacturing_path.write_text(

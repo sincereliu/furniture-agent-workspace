@@ -9,7 +9,7 @@ description: 用于 manufacturing_planned 阶段。当用户说"用什么五金"
 
 ## 工作流
 
-1. 检查前置：`design_intent` 与 `panels_planned` 均已确认；独立 `layout-plan` 结果不是前置条件。
+1. 检查前置：`design_intent` 与 `panels_planned` 均已确认；独立 `layout-plan` 结果不是前置条件。有 Project Store 时制造按确认时记下的 `confirmed_panel_sha256` 读 `store/<project-id>/panels/<sha256>.json`，文件缺失则失败，不静默改用内存里的板件，也不重跑 `panel-plan`。无 Store 时读内存中已确认的 `stage_outputs.panels_planned`。
 2. 由 LLM 根据完整上下文理解制造需求，提出整份策略草案，并把未明确的假设逐项列出给用户确认。策略覆盖：
    - 材料：类别、等级、厚度、纹理、可见面、饰面；
    - 封边：封哪些边、封边厚度及余量；
@@ -44,6 +44,6 @@ description: 用于 manufacturing_planned 阶段。当用户说"用什么五金"
 ## 边界
 
 - 运行时在 `scripts/furniture_manufacturing/`；代码契约与演进中需求见 [运行时映射](references/runtime-map.md)。
-- 同一已确认板件上再试制造用 `retry_stage()`；直接改已有制造结果用 `revise_stage_output()`，使本阶段及下游失效。
+- 同一已确认板件上再试制造用 `retry_stage("manufacturing_planned")`，冻结板件文件保持不变；直接改已有制造结果用 `revise_stage_output()`，使本阶段及下游失效。
 - 不发射特征树、不调用 CAD Bridge、不手改派生产物。
 - 试验、统计和生产仿真写入 `stage_analyses.manufacturing_planned`，只提供证据或候选；它们不自动提升 `readiness`，不直接修改 BOM，也不构成现实工厂因果结论。

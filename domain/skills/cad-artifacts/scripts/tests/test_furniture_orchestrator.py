@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 from uuid import uuid4
 
 
@@ -41,7 +42,10 @@ def cabinet_intent(*, furniture_category: str = "floor_cabinet") -> DesignIntent
     )
 
 
-def fake_orchestrator(temporary_root: Path) -> FurnitureOrchestrator:
+def fake_orchestrator(
+    temporary_root: Path,
+    project_store: JsonProjectStore | None = None,
+) -> FurnitureOrchestrator:
     launcher_path = temporary_root / "fake_gen.py"
     launcher_path.write_text(
         "\n".join(
@@ -71,7 +75,7 @@ def fake_orchestrator(temporary_root: Path) -> FurnitureOrchestrator:
     return FurnitureOrchestrator(
         workspace_root=WORKSPACE_ROOT,
         cad_bridge=bridge,
-        project_store=None,
+        project_store=project_store,
     )
 
 
@@ -882,6 +886,134 @@ class FurnitureOrchestratorTests(unittest.TestCase):
                 ],
                 2,
             )
+
+    def test_confirming_panels_freezes_json_and_manufacturing_retries_reuse_it(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            store = JsonProjectStore(temporary_directory)
+            orchestrator = FurnitureOrchestrator(
+                workspace_root=WORKSPACE_ROOT,
+                project_store=store,
+            )
+            project = orchestrator.create_project(
+                "可复用板件",
+                cabinet_intent(),
+                stage_inputs=stage_inputs_from_spec(panel_parameters()),
+            )
+            orchestrator.confirm_intent(project)
+            orchestrator.run_next(project)
+            orchestrator.confirm_stage(project, WorkflowStage.PANELS_PLANNED)
+
+            digest = project.latest.confirmed_panel_sha256
+            self.assertIsNotNone(digest)
+            self.assertEqual(project.latest.panel_sha256, digest)
+            frozen_path = store.panel_path(project.id, digest)
+            self.assertTrue(frozen_path.is_file())
+            frozen = json.loads(frozen_path.read_text(encoding="utf-8"))
+            self.assertEqual(set(frozen), {"cabinets"})
+            original_thickness = first_cabinet_spec(frozen)["board_thickness"]
+            live_spec = first_cabinet_spec(
+                project.latest.stage_outputs["panels_planned"]
+            )
+            live_spec["board_thickness"] = original_thickness + 81
+
+            with patch(
+                "furniture_workflow.workflow_orchestrator.plan_panel_stage"
+            ) as plan_panels:
+                first = orchestrator.run_next(project)
+                plan_panels.assert_not_called()
+
+            self.assertIn(
+                "manufacturing_planned",
+                first.revision.stage_outputs,
+            )
+            bom_thicknesses = {
+                panel["thickness"]
+                for panel in first.revision.stage_outputs["manufacturing_planned"][
+                    "panels"
+                ]
+            }
+            self.assertIn(original_thickness, bom_thicknesses)
+            self.assertNotIn(original_thickness + 81, bom_thicknesses)
+
+            with patch(
+                "furniture_workflow.workflow_orchestrator.plan_panel_stage"
+            ) as plan_panels:
+                second = orchestrator.retry_stage(
+                    project,
+                    WorkflowStage.MANUFACTURING_PLANNED,
+                    stage_input={"parameters": {"door_hinge_side": "left"}},
+                )
+                plan_panels.assert_not_called()
+
+            self.assertEqual(second.revision.id, first.revision.id)
+            self.assertEqual(second.revision.confirmed_panel_sha256, digest)
+            self.assertEqual(
+                len(second.revision.attempts_for("manufacturing_planned")),
+                2,
+            )
+            self.assertEqual(
+                json.loads(frozen_path.read_text(encoding="utf-8")),
+                frozen,
+            )
+            self.assertEqual(
+                second.revision.stage_outputs["manufacturing_planned"][
+                    "requested_options"
+                ].get("door_hinge_side"),
+                "left",
+            )
+
+            frozen_path.unlink()
+            with self.assertRaisesRegex(ValueError, "frozen panel plan is missing"):
+                orchestrator.retry_stage(
+                    project,
+                    WorkflowStage.MANUFACTURING_PLANNED,
+                )
+
+    def test_cad_snapshot_writes_frozen_panel_not_mutated_live(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_root = Path(temporary_directory)
+            store = JsonProjectStore(temporary_root / "store")
+            orchestrator = fake_orchestrator(temporary_root, project_store=store)
+            result = orchestrator.execute_spec(
+                "frozen-cad",
+                cabinet_data(),
+                through_stage=WorkflowStage.FEATURE_TREE_PLANNED,
+                output_root=temporary_root / "outputs",
+                artifact_name="frozen-cad",
+            )
+            digest = result.revision.confirmed_panel_sha256
+            self.assertIsNotNone(digest)
+            frozen = json.loads(
+                store.panel_path(result.project.id, digest).read_text(
+                    encoding="utf-8"
+                )
+            )
+            original_thickness = first_cabinet_spec(frozen)["board_thickness"]
+            first_cabinet_spec(
+                result.revision.stage_outputs["panels_planned"]
+            )["board_thickness"] = original_thickness + 81
+
+            cad = orchestrator.run_next(
+                result.project,
+                output_root=temporary_root / "outputs",
+                artifact_name="frozen-cad",
+                generate_cad=True,
+            )
+            snapshot = json.loads(
+                (
+                    temporary_root
+                    / "outputs"
+                    / "frozen-cad"
+                    / "frozen-cad.panel-plan.json"
+                ).read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                first_cabinet_spec(snapshot)["board_thickness"],
+                original_thickness,
+            )
+            self.assertEqual(cad.bridge.status, "ok")
 
     def test_failed_panel_attempt_can_be_retried_without_new_intent(self) -> None:
         project = self.orchestrator.create_project(

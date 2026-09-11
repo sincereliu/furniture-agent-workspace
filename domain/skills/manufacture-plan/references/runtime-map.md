@@ -2,6 +2,10 @@
 
 本参考集中说明 `SKILL.md` 工作流背后的运行时结构与校验职责；LLM 走业务流时不必逐条记忆，核对实现或规划演进时再读。
 
+## 交接
+
+板件几何来自已确认冻结文件，不重跑 `panel-plan`。Orchestrator 用 `confirmed_panel_sha256` 读 `store/<project-id>/panels/<sha256>.json`，再 `require_primary_handoff()` 还原 `FurnitureSpec` / `PanelPlacement`。本阶段自己的提案在 `stage_inputs.manufacturing`。无 Store 或尚未记下确认哈希时读内存 `stage_outputs.panels_planned`。
+
 ## 五金连接件（`connectors/`）
 
 - 基类 `Connector` 定义统一接口：`match()`、`generate_holes()`、`generate_holes_for_panels()`、`boms()`、`machining_operations()`。

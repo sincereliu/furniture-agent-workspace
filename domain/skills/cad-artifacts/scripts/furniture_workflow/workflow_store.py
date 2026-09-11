@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from .workflow_project import Project, Revision, StageAttempt
+from .workflow_state import WorkflowStage
 
 
 def _write_json(path: Path, value: object) -> None:
@@ -25,6 +26,9 @@ class JsonProjectStore:
 
     def intent_path(self, project_id: str, intent_sha256: str) -> Path:
         return self.project_dir(project_id) / "intents" / f"{intent_sha256}.json"
+
+    def panel_path(self, project_id: str, panel_sha256: str) -> Path:
+        return self.project_dir(project_id) / "panels" / f"{panel_sha256}.json"
 
     def attempt_dir(
         self,
@@ -54,6 +58,7 @@ class JsonProjectStore:
         temporary_path.replace(path)
         for revision in project.revisions:
             self._write_frozen_intent(project.id, revision)
+            self._write_frozen_panel(project.id, revision)
             self._write_attempts(project.id, revision)
         return path
 
@@ -70,6 +75,18 @@ class JsonProjectStore:
         if path.is_file():
             return
         _write_json(path, revision.intent.to_dict())
+
+    def _write_frozen_panel(self, project_id: str, revision: Revision) -> None:
+        if WorkflowStage.PANELS_PLANNED.value not in revision.approved_stages:
+            return
+        digest = revision.confirmed_panel_sha256 or revision.panel_sha256
+        output = revision.stage_outputs.get(WorkflowStage.PANELS_PLANNED.value)
+        if not digest or not isinstance(output, dict):
+            return
+        path = self.panel_path(project_id, digest)
+        if path.is_file():
+            return
+        _write_json(path, output)
 
     def _write_attempts(self, project_id: str, revision: Revision) -> None:
         for stage, attempts in revision.stage_attempts.items():

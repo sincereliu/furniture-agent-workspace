@@ -217,6 +217,8 @@ class FurnitureOrchestrator:
             )
         ]
         revision.selected_attempts[changed_stage.value] = 1
+        if stage_index(changed_stage) > stage_index(WorkflowStage.PANELS_PLANNED):
+            revision.confirmed_panel_sha256 = parent.confirmed_panel_sha256
         self._persist(project)
         return revision
 
@@ -234,11 +236,9 @@ class FurnitureOrchestrator:
             raise ValueError(f"unsupported stage analysis; use one of: {supported}")
         revision = project.latest
         source_stage = ANALYSIS_STAGE_OWNERS[analysis_name]
-        source_output = revision.stage_outputs.get(source_stage.value)
-        if not isinstance(source_output, dict):
-            raise ValueError(
-                f"analysis requires stage output: {source_stage.value}"
-            )
+        source_output = self._stage_source_output(
+            revision, source_stage, project_id=project.id
+        )
         values = dict(config or {})
         dispatch: dict[str, Callable[[], dict[str, Any]]] = {
             "panel_unit_audit": lambda: audit_panel_quantities(
@@ -295,9 +295,9 @@ class FurnitureOrchestrator:
         record = analyses.get("panel_optimization")
         if not isinstance(record, Mapping):
             raise ValueError("run panel_optimization before selecting a candidate")
-        source_output = revision.stage_outputs.get(stage.value)
-        if not isinstance(source_output, dict):
-            raise ValueError("panels_planned output is unavailable")
+        source_output = self._confirmed_panel_output(
+            revision, project_id=project.id
+        )
         if record.get("source_revision_id") != revision.id or record.get(
             "source_sha256"
         ) != _stable_digest(source_output):
@@ -381,7 +381,9 @@ class FurnitureOrchestrator:
 
         report = self._latest_stage_validation(revision, requested)
         if report is None or not report.passed:
-            report = self._validate_stage_output(revision, requested)
+            report = self._validate_stage_output(
+                revision, requested, project_id=project.id
+            )
             revision.validations.append(report)
         if not report.passed:
             revision.workflow.fail(f"{requested.value} validation failed")
@@ -391,6 +393,8 @@ class FurnitureOrchestrator:
         if requested == WorkflowStage.DESIGN_INTENT:
             revision.intent = revision.intent.confirm()
             revision.stage_outputs[requested.value] = revision.intent.to_dict()
+        if requested == WorkflowStage.PANELS_PLANNED:
+            revision.confirmed_panel_sha256 = revision.panel_sha256
 
         revision.approve_stage(requested)
         revision.workflow.record(f"{requested.value} confirmed")
@@ -649,16 +653,17 @@ class FurnitureOrchestrator:
                 output,
                 stage_input,
                 "construction, exact clearances, and physical panels planned",
+                project_id=project.id,
             )
             return
 
         if stage == WorkflowStage.MANUFACTURING_PLANNED:
-            spec = self._spec_from_revision(revision)
+            spec = self._spec_from_revision(revision, project_id=project.id)
             stage_input = manufacturing_stage_input(revision.stage_inputs)
             try:
                 bom = plan_manufacturing(
                     spec,
-                    self._placements_from_revision(revision),
+                    self._placements_from_revision(revision, project_id=project.id),
                     requested_options=stage_input.get("parameters", {}),
                     appearance=stage_input.get("appearance", {}),
                 )
@@ -671,11 +676,12 @@ class FurnitureOrchestrator:
                 asdict(bom),
                 stage_input,
                 "materials, hardware, and preliminary BOM planned",
+                project_id=project.id,
             )
             return
 
         if stage == WorkflowStage.FEATURE_TREE_PLANNED:
-            spec = self._spec_from_revision(revision)
+            spec = self._spec_from_revision(revision, project_id=project.id)
             manufacturing = self._bom_from_revision(revision)
             try:
                 feature_tree = panels_to_feature_tree(
@@ -698,6 +704,7 @@ class FurnitureOrchestrator:
                 feature_tree,
                 {},
                 "Feature Tree v2 with target-specific machining cuts planned",
+                project_id=project.id,
             )
             return
 
@@ -706,7 +713,9 @@ class FurnitureOrchestrator:
                 raise ValueError("CAD generation requires output_root")
             if not generate_cad:
                 raise ValueError("CAD generation requires generate_cad=True")
-            pipeline = self._pipeline_from_revision(revision)
+            pipeline = self._pipeline_from_revision(
+                revision, project_id=project.id
+            )
             if pipeline is None:
                 raise ValueError("manufacturing stage must exist before CAD generation")
             artifact_dir = prepare_artifact_dir(
@@ -722,6 +731,9 @@ class FurnitureOrchestrator:
                 pipeline,
                 artifact_dir,
                 artifact_name=artifact_name,
+                panel_output=self._confirmed_panel_output(
+                    revision, project_id=project.id
+                ),
             )
             bridge = self.cad_bridge.generate_from_source(
                 source_path,
@@ -738,7 +750,9 @@ class FurnitureOrchestrator:
                         bridge.topology_path,
                         package_path=bridge.viewer_package_path,
                     )
-            report = self._validate_stage_output(revision, stage)
+            report = self._validate_stage_output(
+                revision, stage, project_id=project.id
+            )
             revision.validations.append(report)
             if not report.passed:
                 revision.workflow.fail(bridge.message)
@@ -750,7 +764,9 @@ class FurnitureOrchestrator:
             report = validate_delivery(
                 revision.manifest,
                 source_revision_id=revision.id,
-                stage_outputs=revision.stage_outputs,
+                stage_outputs=self._resolved_stage_outputs(
+                    revision, project_id=project.id
+                ),
                 approved_stages=revision.approved_stages,
                 stage_validations=revision.validations,
                 stage_analyses=revision.stage_analyses,
@@ -772,9 +788,13 @@ class FurnitureOrchestrator:
         output: dict[str, Any],
         inputs: dict[str, Any],
         note: str,
+        *,
+        project_id: str | None = None,
     ) -> None:
         revision.stage_outputs[stage.value] = deepcopy(output)
-        report = self._validate_stage_output(revision, stage)
+        report = self._validate_stage_output(
+            revision, stage, project_id=project_id
+        )
         revision.validations.append(report)
         attempt = self._record_attempt(
             revision,
@@ -874,6 +894,8 @@ class FurnitureOrchestrator:
             for key, value in revision.selected_attempts.items()
             if key in revision.stage_attempts and key != stage.value
         }
+        if index <= stage_index(WorkflowStage.PANELS_PLANNED):
+            revision.confirmed_panel_sha256 = None
         if index <= stage_index(WorkflowStage.FEATURE_TREE_PLANNED):
             revision.feature_tree = None
         predecessor = STAGE_SEQUENCE[index - 1]
@@ -935,7 +957,9 @@ class FurnitureOrchestrator:
 
     def _result(self, project: Project) -> OrchestrationResult:
         revision = project.latest
-        pipeline = self._pipeline_from_revision(revision)
+        pipeline = self._pipeline_from_revision(
+            revision, project_id=project.id
+        )
         return OrchestrationResult(
             project=project,
             revision=revision,
@@ -951,6 +975,8 @@ class FurnitureOrchestrator:
     def _pipeline_from_revision(
         self,
         revision: Revision,
+        *,
+        project_id: str | None = None,
     ) -> CabinetPipelineResult | None:
         required = (
             WorkflowStage.PANELS_PLANNED.value,
@@ -959,31 +985,94 @@ class FurnitureOrchestrator:
         if not all(key in revision.stage_outputs for key in required):
             return None
         return CabinetPipelineResult(
-            spec=self._spec_from_revision(revision),
-            structure=self._structure_from_revision(revision),
-            placements=self._placements_from_revision(revision),
+            spec=self._spec_from_revision(revision, project_id=project_id),
+            structure=self._structure_from_revision(
+                revision, project_id=project_id
+            ),
+            placements=self._placements_from_revision(
+                revision, project_id=project_id
+            ),
             panels=self._panels_from_revision(revision),
             bom=self._bom_from_revision(revision),
         )
 
-    @staticmethod
-    def _spec_from_revision(revision: Revision) -> FurnitureSpec:
+    def _resolved_stage_outputs(
+        self,
+        revision: Revision,
+        *,
+        project_id: str | None = None,
+    ) -> dict[str, Any]:
+        outputs = dict(revision.stage_outputs)
+        if WorkflowStage.PANELS_PLANNED.value in outputs:
+            outputs[WorkflowStage.PANELS_PLANNED.value] = (
+                self._confirmed_panel_output(revision, project_id=project_id)
+            )
+        return outputs
+
+    def _stage_source_output(
+        self,
+        revision: Revision,
+        stage: WorkflowStage,
+        *,
+        project_id: str | None = None,
+    ) -> dict[str, Any]:
+        if stage == WorkflowStage.PANELS_PLANNED:
+            return self._confirmed_panel_output(revision, project_id=project_id)
+        output = revision.stage_outputs.get(stage.value)
+        if not isinstance(output, dict):
+            raise ValueError(f"stage output is required: {stage.value}")
+        return output
+
+    def _confirmed_panel_output(
+        self,
+        revision: Revision,
+        *,
+        project_id: str | None = None,
+    ) -> dict[str, Any]:
+        live = revision.stage_outputs.get(WorkflowStage.PANELS_PLANNED.value)
+        if not isinstance(live, dict):
+            raise ValueError("panels_planned output is required")
+        digest = revision.confirmed_panel_sha256
+        if self.project_store is None or not project_id or not digest:
+            return live
+        path = self.project_store.panel_path(project_id, digest)
+        if not path.is_file():
+            raise ValueError(f"frozen panel plan is missing: {path}")
+        frozen = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(frozen, dict):
+            raise ValueError("frozen panel plan must be an object")
+        return frozen
+
+    def _spec_from_revision(
+        self,
+        revision: Revision,
+        *,
+        project_id: str | None = None,
+    ) -> FurnitureSpec:
         spec, _, _ = require_primary_handoff(
-            revision.stage_outputs[WorkflowStage.PANELS_PLANNED.value]
+            self._confirmed_panel_output(revision, project_id=project_id)
         )
         return FurnitureSpec.from_dict(spec)
 
-    @staticmethod
-    def _structure_from_revision(revision: Revision) -> CabinetStructure:
+    def _structure_from_revision(
+        self,
+        revision: Revision,
+        *,
+        project_id: str | None = None,
+    ) -> CabinetStructure:
         _, structure, _ = require_primary_handoff(
-            revision.stage_outputs[WorkflowStage.PANELS_PLANNED.value]
+            self._confirmed_panel_output(revision, project_id=project_id)
         )
         return CabinetStructure.from_dict(structure)
 
-    @staticmethod
-    def _placements_from_revision(revision: Revision) -> list[PanelPlacement]:
+    def _placements_from_revision(
+        self,
+        revision: Revision,
+        *,
+        project_id: str | None = None,
+    ) -> list[PanelPlacement]:
         _, _, panels = require_primary_handoff(
-            revision.stage_outputs[WorkflowStage.PANELS_PLANNED.value]
+            self._confirmed_panel_output(revision, project_id=project_id)
         )
         return [PanelPlacement.from_dict(item) for item in panels]
 
@@ -1018,6 +1107,8 @@ class FurnitureOrchestrator:
         self,
         revision: Revision,
         stage: WorkflowStage,
+        *,
+        project_id: str | None = None,
     ) -> ValidationReport:
         try:
             if stage == WorkflowStage.DESIGN_INTENT:
@@ -1029,9 +1120,11 @@ class FurnitureOrchestrator:
                 )
             if stage == WorkflowStage.MANUFACTURING_PLANNED:
                 return validate_manufacturing(
-                    self._spec_from_revision(revision),
+                    self._spec_from_revision(revision, project_id=project_id),
                     self._bom_from_revision(revision),
-                    self._placements_from_revision(revision),
+                    self._placements_from_revision(
+                        revision, project_id=project_id
+                    ),
                 )
             if stage == WorkflowStage.FEATURE_TREE_PLANNED:
                 return validate_feature_tree(revision.stage_outputs[stage.value])

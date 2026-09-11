@@ -5,7 +5,7 @@
 ## 总原则
 
 - `panels_planned` 的唯一事实来源是 `cabinets[]` 里每台柜的 `spec`、`structure`、`back_mount_resolution` 和 `panels`。
-- 旁路分析只读取当前阶段输出，写入 `stage_analyses.panels_planned`。
+- 旁路分析只读取已确认冻结板件（有 Store 时按 `confirmed_panel_sha256` 读 `store/<project-id>/panels/<sha256>.json`），写入 `stage_analyses.panels_planned`。未确认或无 Store 时读内存中的阶段输出。
 - 旁路分析不能静默修改板件事实输出，不能替代结构化准入，也不能直接变成制造或 CAD 输入。
 
 ## 单位与不确定度审计

@@ -14,7 +14,7 @@ description: 用于 panels_planned 阶段。当用户说“几扇门”“几层
 3. 把选定草稿的全部规范字段写入 `stage_inputs.panels.parameters`。完整字段、显式值要求与候选起点见 [提案契约](references/panel-proposal-contract.md)。
 4. 由 `FurnitureSpec.from_intent()` 校验意图确认状态、字段完整性/类型和客观结构冲突，首次物化完整规范；无法由当前拓扑表达的混合语义必须继续消歧，不得让运行时丢弃字段。
 5. 依据 [背板结构规则](references/back-construction-rules.md)、[板件定义规则](references/panel-definition-rules.md)、[抽屉尺寸链](references/drawer-dimension-chain.md) 和 `references/cabinet-topologies/` 生成柜体实例及其 `spec/structure/back_mount_resolution/panels`；当背板模式需要时，同时物化背拉条并纳入同一阶段校验。
-6. 运行时统一校验柜体身份、板件归属、结构规格、精确净空、板件标识/尺寸/位置/依赖和背板几何。每次规划是一次 attempt：展示后暂停。用户要另一版时调用 `retry_stage("panels_planned")`（可带新的 `stage_inputs.panels`），不要 `revise()` 意图；某次通过的尝试用 `select_stage_attempt()` 选用后再确认。尝试失败只记录该次，冻结意图仍在。未确认不得进入制造、BOM、特征树或 CAD。
+6. 运行时统一校验柜体身份、板件归属、结构规格、精确净空、板件标识/尺寸/位置/依赖和背板几何。每次规划是一次 attempt：展示后暂停。用户要另一版时调用 `retry_stage("panels_planned")`（可带新的 `stage_inputs.panels`），不要 `revise()` 意图；某次通过的尝试用 `select_stage_attempt()` 选用后再确认。尝试失败只记录该次，冻结意图仍在。`confirm_stage(panels_planned)` 把当前候选冻成 `store/<project-id>/panels/<sha256>.json`；制造只读这份冻结文件，重试制造不会重跑板件。未确认不得进入制造、BOM、特征树或 CAD。
 
 ## 提案与展示
 
@@ -38,7 +38,7 @@ description: 用于 panels_planned 阶段。当用户说“几扇门”“几层
 
 ## 旁路分析
 
-- `panel_unit_audit` 和 `panel_optimization` 只读取当前 `panels_planned` 输出，写入 `stage_analyses.panels_planned`。
+- `panel_unit_audit` 和 `panel_optimization` 只读取已确认冻结板件（有 Store 时按 `confirmed_panel_sha256` 读文件），写入 `stage_analyses.panels_planned`。
 - 它们不自动改写 `panels_planned` 事实输出，不替代结构化准入，也不构成制造或 CAD 的直接输入。
 - 只有用户明确选中优化候选后，才可用 `revise_stage_output()` 物化新的板件结果。
 

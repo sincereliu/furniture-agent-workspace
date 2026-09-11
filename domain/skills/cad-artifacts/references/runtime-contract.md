@@ -47,18 +47,20 @@ result = orchestrator.run_next(
 `run_next()`/默认 `run_until()` 不越过未确认检查点。Agent 返回当前输出后等待确认，不用批处理代替确认。
 
 - 意图确认：`confirm_stage(project, "design_intent")` 把 `confirmed=true` 的 `DesignIntent` 冻成 `store/<project-id>/intents/<intent-sha256>.json`。之后板件及后续规划只读这份冻结意图。
-- 同一冻结意图再试规划：`retry_stage(project, stage, stage_input=...)`。适用于未确认或需作废下游的 `panels_planned`、`manufacturing_planned`、`feature_tree_planned`。失败只记录该次 attempt，不把 Revision 标为 `FAILED`。
+- 板件确认：`confirm_stage(project, "panels_planned")` 把已确认板件冻成 `store/<project-id>/panels/<panel-sha256>.json`，并记下 `confirmed_panel_sha256`。有 Store 时制造、板件旁路分析、CAD `panel-plan.json` 和交付分析哈希都按该哈希读冻结文件，文件缺失则失败；无 Store 时读内存中已确认输出。`retry_stage(project, "manufacturing_planned")` 不重跑板件。
+- 同一冻结上游再试规划：`retry_stage(project, stage, stage_input=...)`。适用于未确认或需作废下游的 `panels_planned`、`manufacturing_planned`、`feature_tree_planned`。失败只记录该次 attempt，不把 Revision 标为 `FAILED`。
 - 选用某次通过的尝试：`select_stage_attempt(project, stage, number)`，再 `confirm_stage()`。
 - 意图变化：`revise(project, new_intent)`，从 `design_intent` 开始，下游尝试作废。
 - 直接改已有规划结果：`revise_stage_output(project, stage, edited_output)`。
 - 新 Revision 仅复制修改点前的已确认输出；修改阶段和下游重做。旧产物标为 stale，不手改 STEP、GLB、BOM 或源码。
 
-冻结意图与 attempt 文件：
+冻结意图、冻结板件与 attempt 文件：
 
 ```text
 store/<project-id>/
   project.json
   intents/<intent-sha256>.json
+  panels/<panel-sha256>.json
   revisions/<revision-id>/attempts/panels_planned/001/input.json
   revisions/<revision-id>/attempts/panels_planned/001/output.json
   revisions/<revision-id>/attempts/panels_planned/001/status.json

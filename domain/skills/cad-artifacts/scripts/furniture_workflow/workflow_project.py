@@ -20,6 +20,11 @@ def _id(prefix: str) -> str:
     return f"{prefix}_{uuid4().hex}"
 
 
+def _canonical_sha256(value: Any) -> str:
+    encoded = json.dumps(value, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    return sha256(encoded).hexdigest()
+
+
 def _stage_key(stage: str | WorkflowStage) -> str:
     return stage.value if isinstance(stage, WorkflowStage) else str(stage)
 
@@ -84,6 +89,7 @@ class Revision:
     approved_stages: list[str] = field(default_factory=list)
     stage_attempts: dict[str, list[StageAttempt]] = field(default_factory=dict)
     selected_attempts: dict[str, int] = field(default_factory=dict)
+    confirmed_panel_sha256: str | None = None
 
     def __post_init__(self) -> None:
         if self.manifest is None:
@@ -125,10 +131,14 @@ class Revision:
 
     @property
     def intent_sha256(self) -> str:
-        encoded = json.dumps(
-            self.intent.to_dict(), ensure_ascii=False, sort_keys=True
-        ).encode("utf-8")
-        return sha256(encoded).hexdigest()
+        return _canonical_sha256(self.intent.to_dict())
+
+    @property
+    def panel_sha256(self) -> str | None:
+        output = self.stage_outputs.get(WorkflowStage.PANELS_PLANNED.value)
+        if not isinstance(output, dict):
+            return None
+        return _canonical_sha256(output)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -137,6 +147,8 @@ class Revision:
             "parent_revision_id": self.parent_revision_id,
             "created_at": self.created_at,
             "intent_sha256": self.intent_sha256,
+            "panel_sha256": self.panel_sha256,
+            "confirmed_panel_sha256": self.confirmed_panel_sha256,
             "intent": self.intent.to_dict(),
             "stage_inputs": self.stage_inputs,
             "workflow": self.workflow.to_dict(),
@@ -201,6 +213,11 @@ class Revision:
                 str(stage): int(number)
                 for stage, number in dict(data.get("selected_attempts", {})).items()
             },
+            confirmed_panel_sha256=(
+                str(data["confirmed_panel_sha256"])
+                if data.get("confirmed_panel_sha256")
+                else None
+            ),
         )
 
 
