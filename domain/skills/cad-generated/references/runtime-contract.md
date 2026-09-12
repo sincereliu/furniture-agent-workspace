@@ -25,14 +25,16 @@
 
 输出在 `revision.stage_outputs[stage.value]`，待后续处理的参数在 `revision.stage_inputs`，确认在 `approved_stages`，规划尝试在 `stage_attempts`，历史在 `workflow.history`。`JsonProjectStore` 把 Project 写到 `store/<project-id>/project.json`，确认意图时额外写出冻结文件，每次规划尝试写出独立 attempt 目录。
 
-交互调用：
+交互调用（Python）：
 
 ```python
 orchestrator.confirm_stage(project)          # 确认当前检查点；意图确认后冻结 JSON
-result = orchestrator.run_next(project)     # 生成下一阶段的第一次尝试
+result = orchestrator.run_next(project, stage_input={...})  # 生成下一阶段的第一次尝试
 orchestrator.retry_stage(project, "panel_plan", stage_input={"parameters": ...})
 orchestrator.select_stage_attempt(project, "panel_plan", 1)
 ```
+
+任意 function-calling 宿主不要直调上述 Python 对象，应注册 `furniture_workflow/agent_tools.py` 的 `openai_tools()`，经 `FurnitureToolSession.call` 传入 `project_id`。工具列表、错误码与快照字段见 [交互工具面](agent-tool-contract.md)。
 
 进入 CAD 阶段须显式给出输出：
 
@@ -139,7 +141,7 @@ build123d 入口源码以 `<artifact-name>.step.py`（交互模式为 `model.ste
 
 运行时流水线为：
 
-`CLI / API / Agent -> FurnitureOrchestrator -> 设计意图 -> 板件 -> 制造/BOM -> 特征树 -> CAD Bridge -> STEP + Viewer 组件包 -> 交付验证`
+`CLI / API / Agent tools -> FurnitureOrchestrator -> 设计意图 -> 板件 -> 制造/BOM -> 特征树 -> CAD Bridge -> STEP + Viewer 组件包 -> 交付验证`
 
 独立房间摆放为：`明确布局请求 -> layout-plan -> 房间坐标/碰撞检查/SVG/互动 Viewer`。
 

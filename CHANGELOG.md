@@ -1,5 +1,13 @@
 # 更新日志
 
+## 20260912.6 — 交互 Orchestrator 收成 function-calling 工具面
+
+新增 `furniture_workflow/agent_tools.py`：`FurnitureToolSession` + `openai_tools()`。任意 function-calling 宿主只注册 `furniture_create_project` / `get_project` / `confirm_stage` / `run_next` / `retry_stage` / `select_stage_attempt` / `revise_intent`。`run_next` 可带第一次 `stage_input`。不暴露 `execute_spec`、`plan_cabinet`、CAD Bridge。契约见 `domain/skills/cad-generated/references/agent-tool-contract.md`。
+
+### 边界
+
+- 新增代码理由：`structured_protocol`（工具 JSON Schema、参数准入、错误码）、`state`（快照里的 `allowed_actions` / `waiting_for` 由阶段状态派生）。CAD 的 `output_root` 在 `generate_cad=true` 且未传时使用约定路径 `generated`，属于协议路径而非构造默认值。无自然语言映射，无板件/制造字段默认值。
+
 ## 20260912.5 — 板件/制造检查点改跟目录名
 
 检查点 `panels_planned` 改为 `panel_plan`，`manufacturing_planned` 改为 `manufacture_plan`，与目录 `panel-plan` / `manufacture-plan` 对齐。旧项目 JSON 读入时映射到新名；产物 kind `panel_plan` / `manufacturing_plan` 不变。

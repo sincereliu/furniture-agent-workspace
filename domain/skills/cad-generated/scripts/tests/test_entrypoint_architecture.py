@@ -33,11 +33,20 @@ class EntrypointArchitectureTests(unittest.TestCase):
         self.assertNotIn("furniture_feature_tree.feature_tree_emitter", server_modules)
         self.assertNotIn("furniture_cad.cad_bridge", server_modules)
 
+        tool_modules = imported_modules(
+            SCRIPTS_ROOT / "furniture_workflow" / "agent_tools.py"
+        )
+        self.assertIn("workflow_orchestrator", tool_modules)
+        self.assertNotIn("cabinet_pipeline", tool_modules)
+        self.assertNotIn("furniture_panel_planning.panel_pipeline", tool_modules)
+        self.assertNotIn("furniture_cad.cad_bridge", tool_modules)
+
     def test_agent_routes_execution_through_the_orchestrator(self) -> None:
         agent_skill = (
             WORKSPACE_ROOT / ".agents" / "skills" / "furniture-agent" / "SKILL.md"
         ).read_text(encoding="utf-8")
         self.assertIn("FurnitureOrchestrator", agent_skill)
+        self.assertIn("FurnitureToolSession", agent_skill)
         self.assertIn("不得从 Agent 直接调用 `plan_cabinet()`", agent_skill)
         self.assertIn("generate_cad=True", agent_skill)
         self.assertNotIn("$cad-generated", agent_skill)

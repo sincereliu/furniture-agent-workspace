@@ -5,7 +5,7 @@
 ## 架构
 
 ```text
-CLI / FastAPI / Agent Skill + CAD tool
+CLI / FastAPI / Agent tools (furniture_*)
             |
             v
 FurnitureOrchestrator
@@ -18,11 +18,11 @@ FurnitureOrchestrator
 独立 layout-plan -> 房间摆放 / 碰撞检查 / SVG / Viewer
 ```
 
-`domain/skills/cad-generated/scripts/furniture_workflow/workflow_orchestrator.py` 是家具生成的唯一应用层入口。规划阶段实现由各自 Skill 的 `scripts/` 拥有；`cad_generated` 是 Orchestrator tool（`run_next(..., generate_cad=True)`），不是 Agent Skill。CLI、API 与 Agent 不直接拼装规划器、发射器或 CAD Bridge。`layout-plan` 是明确请求时才调用的独立房间摆放能力，不是家具生成前置步骤。
+`domain/skills/cad-generated/scripts/furniture_workflow/workflow_orchestrator.py` 是家具生成的唯一应用层入口。规划阶段实现由各自 Skill 的 `scripts/` 拥有；`cad_generated` 是 Orchestrator tool（`run_next(..., generate_cad=True)`），不是 Agent Skill。交互式 function-calling 经 `furniture_workflow/agent_tools.py` 的 `FurnitureToolSession` 调用 Orchestrator，不直接拼装规划器、发射器或 CAD Bridge。CLI/API 批处理仍走 `execute_spec()`。`layout-plan` 是明确请求时才调用的独立房间摆放能力，不是家具生成前置步骤。
 
 ## 六阶段交互
 
-交互式 Agent 每次只运行一个阶段：`confirm_stage()` 确认当前阶段，`run_next()` 进入下一阶段。意图确认后冻成 JSON；对同一份冻结意图可用 `retry_stage()` 再试板件等规划阶段，用 `select_stage_attempt()` 选用某次尝试。阶段完成后，用户检查 Revision 中对应的 `stage_outputs`；未确认时 `run_next()` 不会越过当前检查点。
+交互式 Agent 每次只运行一个阶段：`furniture_confirm_stage` 确认当前阶段，`furniture_run_next` 进入下一阶段。意图确认后冻成 JSON；对同一份冻结意图可用 `furniture_retry_stage` 再试板件等规划阶段，用 `furniture_select_stage_attempt` 选用某次尝试。阶段完成后，用户检查快照中的 `current_output`；未确认时不能越过当前检查点。工具契约见 `domain/skills/cad-generated/references/agent-tool-contract.md`。
 
 ```text
 1. design_intent

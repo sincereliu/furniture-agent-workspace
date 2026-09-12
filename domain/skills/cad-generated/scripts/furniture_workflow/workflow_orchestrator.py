@@ -405,6 +405,7 @@ class FurnitureOrchestrator:
         self,
         project: Project,
         *,
+        stage_input: Mapping[str, Any] | None = None,
         output_root: str | Path | None = None,
         artifact_name: str | None = None,
         generate_cad: bool = False,
@@ -417,6 +418,13 @@ class FurnitureOrchestrator:
         current_index = stage_index(revision.workflow.current)
         if current_index == len(STAGE_SEQUENCE) - 1:
             return self._result(project)
+        if stage_input:
+            if not revision.is_stage_approved(revision.workflow.current):
+                raise ValueError(
+                    "stage_input requires the current stage to be confirmed"
+                )
+            next_stage = STAGE_SEQUENCE[current_index + 1]
+            self._apply_retry_input(revision, next_stage, stage_input)
         result = self.run_until(
             project,
             STAGE_SEQUENCE[current_index + 1],

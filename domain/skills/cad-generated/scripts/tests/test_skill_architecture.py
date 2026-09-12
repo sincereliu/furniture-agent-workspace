@@ -52,6 +52,7 @@ STAGE_REFERENCES = {
     "cad-generated": (
         "TOOL.md",
         "references/runtime-contract.md",
+        "references/agent-tool-contract.md",
     ),
     "delivery-validated": ("references/delivery-checklist.md",),
 }
