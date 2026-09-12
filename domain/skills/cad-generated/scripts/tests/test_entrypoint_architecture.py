@@ -40,8 +40,8 @@ class EntrypointArchitectureTests(unittest.TestCase):
         self.assertIn("FurnitureOrchestrator", agent_skill)
         self.assertIn("不得从 Agent 直接调用 `plan_cabinet()`", agent_skill)
         self.assertIn("generate_cad=True", agent_skill)
-        self.assertNotIn("$cad-artifacts", agent_skill)
-        self.assertNotIn("domain/skills/cad-artifacts/SKILL.md", agent_skill)
+        self.assertNotIn("$cad-generated", agent_skill)
+        self.assertNotIn("domain/skills/cad-generated/SKILL.md", agent_skill)
 
 
 if __name__ == "__main__":

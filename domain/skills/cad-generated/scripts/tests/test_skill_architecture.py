@@ -22,9 +22,9 @@ PLANNING_STAGE_SKILLS = {
     "panels_planned": "panel-plan",
     "manufacturing_planned": "manufacture-plan",
     "feature_tree_planned": "feature-tree",
-    "delivery_validated": "delivery-report",
+    "delivery_validated": "delivery-validated",
 }
-CAD_TOOL_HOME = "cad-artifacts"
+CAD_TOOL_HOME = "cad-generated"
 
 STAGE_REFERENCES = {
     "design-intent": (
@@ -49,11 +49,11 @@ STAGE_REFERENCES = {
         "references/connection-contact-defaults.md",
     ),
     "feature-tree": ("references/feature-tree-rules.md",),
-    "cad-artifacts": (
+    "cad-generated": (
         "TOOL.md",
         "references/runtime-contract.md",
     ),
-    "delivery-report": ("references/delivery-checklist.md",),
+    "delivery-validated": ("references/delivery-checklist.md",),
 }
 
 STAGE_RUNTIME_PACKAGES = {
@@ -62,8 +62,8 @@ STAGE_RUNTIME_PACKAGES = {
     "panel-plan": "furniture_panel_planning",
     "manufacture-plan": "furniture_manufacturing",
     "feature-tree": "furniture_feature_tree",
-    "cad-artifacts": "furniture_cad",
-    "delivery-report": "furniture_delivery_validation",
+    "cad-generated": "furniture_cad",
+    "delivery-validated": "furniture_delivery_validation",
 }
 
 
@@ -126,15 +126,15 @@ class SkillArchitectureTests(unittest.TestCase):
         self.assertIn("generate_cad=True", tool_text)
         self.assertNotRegex(
             tool_text,
-            re.compile(r"^name:\s*cad-artifacts\s*$", re.MULTILINE),
+            re.compile(r"^name:\s*cad-generated\s*$", re.MULTILINE),
         )
 
         router = (
             WORKSPACE_ROOT / ".agents" / "skills" / "furniture-agent" / "SKILL.md"
         ).read_text(encoding="utf-8")
         self.assertIn("generate_cad=True", router)
-        self.assertNotIn("$cad-artifacts", router)
-        self.assertNotIn("domain/skills/cad-artifacts/SKILL.md", router)
+        self.assertNotIn("$cad-generated", router)
+        self.assertNotIn("domain/skills/cad-generated/SKILL.md", router)
 
         host_prompt = (
             WORKSPACE_ROOT
@@ -144,7 +144,7 @@ class SkillArchitectureTests(unittest.TestCase):
             / "agents"
             / "openai.yaml"
         ).read_text(encoding="utf-8")
-        self.assertNotIn("$cad-artifacts", host_prompt)
+        self.assertNotIn("$cad-generated", host_prompt)
 
     def test_router_uses_explicit_stage_skill_paths(self) -> None:
         router = (
@@ -157,7 +157,7 @@ class SkillArchitectureTests(unittest.TestCase):
                 router,
             )
         self.assertIn(
-            "`cad_generated`：Orchestrator tool（`run_next(..., generate_cad=True)`），实现 `domain/skills/cad-artifacts/TOOL.md`",
+            "`cad_generated`：Orchestrator tool（`run_next(..., generate_cad=True)`），实现 `domain/skills/cad-generated/TOOL.md`",
             router,
         )
         self.assertIn(
@@ -223,7 +223,7 @@ class SkillArchitectureTests(unittest.TestCase):
             for relative_path in references:
                 self.assertTrue((skill_root / relative_path).is_file())
 
-        cad_references = SKILLS_ROOT / "cad-artifacts" / "references"
+        cad_references = SKILLS_ROOT / "cad-generated" / "references"
         for moved_reference in (
             "intent-capture-rules.md",
             "spatial-layout-rules.md",
@@ -288,7 +288,7 @@ class SkillArchitectureTests(unittest.TestCase):
             self.assertTrue((package_root / "__init__.py").is_file(), package_root)
 
         workflow_package = (
-            SKILLS_ROOT / "cad-artifacts" / "scripts" / "furniture_workflow"
+            SKILLS_ROOT / "cad-generated" / "scripts" / "furniture_workflow"
         )
         self.assertTrue((workflow_package / "workflow_orchestrator.py").is_file())
 
@@ -299,8 +299,8 @@ class SkillArchitectureTests(unittest.TestCase):
             "panel-plan": "furniture_panel_planning/validation.py",
             "manufacture-plan": "furniture_manufacturing/validation.py",
             "feature-tree": "furniture_feature_tree/validation.py",
-            "cad-artifacts": "furniture_cad/validation.py",
-            "delivery-report": (
+            "cad-generated": "furniture_cad/validation.py",
+            "delivery-validated": (
                 "furniture_delivery_validation/validation.py"
             ),
         }
@@ -311,7 +311,7 @@ class SkillArchitectureTests(unittest.TestCase):
 
         orchestrator = (
             SKILLS_ROOT
-            / "cad-artifacts"
+            / "cad-generated"
             / "scripts"
             / "furniture_workflow"
             / "workflow_orchestrator.py"
@@ -332,7 +332,7 @@ class SkillArchitectureTests(unittest.TestCase):
 
         delivery_validation = (
             SKILLS_ROOT
-            / "delivery-report"
+            / "delivery-validated"
             / "scripts"
             / "furniture_delivery_validation"
             / "validation.py"
@@ -391,7 +391,7 @@ class SkillArchitectureTests(unittest.TestCase):
 
         input_adapter = (
             SKILLS_ROOT
-            / "cad-artifacts"
+            / "cad-generated"
             / "scripts"
             / "furniture_workflow"
             / "input_adapter.py"
@@ -477,13 +477,13 @@ class SkillArchitectureTests(unittest.TestCase):
                 "insert/cover",
                 "drilled-holes",
             ),
-            "domain/skills/cad-artifacts/references/runtime-contract.md": (
+            "domain/skills/cad-generated/references/runtime-contract.md": (
                 "back_mount",
                 "back_rail_height",
                 "drilled-holes",
             ),
             (
-                "domain/skills/delivery-report/"
+                "domain/skills/delivery-validated/"
                 "references/delivery-checklist.md"
             ): (
                 "back_mount",
@@ -521,7 +521,7 @@ class SkillArchitectureTests(unittest.TestCase):
                 "FurnitureOrchestrator.run_next()",
                 "references/runtime-map.md",
             ),
-            "domain/skills/delivery-report/SKILL.md": (
+            "domain/skills/delivery-validated/SKILL.md": (
                 "前五个串联阶段",
                 "不解析 STEP 几何",
                 "未执行",

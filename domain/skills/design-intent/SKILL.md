@@ -15,7 +15,7 @@ description: 用于 design_intent 阶段，也是家具流水线的入口。当�
 2. **生成草稿**：字段只有 `furniture_category`、成品外包络 `finished_envelope`、吊柜挂装方式 `hanging_mode` 与挂高 `hanging_height_mm`、以及工作流元数据。
 3. **预校验**：草稿尺寸可为 `null`；确认前只查——类别已归一化、宽/深/高均为正数、吊柜挂装完整（自由挂高时挂高为正数）、地柜挂装字段为空。
 4. **展示并等确认**：只展示外包络与挂装方式。用户没给的值标成假设；缺尺寸或吊柜挂装时先追问，不要编造后当作已确认事实。
-5. **冻结**：`confirm_stage(design_intent)` 通过后，Orchestrator 把这份 `DesignIntent` 写成不可改的 JSON。之后板件阶段只读冻结意图；要再出一版板件用 `retry_stage()`，不要回头改意图。文件位置见 [运行时契约](../cad-artifacts/references/runtime-contract.md)。
+5. **冻结**：`confirm_stage(design_intent)` 通过后，Orchestrator 把这份 `DesignIntent` 写成不可改的 JSON。之后板件阶段只读冻结意图；要再出一版板件用 `retry_stage()`，不要回头改意图。文件位置见 [运行时契约](../cad-generated/references/runtime-contract.md)。
 
 ## 本阶段不做什么
 

@@ -1,5 +1,21 @@
 # 更新日志
 
+## 20260912.4 — 后两个阶段目录与检查点对齐
+
+目录 `cad-artifacts` 改名为 `cad-generated`，`delivery-report` 改名为 `delivery-validated`，与检查点 `cad_generated` / `delivery_validated` 对齐。阶段 ID、Python 包名和已有项目数据不变。
+
+### 边界
+
+- 无新增运行时逻辑。纯目录与引用重命名。
+
+## 20260912.3 — cad_generated 改为 Orchestrator tool，不再作为 Agent Skill
+
+Agent 不再加载 `domain/skills/cad-artifacts/SKILL.md` 或 `$cad-artifacts`。特征树确认后调用 `run_next(..., generate_cad=True)`。实现仍在 `domain/skills/cad-artifacts/scripts/`；目录入口改为 `TOOL.md`。
+
+### 边界
+
+- 无新增运行时分支、映射、默认值或解析器。CAD 生成仍是 `side_effect`，由已有 Orchestrator tool 执行。无自然语言映射。
+
 ## 20260912.2 — CAD Bridge 对接 text-to-cad 0.5.1
 
 CadBridge 不再调用已删除的 `skills/cad/scripts/gen`。默认执行 `python <model.py> --json`，特征树发射器写出 cadgen `@step` 模型；STEP 按 `out=` 落到交付目录，Viewer 视图从 cadgen store 导出。测试仍可用 `gen_launcher` 假 CLI。不修改 `external/`。

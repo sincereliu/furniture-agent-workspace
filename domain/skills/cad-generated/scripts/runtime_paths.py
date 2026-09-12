@@ -12,8 +12,8 @@ STAGE_SKILL_NAMES = (
     "panel-plan",
     "manufacture-plan",
     "feature-tree",
-    "cad-artifacts",
-    "delivery-report",
+    "cad-generated",
+    "delivery-validated",
 )
 
 

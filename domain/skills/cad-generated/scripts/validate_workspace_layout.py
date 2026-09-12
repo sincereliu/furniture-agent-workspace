@@ -29,8 +29,8 @@ STAGE_SKILL_NAMES = (
     "panel-plan",
     "manufacture-plan",
     "feature-tree",
-    "cad-artifacts",
-    "delivery-report",
+    "cad-generated",
+    "delivery-validated",
 )
 ALLOWED_SCRIPT_ROOTS = tuple(
     Path("domain") / "skills" / skill_name / "scripts" for skill_name in STAGE_SKILL_NAMES

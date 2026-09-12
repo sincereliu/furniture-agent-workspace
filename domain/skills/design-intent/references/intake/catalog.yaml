@@ -4,7 +4,7 @@
 #
 # `executable: true` 是代码准入契约：必须与
 # furniture_design_intent.design_intent.EXECUTABLE_CATEGORIES 一致，
-# 由 cad-artifacts/scripts/tests/test_skill_architecture.py 断言。
+# 由 cad-generated/scripts/tests/test_skill_architecture.py 断言。
 
 families:
   floor_cabinet:
