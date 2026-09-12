@@ -257,6 +257,22 @@ def plan_manufacturing(
     )
 
 
+def _cam_face_for(placement: PanelPlacement) -> str | None:
+    """Which face manufacturing operates the eccentric cam from.
+
+    Horizontal carcass boards use the world-down face of the board.
+    Drawer box sides, back and bottom use the outer face.
+    """
+    panel_type = placement.panel_type
+    if panel_type in ("top", "fixed_shelf"):
+        return placement.inner_face or None
+    if panel_type == "bottom":
+        return placement.outer_face or None
+    if panel_type in ("drawer_side", "drawer_back", "drawer_bottom"):
+        return placement.outer_face or None
+    return None
+
+
 def _manufacturing_panel(
     spec: FurnitureSpec,
     back_mount: str,
@@ -322,7 +338,7 @@ def _manufacturing_panel(
         movable_shelf_connector=movable_shelf_connector,
         inner_face=placement.inner_face,
         outer_face=placement.outer_face,
-        cam_face=placement.cam_face,
+        cam_face=_cam_face_for(placement),
         joints=list(placement.joints),
         role=placement.role,
         parent_id=placement.parent_id,

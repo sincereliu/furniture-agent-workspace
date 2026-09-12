@@ -22,12 +22,10 @@ enclosure:
     type: panel
     semantic_face: top
     material: carcass
-    cam_face: bottom      # 偏心轮从底板方向操作
   bottom:
     type: panel
     semantic_face: bottom
     material: carcass
-    cam_face: bottom      # 偏心轮从底板方向操作
   back:
     type: back_panel
     semantic_face: back

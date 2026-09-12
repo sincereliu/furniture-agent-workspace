@@ -21,8 +21,6 @@ _JOINT_FIELDS = frozenset(
         "edge_axis",
         "edge_sign",
         "end_z",
-        "end_has_cam",
-        "end_cam_face",
         "end_size_z",
         "connection",
     }
@@ -35,7 +33,7 @@ class PanelJoint:
 
     `connection` 是制造阶段写入的连不连（on/off）。本阶段 `compute_joints()`
     只填几何邻接；字段默认 `on` 仅作序列化占位，制造层
-    `default_joint_connection` 会按面板类型重解析。用什么五金仍由制造连接件决定。
+    `default_joint_connection` 会按面板类型重解析。
     """
 
     bearing_id: str  # 承面板件 ID
@@ -43,9 +41,7 @@ class PanelJoint:
     face: str  # 承面所用语义面（inner_face 的值，如 "+x"）
     edge_axis: str  # 端面所在轴（"x"/"y"/"z"）
     edge_sign: int  # 端面方向：+1=轴正端，-1=轴负端
-    end_z: float  # 端面件厚度中心线的 Z 坐标（几何基准，非五金孔位）
-    end_has_cam: bool = False  # 端面件是否有 cam_face
-    end_cam_face: str | None = None  # 端面件的偏心轮安装面（"+z"/"-z"）
+    end_z: float  # 端面件厚度中心线的 Z 坐标（几何基准）
     end_size_z: float = 0.0  # 端面件在 z 方向的尺寸（横板=板厚）
     connection: str = "on"  # resolved on/off; missing on old payloads means on
 
@@ -175,8 +171,6 @@ def compute_joints(placements: Sequence[PanelPlacement]) -> list[PanelJoint]:
                     edge_axis=face_axis,
                     edge_sign=edge_sign,
                     end_z=end_panel.pos_z + end_panel.size_z / 2.0,
-                    end_has_cam=bool(end_panel.cam_face),
-                    end_cam_face=end_panel.cam_face,
                     end_size_z=end_panel.size_z,
                 )
             )

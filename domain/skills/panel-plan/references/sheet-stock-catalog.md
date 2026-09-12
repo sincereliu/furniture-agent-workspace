@@ -18,7 +18,7 @@
 | 侧板、顶底板、层板、踢脚板、踢脚支撑、背拉条 | 料板 `board_thickness` |
 | 抽屉前板、抽屉侧板、抽屉后板、抽屉底板 | 料板 `board_thickness` |
 | 后背板（`groove` / `cover`） | 卷后背板 `back_thickness = 9` |
-| 后背板（`insert`） | 料板 `board_thickness`（内嵌背板要打三合一，不能用 9 mm 卷板） |
+| 后背板（`insert`） | 料板 `board_thickness`（内嵌背板是柜体围合件，不能用 9 mm 卷板） |
 | 门板 | 料板 `door_thickness`，省略则等于 `board_thickness` |
 
 当前拓扑没有独立的抽屉面板。若以后增加，按门板料走，不按抽屉盒另开一档。

@@ -41,18 +41,33 @@ def _is_male(panel: PanelRecord) -> bool:
     return any(j.end_id == panel.label for j in _joints_of(panel))
 
 
-def _trinity_female(panel: PanelRecord) -> bool:
+def _end_panel(joint: Any, by_label: Mapping[str, PanelRecord] | None) -> PanelRecord | None:
+    if not by_label:
+        return None
+    return by_label.get(joint.end_id)
+
+
+def _end_has_cam(joint: Any, by_label: Mapping[str, PanelRecord] | None) -> bool:
+    end = _end_panel(joint, by_label)
+    return bool(end and end.cam_face)
+
+
+def _trinity_female(
+    panel: PanelRecord,
+    by_label: Mapping[str, PanelRecord] | None = None,
+) -> bool:
     """x 轴方向、带 cam 的面接触方（侧板/隔板）。
 
     优先从连接拓扑推导；无连接拓扑时退回 panel_type 判断。
-    end_has_cam 必须为真（与 _trinity_male/_female_holes 一致）：
-    否则抽屉侧板等无 cam 的板件会被误判为三合一母件。
+    端面件必须有 cam_face，否则抽屉侧板等会被误判为三合一母件。
     """
     if panel.joints:
+        lookup = dict(by_label or {})
+        lookup.setdefault(panel.label, panel)
         return any(
             j.bearing_id == panel.label
             and j.face[1] == "x"
-            and j.end_has_cam
+            and _end_has_cam(j, lookup)
             and joint_is_connected(j)
             for j in _joints_of(panel)
         )
@@ -60,16 +75,21 @@ def _trinity_female(panel: PanelRecord) -> bool:
     return panel.panel_type in ("side", "divider")
 
 
-def _trinity_male(panel: PanelRecord) -> bool:
-    """x 轴方向的边接触方（横板），端面在 x 轴且 end_has_cam。
+def _trinity_male(
+    panel: PanelRecord,
+    by_label: Mapping[str, PanelRecord] | None = None,
+) -> bool:
+    """x 轴方向的边接触方（横板），端面在 x 轴且端面件有 cam_face。
 
     优先从连接拓扑推导；无连接拓扑时退回 panel_type 判断。
     """
     if panel.joints:
+        lookup = dict(by_label or {})
+        lookup.setdefault(panel.label, panel)
         return any(
             j.end_id == panel.label
             and j.edge_axis == "x"
-            and j.end_has_cam
+            and _end_has_cam(j, lookup)
             and joint_is_connected(j)
             for j in _joints_of(panel)
         )
@@ -91,13 +111,14 @@ def _gather_joints(panels: list[PanelRecord]) -> list:
 
 
 def _trinity_joints(panels: list[PanelRecord]) -> list:
-    """筛选三合一相关的连接（已解析为连接，且 x 轴、end_has_cam）。"""
+    """筛选三合一相关的连接（已解析为连接，且 x 轴、端面件有 cam_face）。"""
+    by_label = {panel.label: panel for panel in panels}
     return [
         j for j in _gather_joints(panels)
         if joint_is_connected(j)
         and j.face[1] == "x"
         and j.edge_axis == "x"
-        and j.end_has_cam
+        and _end_has_cam(j, by_label)
     ]
 
 
@@ -135,7 +156,7 @@ def _is_trinity_joint(joint: Any, by_label: Dict[str, PanelRecord]) -> bool:
     """
     if not joint_is_connected(joint):
         return False
-    if not joint.end_has_cam:
+    if not _end_has_cam(joint, by_label):
         return False
     female = by_label[joint.bearing_id]
     male = by_label[joint.end_id]
@@ -175,8 +196,9 @@ class TrinityConnector(Connector):
         spec = entry.get(first_key, {}) if first_key else {}
         rules = self.rules.get(self.rules_section, {}) if self.rules_section else {}
 
-        female_panels = [p for p in panels if _trinity_female(p)]
-        male_panels = [p for p in panels if _trinity_male(p)]
+        by_label = {p.label: p for p in panels}
+        female_panels = [p for p in panels if _trinity_female(p, by_label)]
+        male_panels = [p for p in panels if _trinity_male(p, by_label)]
 
         return {
             "panels": female_panels + male_panels,
@@ -342,7 +364,7 @@ class TrinityConnector(Connector):
     ) -> List[HoleSpec]:
         """生成所有三合一孔位。
 
-        对每个带 cam 的连接（end_has_cam 的 joint，边轴 x 或 y）成对生成：
+        对每个端面件带 cam 的连接（边轴 x 或 y）成对生成：
         - female 面 → 预埋螺母孔（位置对齐 male 的连接杆轴线与连接排）
         - male 边   → 连接杆孔（端面）
         - male cam 面 → 偏心轮孔
@@ -405,7 +427,7 @@ class TrinityConnector(Connector):
         joint: Any, male: PanelRecord, rod_axis_offset: float
     ) -> float:
         """male 连接杆轴线在 cam 面法向轴上的世界坐标（取整到 0.001）。"""
-        cam_face = getattr(joint, "end_cam_face", None) or "+z"
+        cam_face = male.cam_face or "+z"
         t = cam_face[1]
         size_t = getattr(male, f"size_{t}", 0.0)
         pos_t = getattr(male, f"pos_{t}", 0.0)
@@ -429,7 +451,7 @@ class TrinityConnector(Connector):
         face = joint.face
         f = face[1]
         a = joint.edge_axis
-        cam_face = getattr(joint, "end_cam_face", None) or "+z"
+        cam_face = male.cam_face or "+z"
         t = cam_face[1]
         s2 = _other_axis(a, t)
         face_local = panel.face_position(face) - getattr(panel, f"pos_{f}")
@@ -470,7 +492,7 @@ class TrinityConnector(Connector):
         r_diam = float(rod_spec.get("hole", {}).get("diameter_mm", 8))
         r_depth = float(rod_spec.get("hole", {}).get("depth_mm", 33))
         a = joint.edge_axis
-        cam_face = getattr(joint, "end_cam_face", None) or "+z"
+        cam_face = panel.cam_face or "+z"
         t = cam_face[1]
         s2 = _other_axis(a, t)
         rows = [row_first, getattr(panel, f"size_{s2}") - row_last]
@@ -508,7 +530,7 @@ class TrinityConnector(Connector):
         w_diam = float(cam_spec.get("hole", {}).get("diameter_mm", 12))
         w_depth = float(cam_spec.get("hole", {}).get("depth_mm", 13.5))
         a = joint.edge_axis
-        cam_face = getattr(joint, "end_cam_face", None) or "+z"
+        cam_face = panel.cam_face or "+z"
         t = cam_face[1]
         s2 = _other_axis(a, t)
         rows = [row_first, getattr(panel, f"size_{s2}") - row_last]

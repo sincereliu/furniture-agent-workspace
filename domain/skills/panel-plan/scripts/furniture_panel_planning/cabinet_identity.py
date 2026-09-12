@@ -69,7 +69,7 @@ _PANEL_OUTPUT_FIELDS = frozenset({"cabinets"})
 
 
 def cabinets_from_output(output: Mapping[str, Any]) -> list[dict[str, Any]]:
-    """Return cabinet units from panels_planned output. No flattened top-level copy."""
+    """Return cabinet units from panel_plan output. No flattened top-level copy."""
     unknown = sorted(set(output) - _PANEL_OUTPUT_FIELDS)
     if unknown:
         raise ValueError(

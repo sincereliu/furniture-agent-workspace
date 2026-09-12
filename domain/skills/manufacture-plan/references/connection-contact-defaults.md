@@ -17,7 +17,7 @@
 
 ## 已落地
 
-`plan_manufacturing` 按面板类型重解析每条接触，写出 `connection: on | off`。板件阶段只产 `female/male/face/edge` 拓扑；字段缺省 `on` 仅作序列化占位。旧序列化没有该字段时按 `on` 加载。`off` 的接触不再进入打孔/五金；轴方向和 `cam_face` 只用于选择三合一这类五金，不再用来猜连不连。
+`plan_manufacturing` 按面板类型重解析每条接触，写出 `connection: on | off`。板件阶段只产 `bearing_id/end_id/face/edge` 拓扑；字段缺省 `on` 仅作序列化占位。旧序列化没有该字段时按 `on` 加载。`off` 的接触不再进入打孔/五金；轴方向和制造层派生的 `cam_face` 只用于选择三合一这类五金，不再用来猜连不连。
 
 本轮**没有**逐条 `on/off/auto` 提案覆盖字段。用户若要改某条连接，只能通过后续契约扩展或整阶段 `revise_stage_output()`；不要假装现在就能提交开关。
 

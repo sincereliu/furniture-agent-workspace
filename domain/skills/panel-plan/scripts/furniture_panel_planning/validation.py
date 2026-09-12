@@ -35,7 +35,7 @@ def validate_panel_output(
     output: Mapping[str, Any],
 ) -> ValidationReport:
     """Validate the complete construction-and-panels stage checkpoint."""
-    report = ValidationReport(stage="panels_planned")
+    report = ValidationReport(stage="panel_plan")
     try:
         cabinets = cabinets_from_output(output)
         cabinet_ids = [str(item.get("id", "")) for item in cabinets]
@@ -110,7 +110,7 @@ def _validate_cabinet_membership(
     panels: list[PanelPlacement],
     seen_ids: set[str],
 ) -> ValidationReport:
-    report = ValidationReport(stage="panels_planned")
+    report = ValidationReport(stage="panel_plan")
     roles: set[str] = set()
     for panel in panels:
         if panel.id in seen_ids:
@@ -174,7 +174,7 @@ def validate_structure(
     structure: CabinetStructure,
 ) -> ValidationReport:
     """Validate exact geometry against the confirmed finished envelope."""
-    report = ValidationReport(stage="panels_planned")
+    report = ValidationReport(stage="panel_plan")
     confirmed = (
         confirmed_intent.furniture_category,
         confirmed_intent.finished_envelope.width_mm,
@@ -203,7 +203,7 @@ def validate_structure(
         "toe_kick_height",
         "back_offset",
         "front_face_margin",
-        "door_hinge_gap",
+        "front_gap",
         "toe_kick_reveal_front",
         "toe_kick_reveal_back",
     ):
@@ -285,7 +285,7 @@ def validate_panels(
     layout: CabinetStructure,
     panels: list[PanelPlacement],
 ) -> ValidationReport:
-    report = ValidationReport(stage="panels_planned")
+    report = ValidationReport(stage="panel_plan")
     if not isinstance(layout, CabinetStructure):
         raise TypeError(
             "validate_panels requires CabinetStructure; independent room layout is not a valid panel input"
@@ -358,7 +358,7 @@ def _validate_doors(
     spec: FurnitureSpec,
     panels: list[PanelPlacement],
 ) -> ValidationReport:
-    report = ValidationReport(stage="panels_planned")
+    report = ValidationReport(stage="panel_plan")
     doors = sorted(
         (item for item in panels if item.panel_type == "door"),
         key=lambda item: (item.pos_x, item.id),
@@ -378,7 +378,7 @@ def _validate_panel_basics(
     panels: list[PanelPlacement],
     ids: set[str],
 ) -> ValidationReport:
-    report = ValidationReport(stage="panels_planned")
+    report = ValidationReport(stage="panel_plan")
     for item in panels:
         if item.quantity <= 0:
             report.add_error(
@@ -426,7 +426,7 @@ def _validate_carcass_panels(
     panel_by_role: Mapping[str, PanelPlacement],
     carcass_roles: set[str],
 ) -> ValidationReport:
-    report = ValidationReport(stage="panels_planned")
+    report = ValidationReport(stage="panel_plan")
     for role in sorted(carcass_roles):
         panel = panel_by_role.get(role)
         if panel is None:
@@ -454,7 +454,7 @@ def _validate_back_panel(
     panel_by_role: Mapping[str, PanelPlacement],
     carcass_roles: set[str],
 ) -> ValidationReport:
-    report = ValidationReport(stage="panels_planned")
+    report = ValidationReport(stage="panel_plan")
     back = panel_by_role.get("back_panel")
     if back is None:
         report.add_error(
@@ -527,7 +527,7 @@ def _validate_toe_kick_panels(
     layout: CabinetStructure,
     panels: list[PanelPlacement],
 ) -> ValidationReport:
-    report = ValidationReport(stage="panels_planned")
+    report = ValidationReport(stage="panel_plan")
     support_panels = [
         item
         for item in panels
@@ -572,7 +572,7 @@ def _validate_back_rails(
     layout: CabinetStructure,
     panels: list[PanelPlacement],
 ) -> ValidationReport:
-    report = ValidationReport(stage="panels_planned")
+    report = ValidationReport(stage="panel_plan")
     rail_panels = [
         item for item in panels if item.panel_type == "back_rail"
     ]
@@ -617,7 +617,7 @@ def _validate_depth_aligned_panels(
     layout: CabinetStructure,
     panels: list[PanelPlacement],
 ) -> ValidationReport:
-    report = ValidationReport(stage="panels_planned")
+    report = ValidationReport(stage="panel_plan")
     for item in panels:
         if item.panel_type in ("fixed_shelf", "movable_shelf") and (
             abs(item.pos_y - layout.internal_y_start) > 1e-6
@@ -644,7 +644,7 @@ def _validate_shelf_panels(
     layout: CabinetStructure,
     panels: list[PanelPlacement],
 ) -> ValidationReport:
-    report = ValidationReport(stage="panels_planned")
+    report = ValidationReport(stage="panel_plan")
     if spec.drawer_count > 0:
         return report
     shelf_panels = [
@@ -677,7 +677,7 @@ def _validate_drawer_panels(
     layout: CabinetStructure,
     panels: list[PanelPlacement],
 ) -> ValidationReport:
-    report = ValidationReport(stage="panels_planned")
+    report = ValidationReport(stage="panel_plan")
     drawer_panels = [item for item in panels if item.panel_type.startswith("drawer_")]
     if spec.drawer_count <= 0:
         if drawer_panels:

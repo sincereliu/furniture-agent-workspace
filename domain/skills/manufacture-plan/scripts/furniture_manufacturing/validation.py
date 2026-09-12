@@ -28,7 +28,7 @@ def validate_manufacturing(
     bom: BOMReport,
     placements: list[PanelPlacement],
 ) -> ValidationReport:
-    report = ValidationReport(stage="manufacturing_planned")
+    report = ValidationReport(stage="manufacture_plan")
     if bom.requested_options:
         report.add_warning(
             "REQUESTED_MANUFACTURING_OPTIONS_PENDING",

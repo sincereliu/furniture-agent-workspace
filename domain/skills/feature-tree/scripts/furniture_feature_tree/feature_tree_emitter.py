@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import pprint
 import re
 from pathlib import Path
@@ -12,7 +13,10 @@ VALID_IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 def write_build123d_source(
-    feature_tree: dict[str, Any], source_path: str | Path
+    feature_tree: dict[str, Any],
+    source_path: str | Path,
+    *,
+    step_path: str | Path | None = None,
 ) -> Path:
     validate_feature_tree(feature_tree)
     resolved_source = Path(source_path).resolve()
@@ -20,9 +24,14 @@ def write_build123d_source(
     tree_literal = pprint.pformat(
         _sanitize_for_source(feature_tree), sort_dicts=False, width=100
     )
+    step_decorator = "@step"
+    if step_path is not None:
+        out_literal = json.dumps(Path(step_path).resolve().as_posix())
+        step_decorator = f"@step(out={out_literal})"
     source = f'''"""Generated from the furniture Feature Tree. Edit the intent, not this file."""
 
-from build123d import Align, Box, Compound, Location
+from cadgen import build123d as bd
+from cadgen import step
 
 
 FEATURE_TREE = {tree_literal}
@@ -31,13 +40,13 @@ FEATURE_TREE = {tree_literal}
 def _box(node):
     size = node["size"]
     position = node["position"]
-    shape = Box(
+    shape = bd.Box(
         size["x"],
         size["y"],
         size["z"],
-        align=(Align.MIN, Align.MIN, Align.MIN),
+        align=(bd.Align.MIN, bd.Align.MIN, bd.Align.MIN),
     )
-    shape.move(Location((position["x"], position["y"], position["z"])))
+    shape.move(bd.Location((position["x"], position["y"], position["z"])))
     return shape
 
 
@@ -54,7 +63,16 @@ def gen_step():
                 shape = shape - _box(operation)
         shape.label = feature["id"]
         parts.append(shape)
-    return Compound(children=parts, label=FEATURE_TREE["root"]["id"])
+    return bd.Compound(children=parts, label=FEATURE_TREE["root"]["id"])
+
+
+{step_decorator}
+def model():
+    return gen_step()
+
+
+if __name__ == "__main__":
+    model()
 '''
     resolved_source.write_text(source, encoding="utf-8")
     return resolved_source

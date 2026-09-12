@@ -24,6 +24,54 @@
 
 - 新增代码理由：`schema`（Feature/ConnectionPoint 字段与判别联合）、`validation`（按点 1:1:1、孔/槽/封边几何）、`calculation`（分组/派生/数特征数连接点）、`structured_protocol`（`kind`/`feature_from_dict` 序列化往返、`parse_connection_id` 逆向）。无自然语言映射，无 LLM 决策。
 
+## 20260912.6 — 交互 Orchestrator 收成 function-calling 工具面
+
+新增 `furniture_workflow/agent_tools.py`：`FurnitureToolSession` + `openai_tools()`。任意 function-calling 宿主只注册 `furniture_create_project` / `get_project` / `confirm_stage` / `run_next` / `retry_stage` / `select_stage_attempt` / `revise_intent`。`run_next` 可带第一次 `stage_input`。不暴露 `execute_spec`、`plan_cabinet`、CAD Bridge。契约见 `domain/skills/cad-generated/references/agent-tool-contract.md`。
+
+### 边界
+
+- 新增代码理由：`structured_protocol`（工具 JSON Schema、参数准入、错误码）、`state`（快照里的 `allowed_actions` / `waiting_for` 由阶段状态派生）。CAD 的 `output_root` 在 `generate_cad=true` 且未传时使用约定路径 `generated`，属于协议路径而非构造默认值。无自然语言映射，无板件/制造字段默认值。
+
+## 20260912.5 — 板件/制造检查点改跟目录名
+
+检查点 `panels_planned` 改为 `panel_plan`，`manufacturing_planned` 改为 `manufacture_plan`，与目录 `panel-plan` / `manufacture-plan` 对齐。旧项目 JSON 读入时映射到新名；产物 kind `panel_plan` / `manufacturing_plan` 不变。
+
+### 边界
+
+- 新增代码理由：`state`（检查点 ID）、`structured_protocol`（旧阶段名兼容）。无自然语言映射。
+
+## 20260912.4 — 后两个阶段目录与检查点对齐
+
+目录 `cad-artifacts` 改名为 `cad-generated`，`delivery-report` 改名为 `delivery-validated`，与检查点 `cad_generated` / `delivery_validated` 对齐。阶段 ID、Python 包名和已有项目数据不变。
+
+### 边界
+
+- 无新增运行时逻辑。纯目录与引用重命名。
+
+## 20260912.3 — cad_generated 改为 Orchestrator tool，不再作为 Agent Skill
+
+Agent 不再加载 `domain/skills/cad-artifacts/SKILL.md` 或 `$cad-artifacts`。特征树确认后调用 `run_next(..., generate_cad=True)`。实现仍在 `domain/skills/cad-artifacts/scripts/`；目录入口改为 `TOOL.md`。
+
+### 边界
+
+- 无新增运行时分支、映射、默认值或解析器。CAD 生成仍是 `side_effect`，由已有 Orchestrator tool 执行。无自然语言映射。
+
+## 20260912.2 — CAD Bridge 对接 text-to-cad 0.5.1
+
+CadBridge 不再调用已删除的 `skills/cad/scripts/gen`。默认执行 `python <model.py> --json`，特征树发射器写出 cadgen `@step` 模型；STEP 按 `out=` 落到交付目录，Viewer 视图从 cadgen store 导出。测试仍可用 `gen_launcher` 假 CLI。不修改 `external/`。
+
+### 边界
+
+- 新增/调整代码理由：`side_effect`（跑模型、写 STEP、导出 Viewer 视图）、`structured_protocol`（cadgen `--json` 的 `document`/`tree`）。无自然语言映射。
+
+## 20260912.1 — panel-plan 去掉制造语义，只留尺寸、位置和接触
+
+板件阶段不再携带三合一/铰链/偏心轮这类制造名字。`cam_face` 从板件输出删除，改由制造按板件类型和内外面派生；接触记录不再写 `end_has_cam` / `end_cam_face`。几何前口间隙从 `door_hinge_gap` 改名为 `front_gap`。
+
+### 边界
+
+- 新增/调整代码理由：`schema`（`front_gap`；板件输出不再含 `cam_face`）、`calculation`（制造层 `_cam_face_for` 与三合一改读端面件 `cam_face`）。无自然语言映射。无兼容别名：旧字段名直接拒绝。
+
 ## 20260911.4 — 板件冻结文件成为制造之后的统一来源
 
 CAD 的 `panel-plan.json` 快照、板件旁路分析和交付里的分析哈希都按 `confirmed_panel_sha256` 读冻结板件，不再用确认后被改过的内存副本。

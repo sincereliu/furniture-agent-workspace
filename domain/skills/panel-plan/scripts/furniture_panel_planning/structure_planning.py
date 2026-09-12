@@ -1,4 +1,4 @@
-"""Exact cabinet construction geometry owned by panels_planned."""
+"""Exact cabinet construction geometry owned by panel_plan."""
 
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ class CabinetStructure:
     @classmethod
     def from_spec(cls, spec: FurnitureSpec) -> "CabinetStructure":
         board = spec.board_thickness
-        carcass_y_end = spec.depth - spec.door_thickness - spec.door_hinge_gap
+        carcass_y_end = spec.depth - spec.door_thickness - spec.front_gap
         if spec.back_mount == "cover":
             carcass_y_start = spec.back_thickness
             back_plane_y = 0.0

@@ -4,7 +4,7 @@
 
 ## 交接
 
-板件几何来自已确认冻结文件，不重跑 `panel-plan`。Orchestrator 用 `confirmed_panel_sha256` 读 `store/<project-id>/panels/<sha256>.json`，再 `require_primary_handoff()` 还原 `FurnitureSpec` / `PanelPlacement`。本阶段自己的提案在 `stage_inputs.manufacturing`。无 Store 或尚未记下确认哈希时读内存 `stage_outputs.panels_planned`。
+板件几何来自已确认冻结文件，不重跑 `panel-plan`。Orchestrator 用 `confirmed_panel_sha256` 读 `store/<project-id>/panels/<sha256>.json`，再 `require_primary_handoff()` 还原 `FurnitureSpec` / `PanelPlacement`。本阶段自己的提案在 `stage_inputs.manufacturing`。无 Store 或尚未记下确认哈希时读内存 `stage_outputs.panel_plan`。
 
 ## 五金连接件（`connectors/`）
 
@@ -20,7 +20,7 @@
 - 目录键（`hardware_catalog.yaml`）全英文：顶层按套 `three_in_one` / `two_in_one` / `shelf_pin`，套内规格组 `standard`，零件键 `cam` / `rod` / `nut` / `pin`；每个零件分 `part`（实物，BOM/采购）与 `hole`（打孔，钻孔）两层，配合余量直接写入 `hole` 数值，不做代码派生。
 - 孔类型（`hole_type`）按 `<套名>_<零件>`：`three_in_one_cam` / `three_in_one_rod` / `three_in_one_nut`、`two_in_one_cam` / `two_in_one_rod`、`shelf_pin`；进入 `drilled-holes.json` / GLB 标签 / 校验计数。内嵌背板三合一与柜体三合一统一为 `three_in_one_*`，靠 `HoleSpec.connection_id`（`<female>→<male>#<排次>`，确定性、非随机）区分来源。
 - 活动层板连接方式由制造阶段输入 `movable_shelf_connector`（`two_in_one`/`shelf_pin`）显式选择，经 `plan_manufacturing` 盖章到 `PanelRecord`；`TwoInOneConnector`/`ShelfPinConnector` 只处理选中自己的板件，避免两者同时出孔/BOM。有活动层板却未提供时运行时拒绝。
-- `PanelJoint.connection`（连不连）由制造层在 `plan_manufacturing` 按面板类型重解析；默认口径见 [连接与接触默认规则](connection-contact-defaults.md)。`off` 的接触不进入三合一打孔。轴方向和 `cam_face` 只用于选择三合一五金，不再回答「连不连」。
+- `PanelJoint.connection`（连不连）由制造层在 `plan_manufacturing` 按面板类型重解析；默认口径见 [连接与接触默认规则](connection-contact-defaults.md)。`off` 的接触不进入三合一打孔。轴方向和制造层派生的 `cam_face` 只用于选择三合一五金，不再回答「连不连」。
 
 ## 生成与产物
 

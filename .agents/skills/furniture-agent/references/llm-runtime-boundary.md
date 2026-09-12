@@ -1,6 +1,6 @@
 # LLM 与运行时边界
 
-适用于创建、修改和审查所有 `domain/skills/` 下家具阶段 Skill（`design-intent`、`layout-plan`、`panel-plan`、`manufacture-plan`、`feature-tree`、`cad-artifacts`、`delivery-report`）及家具工作流代码。
+适用于创建、修改和审查所有 `domain/skills/` 下家具阶段包（规划 Skill：`design-intent`、`layout-plan`、`panel-plan`、`manufacture-plan`、`feature-tree`、`delivery-validated`；CAD 执行工具：`cad-generated`）及家具工作流代码。
 
 ## 总原则
 
@@ -59,7 +59,7 @@
 
 1. 查看本次 `domain/skills/` 下家具阶段 Skill 的差异，列出新增或扩大的分支、映射、默认值和解析器。
 2. 给每项标注一个代码理由：`schema`、`validation`、`calculation`、`state`、`side_effect` 或 `structured_protocol`。
-3. 没有上述理由的逻辑移到 `SKILL.md`/`references/`，或删除。
+3. 没有上述理由的逻辑移到所属规划 Skill 的 `SKILL.md`、CAD 的 `TOOL.md` 或 `references/`，或删除。
 4. 检查代码中是否出现自然语言示例的复制、精确别名匹配或上游阶段的下游决策。
 5. 测试客观行为与不变量，不测试提示词的固定措辞。
 6. 交付时简要报告：LLM 负责什么、代码保留什么、是否存在例外。
