@@ -61,7 +61,7 @@ def _coerce_shelves(raw: Any) -> list[ShelfSpec]:
 # fields may be omitted and are expanded from the shop process card.
 PANEL_REQUIRED_PARAMETER_FIELDS = frozenset(
     {
-        "toe_kick_height", "back_offset", "front_face_margin", "door_hinge_gap",
+        "toe_kick_height", "back_offset", "front_face_margin", "front_gap",
         "groove_depth", "groove_clearance", "toe_kick_reveal_front",
         "toe_kick_reveal_back", "toe_kick_support_count", "back_mount",
         "back_rail_height", "drawer_count", "drawer_side_clearance",
@@ -99,7 +99,7 @@ class FurnitureSpec:
     toe_kick_height: float
     back_offset: float
     front_face_margin: float
-    door_hinge_gap: float
+    front_gap: float
     shelves: list[ShelfSpec]
     top_gap_mm: float
     n_doors: int
@@ -126,7 +126,7 @@ class FurnitureSpec:
         for name in (
             "width", "depth", "height", "board_thickness", "back_thickness",
             "door_thickness", "toe_kick_height", "back_offset", "front_face_margin",
-            "door_hinge_gap", "groove_depth", "groove_clearance",
+            "front_gap", "groove_depth", "groove_clearance",
             "toe_kick_reveal_front", "toe_kick_reveal_back", "back_rail_height",
             "drawer_side_clearance", "drawer_layer_gap", "drawer_bottom_thickness",
             "drawer_back_thickness", "drawer_back_clearance",
@@ -352,7 +352,7 @@ def _validate_objective_invariants(spec: FurnitureSpec) -> None:
         "drawer_back_thickness",
     )
     non_negative = (
-        "toe_kick_height", "back_offset", "front_face_margin", "door_hinge_gap",
+        "toe_kick_height", "back_offset", "front_face_margin", "front_gap",
         "groove_clearance", "toe_kick_reveal_front", "toe_kick_reveal_back",
         "back_rail_height", "drawer_layer_gap", "drawer_back_clearance",
         "top_gap_mm",

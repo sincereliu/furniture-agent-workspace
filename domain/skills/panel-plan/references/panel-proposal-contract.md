@@ -17,7 +17,7 @@
 ## 完整字段
 
 - 背板与槽：`back_mount`、`back_offset`、`groove_depth`、`groove_clearance`、`back_rail_height`
-- 前脸边距与踢脚：`front_face_margin`、`door_hinge_gap`、`toe_kick_height`、`toe_kick_reveal_front`、`toe_kick_reveal_back`、`toe_kick_support_count`
+- 前脸边距与踢脚：`front_face_margin`、`front_gap`、`toe_kick_height`、`toe_kick_reveal_front`、`toe_kick_reveal_back`、`toe_kick_support_count`
 - 门与抽屉数量：`n_doors`、`drawer_count`
 - 层板：`shelves`、`top_gap_mm`
 - 抽屉尺寸链输入：`drawer_side_clearance`、`drawer_layer_gap`、`drawer_back_clearance`
@@ -40,7 +40,7 @@
 用户没说时，LLM 用下面这组值填满必填字段并标成假设。料档按工艺卡省略或覆盖，不能把目录展开当成开放默认值。
 
 - 料档按工艺卡，不写入假设清单：料板 18、卷后背板 9、门与抽屉盒同料板。覆盖时只允许目录值，见 [料档与工艺卡](sheet-stock-catalog.md)。
-- `back_mount=groove`、背板后移 18、前脸边距 1.5、铰链深度缝 2、槽深 6、槽余量 1、背拉条高 70。
+- `back_mount=groove`、背板后移 18、前脸边距 1.5、前脸深度缝 2、槽深 6、槽余量 1、背拉条高 70。
 - 抽屉每侧净空 13、层缝 1.5、后净空 0。
 - 落地柜：踢脚 50、前后退让 1/30、2 门、`drawer_count=0`、4 层固定层板。层板净高由 LLM 按内净高均分成数写入 `top_gap_mm` 与各层 `gap_below_mm`（运行时不均分）。踢脚支撑数由 LLM 写出整数：`W < 600 → 0`，否则 `1 + floor((W - 600) / 300)`（800 宽为 1）。
 - 吊柜：踢脚 0、前后退让 0、支撑数 0、2 门、`drawer_count=0`、1 层固定层板。同样由 LLM 把顶格与该层下净高等分成数写入。

@@ -159,7 +159,7 @@ def audit_panel_quantities(
             {
                 "depth": 1.0,
                 "door_thickness": -1.0,
-                "door_hinge_gap": -1.0,
+                "front_gap": -1.0,
                 "back_thickness": -1.0,
                 **(
                     {"back_offset": -1.0}

@@ -138,7 +138,7 @@ class CabinetRequest(BaseModel):
     toe_kick_height: float | None = Field(default=None, ge=0, description="踢脚线高 mm")
     back_offset: float | None = Field(default=None, ge=0, description="背板后移 mm")
     front_face_margin: float | None = Field(default=None, ge=0, description="前脸四周边距 mm（门板与抽屉前板共用）")
-    door_hinge_gap: float | None = Field(default=None, ge=0, description="门铰深度间隙 mm")
+    front_gap: float | None = Field(default=None, ge=0, description="门前脸与柜体前方的深度间隙 mm")
     shelves: list[dict[str, Any]] | None = Field(
         default=None,
         description="层板列表（从上到下）：[{shelf_type: fixed|movable, gap_below_mm: 净高mm|null}]",

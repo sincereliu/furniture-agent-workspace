@@ -81,7 +81,7 @@ store/<project-id>/
   "furniture_category": "floor_cabinet", "width": 800, "depth": 600, "height": 2000,
   "board_thickness": 18, "back_thickness": 9, "door_thickness": 18,
   "toe_kick_height": 50, "back_offset": 18,
-  "front_face_margin": 1.5, "door_hinge_gap": 2,
+  "front_face_margin": 1.5, "front_gap": 2,
   "groove_depth": 6, "groove_clearance": 1,
   "toe_kick_reveal_front": 1, "toe_kick_reveal_back": 30,
   "toe_kick_support_count": 1, "back_mount": "groove", "back_rail_height": 70,

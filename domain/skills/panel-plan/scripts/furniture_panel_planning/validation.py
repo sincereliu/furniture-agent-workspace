@@ -203,7 +203,7 @@ def validate_structure(
         "toe_kick_height",
         "back_offset",
         "front_face_margin",
-        "door_hinge_gap",
+        "front_gap",
         "toe_kick_reveal_front",
         "toe_kick_reveal_back",
     ):

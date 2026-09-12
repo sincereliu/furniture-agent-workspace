@@ -46,9 +46,7 @@
 | 承面方向 | `face` | 面标记 | 承面所用语义面，值为该板 `inner_face`，如 `+x`。 |
 | 端面轴 | `edge_axis` | `x`/`y`/`z` | 端面所在轴。 |
 | 端面方向 | `edge_sign` | `+1`/`-1` | `+1` 为轴正端，`-1` 为轴负端。 |
-| 端面件厚度中心 Z | `end_z` | mm | 几何基准，不是孔位。 |
-| 端面件有偏心轮面 | `end_has_cam` | 布尔 | 该板是否有 `cam_face`。 |
-| 端面件偏心轮面 | `end_cam_face` | 面标记或 `null` | |
+| 端面件厚度中心 Z | `end_z` | mm | 几何基准。 |
 | 端面件 Z 向尺寸 | `end_size_z` | mm | 横板时等于板厚。 |
 
 ## 几何字段口径
@@ -57,14 +55,14 @@
 | --- | --- | --- |
 | `size_x/size_y/size_z` | mm | 板件或操作在世界坐标 X/Y/Z 三轴上的尺寸。 |
 | `pos_x/pos_y/pos_z` | mm | 板件或操作最小角点在世界坐标中的位置。 |
-| `length_mm/width_mm` | mm | 制造/BOM 视图中的二维成品尺寸字段；是面向报表的派生命名，不替代 `size_*`。 |
-| `local_x/local_y/local_z` | mm | 相对于所属板件局部坐标系的孔位或操作坐标。 |
+| `length_mm/width_mm` | mm | 下游报表用的二维成品尺寸字段；是派生命名，不替代 `size_*`。 |
+| `local_x/local_y/local_z` | mm | 相对于所属板件局部坐标系的坐标。 |
 | `diameter/depth` | mm | 孔径与钻入深度；虽然字段名未带 `_mm`，口径仍统一为 mm。 |
 
 ## 术语约束
 
-- `front_face_margin` 表示前脸四周边距，并被门板与抽屉前板共同消费；讨论抽屉时不得把它写成独立的“滑轨净空”。
-- `door_hinge_gap` 表示门前脸与柜体前方的铰链深度方向间隙，不等于门边缝。
+- `front_face_margin` 表示前脸四周边距，并被门板与抽屉前板共同消费；讨论抽屉时不得把它写成独立的侧向净空。
+- `front_gap` 表示门前脸与柜体前方的深度方向间隙，不等于门边缝。
 - `back_offset` 表示背板基准相对柜体背侧的偏移；`cover` 模式下背板位于 `Y=0`，不再消费该偏移来决定内部起点。
 - `panel` 在本阶段指制造板件记录，不指 CAD 实体、网格或 feature tree 节点。
 - `structure` 在本阶段指确定性柜体结构几何与内部净空，不指房间布局结果。
@@ -79,4 +77,6 @@
 - `back_mount=auto`、`gap_below_mm="auto"`：不再接受；背板必须写 `groove`/`insert`/`cover`，计算层只写 `null`。
 - `toe_kick_support_count=null`：不再接受；必须写非负整数。
 - `female_id`、`male_id`：用 `bearing_id`/`end_id`。
-- `male_z`、`male_has_cam`、`male_cam_face`、`male_size_z`：用 `end_z`/`end_has_cam`/`end_cam_face`/`end_size_z`。
+- `male_z`、`male_size_z`：用 `end_z`/`end_size_z`。
+- `door_hinge_gap`：用 `front_gap`。
+- `cam_face`、`end_has_cam`、`end_cam_face`、`male_has_cam`、`male_cam_face`：本阶段不产出。

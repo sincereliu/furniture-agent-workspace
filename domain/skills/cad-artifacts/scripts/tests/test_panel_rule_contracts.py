@@ -229,6 +229,10 @@ class PanelRuleContractTests(unittest.TestCase):
         payload["door_hinge_side"] = "left"
         with self.assertRaisesRegex(ValueError, "does not support"):
             FurnitureSpec.from_dict(payload)
+        payload = spec.__dict__.copy()
+        payload["door_hinge_gap"] = payload["front_gap"]
+        with self.assertRaisesRegex(ValueError, "does not support"):
+            FurnitureSpec.from_dict(payload)
 
         structure = CabinetStructure.from_spec(spec)
         structure_payload = structure.__dict__.copy()
@@ -387,9 +391,14 @@ class PanelRuleContractTests(unittest.TestCase):
             self.assertIn("end_id", joint)
             self.assertNotIn("female_id", joint)
             self.assertNotIn("male_id", joint)
+            self.assertNotIn("end_has_cam", joint)
+            self.assertNotIn("end_cam_face", joint)
             restored = PanelJoint.from_dict(joint)
             self.assertEqual(restored.bearing_id, joint["bearing_id"])
             self.assertEqual(restored.end_id, joint["end_id"])
+        for panel in output["cabinets"][0]["panels"]:
+            self.assertNotIn("cam_face", panel)
+            self.assertNotIn("door_hinge_gap", panel)
 
         with self.assertRaisesRegex(ValueError, "female_id"):
             PanelJoint.from_dict(
@@ -400,6 +409,19 @@ class PanelRuleContractTests(unittest.TestCase):
                     "edge_axis": "x",
                     "edge_sign": -1,
                     "end_z": 991.0,
+                }
+            )
+        with self.assertRaisesRegex(ValueError, "end_has_cam"):
+            PanelJoint.from_dict(
+                {
+                    "bearing_id": "cabinet_1__left_side_panel",
+                    "end_id": "cabinet_1__top_panel",
+                    "face": "+x",
+                    "edge_axis": "x",
+                    "edge_sign": -1,
+                    "end_z": 991.0,
+                    "end_has_cam": True,
+                    "end_cam_face": "-z",
                 }
             )
 

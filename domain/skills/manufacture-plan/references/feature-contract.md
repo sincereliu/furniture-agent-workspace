@@ -20,7 +20,7 @@ BOM、校验、导出、设备路线都是它们的派生或标注。
 
 分界线的判据是「改变面板几何 vs 只改变加工/五金」：**改变面板几何（尺寸/位置/拓扑）
 → panel-plan；只改变孔/槽/封边/BOM → manufacturing。** 设计层产出 `PanelJoint` 拓扑
-（`female/male/face/edge`）；不产孔位、不选五金、不决定连不连与铰链侧——那些由制造层
+（`bearing_id/end_id/face/edge`）；不产孔位、不选五金、不决定连不连与铰链侧——那些由制造层
 决定/推导（「用什么五金仍由制造连接件决定」）。孔位是「实现」不是「目标」：它在工艺层
 由代码确定性推导，不在设计层定。
 
@@ -46,7 +46,7 @@ panel-plan 失效、从面板重跑——面板其实没变，白跑且修订语
   重跑 manufacturing 及下游。
 - ✅ `connection`（连不连 on/off）：**已迁移**。panel-plan 不再解析，制造层在
   `plan_manufacturing` 按面板类型重解析（`default_joint_connection`）；拓扑
-  （`female/male/face/edge`）留在 panel-plan。
+  （`bearing_id/end_id/face/edge`）留在 panel-plan。
 - ✅ `door_hinge_side`（铰链侧）：**已迁移**。单门为制造输入（`requested_options`，
   `left`/`right`），双门由制造按门板 X 位置派生；panel-plan 不再携带。
 - `back_mount`（groove/insert/cover）**留在** panel-plan：它改变背板尺寸与柜体深度

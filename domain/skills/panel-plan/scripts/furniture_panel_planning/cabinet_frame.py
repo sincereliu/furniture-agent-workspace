@@ -2,7 +2,7 @@
 
 A two-axis definition (front + top) resolves all six semantic faces via the
 right-hand rule.  This is the single point of truth for cabinet orientation;
-every downstream subsystem (panel placement, connectors, feature tree,
+every downstream subsystem (panel placement, feature tree,
 six-side drill) reads faces from here instead of hardcoding world axes.
 
 Examples

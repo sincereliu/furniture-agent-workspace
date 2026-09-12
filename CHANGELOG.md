@@ -1,5 +1,13 @@
 # 更新日志
 
+## 20260912.1 — panel-plan 去掉制造语义，只留尺寸、位置和接触
+
+板件阶段不再携带三合一/铰链/偏心轮这类制造名字。`cam_face` 从板件输出删除，改由制造按板件类型和内外面派生；接触记录不再写 `end_has_cam` / `end_cam_face`。几何前口间隙从 `door_hinge_gap` 改名为 `front_gap`。
+
+### 边界
+
+- 新增/调整代码理由：`schema`（`front_gap`；板件输出不再含 `cam_face`）、`calculation`（制造层 `_cam_face_for` 与三合一改读端面件 `cam_face`）。无自然语言映射。无兼容别名：旧字段名直接拒绝。
+
 ## 20260911.4 — 板件冻结文件成为制造之后的统一来源
 
 CAD 的 `panel-plan.json` 快照、板件旁路分析和交付里的分析哈希都按 `confirmed_panel_sha256` 读冻结板件，不再用确认后被改过的内存副本。

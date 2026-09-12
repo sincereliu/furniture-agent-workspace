@@ -39,7 +39,6 @@
 - 每块层板的 X 尺寸等于 `internal_width`。
 - 每块层板的 Y 尺寸等于 `internal_y_end - internal_y_start`。
 - 固定层板生成 `fixed_shelf`，活动层板生成 `movable_shelf`。
-- 固定层板使用 `cam_face` 表达可用于连接件的面；活动层板不在本阶段选择连接五金。
 
 ## 样例
 

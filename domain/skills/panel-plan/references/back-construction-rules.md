@@ -6,7 +6,7 @@
 
 - `back_mount`：规范值为 `groove/insert/cover`；必须由提案显式给出，不存在运行时缺省或 `auto` 解析。
 - `board_thickness/back_thickness/door_thickness`：来自已准入料档；背板厚为卷后背板 `9` mm，见 [料档与工艺卡](sheet-stock-catalog.md)。
-- `back_offset/front_face_margin/door_hinge_gap`。
+- `back_offset/front_face_margin/front_gap`。
 - `groove_depth/groove_clearance/back_rail_height`。
 
 这些值可在完整 CLI/API 请求中提前提交，但只保存在 `stage_inputs.panels.parameters`，直到客户确认设计意图后才物化为板件阶段 `FurnitureSpec`。
@@ -19,7 +19,7 @@
 
 ## 精确结构
 
-- 柜体前端统一预留 `door_thickness + door_hinge_gap`，所有板件保持在已确认成品深度内。
+- 柜体前端统一预留 `door_thickness + front_gap`，所有板件保持在已确认成品深度内。
 - `groove/insert`：柜体从 `Y=0` 开始，背板基准为 `back_offset`，内部 Y 起点为 `back_offset + back_thickness`。
 - `cover`：背板位于 `Y=0`，柜体从 `Y=back_thickness` 开始，背板不得与柜体重叠。
 - 内部 X/Z 范围由成品外包络、柜体板厚和踢脚高度计算；所有净宽、净高、净深必须为正。
@@ -31,4 +31,4 @@
 - `cover`：背板为成品宽×成品高，覆盖整个背面。
 - 仅有效模式为 `groove` 且 `back_rail_height > 0` 时生成背拉条；数量为
   `floor(internal_height / 500)`，沿内部净高等距布置，净距必须为正。
-- 背拉条尺寸、位置和净距属于本阶段；实际槽包络、连接、封边和孔位属于制造阶段。
+- 背拉条尺寸、位置和净距属于本阶段；槽包络与连接细节属于制造阶段。

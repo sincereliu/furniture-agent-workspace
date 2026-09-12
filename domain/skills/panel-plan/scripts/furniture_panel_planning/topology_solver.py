@@ -1,7 +1,7 @@
 """Topology solver — convert cabinet topology data into panel placements.
 
 Reads a cabinet topology YAML and a FurnitureSpec, then computes every panel's
-3-D placement with correct semantic face directions (inner/outer/cam).
+3-D placement with size, position, and inner/outer faces.
 
 The cabinet-type topology skeleton lives in the YAML files under
 references/cabinet-topologies/. Deterministic execution rules that are shared
@@ -94,7 +94,7 @@ def solve_panel_placements(
             continue
 
         # Standard enclosure panel
-        panel = _build_enclosure_panel(spec, layout, side_name, side_def, face_dir)
+        panel = _build_enclosure_panel(spec, layout, side_name, face_dir)
         placements.append(panel)
 
     # ── Doors ─────────────────────────────────────────────────────
@@ -142,7 +142,6 @@ def _build_enclosure_panel(
     spec: FurnitureSpec,
     layout: CabinetStructure,
     side_name: str,
-    side_def: dict[str, Any],
     face_dir: str,
 ) -> PanelPlacement:
     """Build a single enclosure panel."""
@@ -191,9 +190,6 @@ def _build_enclosure_panel(
 
     name = name_map.get(side_name, side_name)
     outer = face_dir
-    cam = side_def.get("cam_face")
-    if cam:
-        cam = _resolve_semantic_face(cam, _frame_from_spec(spec))
 
     return PanelPlacement(
         id=f"{side_name}_panel",
@@ -204,7 +200,6 @@ def _build_enclosure_panel(
         material_role="carcass",
         inner_face=inner,
         outer_face=outer,
-        cam_face=cam,
         note=f"{name}，厚{board:.0f}mm",
     )
 
@@ -239,7 +234,7 @@ def _back_panel_variants(
             pos_z=layout.internal_z_start - groove_d,
             material_role="back",
             depends_on=["left_side_panel", "right_side_panel", "top_panel", "bottom_panel"],
-            inner_face=inner, outer_face=outer, cam_face=None,
+            inner_face=inner, outer_face=outer,
             note=f"四边入槽{groove_d:.0f}mm的成品背板",
         ))
         for box in back_rail_boxes(spec, layout):
@@ -251,7 +246,7 @@ def _back_panel_variants(
                 pos_x=box.pos_x, pos_y=box.pos_y, pos_z=box.pos_z,
                 material_role="carcass",
                 depends_on=["left_side_panel", "right_side_panel"],
-                inner_face="+y", outer_face="-y", cam_face=None,
+                inner_face="+y", outer_face="-y",
                 note=f"背板拉条，{box.size_z:.0f}×{board:.0f}mm",
             ))
 
@@ -262,7 +257,7 @@ def _back_panel_variants(
             pos_x=layout.internal_x_start, pos_y=back_y, pos_z=layout.internal_z_start,
             material_role="back",
             depends_on=["left_side_panel", "right_side_panel", "top_panel", "bottom_panel"],
-            inner_face=inner, outer_face=outer, cam_face=None,
+            inner_face=inner, outer_face=outer,
             note="内嵌背板，位于内部净空后侧",
         ))
 
@@ -273,7 +268,7 @@ def _back_panel_variants(
             pos_x=0.0, pos_y=0.0, pos_z=0.0,
             material_role="back",
             depends_on=["left_side_panel", "right_side_panel", "top_panel", "bottom_panel"],
-            inner_face=inner, outer_face=outer, cam_face=None,
+            inner_face=inner, outer_face=outer,
             note="外盖背板，覆盖整个背面",
         ))
 
@@ -293,7 +288,7 @@ def _door_panels(
     margin = spec.front_face_margin
     dw = (layout.width - margin * 2 * count) / count
     dh = layout.height - layout.toe_kick_height - margin * 2
-    dy = layout.carcass_y_end + spec.door_hinge_gap
+    dy = layout.carcass_y_end + spec.front_gap
     inner = frame.back
     outer = frame.front
 
@@ -312,7 +307,7 @@ def _door_panels(
             pos_x=x, pos_y=dy, pos_z=layout.toe_kick_height + margin,
             material_role="door",
             depends_on=["left_side_panel", "right_side_panel"],
-            inner_face=inner, outer_face=outer, cam_face=None,
+            inner_face=inner, outer_face=outer,
             note=f"门板，{dw:.0f}×{dh:.0f}×{spec.door_thickness:.0f}mm",
         ))
     return panels
@@ -336,7 +331,7 @@ def _toe_kick_panels(
         pos_x=x, pos_y=layout.toe_kick_rear_y,
         material_role="carcass",
         depends_on=["left_side_panel", "right_side_panel"],
-        inner_face=frame.front, outer_face=frame.back, cam_face=None,
+        inner_face=frame.front, outer_face=frame.back,
     )
     front = PanelPlacement(
         id="toe_kick_front", name="前踢脚板", panel_type="toe_kick",
@@ -344,7 +339,7 @@ def _toe_kick_panels(
         pos_x=x, pos_y=layout.toe_kick_front_y - board,
         material_role="carcass",
         depends_on=["left_side_panel", "right_side_panel"],
-        inner_face=frame.back, outer_face=frame.front, cam_face=None,
+        inner_face=frame.back, outer_face=frame.front,
     )
     panels = [rear, front]
     for box in toe_kick_support_boxes(spec, layout):
@@ -356,7 +351,7 @@ def _toe_kick_panels(
             pos_x=box.pos_x, pos_y=box.pos_y, pos_z=box.pos_z,
             material_role="carcass",
             depends_on=["toe_kick_back", "toe_kick_front"],
-            inner_face="", outer_face="", cam_face=None,
+            inner_face="", outer_face="",
         ))
     return panels
 
@@ -373,12 +368,10 @@ def _shelves_from_spec(
     for box in shelf_panel_boxes(spec, layout):
         if box.shelf_type == "fixed":
             panel_type = "fixed_shelf"
-            cam = frame.bottom
             name = f"层板({box.center_z:.0f}mm)"
             note = "固定层板"
         else:
             panel_type = "movable_shelf"
-            cam = None
             name = f"活动层板({box.center_z:.0f}mm)"
             note = "活动层板"
         panels.append(PanelPlacement(
@@ -387,7 +380,7 @@ def _shelves_from_spec(
             pos_x=box.pos_x, pos_y=box.pos_y, pos_z=box.pos_z,
             material_role="carcass",
             depends_on=["left_side_panel", "right_side_panel"],
-            inner_face=inner, outer_face=outer, cam_face=cam,
+            inner_face=inner, outer_face=outer,
             note=note,
         ))
     return panels
@@ -402,25 +395,25 @@ def _drawer_panels(
     """Materialize full-height drawer boxes from the shared dimension chain."""
     roles = {
         "drawer_front": (
-            "drawer_front", "抽屉前板", frame.back, frame.front, None,
+            "drawer_front", "抽屉前板", frame.back, frame.front,
         ),
         "drawer_side_L": (
-            "drawer_side", "抽屉左板", frame.right, frame.left, frame.left,
+            "drawer_side", "抽屉左板", frame.right, frame.left,
         ),
         "drawer_side_R": (
-            "drawer_side", "抽屉右板", frame.left, frame.right, frame.right,
+            "drawer_side", "抽屉右板", frame.left, frame.right,
         ),
         "drawer_back": (
-            "drawer_back", "抽屉后板", frame.front, frame.back, frame.back,
+            "drawer_back", "抽屉后板", frame.front, frame.back,
         ),
         "drawer_bottom": (
-            "drawer_bottom", "抽屉底板", frame.top, frame.bottom, frame.bottom,
+            "drawer_bottom", "抽屉底板", frame.top, frame.bottom,
         ),
     }
     panels: list[PanelPlacement] = []
     for box in drawer_panel_boxes(spec, layout):
         role_key = box.panel_id.rsplit("_z", 1)[0]
-        panel_type, label, inner, outer, cam = roles[role_key]
+        panel_type, label, inner, outer = roles[role_key]
         z_label = box.panel_id.rsplit("_", 1)[-1][1:]
         panels.append(PanelPlacement(
             id=box.panel_id,
@@ -429,7 +422,7 @@ def _drawer_panels(
             size_x=box.size_x, size_y=box.size_y, size_z=box.size_z,
             pos_x=box.pos_x, pos_y=box.pos_y, pos_z=box.pos_z,
             material_role="carcass",
-            inner_face=inner, outer_face=outer, cam_face=cam,
+            inner_face=inner, outer_face=outer,
             note=(
                 f"{label} {box.size_x:.0f}×{box.size_z:.0f}×{box.size_y:.0f}mm"
                 if panel_type == "drawer_front"
@@ -453,7 +446,3 @@ def frame_sign(signed: str) -> int:
     return 1 if signed[0] == "+" else -1
 
 
-def _frame_from_spec(spec: FurnitureSpec) -> CabinetFrame:
-    """Build a CabinetFrame for the spec's furniture type."""
-    topology = _load_topology(spec.furniture_category)
-    return CabinetFrame(**topology["frame"])

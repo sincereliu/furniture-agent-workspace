@@ -27,4 +27,4 @@
 | `validation.py` | 检查点不变量 | validation |
 | `quantitative_audit.py` / `design_optimization.py` | 旁路分析 | 只写 `stage_analyses` |
 
-连不连默认规则在制造 [连接与接触默认规则](../manufacture-plan/references/connection-contact-defaults.md)。
+本阶段只产出尺寸、位置和承面–端面接触。连不连默认规则在制造 [连接与接触默认规则](../manufacture-plan/references/connection-contact-defaults.md)。
