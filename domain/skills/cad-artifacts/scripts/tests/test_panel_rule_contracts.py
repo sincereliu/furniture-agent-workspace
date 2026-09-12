@@ -21,6 +21,7 @@ from furniture_panel_planning.construction_geometry import (
     toe_kick_support_boxes,
 )
 from furniture_panel_planning.cabinet_identity import require_primary_handoff
+from furniture_panel_planning.joint_topology import PanelJoint
 from furniture_panel_planning.panel_pipeline import plan_panel_cabinets, plan_panel_stage
 from furniture_panel_planning.panel_planning import plan_panels
 from furniture_panel_planning.panel_rules import (
@@ -365,6 +366,40 @@ class PanelRuleContractTests(unittest.TestCase):
                     "cabinets": output["cabinets"],
                     "spec": spec,
                     "panels": panels,
+                }
+            )
+
+    def test_contact_output_uses_bearing_and_end_ids(self) -> None:
+        intent = DesignIntent(
+            furniture_category="floor_cabinet",
+            finished_envelope=FinishedEnvelope(800, 600, 1000),
+            confirmed=True,
+        )
+        output = plan_panel_stage(intent, panel_parameters())
+        contacts = [
+            joint
+            for panel in output["cabinets"][0]["panels"]
+            for joint in panel["joints"]
+        ]
+        self.assertTrue(contacts)
+        for joint in contacts:
+            self.assertIn("bearing_id", joint)
+            self.assertIn("end_id", joint)
+            self.assertNotIn("female_id", joint)
+            self.assertNotIn("male_id", joint)
+            restored = PanelJoint.from_dict(joint)
+            self.assertEqual(restored.bearing_id, joint["bearing_id"])
+            self.assertEqual(restored.end_id, joint["end_id"])
+
+        with self.assertRaisesRegex(ValueError, "female_id"):
+            PanelJoint.from_dict(
+                {
+                    "female_id": "cabinet_1__left_side_panel",
+                    "male_id": "cabinet_1__top_panel",
+                    "face": "+x",
+                    "edge_axis": "x",
+                    "edge_sign": -1,
+                    "end_z": 991.0,
                 }
             )
 

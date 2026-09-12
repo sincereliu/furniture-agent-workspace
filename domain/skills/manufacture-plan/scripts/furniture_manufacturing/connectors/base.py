@@ -20,7 +20,7 @@ def make_connection_id(female_id: str, male_id: str, row_index: int) -> str:
     """确定性的连接点标识：面板配对 + 排次。
 
     非随机：同一柜体每次重算生成完全相同的 id，可复现、可 diff、可测试。
-    female_id/male_id 来自 PanelJoint（哪块板的面被哪块板的端面顶住）；
+    两侧板件 id 来自冻结接触的 bearing_id/end_id（承面/端面）；
     row_index 是同一连接边上的第几排（前后排 / 沿边排，按位置从小到大）。
     """
     return f"{female_id}→{male_id}#{row_index}"

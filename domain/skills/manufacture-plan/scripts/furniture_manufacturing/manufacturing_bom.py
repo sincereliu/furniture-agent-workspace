@@ -109,15 +109,15 @@ def _derive_door_hinge_sides(
 def _resolve_joint_connections(panels: list[PanelRecord]) -> None:
     """在制造层按面板类型重解析每条接触的连不连（原在 panel-plan 解析）。
 
-    panel-plan 只产连接拓扑（female/male/face/edge）；连不连是制造层关注点
+    panel-plan 只产接触拓扑（bearing_id/end_id/face/edge）；连不连是制造层关注点
     （只影响孔位与五金，不影响面板几何），故在此重解析并写回每个 PanelRecord。
     """
     by_label = {panel.label: panel for panel in panels}
     for panel in panels:
         resolved = []
         for joint in panel.joints:
-            female = by_label.get(joint.female_id)
-            male = by_label.get(joint.male_id)
+            female = by_label.get(joint.bearing_id)
+            male = by_label.get(joint.end_id)
             connection = (
                 default_joint_connection(female, male)
                 if female is not None and male is not None
@@ -202,13 +202,13 @@ def _manufacturing_panel(
     joints = placement.joints
     if joints:
         for j in joints:
-            if j.female_id == placement.id:
+            if j.bearing_id == placement.id:
                 # female（侧板等）：inner_face 在 x/y 轴 → 高度方向排钻
                 face_axis = j.face[1] if len(j.face) >= 2 else ""
                 if face_axis in ("x", "y"):
                     drill_length = placement.size_z
                     break
-            if j.male_id == placement.id:
+            if j.end_id == placement.id:
                 # male（横板等）：端面在 x 轴 → 宽度方向排钻
                 if j.edge_axis == "x":
                     drill_length = placement.size_x

@@ -61,8 +61,8 @@ class JointConnectionMigrationTests(unittest.TestCase):
         shelf_joints = [
             j for j in back.joints
             if "fixed_shelf" in {
-                by_label[j.female_id].panel_type,
-                by_label[j.male_id].panel_type,
+                by_label[j.bearing_id].panel_type,
+                by_label[j.end_id].panel_type,
             }
         ]
         self.assertTrue(shelf_joints)
@@ -72,8 +72,8 @@ class JointConnectionMigrationTests(unittest.TestCase):
         top_joints = [
             j for j in side.joints
             if "top" in {
-                by_label[j.female_id].panel_type,
-                by_label[j.male_id].panel_type,
+                by_label[j.bearing_id].panel_type,
+                by_label[j.end_id].panel_type,
             }
         ]
         self.assertTrue(top_joints)

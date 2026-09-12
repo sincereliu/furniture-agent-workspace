@@ -43,7 +43,7 @@ class PanelPlacement:
         if not isinstance(raw_joints, list):
             raise ValueError("panel joints must be a list")
         values["joints"] = [
-            item if isinstance(item, PanelJoint) else PanelJoint(**item)
+            item if isinstance(item, PanelJoint) else PanelJoint.from_dict(item)
             for item in raw_joints
         ]
         panel_id = str(values.get("id", "")).strip()

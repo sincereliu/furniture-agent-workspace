@@ -33,6 +33,23 @@
 | 板件柜内角色 | `role` | 字符串 | 柜内稳定角色名，如 `left_side_panel`。输出必须写出。 |
 | 板件所属柜体 | `parent_id` | 标识符 | 必须等于所属 `cabinets[].id`。输出必须写出。 |
 | 板件全局标识 | `id` | 字符串 | `{cabinet_id}__{role}`。输出不得再写裸角色名。 |
+| 板件接触 | `joints` | 列表 | 该板参与的定向接触；每条是承面被端面顶住。 |
+
+## 接触口径
+
+一条接触是定向面–端邻接：承面被端面顶住。角色属于这一条 `joints[]` 记录，不是板件属性。同一块板可以在不同接触里分别担任承面和端面。本阶段只推导接触，不解析连不连。输出键即下表规范名。
+
+| 概念 | 规范名 | 单位/类型 | 说明 |
+| --- | --- | --- | --- |
+| 承面板件 | `bearing_id` | 标识符 | 拿出大面、被顶住的板。 |
+| 端面板件 | `end_id` | 标识符 | 用厚度端顶住承面的板。 |
+| 承面方向 | `face` | 面标记 | 承面所用语义面，值为该板 `inner_face`，如 `+x`。 |
+| 端面轴 | `edge_axis` | `x`/`y`/`z` | 端面所在轴。 |
+| 端面方向 | `edge_sign` | `+1`/`-1` | `+1` 为轴正端，`-1` 为轴负端。 |
+| 端面件厚度中心 Z | `end_z` | mm | 几何基准，不是孔位。 |
+| 端面件有偏心轮面 | `end_has_cam` | 布尔 | 该板是否有 `cam_face`。 |
+| 端面件偏心轮面 | `end_cam_face` | 面标记或 `null` | |
+| 端面件 Z 向尺寸 | `end_size_z` | mm | 横板时等于板厚。 |
 
 ## 几何字段口径
 
@@ -61,3 +78,5 @@
 - `movable_shelf_connector`、`door_hinge_side`：制造阶段输入，不是板件 spec 字段。
 - `back_mount=auto`、`gap_below_mm="auto"`：不再接受；背板必须写 `groove`/`insert`/`cover`，计算层只写 `null`。
 - `toe_kick_support_count=null`：不再接受；必须写非负整数。
+- `female_id`、`male_id`：用 `bearing_id`/`end_id`。
+- `male_z`、`male_has_cam`、`male_cam_face`、`male_size_z`：用 `end_z`/`end_has_cam`/`end_cam_face`/`end_size_z`。

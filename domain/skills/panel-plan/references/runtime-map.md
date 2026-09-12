@@ -23,7 +23,7 @@
 | `panel_rules.py` | 踢脚支撑数量、背拉条数量与净距 | calculation |
 | `construction_geometry.py` | 层板/抽屉/踢脚/背拉条盒子 | calculation |
 | `topology_solver.py` | 读柜型 YAML，物化板件位置与语义面 | calculation |
-| `joint_topology.py` | 接触几何；不解析连不连 | calculation |
+| `joint_topology.py` | 承面–端面接触几何；不解析连不连 | calculation |
 | `validation.py` | 检查点不变量 | validation |
 | `quantitative_audit.py` / `design_optimization.py` | 旁路分析 | 只写 `stage_analyses` |
 

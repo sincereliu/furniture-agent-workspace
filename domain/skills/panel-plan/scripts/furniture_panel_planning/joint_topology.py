@@ -1,40 +1,68 @@
-"""连接拓扑 — 板件之间的面-边邻接关系。
+"""接触拓扑 — 板件之间的承面–端面邻接。
 
 不依赖板件名称（"side"/"top" 等），只根据几何位置 + 语义面
-推导出哪块板的哪个面碰到了哪块板的哪个端面。
+推导出哪块板的承面被哪块板的端面顶住。
+输出键 `bearing_id`/`end_id` 分别是承面/端面板件。
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Sequence
+from typing import Any, Mapping, Sequence
 
 from .panel_models import PanelPlacement
 
 
+_JOINT_FIELDS = frozenset(
+    {
+        "bearing_id",
+        "end_id",
+        "face",
+        "edge_axis",
+        "edge_sign",
+        "end_z",
+        "end_has_cam",
+        "end_cam_face",
+        "end_size_z",
+        "connection",
+    }
+)
+
+
 @dataclass(frozen=True)
 class PanelJoint:
-    """一条面-边邻接：female 的面碰 male 的端面。
+    """一条承面–端面邻接：承面被端面顶住。
 
     `connection` 是制造阶段写入的连不连（on/off）。本阶段 `compute_joints()`
     只填几何邻接；字段默认 `on` 仅作序列化占位，制造层
     `default_joint_connection` 会按面板类型重解析。用什么五金仍由制造连接件决定。
     """
 
-    female_id: str   # 面板 ID（面被接触的那块板）
-    male_id: str     # 面板 ID（端面顶住面的那块板）
-    face: str        # female 的哪个语义面被接触（inner_face 的值，如 "+x"）
-    edge_axis: str   # male 的端面所在轴（"x"/"y"/"z"）
-    edge_sign: int   # male 的端面方向：+1=轴正端，-1=轴负端
-    male_z: float    # male 面板厚度中心线的 Z 坐标（几何基准，非五金孔位）
-    male_has_cam: bool = False  # male 是否有 cam_face（三合一标志）
-    male_cam_face: str | None = None  # male 的偏心轮安装面（"+z"/"-z"）
-    male_size_z: float = 0.0           # male 在 z 方向的尺寸（横板=板厚）
+    bearing_id: str  # 承面板件 ID
+    end_id: str  # 端面板件 ID
+    face: str  # 承面所用语义面（inner_face 的值，如 "+x"）
+    edge_axis: str  # 端面所在轴（"x"/"y"/"z"）
+    edge_sign: int  # 端面方向：+1=轴正端，-1=轴负端
+    end_z: float  # 端面件厚度中心线的 Z 坐标（几何基准，非五金孔位）
+    end_has_cam: bool = False  # 端面件是否有 cam_face
+    end_cam_face: str | None = None  # 端面件的偏心轮安装面（"+z"/"-z"）
+    end_size_z: float = 0.0  # 端面件在 z 方向的尺寸（横板=板厚）
     connection: str = "on"  # resolved on/off; missing on old payloads means on
 
     def __post_init__(self) -> None:
         if self.connection not in {"on", "off"}:
             raise ValueError("connection must be 'on' or 'off'")
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PanelJoint":
+        """Restore one serialized contact. Unknown keys are rejected."""
+        if not isinstance(data, Mapping):
+            raise ValueError("panel joint must be an object")
+        values = dict(data)
+        unknown = sorted(set(values) - _JOINT_FIELDS)
+        if unknown:
+            raise ValueError("panel joint does not support: " + ", ".join(unknown))
+        return cls(**values)
 
 
 # ── 容差 ──────────────────────────────────────────────────────────
@@ -86,10 +114,10 @@ def _axis_range(panel: PanelPlacement, axis: str) -> tuple[float, float]:
 
 
 def compute_joints(placements: Sequence[PanelPlacement]) -> list[PanelJoint]:
-    """从板件列表推导所有面-边邻接。
+    """从板件列表推导所有承面–端面邻接。
 
-    对每块有 inner_face 的板（female 候选），
-    找出所有端面顶在该面上的板（male 候选）。
+    对每块有 inner_face 的板（承面候选），
+    找出所有端面顶在该面上的板（端面候选）。
     """
     joints: list[PanelJoint] = []
     candidates = [p for p in placements if p.inner_face]
@@ -97,59 +125,59 @@ def compute_joints(placements: Sequence[PanelPlacement]) -> list[PanelJoint]:
     def _is_drawer(panel: PanelPlacement) -> bool:
         return "drawer" in panel.panel_type
 
-    for female in candidates:
-        face_dir = female.inner_face
+    for bearing in candidates:
+        face_dir = bearing.inner_face
         face_axis = _axis_char(face_dir)
-        face_pos = _face_position(female, face_dir)
+        face_pos = _face_position(bearing, face_dir)
 
-        # 待检查的轴线（female 面法向之外的另外两轴）
+        # 待检查的轴线（承面法向之外的另外两轴）
         other_axes = [a for a in ("x", "y", "z") if a != face_axis]
 
-        for male in placements:
-            if male.id == female.id:
+        for end_panel in placements:
+            if end_panel.id == bearing.id:
                 continue
             # 抽屉是滑动子装配：抽屉↔柜体的接触（如抽屉侧板贴柜体侧板、
             # 抽屉前板底边搁柜体底板）不是连接，排除跨装配 joint。
-            if _is_drawer(female) != _is_drawer(male):
+            if _is_drawer(bearing) != _is_drawer(end_panel):
                 continue
-            # male 必须在这个面上有端面才可能接触
-            male_min, male_max = _axis_range(male, face_axis)
+            # 端面件必须在这个承面上有端面才可能接触
+            end_min, end_max = _axis_range(end_panel, face_axis)
 
             if not (
-                abs(male_min - face_pos) <= _SNAP_TOLERANCE
-                or abs(male_max - face_pos) <= _SNAP_TOLERANCE
+                abs(end_min - face_pos) <= _SNAP_TOLERANCE
+                or abs(end_max - face_pos) <= _SNAP_TOLERANCE
             ):
                 continue
 
             # 另外两个轴必须重叠
             overlap_all = True
             for axis in other_axes:
-                f_min, f_max = _axis_range(female, axis)
-                m_min, m_max = _axis_range(male, axis)
-                if not _overlap(f_min, f_max, m_min, m_max):
+                b_min, b_max = _axis_range(bearing, axis)
+                e_min, e_max = _axis_range(end_panel, axis)
+                if not _overlap(b_min, b_max, e_min, e_max):
                     overlap_all = False
                     break
 
             if not overlap_all:
                 continue
 
-            # 确定 male 的端面方向
-            if abs(male_min - face_pos) <= _SNAP_TOLERANCE:
+            # 确定端面方向
+            if abs(end_min - face_pos) <= _SNAP_TOLERANCE:
                 edge_sign = -1
             else:
                 edge_sign = +1
 
             joints.append(
                 PanelJoint(
-                    female_id=female.id,
-                    male_id=male.id,
+                    bearing_id=bearing.id,
+                    end_id=end_panel.id,
                     face=face_dir,
                     edge_axis=face_axis,
                     edge_sign=edge_sign,
-                    male_z=male.pos_z + male.size_z / 2.0,  # 几何基准：厚度中心线 Z
-                    male_has_cam=bool(male.cam_face),  # 有 cam_face 才是三合一
-                    male_cam_face=male.cam_face,  # 偏心轮安装面，manufacturing 用于算连接杆轴线高度
-                    male_size_z=male.size_z,       # male 在 z 方向的尺寸（横板=板厚）
+                    end_z=end_panel.pos_z + end_panel.size_z / 2.0,
+                    end_has_cam=bool(end_panel.cam_face),
+                    end_cam_face=end_panel.cam_face,
+                    end_size_z=end_panel.size_z,
                 )
             )
 
@@ -160,26 +188,26 @@ def joint_is_connected(joint: PanelJoint) -> bool:
     """True when the resolved switch says this contact should be fixed.
 
     ``connection`` 现在由制造层在 `plan_manufacturing` 中重解析（见制造层
-    `default_joint_connection`）；panel-plan 只产连接拓扑，不再解析连不连。
+    `default_joint_connection`）；panel-plan 只产接触拓扑，不再解析连不连。
     """
     return getattr(joint, "connection", "on") == "on"
 
 
-def is_female(panel_id: str, joints: Sequence[PanelJoint]) -> bool:
-    """该板是否是某个连接的 female（面接触方）。"""
-    return any(j.female_id == panel_id for j in joints)
+def is_bearing(panel_id: str, joints: Sequence[PanelJoint]) -> bool:
+    """该板是否在某条接触中担任承面。"""
+    return any(j.bearing_id == panel_id for j in joints)
 
 
-def is_male(panel_id: str, joints: Sequence[PanelJoint]) -> bool:
-    """该板是否是某个连接的 male（边接触方）。"""
-    return any(j.male_id == panel_id for j in joints)
+def is_end(panel_id: str, joints: Sequence[PanelJoint]) -> bool:
+    """该板是否在某条接触中担任端面。"""
+    return any(j.end_id == panel_id for j in joints)
 
 
-def female_joints(panel_id: str, joints: Sequence[PanelJoint]) -> list[PanelJoint]:
-    """该板作为 female 参与的所有连接。"""
-    return [j for j in joints if j.female_id == panel_id]
+def bearing_joints(panel_id: str, joints: Sequence[PanelJoint]) -> list[PanelJoint]:
+    """该板作为承面参与的所有接触。"""
+    return [j for j in joints if j.bearing_id == panel_id]
 
 
-def male_joints(panel_id: str, joints: Sequence[PanelJoint]) -> list[PanelJoint]:
-    """该板作为 male 参与的所有连接。"""
-    return [j for j in joints if j.male_id == panel_id]
+def end_joints(panel_id: str, joints: Sequence[PanelJoint]) -> list[PanelJoint]:
+    """该板作为端面参与的所有接触。"""
+    return [j for j in joints if j.end_id == panel_id]

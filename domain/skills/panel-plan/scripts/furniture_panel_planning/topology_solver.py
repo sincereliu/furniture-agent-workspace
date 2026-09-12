@@ -128,7 +128,7 @@ def solve_panel_placements(
     for panel in placements:
         panel.joints = [
             j for j in joints
-            if j.female_id == panel.id or j.male_id == panel.id
+            if j.bearing_id == panel.id or j.end_id == panel.id
         ]
 
     return placements

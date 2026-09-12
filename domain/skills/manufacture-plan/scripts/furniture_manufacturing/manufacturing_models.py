@@ -48,7 +48,7 @@ class PanelRecord:
         if not isinstance(raw_joints, list):
             raise ValueError("manufacturing panel joints must be a list")
         values["joints"] = [
-            item if isinstance(item, PanelJoint) else PanelJoint(**item)
+            item if isinstance(item, PanelJoint) else PanelJoint.from_dict(item)
             for item in raw_joints
         ]
         from furniture_panel_planning.cabinet_identity import (
