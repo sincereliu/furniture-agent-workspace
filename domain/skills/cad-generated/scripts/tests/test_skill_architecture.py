@@ -19,8 +19,8 @@ from furniture_design_intent.design_intent import EXECUTABLE_CATEGORIES
 
 PLANNING_STAGE_SKILLS = {
     "design_intent": "design-intent",
-    "panels_planned": "panel-plan",
-    "manufacturing_planned": "manufacture-plan",
+    "panel_plan": "panel-plan",
+    "manufacture_plan": "manufacture-plan",
     "feature_tree_planned": "feature-tree",
     "delivery_validated": "delivery-validated",
 }

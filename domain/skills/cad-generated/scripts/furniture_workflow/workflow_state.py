@@ -18,8 +18,8 @@ class WorkflowStage(str, Enum):
     # It is an independent room-placement workflow, not a serial furniture
     # generation checkpoint.
     LAYOUT_PLANNED = "layout_planned"
-    PANELS_PLANNED = "panels_planned"
-    MANUFACTURING_PLANNED = "manufacturing_planned"
+    PANELS_PLANNED = "panel_plan"
+    MANUFACTURING_PLANNED = "manufacture_plan"
     FEATURE_TREE_PLANNED = "feature_tree_planned"
     CAD_GENERATED = "cad_generated"
     DELIVERY_VALIDATED = "delivery_validated"
@@ -48,6 +48,8 @@ LEGACY_STAGE_VALUES = {
     "draft_intent": WorkflowStage.DESIGN_INTENT,
     "intent_confirmed": WorkflowStage.DESIGN_INTENT,
     "panel_planned": WorkflowStage.PANELS_PLANNED,
+    "panels_planned": WorkflowStage.PANELS_PLANNED,
+    "manufacturing_planned": WorkflowStage.MANUFACTURING_PLANNED,
     "feature_tree_validated": WorkflowStage.FEATURE_TREE_PLANNED,
     "artifacts_generated": WorkflowStage.CAD_GENERATED,
     "artifacts_verified": WorkflowStage.DELIVERY_VALIDATED,

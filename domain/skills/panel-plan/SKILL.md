@@ -1,11 +1,11 @@
 ---
 name: panel-plan
-description: 用于 panels_planned 阶段。当用户说“几扇门”“几层板”“要不要抽屉”“背板怎么装”“踢脚多高”“板厚多少”，或需要从已确认外包络生成可审查板件时使用。门、层板、抽屉、背板安装、背拉条和踢脚先由 LLM 提案，经结构化代码准入后物化。料厚按车间料档准入，不是开放默认值。单位审计与优化属于旁路分析，不属于核心板件生成。
+description: 用于 panel_plan 阶段。当用户说“几扇门”“几层板”“要不要抽屉”“背板怎么装”“踢脚多高”“板厚多少”，或需要从已确认外包络生成可审查板件时使用。门、层板、抽屉、背板安装、背拉条和踢脚先由 LLM 提案，经结构化代码准入后物化。料厚按车间料档准入，不是开放默认值。单位审计与优化属于旁路分析，不属于核心板件生成。
 ---
 
 # 家具板件规划
 
-阶段：`panels_planned`
+阶段：`panel_plan`
 
 ## 核心流程
 
@@ -14,7 +14,7 @@ description: 用于 panels_planned 阶段。当用户说“几扇门”“几层
 3. 把选定草稿的规范字段写入 `stage_inputs.panels.parameters`。必填字段、可选料档与候选起点见 [提案契约](references/panel-proposal-contract.md)；料厚目录与工艺卡见 [料档与工艺卡](references/sheet-stock-catalog.md)。
 4. 由 `FurnitureSpec.from_intent()` 校验意图确认状态、字段完整性/类型和客观结构冲突，按工艺卡展开省略的料档，首次物化完整规范；无法由当前拓扑表达的混合语义必须继续消歧，不得让运行时丢弃字段。
 5. 依据 [背板结构规则](references/back-construction-rules.md)、[板件定义规则](references/panel-definition-rules.md)、[抽屉尺寸链](references/drawer-dimension-chain.md) 和 `references/cabinet-topologies/` 生成柜体实例及其 `spec/structure/back_mount_resolution/panels`；当背板模式需要时，同时物化背拉条并纳入同一阶段校验。
-6. 运行时统一校验柜体身份、板件归属、结构规格、精确净空、板件标识/尺寸/位置/依赖和背板几何。每次规划是一次 attempt：展示后暂停。用户要另一版时调用 `retry_stage("panels_planned")`（可带新的 `stage_inputs.panels`），不要 `revise()` 意图；某次通过的尝试用 `select_stage_attempt()` 选用后再确认。尝试失败只记录该次，冻结意图仍在。`confirm_stage(panels_planned)` 把当前候选冻成 `store/<project-id>/panels/<sha256>.json`；制造只读这份冻结文件，重试制造不会重跑板件。未确认不得进入后续阶段。
+6. 运行时统一校验柜体身份、板件归属、结构规格、精确净空、板件标识/尺寸/位置/依赖和背板几何。每次规划是一次 attempt：展示后暂停。用户要另一版时调用 `retry_stage("panel_plan")`（可带新的 `stage_inputs.panels`），不要 `revise()` 意图；某次通过的尝试用 `select_stage_attempt()` 选用后再确认。尝试失败只记录该次，冻结意图仍在。`confirm_stage(panel_plan)` 把当前候选冻成 `store/<project-id>/panels/<sha256>.json`；制造只读这份冻结文件，重试制造不会重跑板件。未确认不得进入后续阶段。
 
 ## 提案与展示
 
@@ -39,14 +39,14 @@ description: 用于 panels_planned 阶段。当用户说“几扇门”“几层
 
 ## 旁路分析
 
-- `panel_unit_audit` 和 `panel_optimization` 只读取已确认冻结板件（有 Store 时按 `confirmed_panel_sha256` 读文件），写入 `stage_analyses.panels_planned`。
-- 它们不自动改写 `panels_planned` 事实输出，不替代结构化准入，也不构成制造或 CAD 的直接输入。
+- `panel_unit_audit` 和 `panel_optimization` 只读取已确认冻结板件（有 Store 时按 `confirmed_panel_sha256` 读文件），写入 `stage_analyses.panel_plan`。
+- 它们不自动改写 `panel_plan` 事实输出，不替代结构化准入，也不构成制造或 CAD 的直接输入。
 - 只有用户明确选中优化候选后，才可用 `revise_stage_output()` 物化新的板件结果。
 
 ## 边界
 
 - 运行时在 `scripts/furniture_panel_planning/`；模块职责和入口见 [运行时映射](references/runtime-map.md)。代码不得按自然语言、柜型或内置 profile 选择方案。料档省略由工艺卡展开，属于结构化协议，见 [料档与工艺卡](references/sheet-stock-catalog.md)。
-- `panels_planned` 的对象树是 `cabinets[]`：每个柜体是父对象，带 `id` 以及自己的 `spec/structure/back_mount_resolution/panels`。板件带 `parent_id`（所属柜体）和 `role`（柜内角色，如 `left_side_panel`）；全局 `id` 为 `{cabinet_id}__{role}`，避免多柜撞名。检查点只写这棵树，不在顶层再抄一份 `spec/panels`。下游读法见 [运行时映射](references/runtime-map.md)。分析记录属于旁路证据，不并入板件事实。
+- `panel_plan` 的对象树是 `cabinets[]`：每个柜体是父对象，带 `id` 以及自己的 `spec/structure/back_mount_resolution/panels`。板件带 `parent_id`（所属柜体）和 `role`（柜内角色，如 `left_side_panel`）；全局 `id` 为 `{cabinet_id}__{role}`，避免多柜撞名。检查点只写这棵树，不在顶层再抄一份 `spec/panels`。下游读法见 [运行时映射](references/runtime-map.md)。分析记录属于旁路证据，不并入板件事实。
 - 可选结构化字段 `cabinet_id` 是身份，不是构造参数，写入提案后由运行时弹出再准入 `FurnitureSpec`。缺省为 `cabinet_1`。交互式主流程目前仍是一份意图对应一台柜；多柜可经 `plan_panel_cabinets()` 组合，不同外包络仍要多份已确认意图。
 - 本阶段只产出板件尺寸、相对柜体原点的位置，以及板件之间的承面–端面关系。接触由几何推导：一条接触是承面被端面顶住。口径见 [术语规范表](references/terminology-glossary.md)。「连不连」见制造 [连接与接触默认规则](../manufacture-plan/references/connection-contact-defaults.md)。本轮没有逐条连接的提案覆盖字段。
 - 同一冻结意图上再试一版用 `retry_stage()`；直接改已生成的板件结果用 `revise_stage_output()`，使本阶段及下游失效。

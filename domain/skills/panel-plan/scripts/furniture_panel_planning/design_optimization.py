@@ -43,7 +43,7 @@ def _normalize_domains(raw: Any) -> dict[str, list[Any]]:
     domains: dict[str, list[Any]] = {}
     for name, values in raw.items():
         if name not in PANEL_PARAMETER_FIELDS:
-            raise ValueError(f"optimization variable is not owned by panels_planned: {name}")
+            raise ValueError(f"optimization variable is not owned by panel_plan: {name}")
         if not isinstance(values, list) or not values:
             raise ValueError(f"optimization variable {name} requires a non-empty choices list")
         if len(values) > 50:

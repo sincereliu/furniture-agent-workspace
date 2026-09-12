@@ -1,4 +1,4 @@
-"""Semantic panel contracts owned by the panels_planned stage."""
+"""Semantic panel contracts owned by the panel_plan stage."""
 
 from __future__ import annotations
 

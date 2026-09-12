@@ -1,15 +1,15 @@
 ---
 name: manufacture-plan
-description: 用于 manufacturing_planned 阶段。当用户说"用什么五金""三合一连接件""铰链怎么装""封边怎么做""出BOM清单""打孔位置"时触发。根据已确认板件制定材料、封边、连接、五金、孔位和 BOM，不构造特征树或 CAD。
+description: 用于 manufacture_plan 阶段。当用户说"用什么五金""三合一连接件""铰链怎么装""封边怎么做""出BOM清单""打孔位置"时触发。根据已确认板件制定材料、封边、连接、五金、孔位和 BOM，不构造特征树或 CAD。
 ---
 
 # 家具制造策略
 
-阶段：`manufacturing_planned`
+阶段：`manufacture_plan`
 
 ## 工作流
 
-1. 检查前置：`design_intent` 与 `panels_planned` 均已确认；独立 `layout-plan` 结果不是前置条件。有 Project Store 时制造按确认时记下的 `confirmed_panel_sha256` 读 `store/<project-id>/panels/<sha256>.json`，文件缺失则失败，不静默改用内存里的板件，也不重跑 `panel-plan`。无 Store 时读内存中已确认的 `stage_outputs.panels_planned`。
+1. 检查前置：`design_intent` 与 `panel_plan` 均已确认；独立 `layout-plan` 结果不是前置条件。有 Project Store 时制造按确认时记下的 `confirmed_panel_sha256` 读 `store/<project-id>/panels/<sha256>.json`，文件缺失则失败，不静默改用内存里的板件，也不重跑 `panel-plan`。无 Store 时读内存中已确认的 `stage_outputs.panel_plan`。
 2. 由 LLM 根据完整上下文理解制造需求，提出整份策略草案，并把未明确的假设逐项列出给用户确认。策略覆盖：
    - 材料：类别、等级、厚度、纹理、可见面、饰面；
    - 封边：封哪些边、封边厚度及余量；
@@ -24,7 +24,7 @@ description: 用于 manufacturing_planned 阶段。当用户说"用什么五金"
 
 ## 关键规则
 
-- 材料厚度来自已确认的 `panels_planned` 输出；铰链侧 `door_hinge_side` 是制造输入/派生（单门输入、双门按位置派生），不从意图重建或硬编码覆盖。
+- 材料厚度来自已确认的 `panel_plan` 输出；铰链侧 `door_hinge_side` 是制造输入/派生（单门输入、双门按位置派生），不从意图重建或硬编码覆盖。
 - 接触默认连不连见 [连接与接触默认规则](references/connection-contact-defaults.md)。
 - 三合一在高度方向按系统 32 排钻分布、深度方向前后双排；铰链孔、背板槽与背板连接、封边的精确口径见 [制造规则](references/manufacturing-rules.md)。
 - 入槽背板不封边；其余背板及背拉条四边封边；cover 外盖螺钉与 groove 背拉条螺钉属组装现场工艺，不生成孔位与五金。
@@ -44,6 +44,6 @@ description: 用于 manufacturing_planned 阶段。当用户说"用什么五金"
 ## 边界
 
 - 运行时在 `scripts/furniture_manufacturing/`；代码契约与演进中需求见 [运行时映射](references/runtime-map.md)。
-- 同一已确认板件上再试制造用 `retry_stage("manufacturing_planned")`，冻结板件文件保持不变；直接改已有制造结果用 `revise_stage_output()`，使本阶段及下游失效。
+- 同一已确认板件上再试制造用 `retry_stage("manufacture_plan")`，冻结板件文件保持不变；直接改已有制造结果用 `revise_stage_output()`，使本阶段及下游失效。
 - 不发射特征树、不调用 CAD Bridge、不手改派生产物。
-- 试验、统计和生产仿真写入 `stage_analyses.manufacturing_planned`，只提供证据或候选；它们不自动提升 `readiness`，不直接修改 BOM，也不构成现实工厂因果结论。
+- 试验、统计和生产仿真写入 `stage_analyses.manufacture_plan`，只提供证据或候选；它们不自动提升 `readiness`，不直接修改 BOM，也不构成现实工厂因果结论。

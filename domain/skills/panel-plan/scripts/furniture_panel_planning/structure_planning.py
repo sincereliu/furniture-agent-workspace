@@ -1,4 +1,4 @@
-"""Exact cabinet construction geometry owned by panels_planned."""
+"""Exact cabinet construction geometry owned by panel_plan."""
 
 from __future__ import annotations
 

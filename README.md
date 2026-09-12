@@ -26,14 +26,14 @@ FurnitureOrchestrator
 
 ```text
 1. design_intent
-2. panels_planned
-3. manufacturing_planned
+2. panel_plan
+3. manufacture_plan
 4. feature_tree_planned
 5. cad_generated
 6. delivery_validated
 ```
 
-阶段确认顺序遵循客户决策：`design_intent` 只确认家具类别与宽深高成品外包络；`panels_planned` 首次确认门数、层板数、抽屉数、板厚、背板、踢脚、精确净空和实体板件；`manufacturing_planned` 再确定材料、封边、连接、五金与加工。
+阶段确认顺序遵循客户决策：`design_intent` 只确认家具类别与宽深高成品外包络；`panel_plan` 首次确认门数、层板数、抽屉数、板厚、背板、踢脚、精确净空和实体板件；`manufacture_plan` 再确定材料、封边、连接、五金与加工。
 
 只有明确调用独立 `layout-plan` 或 `/api/plan-layout` 时才接收房间和家具位置并生成摆放图。未提供时使用 `4200×3600×2800 mm` 的“默认卧室（系统假设）”，并将柜体沿北墙居中摆放；只提供一项时补齐另一项。独立结果包含 `layout_context` 来源标记、房间坐标、家具四角占地、六向净距、内联 SVG 透视图和自包含 HTML 互动 Viewer。普通家具生成不会运行这一步，也不会生成 `layout-plan.json`：
 
@@ -61,7 +61,7 @@ FurnitureOrchestrator
 }
 ```
 
-设计意图变化使用 `revise()` 从第 1 阶段建立新 Revision。同一冻结意图上再试规划使用 `retry_stage()`；已确认板件冻成独立 JSON，对同一份板件再试制造不必重跑 `panel-plan`。直接改已有 `panels_planned`、`manufacturing_planned` 或 `feature_tree_planned` 结果时使用 `revise_stage_output()`：新 Revision 只保留修改点之前已确认的结果，修改点及全部下游重新确认或生成。独立房间布局直接重新运行，不建立或使主流程 Revision 失效。完整批处理请求中的后续参数保存在 `stage_inputs`，不会污染 `DesignIntent`；`stage_inputs`、`stage_outputs`、`stage_attempts`、`approved_stages` 和工作流历史会随 Project JSON 一起保存，冻结意图、冻结板件与各次 attempt 另有独立 JSON 文件。
+设计意图变化使用 `revise()` 从第 1 阶段建立新 Revision。同一冻结意图上再试规划使用 `retry_stage()`；已确认板件冻成独立 JSON，对同一份板件再试制造不必重跑 `panel-plan`。直接改已有 `panel_plan`、`manufacture_plan` 或 `feature_tree_planned` 结果时使用 `revise_stage_output()`：新 Revision 只保留修改点之前已确认的结果，修改点及全部下游重新确认或生成。独立房间布局直接重新运行，不建立或使主流程 Revision 失效。完整批处理请求中的后续参数保存在 `stage_inputs`，不会污染 `DesignIntent`；`stage_inputs`、`stage_outputs`、`stage_attempts`、`approved_stages` 和工作流历史会随 Project JSON 一起保存，冻结意图、冻结板件与各次 attempt 另有独立 JSON 文件。
 
 `generate_furniture.py` 和 `execute_spec()` 是明确的一次性批处理入口，可以自动确认已通过验证的中间阶段；它们不用于交互式逐步设计。
 
@@ -71,11 +71,11 @@ FurnitureOrchestrator
 
 | 分析名 | 来源阶段 | 方法 Skill | 家具适配器 |
 | --- | --- | --- | --- |
-| `panel_unit_audit` | `panels_planned` | `uncertainty-and-units` | `quantitative_audit.py` |
-| `panel_optimization` | `panels_planned` | `pymoo` | `design_optimization.py` |
-| `prototype_experiment` | `manufacturing_planned` | `experimental-design` | `prototype_experiment.py` |
-| `test_statistics` | `manufacturing_planned` | `statistical-analysis` | `test_statistics.py` |
-| `production_simulation` | `manufacturing_planned` | `simpy` | `production_simulation.py` |
+| `panel_unit_audit` | `panel_plan` | `uncertainty-and-units` | `quantitative_audit.py` |
+| `panel_optimization` | `panel_plan` | `pymoo` | `design_optimization.py` |
+| `prototype_experiment` | `manufacture_plan` | `experimental-design` | `prototype_experiment.py` |
+| `test_statistics` | `manufacture_plan` | `statistical-analysis` | `test_statistics.py` |
+| `production_simulation` | `manufacture_plan` | `simpy` | `production_simulation.py` |
 
 可选数值依赖统一安装：
 

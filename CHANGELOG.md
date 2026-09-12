@@ -1,5 +1,13 @@
 # 更新日志
 
+## 20260912.5 — 板件/制造检查点改跟目录名
+
+检查点 `panels_planned` 改为 `panel_plan`，`manufacturing_planned` 改为 `manufacture_plan`，与目录 `panel-plan` / `manufacture-plan` 对齐。旧项目 JSON 读入时映射到新名；产物 kind `panel_plan` / `manufacturing_plan` 不变。
+
+### 边界
+
+- 新增代码理由：`state`（检查点 ID）、`structured_protocol`（旧阶段名兼容）。无自然语言映射。
+
 ## 20260912.4 — 后两个阶段目录与检查点对齐
 
 目录 `cad-artifacts` 改名为 `cad-generated`，`delivery-report` 改名为 `delivery-validated`，与检查点 `cad_generated` / `delivery_validated` 对齐。阶段 ID、Python 包名和已有项目数据不变。

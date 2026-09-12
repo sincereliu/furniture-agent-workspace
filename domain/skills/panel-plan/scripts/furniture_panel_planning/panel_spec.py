@@ -1,4 +1,4 @@
-"""Structured contract admitted by the ``panels_planned`` stage."""
+"""Structured contract admitted by the ``panel_plan`` stage."""
 
 from __future__ import annotations
 

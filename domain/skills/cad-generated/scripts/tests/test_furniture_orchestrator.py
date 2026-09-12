@@ -25,7 +25,7 @@ from furniture_design_intent.design_intent import DesignIntent, FinishedEnvelope
 from furniture_workflow.input_adapter import stage_inputs_from_spec
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from furniture_workflow.workflow_project import Project
-from furniture_workflow.workflow_state import STAGE_SEQUENCE, WorkflowStage
+from furniture_workflow.workflow_state import STAGE_SEQUENCE, WorkflowStage, parse_stage
 from furniture_workflow.workflow_store import JsonProjectStore
 from furniture_panel_planning.panel_pipeline import plan_panel_stage
 from panel_fixtures import cabinet_data, panel_parameters
@@ -476,7 +476,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             WorkflowStage.PANELS_PLANNED,
         )
         self.assertNotIn("layout_planned", result.revision.stage_outputs)
-        self.assertIn("panels_planned", result.revision.stage_outputs)
+        self.assertIn("panel_plan", result.revision.stage_outputs)
 
     def test_draft_intent_preserves_null_dimensions_and_cannot_confirm(self) -> None:
         intent = DesignIntent.from_dict(
@@ -812,11 +812,11 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "panel proposal is incomplete"):
             plan_panel_stage(revision.intent, {})
         result = self.orchestrator.run_next(project)
-        panel_output = result.revision.stage_outputs["panels_planned"]
+        panel_output = result.revision.stage_outputs["panel_plan"]
         self.assertEqual(first_cabinet_spec(panel_output)["board_thickness"], 18.0)
         self.assertEqual(panel_output["cabinets"][0]["structure"]["back_mount"], "groove")
         self.assertEqual(
-            result.revision.selected_attempts["panels_planned"],
+            result.revision.selected_attempts["panel_plan"],
             1,
         )
 
@@ -845,7 +845,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
 
             first = orchestrator.run_next(project)
             self.assertEqual(
-                first_cabinet_spec(first.revision.stage_outputs["panels_planned"])[
+                first_cabinet_spec(first.revision.stage_outputs["panel_plan"])[
                     "n_doors"
                 ],
                 2,
@@ -857,9 +857,9 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             )
             self.assertEqual(second.revision.id, first.revision.id)
             self.assertEqual(second.revision.intent_sha256, intent_sha)
-            self.assertEqual(len(second.revision.attempts_for("panels_planned")), 2)
+            self.assertEqual(len(second.revision.attempts_for("panel_plan")), 2)
             self.assertEqual(
-                first_cabinet_spec(second.revision.stage_outputs["panels_planned"])[
+                first_cabinet_spec(second.revision.stage_outputs["panel_plan"])[
                     "n_doors"
                 ],
                 1,
@@ -870,7 +870,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             attempt_dir = store.attempt_dir(
                 project.id,
                 second.revision.id,
-                "panels_planned",
+                "panel_plan",
                 2,
             )
             self.assertTrue((attempt_dir / "output.json").is_file())
@@ -881,7 +881,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
                 1,
             )
             self.assertEqual(
-                first_cabinet_spec(project.latest.stage_outputs["panels_planned"])[
+                first_cabinet_spec(project.latest.stage_outputs["panel_plan"])[
                     "n_doors"
                 ],
                 2,
@@ -914,7 +914,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             self.assertEqual(set(frozen), {"cabinets"})
             original_thickness = first_cabinet_spec(frozen)["board_thickness"]
             live_spec = first_cabinet_spec(
-                project.latest.stage_outputs["panels_planned"]
+                project.latest.stage_outputs["panel_plan"]
             )
             live_spec["board_thickness"] = original_thickness + 81
 
@@ -925,12 +925,12 @@ class FurnitureOrchestratorTests(unittest.TestCase):
                 plan_panels.assert_not_called()
 
             self.assertIn(
-                "manufacturing_planned",
+                "manufacture_plan",
                 first.revision.stage_outputs,
             )
             bom_thicknesses = {
                 panel["thickness"]
-                for panel in first.revision.stage_outputs["manufacturing_planned"][
+                for panel in first.revision.stage_outputs["manufacture_plan"][
                     "panels"
                 ]
             }
@@ -950,7 +950,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             self.assertEqual(second.revision.id, first.revision.id)
             self.assertEqual(second.revision.confirmed_panel_sha256, digest)
             self.assertEqual(
-                len(second.revision.attempts_for("manufacturing_planned")),
+                len(second.revision.attempts_for("manufacture_plan")),
                 2,
             )
             self.assertEqual(
@@ -958,7 +958,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
                 frozen,
             )
             self.assertEqual(
-                second.revision.stage_outputs["manufacturing_planned"][
+                second.revision.stage_outputs["manufacture_plan"][
                     "requested_options"
                 ].get("door_hinge_side"),
                 "left",
@@ -992,7 +992,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             )
             original_thickness = first_cabinet_spec(frozen)["board_thickness"]
             first_cabinet_spec(
-                result.revision.stage_outputs["panels_planned"]
+                result.revision.stage_outputs["panel_plan"]
             )["board_thickness"] = original_thickness + 81
 
             cad = orchestrator.run_next(
@@ -1026,7 +1026,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         self.orchestrator.confirm_intent(project)
         failed = self.orchestrator.run_next(project).revision
         self.assertEqual(failed.workflow.current, WorkflowStage.DESIGN_INTENT)
-        self.assertFalse(failed.latest_attempt("panels_planned").passed)
+        self.assertFalse(failed.latest_attempt("panel_plan").passed)
 
         recovered = self.orchestrator.retry_stage(
             project,
@@ -1035,8 +1035,8 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         ).revision
         self.assertEqual(recovered.id, failed.id)
         self.assertEqual(recovered.workflow.current, WorkflowStage.PANELS_PLANNED)
-        self.assertTrue(recovered.latest_attempt("panels_planned").passed)
-        self.assertIn("panels_planned", recovered.stage_outputs)
+        self.assertTrue(recovered.latest_attempt("panel_plan").passed)
+        self.assertIn("panel_plan", recovered.stage_outputs)
 
     def test_new_intent_revision_does_not_keep_panel_attempts(self) -> None:
         project = self.orchestrator.create_project(
@@ -1047,7 +1047,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         self.orchestrator.confirm_intent(project)
         self.orchestrator.run_next(project)
         parent = project.latest
-        self.assertTrue(parent.attempts_for("panels_planned"))
+        self.assertTrue(parent.attempts_for("panel_plan"))
 
         revised = self.orchestrator.revise(
             project,
@@ -1057,8 +1057,40 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             ),
         )
         self.assertEqual(revised.parent_revision_id, parent.id)
-        self.assertEqual(revised.attempts_for("panels_planned"), [])
-        self.assertNotIn("panels_planned", revised.stage_outputs)
+        self.assertEqual(revised.attempts_for("panel_plan"), [])
+        self.assertNotIn("panel_plan", revised.stage_outputs)
+
+    def test_legacy_panel_and_manufacture_stage_names_are_canonicalized(self) -> None:
+        self.assertEqual(parse_stage("panels_planned"), WorkflowStage.PANELS_PLANNED)
+        self.assertEqual(
+            parse_stage("manufacturing_planned"),
+            WorkflowStage.MANUFACTURING_PLANNED,
+        )
+        self.assertEqual(WorkflowStage.PANELS_PLANNED.value, "panel_plan")
+        self.assertEqual(WorkflowStage.MANUFACTURING_PLANNED.value, "manufacture_plan")
+
+        project = self.orchestrator.create_project(
+            "旧阶段名",
+            cabinet_intent(),
+            stage_inputs=stage_inputs_from_spec(panel_parameters()),
+        )
+        self.orchestrator.confirm_intent(project)
+        self.orchestrator.run_next(project)
+        data = project.to_dict()
+        revision_data = data["revisions"][0]
+        outputs = revision_data["stage_outputs"]
+        outputs["panels_planned"] = outputs.pop("panel_plan")
+        revision_data["approved_stages"].append("panels_planned")
+        revision_data["stage_attempts"]["panels_planned"] = (
+            revision_data["stage_attempts"].pop("panel_plan")
+        )
+        loaded = Project.from_dict(data).latest
+        self.assertIn("panel_plan", loaded.stage_outputs)
+        self.assertNotIn("panels_planned", loaded.stage_outputs)
+        self.assertIn("panel_plan", loaded.approved_stages)
+        self.assertNotIn("panels_planned", loaded.approved_stages)
+        self.assertIn("panel_plan", loaded.stage_attempts)
+        self.assertTrue(loaded.attempts_for("panels_planned"))
 
 
 if __name__ == "__main__":

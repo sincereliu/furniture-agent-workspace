@@ -30,8 +30,8 @@ REQUIRED_DELIVERY_KINDS = frozenset(
 
 PRE_DELIVERY_STAGES = (
     "design_intent",
-    "panels_planned",
-    "manufacturing_planned",
+    "panel_plan",
+    "manufacture_plan",
     "feature_tree_planned",
     "cad_generated",
 )
@@ -145,7 +145,7 @@ def validate_delivery(
         report.add_warning(
             "MANUFACTURING_PRELIMINARY",
             "manufacturing plan is still preliminary and is not factory-ready",
-            "manufacturing_planned.readiness",
+            "manufacture_plan.readiness",
         )
 
     for artifact in artifacts:
@@ -327,7 +327,7 @@ def _manufacturing_readiness(
 ) -> str:
     if stage_outputs is None:
         return ""
-    manufacturing = stage_outputs.get("manufacturing_planned")
+    manufacturing = stage_outputs.get("manufacture_plan")
     if not isinstance(manufacturing, Mapping):
         return ""
     return str(manufacturing.get("readiness", "preliminary"))

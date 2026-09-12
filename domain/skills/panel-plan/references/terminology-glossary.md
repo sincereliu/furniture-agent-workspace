@@ -1,6 +1,6 @@
 # 板件阶段术语规范表
 
-回答“`panel-plan` 阶段哪些术语是规范名，各自的单位和语义口径是什么？”；本文件是 `panels_planned` 阶段的术语唯一规范中心。
+回答“`panel-plan` 阶段哪些术语是规范名，各自的单位和语义口径是什么？”；本文件是 `panel_plan` 阶段的术语唯一规范中心。
 
 ## 使用原则
 
@@ -18,7 +18,7 @@
 | 成品外包络高 | `finished_envelope.height_mm` | mm | 意图阶段规范表达。序列化 `FurnitureSpec` 对应字段是 `height`。 |
 | 挂装方式 | `hanging_mode` | 枚举 | 仅吊柜；规范值 `free_hanging_height`（自由挂高）/`flush_ceiling`（贴顶）。本阶段只读已确认意图，不解析挂装别名。 |
 | 吊柜挂高 | `hanging_height_mm` | mm | 仅 `hanging_mode=free_hanging_height` 时有效。 |
-| 门数量 | `n_doors` | 整数 | `panels_planned` 规范名是 `n_doors`。本阶段不接受 `door_count`。 |
+| 门数量 | `n_doors` | 整数 | `panel_plan` 规范名是 `n_doors`。本阶段不接受 `door_count`。 |
 | 前脸四周边距 | `front_face_margin` | mm | 门板与抽屉前板共用的前脸边距。本阶段不接受 `door_margin`。 |
 | 层板列表 | `shelves` | 列表 | 从上到下排列的结构化层板列表。 |
 | 层板下净高 | `gap_below_mm` | mm 或 `null` | 字段名固定为 `gap_below_mm`；`null` 表示计算层。 |

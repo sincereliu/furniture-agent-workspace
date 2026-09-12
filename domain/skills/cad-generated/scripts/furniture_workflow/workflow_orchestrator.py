@@ -1031,7 +1031,7 @@ class FurnitureOrchestrator:
     ) -> dict[str, Any]:
         live = revision.stage_outputs.get(WorkflowStage.PANELS_PLANNED.value)
         if not isinstance(live, dict):
-            raise ValueError("panels_planned output is required")
+            raise ValueError("panel_plan output is required")
         digest = revision.confirmed_panel_sha256
         if self.project_store is None or not project_id or not digest:
             return live

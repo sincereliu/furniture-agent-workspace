@@ -100,7 +100,7 @@ class ScientificAnalysisAdapterTests(unittest.TestCase):
                 store.panel_path(project.id, digest).read_text(encoding="utf-8")
             )
             original_thickness = frozen["cabinets"][0]["spec"]["board_thickness"]
-            project.latest.stage_outputs["panels_planned"]["cabinets"][0]["spec"][
+            project.latest.stage_outputs["panel_plan"]["cabinets"][0]["spec"][
                 "board_thickness"
             ] = original_thickness + 81
 
@@ -108,7 +108,7 @@ class ScientificAnalysisAdapterTests(unittest.TestCase):
             self.assertEqual(record["source_sha256"], _stable_digest(frozen))
             self.assertNotEqual(
                 record["source_sha256"],
-                _stable_digest(project.latest.stage_outputs["panels_planned"]),
+                _stable_digest(project.latest.stage_outputs["panel_plan"]),
             )
 
     def test_pareto_candidate_requires_explicit_new_revision(self) -> None:

@@ -26,7 +26,11 @@ def _canonical_sha256(value: Any) -> str:
 
 
 def _stage_key(stage: str | WorkflowStage) -> str:
-    return stage.value if isinstance(stage, WorkflowStage) else str(stage)
+    return parse_stage(stage).value
+
+
+def _remap_stage_keys(data: dict[str, Any]) -> dict[str, Any]:
+    return {_stage_key(str(key)): value for key, value in data.items()}
 
 
 @dataclass
@@ -58,7 +62,7 @@ class StageAttempt:
     def from_dict(cls, data: dict[str, Any]) -> "StageAttempt":
         return cls(
             number=int(data["number"]),
-            stage=str(data["stage"]),
+            stage=_stage_key(str(data["stage"])),
             intent_sha256=str(data["intent_sha256"]),
             inputs=deepcopy(dict(data.get("inputs") or {})),
             output=(
@@ -173,7 +177,12 @@ class Revision:
             stage_inputs = _legacy_stage_inputs(raw_intent)
         else:
             stage_inputs = deepcopy(stage_inputs)
-        stage_outputs = deepcopy(dict(data.get("stage_outputs", {})))
+        stage_outputs = _remap_stage_keys(deepcopy(dict(data.get("stage_outputs", {}))))
+        validations: list[ValidationReport] = []
+        for item in data.get("validations", []):
+            payload = dict(item)
+            payload["stage"] = _stage_key(str(payload["stage"]))
+            validations.append(ValidationReport.from_dict(payload))
         return cls(
             id=str(data["id"]),
             number=int(data["number"]),
@@ -182,9 +191,7 @@ class Revision:
             intent=DesignIntent.from_dict(raw_intent),
             stage_inputs=stage_inputs,
             workflow=WorkflowState.from_dict(data["workflow"]),
-            validations=[
-                ValidationReport.from_dict(item) for item in data.get("validations", [])
-            ],
+            validations=validations,
             manifest=(
                 ArtifactManifest.from_dict(data["manifest"])
                 if data.get("manifest")
@@ -192,27 +199,33 @@ class Revision:
             ),
             feature_tree=data.get("feature_tree"),
             stage_outputs=stage_outputs,
-            stage_analyses={
-                str(stage): {
-                    str(name): dict(record)
-                    for name, record in dict(records).items()
+            stage_analyses=_remap_stage_keys(
+                {
+                    str(stage): {
+                        str(name): dict(record)
+                        for name, record in dict(records).items()
+                    }
+                    for stage, records in dict(data.get("stage_analyses", {})).items()
                 }
-                for stage, records in dict(data.get("stage_analyses", {})).items()
-            },
+            ),
             approved_stages=[
                 parse_stage(str(value)).value
                 for value in data.get("approved_stages", [])
             ],
-            stage_attempts={
-                str(stage): [
-                    StageAttempt.from_dict(item) for item in list(records)
-                ]
-                for stage, records in dict(data.get("stage_attempts", {})).items()
-            },
-            selected_attempts={
-                str(stage): int(number)
-                for stage, number in dict(data.get("selected_attempts", {})).items()
-            },
+            stage_attempts=_remap_stage_keys(
+                {
+                    str(stage): [
+                        StageAttempt.from_dict(item) for item in list(records)
+                    ]
+                    for stage, records in dict(data.get("stage_attempts", {})).items()
+                }
+            ),
+            selected_attempts=_remap_stage_keys(
+                {
+                    str(stage): int(number)
+                    for stage, number in dict(data.get("selected_attempts", {})).items()
+                }
+            ),
             confirmed_panel_sha256=(
                 str(data["confirmed_panel_sha256"])
                 if data.get("confirmed_panel_sha256")

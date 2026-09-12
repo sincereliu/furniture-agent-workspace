@@ -1,11 +1,11 @@
 # 板件旁路分析
 
-回答“`panels_planned` 完成后，可以对当前板件事实输出做哪些附加分析，它们如何与核心阶段解耦？”；本文件只描述旁路分析，不定义板件生成规则。
+回答“`panel_plan` 完成后，可以对当前板件事实输出做哪些附加分析，它们如何与核心阶段解耦？”；本文件只描述旁路分析，不定义板件生成规则。
 
 ## 总原则
 
-- `panels_planned` 的唯一事实来源是 `cabinets[]` 里每台柜的 `spec`、`structure`、`back_mount_resolution` 和 `panels`。
-- 旁路分析只读取已确认冻结板件（有 Store 时按 `confirmed_panel_sha256` 读 `store/<project-id>/panels/<sha256>.json`），写入 `stage_analyses.panels_planned`。未确认或无 Store 时读内存中的阶段输出。
+- `panel_plan` 的唯一事实来源是 `cabinets[]` 里每台柜的 `spec`、`structure`、`back_mount_resolution` 和 `panels`。
+- 旁路分析只读取已确认冻结板件（有 Store 时按 `confirmed_panel_sha256` 读 `store/<project-id>/panels/<sha256>.json`），写入 `stage_analyses.panel_plan`。未确认或无 Store 时读内存中的阶段输出。
 - 旁路分析不能静默修改板件事实输出，不能替代结构化准入，也不能直接变成制造或 CAD 输入。
 
 ## 单位与不确定度审计
@@ -19,7 +19,7 @@
 - 用户要求在材料用量、内部空间和复杂度间比较候选时，先读 `../../external/scientific-agent-skills/skills/pymoo/SKILL.md`。
 - 由 LLM 明确目标、变量、约束和引擎（`exact` 或 `pymoo`），再用 `scripts/furniture_panel_planning/design_optimization.py` 生成 `panel_optimization`。引擎必须显式给出，不接受 `auto`。
 - 结果是候选集与 Pareto 摘要，不是新的板件事实输出。
-- 只有用户明确选中候选后，才可通过 `revise_stage_output()` 物化新的 `panels_planned` 结果。
+- 只有用户明确选中候选后，才可通过 `revise_stage_output()` 物化新的 `panel_plan` 结果。
 
 ## 边界
 

@@ -17,8 +17,8 @@
 每个 Revision 记录：
 
 1. `design_intent`
-2. `panels_planned`
-3. `manufacturing_planned`
+2. `panel_plan`
+3. `manufacture_plan`
 4. `feature_tree_planned`
 5. `cad_generated`
 6. `delivery_validated`
@@ -30,8 +30,8 @@
 ```python
 orchestrator.confirm_stage(project)          # 确认当前检查点；意图确认后冻结 JSON
 result = orchestrator.run_next(project)     # 生成下一阶段的第一次尝试
-orchestrator.retry_stage(project, "panels_planned", stage_input={"parameters": ...})
-orchestrator.select_stage_attempt(project, "panels_planned", 1)
+orchestrator.retry_stage(project, "panel_plan", stage_input={"parameters": ...})
+orchestrator.select_stage_attempt(project, "panel_plan", 1)
 ```
 
 进入 CAD 阶段须显式给出输出：
@@ -47,8 +47,8 @@ result = orchestrator.run_next(
 `run_next()`/默认 `run_until()` 不越过未确认检查点。Agent 返回当前输出后等待确认，不用批处理代替确认。
 
 - 意图确认：`confirm_stage(project, "design_intent")` 把 `confirmed=true` 的 `DesignIntent` 冻成 `store/<project-id>/intents/<intent-sha256>.json`。之后板件及后续规划只读这份冻结意图。
-- 板件确认：`confirm_stage(project, "panels_planned")` 把已确认板件冻成 `store/<project-id>/panels/<panel-sha256>.json`，并记下 `confirmed_panel_sha256`。有 Store 时制造、板件旁路分析、CAD `panel-plan.json` 和交付分析哈希都按该哈希读冻结文件，文件缺失则失败；无 Store 时读内存中已确认输出。`retry_stage(project, "manufacturing_planned")` 不重跑板件。
-- 同一冻结上游再试规划：`retry_stage(project, stage, stage_input=...)`。适用于未确认或需作废下游的 `panels_planned`、`manufacturing_planned`、`feature_tree_planned`。失败只记录该次 attempt，不把 Revision 标为 `FAILED`。
+- 板件确认：`confirm_stage(project, "panel_plan")` 把已确认板件冻成 `store/<project-id>/panels/<panel-sha256>.json`，并记下 `confirmed_panel_sha256`。有 Store 时制造、板件旁路分析、CAD `panel-plan.json` 和交付分析哈希都按该哈希读冻结文件，文件缺失则失败；无 Store 时读内存中已确认输出。`retry_stage(project, "manufacture_plan")` 不重跑板件。
+- 同一冻结上游再试规划：`retry_stage(project, stage, stage_input=...)`。适用于未确认或需作废下游的 `panel_plan`、`manufacture_plan`、`feature_tree_planned`。失败只记录该次 attempt，不把 Revision 标为 `FAILED`。
 - 选用某次通过的尝试：`select_stage_attempt(project, stage, number)`，再 `confirm_stage()`。
 - 意图变化：`revise(project, new_intent)`，从 `design_intent` 开始，下游尝试作废。
 - 直接改已有规划结果：`revise_stage_output(project, stage, edited_output)`。
@@ -61,9 +61,9 @@ store/<project-id>/
   project.json
   intents/<intent-sha256>.json
   panels/<panel-sha256>.json
-  revisions/<revision-id>/attempts/panels_planned/001/input.json
-  revisions/<revision-id>/attempts/panels_planned/001/output.json
-  revisions/<revision-id>/attempts/panels_planned/001/status.json
+  revisions/<revision-id>/attempts/panel_plan/001/input.json
+  revisions/<revision-id>/attempts/panel_plan/001/output.json
+  revisions/<revision-id>/attempts/panel_plan/001/status.json
 ```
 
 未传入 `project_store` 时只更新内存中的 Revision；交互服务默认使用仓库根目录下已忽略的 `store/`。
@@ -91,7 +91,7 @@ store/<project-id>/
 }
 ```
 
-`width/depth/height` 必须在意图确认前明确提供；不再用类别预设替代客户确认的外包络。板件必填字段必须完整提交；料档字段（`board_thickness` / `back_thickness` / `door_thickness` / `drawer_bottom_thickness` / `drawer_back_thickness`）可省略，由车间工艺卡展开（料板 18、卷后背板 9、门与抽屉盒同料板）。代码不按柜型静默补其他默认方案。完整值经确定性准入后才写入 `panels_planned.cabinets[].spec`。
+`width/depth/height` 必须在意图确认前明确提供；不再用类别预设替代客户确认的外包络。板件必填字段必须完整提交；料档字段（`board_thickness` / `back_thickness` / `door_thickness` / `drawer_bottom_thickness` / `drawer_back_thickness`）可省略，由车间工艺卡展开（料板 18、卷后背板 9、门与抽屉盒同料板）。代码不按柜型静默补其他默认方案。完整值经确定性准入后才写入 `panel_plan.cabinets[].spec`。
 
 契约为扁平 JSON。规范字段使用 `furniture_category/width/depth/height`；适配器只把外包络字段转成 `DesignIntent`，把板件规范字段路由到 `stage_inputs.panels`，把制造选项（含 `door_hinge_side`、`movable_shelf_connector`）和外观路由到 `stage_inputs.manufacturing`；`room/placement` 只供独立房间布局 API 使用。扁平请求不再接受历史 `type`，该字段仅在旧序列化 spec 加载时恢复。历史 `furniture_type`/`overall_size`/`mount_mode`/`mounting_height` 仍可映射到规范名。可选 `constraints` 必须有阶段映射；未分类约束在协议路由时拒绝。扁平示例里的 `door_hinge_side` 是制造选项，不是板件规范字段。
 

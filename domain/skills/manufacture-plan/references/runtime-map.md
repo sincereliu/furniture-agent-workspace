@@ -4,7 +4,7 @@
 
 ## 交接
 
-板件几何来自已确认冻结文件，不重跑 `panel-plan`。Orchestrator 用 `confirmed_panel_sha256` 读 `store/<project-id>/panels/<sha256>.json`，再 `require_primary_handoff()` 还原 `FurnitureSpec` / `PanelPlacement`。本阶段自己的提案在 `stage_inputs.manufacturing`。无 Store 或尚未记下确认哈希时读内存 `stage_outputs.panels_planned`。
+板件几何来自已确认冻结文件，不重跑 `panel-plan`。Orchestrator 用 `confirmed_panel_sha256` 读 `store/<project-id>/panels/<sha256>.json`，再 `require_primary_handoff()` 还原 `FurnitureSpec` / `PanelPlacement`。本阶段自己的提案在 `stage_inputs.manufacturing`。无 Store 或尚未记下确认哈希时读内存 `stage_outputs.panel_plan`。
 
 ## 五金连接件（`connectors/`）
 
