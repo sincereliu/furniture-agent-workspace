@@ -30,7 +30,7 @@ description: 路由本仓库六阶段家具生成主流程、独立房间摆放�
 - `confirm_stage(design_intent)` 把已确认意图冻成 JSON；板件及后续规划只读这份冻结意图。`confirm_stage(panels_planned)` 把已确认板件冻成 `store/<project-id>/panels/<sha256>.json` 并记下 `confirmed_panel_sha256`；有 Store 时制造、板件旁路分析、CAD 板件快照和交付哈希都按该哈希读冻结文件（缺失则失败），不满意制造时用 `retry_stage(manufacturing_planned)`，不必重跑板件。同一冻结上游上用 `retry_stage()` 再试一版，用 `select_stage_attempt()` 选用某次通过的尝试，再 `confirm_stage()`。规划尝试失败只废这一次，不把整份 Revision 标为失败。
 - 修改设计意图用 `revise()`，从 `design_intent` 开始并作废下游尝试。直接改已有规划结果仍用 `revise_stage_output()`。新 Revision 只继承修改点之前的已确认输出；修改阶段及下游重新确认/生成。
 - 只有用户明确要求房间摆放、靠墙/居中、门窗或障碍物碰撞、摆放图或房间 Viewer 时才调用 `layout-plan`；它不写入主流程 `STAGE_SEQUENCE`，也不是 `panels_planned` 的前置条件。
-- `shelves`、`top_gap_mm`、`n_doors` 属于板件规划输入；`back_mount` 也从板件阶段开始。料厚按 `panel-plan` 车间工艺卡准入（料板 18/22、卷后背板 9），不是意图字段。板件阶段首次物化这些家具本体与结构规格，并按显式 `groove/insert/cover` 生成背板/背拉条；制造阶段只消费已确认板件方案，生成封边、连接、BOM 和孔位。意图和独立房间布局不得提前携带或解析背板结构。
+- 门、层板、抽屉、踢脚、背板安装和料厚从 `panel-plan` 开始，不进意图；提案字段与料档工艺卡以该 Skill 为准。板件阶段首次物化家具本体与结构规格，并按显式 `groove/insert/cover` 生成背板/背拉条。制造阶段只消费已确认板件，生成封边、连接、五金、BOM 和孔位。意图和独立房间布局不得提前携带或解析背板结构。
 - 外部技能只从 `external/text-to-cad/skills/` 按需加载：CAD/STEP/几何/快照用 `cad/SKILL.md`，审查/链接用 `cad-viewer/SKILL.md`，命名采购件用 `step-parts/SKILL.md`；忽略生成副本 `external/text-to-cad/plugins/cad/skills/`。
 - 科学分析只从 `external/scientific-agent-skills/skills/` 按当前阶段按需加载，不把整个集合注册为家具技能：板件尺寸链/公差审计读 `uncertainty-and-units/SKILL.md`，板件多目标候选读 `pymoo/SKILL.md`；制造样件试验读 `experimental-design/SKILL.md`，已有试验数据读 `statistical-analysis/SKILL.md`，板件流转/工位排队读 `simpy/SKILL.md`。
 - 科学分析是 `stage_analyses` 旁路证据，不是新的检查点，也不得直接覆盖 `stage_outputs`。候选方案经用户接受后，按字段所有者调用 `revise()` 或 `revise_stage_output()` 建立新 Revision，再重新确认受影响阶段及下游。
@@ -39,7 +39,7 @@ description: 路由本仓库六阶段家具生成主流程、独立房间摆放�
 
 ## 边界
 
-- 已确认意图只定义家具类别和成品外包络；板件结构和制造方案分别以各自已确认的阶段输出为事实来源。六个串联 Skill 对应六个用户可见检查点，生成 CAD 前须确认 `design_intent`、`panels_planned`、`manufacturing_planned` 与 `feature_tree_planned`。房间布局是独立结果，不参与交付检查点谱系。
+- 已确认意图定义家具类别、成品外包络，以及吊柜的挂装方式与挂高；板件结构和制造方案分别以各自已确认的阶段输出为事实来源。六个串联 Skill 对应六个用户可见检查点，生成 CAD 前须确认 `design_intent`、`panels_planned`、`manufacturing_planned` 与 `feature_tree_planned`。房间布局是独立结果，不参与交付检查点谱系。
 - `domain/skills/cad-artifacts/scripts/furniture_workflow/` 是唯一应用层入口；CLI/API/Agent 仅适配协议。阶段规则归各 Skill，Orchestrator 只编排、记录状态/验证/产物谱系。交互式构造 Orchestrator 时传入 `JsonProjectStore(<workspace>/store)`，确认意图后写出冻结意图 JSON，确认板件后写出冻结板件 JSON。
 - 可复用脚本和运行时模块放在所属阶段 Skill 的 `scripts/`；跨阶段入口与集成测试放在 `domain/skills/cad-artifacts/scripts/`。一次性检查、迁移、调试和实验统一放在已忽略的 `temp/<project-slug>/`，每个项目或任务独占一个目录，使脚本与派生产物可按目录整体识别和删除；任务结束即清理。生成 CAD 源码使用保留路径 `temp/cad-source/<artifact-name>/`。
 - 禁止根级 `scripts/`、`packages/`、`tests/`、`scratch/`、`tmp/`；生成源码不得进入 `generated/`。工作区目录变更后运行 `domain/skills/cad-artifacts/scripts/validate_workspace_layout.py` 并清零违规。
