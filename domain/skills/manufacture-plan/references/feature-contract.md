@@ -1,8 +1,10 @@
 # 特征契约（制造层）
 
-状态：**契约先行，逐步实施**。`kind="hole"`（孔）、`kind="groove"`（槽）、
-`kind="edge_band"`（封边）三种特征的契约与无损转换函数均已落地；连接点
-（`ConnectionPoint`）实体在第三步落地。校验/导出改为「遍历 Feature」仍待后续。
+状态：**已落地**。特征已拆成**判别联合**（基类 `Feature` +
+`HoleFeature` / `GrooveFeature` / `EdgeBandFeature` 三子类），无损转换函数均已落地；
+连接点（`ConnectionPoint`）实体已落地。**生产端已反转**：`plan_manufacturing` 先生成
+一次孔 → Feature + ConnectionPoint（本源），BOM/校验/导出从它们派生（不再从 BOM 反推）。
+BOM 展示（`format_bom_markdown`）仍读原始结构，待后续。
 代码骨架见 `scripts/furniture_manufacturing/features.py`。
 
 ## 目标抽象（一句话）
@@ -20,7 +22,7 @@ BOM、校验、导出、设备路线都是它们的派生或标注。
 
 分界线的判据是「改变面板几何 vs 只改变加工/五金」：**改变面板几何（尺寸/位置/拓扑）
 → panel-plan；只改变孔/槽/封边/BOM → manufacturing。** 设计层产出 `PanelJoint` 拓扑
-（`female/male/face/edge`）；不产孔位、不选五金、不决定连不连与铰链侧——那些由制造层
+（`bearing/end/face/edge`）；不产孔位、不选五金、不决定连不连与铰链侧——那些由制造层
 决定/推导（「用什么五金仍由制造连接件决定」）。孔位是「实现」不是「目标」：它在工艺层
 由代码确定性推导，不在设计层定。
 
@@ -46,7 +48,7 @@ panel-plan 失效、从面板重跑——面板其实没变，白跑且修订语
   重跑 manufacturing 及下游。
 - ✅ `connection`（连不连 on/off）：**已迁移**。panel-plan 不再解析，制造层在
   `plan_manufacturing` 按面板类型重解析（`default_joint_connection`）；拓扑
-  （`female/male/face/edge`）留在 panel-plan。
+  （`bearing/end/face/edge`）留在 panel-plan。
 - ✅ `door_hinge_side`（铰链侧）：**已迁移**。单门为制造输入（`requested_options`，
   `left`/`right`），双门由制造按门板 X 位置派生；panel-plan 不再携带。
 - `back_mount`（groove/insert/cover）**留在** panel-plan：它改变背板尺寸与柜体深度
@@ -58,18 +60,26 @@ panel-plan 失效、从面板重跑——面板其实没变，白跑且修订语
 
 ## 特征（Feature）
 
-一处加工动作，挂在某块板上。字段：
+一处加工动作，挂在某块板上。用**判别联合**表示：基类 `Feature` + 三个子类。
+这是**继承**关系（一个特征实例是三种之一），不是组成关系（不是「一个特征分成三个」）。
+类型判断用 `isinstance(feature, HoleFeature)`，不靠 `kind` 字符串。
 
-| 字段 | 含义 | 现状 |
-|------|------|------|
-| `kind` | 特征种类：`hole` / `groove` / `edge_band` | 只实现 `hole` |
-| `panel_label` | 宿主板 | 来自 `HoleSpec` |
-| `x_local` / `y_local` / `z_local` | 局部原生位置（板件参考系） | 来自 `HoleSpec` |
-| `hole_type` | 孔型（「哪种孔」，经目录映射到五金材料） | 来自 `HoleSpec` |
-| `diameter` / `depth` / `direction` / `is_face_hole` | 形状规格 | 来自 `HoleSpec` |
-| `connection_id` | 连接点引用（字符串，待升级实体） | 来自 `HoleSpec` |
-| `x_global` / `y_global` / `z_global` | 柜体坐标（派生，迁移期保留，目标现算） | 来自 `HoleSpec` |
-| `note` | 备注 | 来自 `HoleSpec` |
+### 基类 Feature（三种加工共有的字段）
+
+| 字段 | 含义 |
+|------|------|
+| `panel_label` | 宿主板 |
+| `x_local` / `y_local` / `z_local` | 局部原生位置（板件参考系） |
+| `x_global` / `y_global` / `z_global` | 柜体坐标（派生，迁移期保留，目标现算） |
+| `note` | 备注 |
+
+### 三个子类（各自专属字段）
+
+| 子类 | 加工 | 专属字段 |
+|------|------|---------|
+| `HoleFeature` | 打孔 | `hole_type`、`diameter`、`depth`、`direction`、`is_face_hole`、`connection_id` |
+| `GrooveFeature` | 开槽 | `feature_id`、`size_x/y/z` |
+| `EdgeBandFeature` | 封边 | `edges`、`material` |
 
 ### 规格 vs 特征（两层，不混）
 
@@ -81,16 +91,23 @@ panel-plan 失效、从面板重跑——面板其实没变，白跑且修订语
 
 ### 材料不存进特征
 
-特征只存 `hole_type`；「这个孔消耗哪种五金」由 `hole_type` 查目录得到。
+`HoleFeature` 只存 `hole_type`；「这个孔消耗哪种五金」由 `hole_type` 查目录得到。
 目录是单一真源，不在每个孔上各抄一遍材料、避免抄着抄着不一致。
 
 ## 连接点（ConnectionPoint）
 
 一个三合一 = 轮孔 + 杆孔 + 螺母孔 = 一个连接点，本质是「一件事：把两块板连起来」。
 
-- 现状：`connection_id` 只是 `HoleSpec` 上的字符串字段（`<female>→<male>#<排次>`）；
-- 目标（第三步）：升级为实体，支持整体增删、按点校验，消除「删一个孔出孤儿」；
-- 现状已做到：校验按 `connection_id` 对齐（每个连接点恰好 1 轮 + 1 杆 + 1 螺母）。
+- ✅ 实体已落地（`connection_points.py`）：`ConnectionPoint` 持有稳定 id（`connection_id`）+
+  结构字段 `bearing_id`/`end_id`/`row_index`/`owner`（归属连接件）+ 组成孔 `holes`；
+- `collect_connection_points(holes, owner=...)` 按 `connection_id` 把孔分组为连接点
+  并打上 owner；`connection_id` 字符串仍保留在 `HoleSpec`/`HoleFeature` 上作为主键
+  （供导出/Viewer 分组）；
+- ✅ 反转彻底：`plan_manufacturing` 先生成一次孔 → 带 owner 的 ConnectionPoint +
+  Feature（本源），BOM/校验/导出都从它们派生——三合一/背板校验按 owner 过滤读
+  `bom.connection_points`，不再各自重新生成孔；「删一个孔出孤儿」由快照缺件直接暴露；
+- 生产端仍逐孔产出 `HoleSpec`（`make_connection_id` 逐孔打标），连接点在规划阶段
+  统一分组打标——「由连接件直接产出 ConnectionPoint」仍为可选后续。
 
 ## 派生规则
 
@@ -110,14 +127,21 @@ panel-plan 失效、从面板重跑——面板其实没变，白跑且修订语
 
 ## 实施路径
 
-1. ✅ Feature 契约 + `kind="hole"`，无损装 `HoleSpec`；
-2. ✅ 槽（`cut_box`）、封边 → `kind="groove"` / `kind="edge_band"` 的**契约与转换函数**
-   已落地（`from_machining_operation` / `from_edge_banding` + 无损测试）；校验/导出改为
-   遍历 Feature 尚待后续；
-3. `connection_id` → `ConnectionPoint` 实体。
+1. ✅ Feature 契约 + `HoleFeature`，无损装 `HoleSpec`；
+2. ✅ 槽（`cut_box`）、封边 → `GrooveFeature` / `EdgeBandFeature` 的**契约与转换函数**
+   已落地（`from_machining_operation` / `from_edge_banding` + 无损测试），并已拆成
+   判别联合（基类 + 三子类）；`collect_features` 统一入口、校验（孔/槽/封边）与
+   孔导出（`emit_drilled_holes`）均已改为遍历 Feature；BOM 展示
+   （`format_bom_markdown`）仍读原始结构，待后续；
+3. ✅ `connection_id` → `ConnectionPoint` 实体（`connection_points.py` + 按点校验 + 契约测试）；
+4. ✅ 生产端反转：`plan_manufacturing` 先生成一次孔 → Feature + ConnectionPoint
+   （带 `owner` 归属），BOM（hardware）从它们派生；`BOMReport` 承载
+   `features`/`connection_points`；校验/BOM 按 owner 过滤读 `bom.connection_points`；
+   Feature 增加 `kind` + `feature_from_dict` 序列化往返；`revise_stage_output`
+   直接编辑制造输出后重算派生快照（`recompute_features`）。
 
 ## 验证判据
 
-- 第一步：Feature 能无损装下 `HoleSpec` 全部字段（测试覆盖）；
-- 第二步：同一个校验/导出入口同时处理孔与槽；
-- 第三步：删一个连接点 → 三个孔 + BOM 数量一起消失，校验通过。
+- ✅ 第一步：Feature 能无损装下 `HoleSpec` 全部字段（测试覆盖）；
+- ✅ 第二步：同一个校验/导出入口同时处理孔/槽/封边（`collect_features` + 校验遍历，测试覆盖）；
+- ✅ 第三步：连接点实体按点校验（每个点 1 轮 + 1 杆 + 1 螺母，测试覆盖）。

@@ -9,12 +9,17 @@
 
 from typing import Any, Dict, List, Mapping, Set
 
+from furniture_manufacturing.connection_points import (
+    ConnectionPoint,
+    collect_connection_points,
+)
 from furniture_manufacturing.connectors.base import (
     Connector,
     HoleSpec,
     _opposite,
     make_connection_id,
 )
+from furniture_manufacturing.features import from_hole_spec
 from furniture_manufacturing.manufacturing_models import HardwareRecord, MachiningOperation, PanelRecord
 from furniture_panel_planning.joint_topology import joint_is_connected
 
@@ -560,16 +565,31 @@ class TrinityConnector(Connector):
             merged = [round(h / snap) * snap for h in merged]
         return merged
 
+    def _own_connection_points(
+        self,
+        panels: List[PanelRecord],
+        connection_points: List[ConnectionPoint] | None,
+    ) -> List[ConnectionPoint]:
+        """本连接件自己的连接点：有共享列表就按 owner 过滤，否则自推导。"""
+        if connection_points is None:
+            return collect_connection_points(
+                [from_hole_spec(h) for h in self.generate_holes_for_panels(panels)],
+                owner=self.__class__.__name__,
+            )
+        return [
+            p for p in connection_points if p.owner == self.__class__.__name__
+        ]
+
     def boms(
         self,
         panels: List[PanelRecord],
         *,
         options: Mapping[str, Any] | None = None,
+        connection_points: List[ConnectionPoint] | None = None,
     ) -> List[HardwareRecord]:
         """生成三合一 BOM 清单。
 
-        数量 = 实际生成的偏心轮孔数（孔即真源）。
-        一套三合一 = 1 偏心轮 + 1 连接杆 + 1 预埋螺母。
+        数量 = 连接点数（一套三合一 = 一个连接点，孔即真源）。
         品牌由确认选择（options）决定；未选择时目录唯一才返回。
         """
         matched = self.match(panels)
@@ -577,8 +597,7 @@ class TrinityConnector(Connector):
         opts = (options or {}).get(self.catalog_entry, {})
         opts = dict(opts) if isinstance(opts, Mapping) else {}
         brand = self.resolve_brand(spec.get("brands", []), opts.get("brand"))
-        holes = self.generate_holes_for_panels(panels)
-        quantity = sum(1 for h in holes if h.hole_type == "three_in_one_cam")
+        quantity = len(self._own_connection_points(panels, connection_points))
         return [HardwareRecord(
             name=self.name,
             spec="偏心轮+连接杆+预埋螺母（实物规格待确认）",
@@ -591,45 +610,36 @@ class TrinityConnector(Connector):
         panels: List[PanelRecord],
         hardware: List[HardwareRecord],
         drilled: Dict[str, Any],
+        connection_points: List[ConnectionPoint] | None = None,
     ) -> None:
-        """三合一专属校验：按连接点(connection_id)对齐，每个连接点恰好 1 轮 + 1 杆 + 1 螺母。
+        """三合一专属校验：按连接点(ConnectionPoint)对齐，每个连接点恰好 1 轮 + 1 杆 + 1 螺母。
 
         只统计本连接件自己生成的孔（柜体三合一）；背板三合一由
         BackMountConnector 负责，合并孔类型后也不会把背板的孔算进柜体。
         """
-        by_conn: Dict[str, Dict[str, int]] = {}
-        for hole in self.generate_holes_for_panels(panels):
-            if not hole.connection_id:
-                continue
-            entry = by_conn.setdefault(
-                hole.connection_id, {"cam": 0, "rod": 0, "nut": 0}
-            )
-            key = {
-                "three_in_one_cam": "cam",
-                "three_in_one_rod": "rod",
-                "three_in_one_nut": "nut",
-            }.get(hole.hole_type)
-            if key:
-                entry[key] += 1
+        points = self._own_connection_points(panels, connection_points)
         hardware_by_name = {item.name: item for item in hardware}
         trinity_hardware = hardware_by_name.get(self.name)
-        if trinity_hardware is not None and trinity_hardware.quantity != len(by_conn):
+        if trinity_hardware is not None and trinity_hardware.quantity != len(points):
             report.add_error(
                 "TRINITY_HARDWARE_COUNT_MISMATCH",
-                f"三合一连接件数量 {trinity_hardware.quantity} 与连接点数 {len(by_conn)} 不一致",
+                f"三合一连接件数量 {trinity_hardware.quantity} 与连接点数 {len(points)} 不一致",
                 "hardware",
             )
-        for conn_id, counts in sorted(by_conn.items()):
-            if counts["rod"] != counts["cam"]:
+        for point in points:
+            cam = len(point.holes_of_type("three_in_one_cam"))
+            rod = len(point.holes_of_type("three_in_one_rod"))
+            nut = len(point.holes_of_type("three_in_one_nut"))
+            if rod != cam:
                 report.add_error(
                     "TRINITY_ROD_CAM_COUNT_MISMATCH",
-                    f"连接点 {conn_id} 连接杆孔数 {counts['rod']} 与偏心轮孔数 {counts['cam']} 不一致（1:1 配对）",
+                    f"连接点 {point.connection_id} 连接杆孔数 {rod} 与偏心轮孔数 {cam} 不一致（1:1 配对）",
                     "drilled_holes",
                 )
-            if counts["nut"] != counts["cam"]:
+            if nut != cam:
                 report.add_error(
                     "TRINITY_NUT_CAM_COUNT_MISMATCH",
-                    f"连接点 {conn_id} 预埋螺母孔数 {counts['nut']} 与偏心轮孔数 {counts['cam']} 不一致（1:1 配对）",
+                    f"连接点 {point.connection_id} 预埋螺母孔数 {nut} 与偏心轮孔数 {cam} 不一致（1:1 配对）",
                     "drilled_holes",
                 )
 

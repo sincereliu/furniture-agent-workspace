@@ -11,11 +11,16 @@ from __future__ import annotations
 from math import ceil
 from typing import Any, Dict, List, Mapping
 
+from furniture_manufacturing.connection_points import (
+    ConnectionPoint,
+    collect_connection_points,
+)
 from furniture_manufacturing.connectors.base import (
     Connector,
     HoleSpec,
     make_connection_id,
 )
+from furniture_manufacturing.features import from_hole_spec
 from furniture_manufacturing.manufacturing_models import (
     HardwareRecord,
     MachiningOperation,
@@ -66,17 +71,33 @@ class BackMountConnector(Connector):
             return self._insert_holes(panels)
         return []
 
+    def _own_connection_points(
+        self,
+        panels: List[PanelRecord],
+        connection_points: List[ConnectionPoint] | None,
+    ) -> List[ConnectionPoint]:
+        """本连接件自己的连接点：有共享列表就按 owner 过滤，否则自推导。"""
+        if connection_points is None:
+            return collect_connection_points(
+                [from_hole_spec(h) for h in self.generate_holes_for_panels(panels)],
+                owner=self.__class__.__name__,
+            )
+        return [
+            p for p in connection_points if p.owner == self.__class__.__name__
+        ]
+
     def boms(
         self,
         panels: List[PanelRecord],
         *,
         options: Mapping[str, Any] | None = None,
+        connection_points: List[ConnectionPoint] | None = None,
     ) -> List[HardwareRecord]:
         mode = self._mode(panels)
         if mode != "insert":
             return []
-        holes = self.generate_holes_for_panels(panels)
-        quantity = self._connection_count(holes)
+        points = self._own_connection_points(panels, connection_points)
+        quantity = len(points)
         if quantity <= 0:
             return []
         spec = self.catalog.get("three_in_one", {}).get("standard", {})
@@ -106,41 +127,31 @@ class BackMountConnector(Connector):
         panels: List[PanelRecord],
         hardware: List[HardwareRecord],
         drilled: Dict[str, Any],
+        connection_points: List[ConnectionPoint] | None = None,
     ) -> None:
-        """背板三合一（insert）专属校验：按连接点对齐，每个连接点 1 轮 + 1 杆 + 1 螺母。"""
+        """背板三合一（insert）专属校验：按连接点(ConnectionPoint)对齐，每个连接点 1 轮 + 1 杆 + 1 螺母。"""
         mode = self._mode(panels)
         if mode != "insert":
             return
-        holes = self.generate_holes_for_panels(panels)
-        by_conn: Dict[str, Dict[str, int]] = {}
-        for hole in holes:
-            if not hole.connection_id:
-                continue
-            entry = by_conn.setdefault(
-                hole.connection_id, {"cam": 0, "rod": 0, "nut": 0}
-            )
-            key = {
-                "three_in_one_cam": "cam",
-                "three_in_one_rod": "rod",
-                "three_in_one_nut": "nut",
-            }.get(hole.hole_type)
-            if key:
-                entry[key] += 1
+        points = self._own_connection_points(panels, connection_points)
         hardware_by_name = {item.name: item for item in hardware}
         hardware_name = "三合一连接件（背板）"
         hardware_item = hardware_by_name.get(hardware_name)
-        if hardware_item is None or hardware_item.quantity != len(by_conn):
+        if hardware_item is None or hardware_item.quantity != len(points):
             report.add_error(
                 "BACK_MOUNT_HARDWARE_COUNT_MISMATCH",
-                f"背板三合一数量与连接点数不一致（期望 {len(by_conn)} 套）",
+                f"背板三合一数量与连接点数不一致（期望 {len(points)} 套）",
                 "hardware",
             )
-        for conn_id, counts in sorted(by_conn.items()):
-            if not (counts["cam"] == counts["rod"] == counts["nut"] == 1):
+        for point in points:
+            cam = len(point.holes_of_type("three_in_one_cam"))
+            rod = len(point.holes_of_type("three_in_one_rod"))
+            nut = len(point.holes_of_type("three_in_one_nut"))
+            if not (cam == rod == nut == 1):
                 report.add_error(
                     "BACK_MOUNT_HOLE_COUNT_MISMATCH",
-                    f"背板连接点 {conn_id} 三件套不完整："
-                    f"轮={counts['cam']} 杆={counts['rod']} 螺母={counts['nut']}（期望各 1）",
+                    f"背板连接点 {point.connection_id} 三件套不完整："
+                    f"轮={cam} 杆={rod} 螺母={nut}（期望各 1）",
                     "drilled_holes",
                 )
 
@@ -320,11 +331,6 @@ class BackMountConnector(Connector):
         """从面板列表中提取统一的背板安装模式。"""
         modes = {panel.back_mount for panel in panels if panel.back_mount}
         return next(iter(modes)) if len(modes) == 1 else ""
-
-    @staticmethod
-    def _connection_count(holes: List[HoleSpec]) -> int:
-        """统计不同连接点(connection_id)的数量（一套三合一 = 一个连接点）。"""
-        return len({hole.connection_id for hole in holes if hole.connection_id})
 
     @staticmethod
     def _spaced_positions(

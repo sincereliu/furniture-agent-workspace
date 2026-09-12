@@ -19,10 +19,13 @@ from furniture_design_intent.design_intent import DesignIntent
 from furniture_design_intent.validation import validate_intent
 from furniture_feature_tree.feature_tree_builder import panels_to_feature_tree
 from furniture_feature_tree.validation import validate_feature_tree
+from furniture_manufacturing.connection_points import ConnectionPoint
+from furniture_manufacturing.features import feature_from_dict
 from furniture_manufacturing.manufacturing_bom import (
     BOMReport,
     emit_drilled_holes,
     plan_manufacturing,
+    recompute_features,
 )
 from furniture_manufacturing.manufacturing_models import (
     HardwareRecord,
@@ -177,6 +180,27 @@ class FurnitureOrchestrator:
         revision.stage_outputs[WorkflowStage.DESIGN_INTENT.value] = (
             revision.intent.to_dict()
         )
+        if changed_stage == WorkflowStage.MANUFACTURING_PLANNED:
+            # 直接编辑制造输出后，重算派生快照（features/connection_points），
+            # 避免它们与 panels/operations 漂移。
+            revised_panels = [
+                PanelRecord.from_dict(item)
+                for item in output.get("panels", [])
+            ]
+            revised_operations = [
+                MachiningOperation(**item)
+                for item in output.get("operations", [])
+            ]
+            features, connection_points = recompute_features(
+                revised_panels, revised_operations
+            )
+            output = {
+                **output,
+                "features": [asdict(feature) for feature in features],
+                "connection_points": [
+                    asdict(point) for point in connection_points
+                ],
+            }
         revision.stage_outputs[changed_stage.value] = deepcopy(output)
         if changed_stage == WorkflowStage.PANELS_PLANNED:
             revised_spec = primary_cabinet(output).get("spec", {})
@@ -1096,6 +1120,13 @@ class FurnitureOrchestrator:
             readiness=str(output.get("readiness", "preliminary")),
             requested_options=dict(output.get("requested_options", {})),
             appearance=dict(output.get("appearance", {})),
+            features=[
+                feature_from_dict(item) for item in output.get("features", [])
+            ],
+            connection_points=[
+                ConnectionPoint.from_dict(item)
+                for item in output.get("connection_points", [])
+            ],
         )
 
     @staticmethod

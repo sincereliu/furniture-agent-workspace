@@ -77,6 +77,7 @@ class DrawerSlideConnector(Connector):
         panels: List[PanelRecord],
         *,
         options: Mapping[str, Any] | None = None,
+        connection_points: List[Any] | None = None,
     ) -> List[HardwareRecord]:
         matched = self.match(panels)
         instances = matched["instances"]

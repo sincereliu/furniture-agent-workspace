@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Mapping
 import yaml
+from furniture_manufacturing.connection_points import ConnectionPoint
 from furniture_manufacturing.manufacturing_models import HardwareRecord, MachiningOperation, PanelRecord
 
 
@@ -104,6 +105,7 @@ class Connector:
         panels: List[PanelRecord],
         *,
         options: Mapping[str, Any] | None = None,
+        connection_points: List[ConnectionPoint] | None = None,
     ) -> List[HardwareRecord]:
         raise NotImplementedError
 
@@ -113,6 +115,7 @@ class Connector:
         panels: List[PanelRecord],
         hardware: List[HardwareRecord],
         drilled: Dict[str, Any],
+        connection_points: List[ConnectionPoint] | None = None,
     ) -> None:
         """五金专属校验；默认 no-op，由各 Connector 覆盖。"""
         return None

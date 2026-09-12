@@ -117,6 +117,7 @@ class TwoInOneConnector(Connector):
         panels: List[PanelRecord],
         *,
         options: Mapping[str, Any] | None = None,
+        connection_points: List[Any] | None = None,
     ) -> List[HardwareRecord]:
         shelves = _selected_shelves(panels, self.catalog_entry)
         if not shelves:
@@ -186,6 +187,7 @@ class ShelfPinConnector(Connector):
         panels: List[PanelRecord],
         *,
         options: Mapping[str, Any] | None = None,
+        connection_points: List[Any] | None = None,
     ) -> List[HardwareRecord]:
         shelves = _selected_shelves(panels, self.catalog_entry)
         if not shelves:

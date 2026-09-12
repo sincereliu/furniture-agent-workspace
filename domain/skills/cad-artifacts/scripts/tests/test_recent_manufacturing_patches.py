@@ -179,7 +179,11 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
         self.assertNotEqual(male_front[0].id, male_front[1].id)
 
     def test_trinity_rod_cam_count_mismatch_is_rejected(self) -> None:
-        """删掉一个连接杆孔后，校验必须报 TRINITY_ROD_CAM_COUNT_MISMATCH。"""
+        """删掉一个连接杆孔后，校验必须报 TRINITY_ROD_CAM_COUNT_MISMATCH。
+
+        连接点本源在 plan_manufacturing 一次性生成：把「删杆孔」放在规划前，
+        让 BOM 的 connection_points 快照本身缺一根杆，校验读快照即能报缺件。
+        """
         spec = furniture_spec(
             furniture_category="floor_cabinet",
             width=800,
@@ -188,7 +192,6 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
             n_doors=2,
         )
         placements = plan_panels(spec, CabinetStructure.from_spec(spec))
-        manufacturing = plan_manufacturing(spec, placements)
         orig = TrinityConnector.generate_holes_for_panels
 
         def drop_one_male(self, panels):
@@ -205,7 +208,9 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
         with mock.patch.object(
             TrinityConnector, "generate_holes_for_panels", drop_one_male
         ):
-            report = validate_manufacturing(spec, manufacturing, placements)
+            manufacturing = plan_manufacturing(spec, placements)
+
+        report = validate_manufacturing(spec, manufacturing, placements)
 
         self.assertFalse(report.passed)
         self.assertIn(

@@ -10,7 +10,15 @@ from furniture_panel_planning.panel_spec import FurnitureSpec, resolve_back_moun
 from furniture_panel_planning.panel_models import PanelPlacement
 
 from .manufacturing_edge_banding import get_edge_banding
+from .connection_points import ConnectionPoint, collect_connection_points
 from .connectors import ALL_CONNECTORS
+from .features import (
+    Feature,
+    HoleFeature,
+    from_edge_banding,
+    from_hole_spec,
+    from_machining_operation,
+)
 from .manufacturing_models import HardwareRecord, MachiningOperation, PanelRecord
 
 
@@ -56,6 +64,9 @@ class BOMReport:
     readiness: str = "preliminary"
     requested_options: dict[str, Any] = field(default_factory=dict)
     appearance: dict[str, Any] = field(default_factory=dict)
+    # 本源：每一处加工（孔/槽/封边）与配对孔打包的连接点。BOM/校验/导出由它们派生。
+    features: list[Feature] = field(default_factory=list)
+    connection_points: list[ConnectionPoint] = field(default_factory=list)
 
     @property
     def panel_count(self) -> int:
@@ -127,6 +138,55 @@ def _resolve_joint_connections(panels: list[PanelRecord]) -> None:
         panel.joints = resolved
 
 
+def _derive_features_and_points(
+    panels: List[PanelRecord],
+    operations: List[MachiningOperation],
+    holes_by_connector: Mapping[Any, list],
+) -> tuple[list[Feature], list[ConnectionPoint]]:
+    """从「生成一次」的孔 + 槽 + 封边派生 Feature 与 ConnectionPoint 本源。"""
+    hole_features = [
+        from_hole_spec(hole)
+        for holes in holes_by_connector.values()
+        for hole in holes
+    ]
+    groove_features = [
+        from_machining_operation(operation)
+        for operation in operations
+        if operation.operation_type == "cut_box"
+    ]
+    edge_features = [
+        edge_feature
+        for panel in panels
+        for edge_feature in from_edge_banding(panel.label, panel.edge_banding)
+    ]
+    features = hole_features + groove_features + edge_features
+    connection_points: list[ConnectionPoint] = []
+    for connector_cls, holes in holes_by_connector.items():
+        connection_points.extend(
+            collect_connection_points(
+                [from_hole_spec(hole) for hole in holes],
+                owner=connector_cls.__name__,
+            )
+        )
+    return features, connection_points
+
+
+def recompute_features(
+    panels: List[PanelRecord],
+    operations: List[MachiningOperation],
+) -> tuple[list[Feature], list[ConnectionPoint]]:
+    """从（可能被修订过的）板件+槽重新派生 Feature + ConnectionPoint。
+
+    供 `revise_stage_output` 在直接编辑制造输出后重算，保持
+    features/connection_points 与 panels/operations 一致（避免持久化快照漂移）。
+    """
+    holes_by_connector = {
+        connector_cls: connector_cls().generate_holes_for_panels(panels)
+        for connector_cls in ALL_CONNECTORS
+    }
+    return _derive_features_and_points(panels, operations, holes_by_connector)
+
+
 def plan_manufacturing(
     spec: FurnitureSpec,
     placements: list[PanelPlacement],
@@ -162,6 +222,16 @@ def plan_manufacturing(
     ]
     _resolve_joint_connections(panels)
     operations = _back_groove_operations(spec, back_mount, placements)
+
+    # ── 本源：生成一次孔 → Feature + ConnectionPoint ──
+    holes_by_connector = {
+        connector_cls: connector_cls().generate_holes_for_panels(panels)
+        for connector_cls in ALL_CONNECTORS
+    }
+    features, connection_points = _derive_features_and_points(
+        panels, operations, holes_by_connector
+    )
+
     dimensions = f"{spec.width:.0f}×{spec.height:.0f}×{spec.depth:.0f}mm"
     connector_options = options.get("options", {})
     if not isinstance(connector_options, Mapping):
@@ -172,12 +242,18 @@ def plan_manufacturing(
         ),
         dimensions=dimensions,
         panels=panels,
-        hardware=estimate_hardware(panels, options=connector_options),
+        hardware=estimate_hardware(
+            panels,
+            options=connector_options,
+            connection_points=connection_points,
+        ),
         operations=operations,
         total_area_m2=sum(panel.area_m2 for panel in panels),
         readiness="preliminary",
         requested_options=options,
         appearance=dict(appearance or {}),
+        features=features,
+        connection_points=connection_points,
     )
 
 
@@ -337,11 +413,23 @@ def estimate_hardware(
     panels: List[PanelRecord],
     *,
     options: Mapping[str, Any] | None = None,
+    connection_points: list[ConnectionPoint] | None = None,
 ) -> List[HardwareRecord]:
+    """从「已分组、带 owner」的连接点派生五金 BOM。
+
+    connection_points 由 plan_manufacturing 生成一次（Feature/ConnectionPoint 本源）；
+    缺省时各连接件自行重推导，保持独立调用可用。
+    """
     hardware: List[HardwareRecord] = []
     for connector_cls in ALL_CONNECTORS:
         connector = connector_cls()
-        hardware.extend(connector.boms(panels, options=options))
+        hardware.extend(
+            connector.boms(
+                panels,
+                options=options,
+                connection_points=connection_points,
+            )
+        )
     return hardware
 
 
@@ -398,33 +486,42 @@ def _build_color_legend() -> Dict[str, Dict[str, str]]:
 _COLOR_LEGEND = _build_color_legend()
 
 
+def collect_features(bom: BOMReport) -> list[Feature]:
+    """返回 BOMReport 承载的 Feature 本源（不再重新生成孔）。
+
+    Feature/ConnectionPoint 由 plan_manufacturing 生成一次，BOM/校验/导出
+    都从它派生；这里只读不生成。
+    """
+    return list(bom.features)
+
+
 def emit_drilled_holes(bom: BOMReport) -> dict:
     """Generate a per-panel hole summary for Viewer overlay.
 
-    Uses Connectors to produce HoleSpec records with both global and local
-    coordinates, then groups them by panel label.
+    Uses collect_features to produce a unified Feature list, then serializes
+    HoleFeature records (global + local coordinates) grouped by panel label.
     """
     panel_holes: dict[str, list[dict]] = {}
 
-    for connector_cls in ALL_CONNECTORS:
-        connector = connector_cls()
-        for hole in connector.generate_holes_for_panels(bom.panels):
-            panel_holes.setdefault(hole.panel_label, []).append({
-                "hole_type": hole.hole_type,
-                "color": _COLOR_LEGEND.get(hole.hole_type, {}).get("color", "#888888"),
-                "x": round(hole.x_global, 2),
-                "y": round(hole.y_global, 2),
-                "z": round(hole.z_global, 2),
-                "local_x": round(hole.x_local, 2),
-                "local_y": round(hole.y_local, 2),
-                "local_z": round(hole.z_local, 2),
-                "diameter": hole.diameter,
-                "depth": hole.depth,
-                "direction": hole.direction,
-                "is_face_hole": hole.is_face_hole,
-                "note": hole.note,
-                "connection_id": hole.connection_id,
-            })
+    for feature in collect_features(bom):
+        if not isinstance(feature, HoleFeature):
+            continue
+        panel_holes.setdefault(feature.panel_label, []).append({
+            "hole_type": feature.hole_type,
+            "color": _COLOR_LEGEND.get(feature.hole_type, {}).get("color", "#888888"),
+            "x": round(feature.x_global, 2),
+            "y": round(feature.y_global, 2),
+            "z": round(feature.z_global, 2),
+            "local_x": round(feature.x_local, 2),
+            "local_y": round(feature.y_local, 2),
+            "local_z": round(feature.z_local, 2),
+            "diameter": feature.diameter,
+            "depth": feature.depth,
+            "direction": feature.direction,
+            "is_face_hole": feature.is_face_hole,
+            "note": feature.note,
+            "connection_id": feature.connection_id,
+        })
 
     panels_out = []
     for panel in bom.panels:
