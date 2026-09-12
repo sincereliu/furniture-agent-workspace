@@ -108,7 +108,11 @@ def write_artifacts(
         encoding="utf-8",
     )
     bom_path.write_text(format_bom_markdown(pipeline.bom), encoding="utf-8")
-    write_build123d_source(revision.feature_tree or {}, source_path)
+    write_build123d_source(
+        revision.feature_tree or {},
+        source_path,
+        step_path=step_path,
+    )
 
     if artifact_name:
         drilled_json_path = artifact_dir / f"{artifact_name}.drilled-holes.json"

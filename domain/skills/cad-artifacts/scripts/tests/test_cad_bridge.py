@@ -76,21 +76,21 @@ class CadBridgeTests(unittest.TestCase):
             )
             self.assertTrue((package_path / "components" / "fake.glb").is_file())
 
-    def test_default_launcher_is_current_gen_entrypoint(self) -> None:
+    def test_default_launcher_is_the_model_script(self) -> None:
         module = load_adapter_module()
         bridge = module.CadBridge(workspace_root=WORKSPACE_ROOT)
 
-        expected = (
-            WORKSPACE_ROOT
-            / "external"
-            / "text-to-cad"
-            / "skills"
-            / "cad"
-            / "scripts"
-            / "gen"
-        ).resolve()
-        self.assertEqual(bridge.gen_launcher, expected)
-        self.assertTrue((bridge.gen_launcher / "__main__.py").is_file())
+        self.assertIsNone(bridge.gen_launcher)
+        source = Path("cabinet.step.py")
+        output = Path("cabinet.step")
+        self.assertEqual(
+            bridge._build_command(source, output, force=False),
+            [str(bridge.python_executable), str(source), "--json"],
+        )
+        self.assertEqual(
+            bridge._build_command(source, output, force=True)[-1],
+            "--force",
+        )
         self.assertEqual(
             bridge._default_step_output(Path("cabinet.step.py")),
             Path("cabinet.step"),
@@ -110,10 +110,15 @@ class CadBridgeTests(unittest.TestCase):
             source_path.write_text(
                 "\n".join(
                     [
-                        "from build123d import Box",
+                        "from cadgen import build123d as bd",
+                        "from cadgen import step",
                         "",
-                        "def gen_step():",
-                        "    return Box(10, 20, 30)",
+                        "@step",
+                        "def model():",
+                        "    return bd.Box(10, 20, 30)",
+                        "",
+                        'if __name__ == "__main__":',
+                        "    model()",
                     ]
                 ),
                 encoding="utf-8",
@@ -147,7 +152,16 @@ class CadBridgeTests(unittest.TestCase):
             self.assertIsInstance(components, dict)
             self.assertTrue(components)
             for component in components.values():
-                component_path = package_path / component["glb"]
+                mesh_ref = next(
+                    (
+                        component[key]
+                        for key in ("glb", "surf", "brep")
+                        if isinstance(component.get(key), str) and component[key]
+                    ),
+                    None,
+                )
+                self.assertIsNotNone(mesh_ref)
+                component_path = package_path / mesh_ref
                 self.assertTrue(component_path.is_file())
                 self.assertGreater(component_path.stat().st_size, 0)
 

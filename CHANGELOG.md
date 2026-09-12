@@ -1,5 +1,13 @@
 # 更新日志
 
+## 20260912.2 — CAD Bridge 对接 text-to-cad 0.5.1
+
+CadBridge 不再调用已删除的 `skills/cad/scripts/gen`。默认执行 `python <model.py> --json`，特征树发射器写出 cadgen `@step` 模型；STEP 按 `out=` 落到交付目录，Viewer 视图从 cadgen store 导出。测试仍可用 `gen_launcher` 假 CLI。不修改 `external/`。
+
+### 边界
+
+- 新增/调整代码理由：`side_effect`（跑模型、写 STEP、导出 Viewer 视图）、`structured_protocol`（cadgen `--json` 的 `document`/`tree`）。无自然语言映射。
+
 ## 20260912.1 — panel-plan 去掉制造语义，只留尺寸、位置和接触
 
 板件阶段不再携带三合一/铰链/偏心轮这类制造名字。`cam_face` 从板件输出删除，改由制造按板件类型和内外面派生；接触记录不再写 `end_has_cam` / `end_cam_face`。几何前口间隙从 `door_hinge_gap` 改名为 `front_gap`。

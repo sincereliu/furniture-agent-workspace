@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -22,7 +24,12 @@ class BridgeResult:
 
 
 class CadBridge:
-    """Invoke the external text-to-cad STEP CLI from the owning workspace."""
+    """Run a cadgen model script from the owning workspace.
+
+    Default entry is ``python <source.py> --json`` (text-to-cad 0.5.1).
+    ``gen_launcher`` is only a test override that still speaks the old
+    ``source --write out --json`` fake-CLI protocol.
+    """
 
     def __init__(
         self,
@@ -45,10 +52,9 @@ class CadBridge:
             else self.workspace_root / ".venv" / "bin" / "python"
         )
         self.python_executable = Path(python_executable or default_python).resolve()
-        self.gen_launcher = Path(
-            gen_launcher
-            or self.external_repo_root / "skills" / "cad" / "scripts" / "gen"
-        ).resolve()
+        self.gen_launcher = (
+            Path(gen_launcher).resolve() if gen_launcher is not None else None
+        )
         self.timeout_seconds = timeout_seconds
 
     def generate_from_source(
@@ -58,7 +64,7 @@ class CadBridge:
         *,
         force: bool = False,
     ) -> BridgeResult:
-        """Generate STEP and a component Viewer package from a gen_step() source."""
+        """Generate STEP and a Viewer view from a cadgen ``@step`` model."""
         resolved_source = self._workspace_path(source_path)
         resolved_output = self._workspace_path(
             output_path
@@ -67,6 +73,7 @@ class CadBridge:
         )
         viewer_package_path = self._expected_viewer_package(resolved_source)
         topology_path = viewer_package_path / "assembly.json"
+        cache_dir = resolved_source.parent / ".cadgen-store"
 
         configuration_error = self._configuration_error(resolved_source, resolved_output)
         if configuration_error:
@@ -80,16 +87,15 @@ class CadBridge:
             )
 
         resolved_output.parent.mkdir(parents=True, exist_ok=True)
-        command = [
-            str(self.python_executable),
-            str(self.gen_launcher),
-            resolved_source.as_posix(),
-            "--write",
-            resolved_output.as_posix(),
-            "--json",
-        ]
-        if force:
-            command.append("--force")
+        command = self._build_command(resolved_source, resolved_output, force=force)
+        env = os.environ.copy()
+        env["CADGEN_DAEMON"] = "0"
+        env["CADGEN_CACHE_DIR"] = str(cache_dir)
+        cadgen_src = self._cadgen_src()
+        if cadgen_src is not None:
+            env["PYTHONPATH"] = os.pathsep.join(
+                [str(cadgen_src), env.get("PYTHONPATH", "")]
+            ).rstrip(os.pathsep)
 
         try:
             completed = subprocess.run(
@@ -99,11 +105,12 @@ class CadBridge:
                 text=True,
                 check=False,
                 timeout=self.timeout_seconds,
+                env=env,
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
             return BridgeResult(
                 status="failed",
-                message=f"Unable to execute text-to-cad STEP generation: {exc}",
+                message=f"Unable to execute cadgen model: {exc}",
                 source_path=str(resolved_source),
                 step_path=str(resolved_output),
                 topology_path=str(topology_path),
@@ -112,8 +119,21 @@ class CadBridge:
 
         payload, payload_error = self._generation_payload(completed.stdout)
         if payload is not None:
-            viewer_package_path = self._workspace_path(str(payload["packagePath"]))
-            topology_path = viewer_package_path / "assembly.json"
+            package_ref = payload.get("packagePath")
+            if isinstance(package_ref, str) and package_ref.strip():
+                viewer_package_path = self._workspace_path(package_ref)
+                topology_path = viewer_package_path / "assembly.json"
+            document = payload.get("document")
+            if isinstance(document, str) and document.strip():
+                self._copy_step_if_needed(document, resolved_output)
+            tree_hash = payload.get("tree")
+            if isinstance(tree_hash, str) and tree_hash.strip():
+                view_error = self._export_viewer_view(
+                    tree_hash, viewer_package_path, cache_dir, cadgen_src
+                )
+                if view_error:
+                    payload_error = payload_error or view_error
+                topology_path = viewer_package_path / "assembly.json"
 
         missing_artifacts = [
             path
@@ -129,7 +149,7 @@ class CadBridge:
         ):
             return BridgeResult(
                 status="ok",
-                message="text-to-cad generated STEP and component Viewer package.",
+                message="cadgen generated STEP and Viewer package.",
                 source_path=str(resolved_source),
                 step_path=str(resolved_output),
                 topology_path=str(topology_path),
@@ -141,7 +161,7 @@ class CadBridge:
 
         details: list[str] = []
         if completed.returncode != 0:
-            details.append("text-to-cad scripts/gen returned a non-zero exit code")
+            details.append("cadgen model returned a non-zero exit code")
         if payload_error:
             details.append(payload_error)
         if missing_artifacts:
@@ -162,6 +182,26 @@ class CadBridge:
             stderr=completed.stderr,
             returncode=completed.returncode,
         )
+
+    def _build_command(
+        self, source_path: Path, output_path: Path, *, force: bool
+    ) -> list[str]:
+        if self.gen_launcher is not None:
+            command = [
+                str(self.python_executable),
+                str(self.gen_launcher),
+                source_path.as_posix(),
+                "--write",
+                output_path.as_posix(),
+                "--json",
+            ]
+            if force:
+                command.append("--force")
+            return command
+        command = [str(self.python_executable), str(source_path), "--json"]
+        if force:
+            command.append("--force")
+        return command
 
     def _workspace_path(self, path: str | Path) -> Path:
         candidate = Path(path)
@@ -184,6 +224,55 @@ class CadBridge:
             return source_path.with_suffix("")
         return source_path.with_suffix(".step")
 
+    def _cadgen_src(self) -> Path | None:
+        candidate = self.external_repo_root / "packages" / "cadgen" / "src"
+        return candidate if candidate.is_dir() else None
+
+    def _copy_step_if_needed(self, document: str, output_path: Path) -> None:
+        source = Path(document)
+        if not source.is_absolute():
+            source = (self.workspace_root / source).resolve()
+        else:
+            source = source.resolve()
+        if not source.is_file() or source == output_path:
+            return
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, output_path)
+
+    @staticmethod
+    def _export_viewer_view(
+        tree_hash: str,
+        dest: Path,
+        cache_dir: Path,
+        cadgen_src: Path | None,
+    ) -> str | None:
+        previous = os.environ.get("CADGEN_CACHE_DIR")
+        os.environ["CADGEN_CACHE_DIR"] = str(cache_dir)
+        inserted = False
+        if cadgen_src is not None:
+            src = str(cadgen_src)
+            if src not in sys.path:
+                sys.path.insert(0, src)
+                inserted = True
+        try:
+            from cadgen.store.view import export_view
+
+            dest.mkdir(parents=True, exist_ok=True)
+            export_view(tree_hash, dest)
+        except Exception as exc:
+            return f"cadgen viewer view export failed: {exc}"
+        finally:
+            if inserted:
+                try:
+                    sys.path.remove(str(cadgen_src))
+                except ValueError:
+                    pass
+            if previous is None:
+                os.environ.pop("CADGEN_CACHE_DIR", None)
+            else:
+                os.environ["CADGEN_CACHE_DIR"] = previous
+        return None
+
     @staticmethod
     def _generation_payload(stdout: str) -> tuple[dict[str, object] | None, str | None]:
         for line in reversed(stdout.splitlines()):
@@ -194,12 +283,17 @@ class CadBridge:
             if not isinstance(payload, dict):
                 continue
             if payload.get("ok") is not True:
-                return None, "text-to-cad scripts/gen reported an unsuccessful result"
+                return None, "cadgen reported an unsuccessful result"
             package_path = payload.get("packagePath")
-            if not isinstance(package_path, str) or not package_path.strip():
-                return None, "text-to-cad scripts/gen did not report packagePath"
-            return payload, None
-        return None, "text-to-cad scripts/gen did not emit a JSON result"
+            document = payload.get("document")
+            tree = payload.get("tree")
+            has_package = isinstance(package_path, str) and bool(package_path.strip())
+            has_document = isinstance(document, str) and bool(document.strip())
+            has_tree = isinstance(tree, str) and bool(tree.strip())
+            if has_package or has_document or has_tree:
+                return payload, None
+            return None, "cadgen JSON result had no document, tree, or packagePath"
+        return None, "cadgen did not emit a JSON result"
 
     @staticmethod
     def _viewer_package_error(package_path: Path) -> str | None:
@@ -215,14 +309,24 @@ class CadBridge:
             return f"Viewer package has no components: {descriptor_path}"
         package_root = package_path.resolve()
         for component in components.values():
-            glb_ref = component.get("glb") if isinstance(component, dict) else None
-            if not isinstance(glb_ref, str) or not glb_ref:
-                return f"Viewer package contains a component without a GLB reference: {descriptor_path}"
-            component_path = (package_path / glb_ref).resolve()
+            if not isinstance(component, dict):
+                return f"Viewer package contains a component without a mesh: {descriptor_path}"
+            mesh_ref = None
+            for key in ("glb", "surf", "brep"):
+                value = component.get(key)
+                if isinstance(value, str) and value.strip():
+                    mesh_ref = value
+                    break
+            if not mesh_ref:
+                return (
+                    f"Viewer package contains a component without a mesh reference: "
+                    f"{descriptor_path}"
+                )
+            component_path = (package_path / mesh_ref).resolve()
             try:
                 component_path.relative_to(package_root)
             except ValueError:
-                return f"Viewer package component escapes the package directory: {glb_ref}"
+                return f"Viewer package component escapes the package directory: {mesh_ref}"
             if not component_path.is_file() or component_path.stat().st_size == 0:
                 return f"Viewer package component is missing or empty: {component_path}"
         return None
@@ -230,14 +334,17 @@ class CadBridge:
     def _configuration_error(self, source_path: Path, output_path: Path) -> Optional[str]:
         if not self.python_executable.is_file():
             return f"Project Python interpreter not found: {self.python_executable}"
-        if not self.gen_launcher.exists():
-            return f"text-to-cad gen launcher not found: {self.gen_launcher}"
-        if self.gen_launcher.is_dir() and not (self.gen_launcher / "__main__.py").is_file():
-            return f"text-to-cad gen launcher has no __main__.py: {self.gen_launcher}"
+        if self.gen_launcher is not None:
+            if not self.gen_launcher.exists():
+                return f"test gen launcher not found: {self.gen_launcher}"
+            if self.gen_launcher.is_dir() and not (
+                self.gen_launcher / "__main__.py"
+            ).is_file():
+                return f"test gen launcher has no __main__.py: {self.gen_launcher}"
         if not source_path.is_file():
             return f"CAD source file not found: {source_path}"
         if source_path.suffix.lower() != ".py":
-            return f"CAD source must be a Python file containing gen_step(): {source_path}"
+            return f"CAD source must be a Python model script: {source_path}"
         if output_path.suffix.lower() != ".step":
-            return f"CAD output must use .step with text-to-cad scripts/gen: {output_path}"
+            return f"CAD output must use .step: {output_path}"
         return None
