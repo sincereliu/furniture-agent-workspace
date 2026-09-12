@@ -145,6 +145,7 @@ class HingeConnector(Connector):
         panels: List[PanelRecord],
         *,
         options: Mapping[str, Any] | None = None,
+        connection_points: List[Any] | None = None,
     ) -> List[HardwareRecord]:
         """生成铰链 BOM 清单。
 
@@ -201,6 +202,7 @@ class HingeConnector(Connector):
         panels: List[PanelRecord],
         hardware: List[HardwareRecord],
         drilled: Dict[str, Any],
+        connection_points: List[Any] | None = None,
     ) -> None:
         """铰链专属校验：杯孔在门包络内、从内侧面钻入、深度≤门厚、侧别正确、孔数=BOM 数。"""
         drilled_by_panel = {

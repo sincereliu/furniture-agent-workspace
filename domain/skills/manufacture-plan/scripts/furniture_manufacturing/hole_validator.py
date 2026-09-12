@@ -8,7 +8,7 @@ from typing import List
 
 import numpy as np
 
-from furniture_manufacturing.connectors.base import HoleSpec
+from furniture_manufacturing.features import HoleFeature
 from furniture_manufacturing.manufacturing_models import PanelRecord
 
 
@@ -32,7 +32,7 @@ def _panel_size_along(panel: PanelRecord, direction: str) -> float:
     }.get(axis, panel.thickness)
 
 
-def validate_hole_depth(hole: HoleSpec, panel: PanelRecord) -> None:
+def validate_hole_depth(hole: HoleFeature, panel: PanelRecord) -> None:
     """检查孔深度 ≤ 打孔方向上的板件尺寸。
 
     深度与打孔方向的板件尺寸比较，而非一律与板厚比较：
@@ -59,7 +59,7 @@ def validate_hole_depth(hole: HoleSpec, panel: PanelRecord) -> None:
 
 # ── 边界检测 ──────────────────────────────────────────────────
 
-def validate_hole_bounds(hole: HoleSpec, panel: PanelRecord) -> None:
+def validate_hole_bounds(hole: HoleFeature, panel: PanelRecord) -> None:
     """检查孔位在板件边界内（含孔半径 margin）。"""
     r = hole.diameter / 2.0
     x, y, z = hole.x_local, hole.y_local, hole.z_local
@@ -78,7 +78,7 @@ def validate_hole_bounds(hole: HoleSpec, panel: PanelRecord) -> None:
 # ── 干涉检测 ──────────────────────────────────────────────────
 
 def _hole_cylinders_collide(
-    h1: HoleSpec, h2: HoleSpec, safety_gap: float = 3.0,
+    h1: HoleFeature, h2: HoleFeature, safety_gap: float = 3.0,
 ) -> bool:
     """检查同方向平行孔是否干涉（开口间距）。
 
@@ -103,7 +103,7 @@ def _hole_cylinders_collide(
 
 
 def validate_holes_no_interference(
-    holes: List[HoleSpec],
+    holes: List[HoleFeature],
     panel: PanelRecord,
     safety_gap: float = 3.0,
 ) -> None:
@@ -123,7 +123,7 @@ def validate_holes_no_interference(
 # ── 批量校验 ──────────────────────────────────────────────────
 
 def validate_all_holes(
-    holes: List[HoleSpec],
+    holes: List[HoleFeature],
     panel: PanelRecord,
     safety_gap: float = 3.0,
 ) -> List[str]:

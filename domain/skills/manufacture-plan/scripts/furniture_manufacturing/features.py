@@ -1,78 +1,50 @@
-"""制造层特征契约（Feature）。
+"""制造层特征契约（Feature）——判别联合。
 
-本模块是「特征」抽象的契约：把「每一处加工」统一成 Feature——
-- kind="hole"：孔（HoleSpec），第一步落地；
-- kind="groove"：槽（MachiningOperation 的 cut_box），第二步落地；
-- kind="edge_band"：封边（PanelRecord.edge_banding），第二步落地。
+把「每一处加工」统一成 Feature 的子类（继承关系，不是组成关系）：
+- HoleFeature：打孔（HoleSpec）
+- GrooveFeature：开槽（MachiningOperation 的 cut_box）
+- EdgeBandFeature：封边（PanelRecord.edge_banding）
 
-完整口径见 references/feature-contract.md。当前只定义契约与转换函数，
-不改变任何现有行为（校验/导出仍消费原始 HoleSpec / MachiningOperation / edge_banding）。
+完整口径见 references/feature-contract.md。Feature/ConnectionPoint 是制造层的
+**本源**：plan_manufacturing 先生成一次孔 → Feature + ConnectionPoint，再由它们
+派生 BOM、校验与孔导出（collect_features 只读 bom.features，不再重新生成孔）。
+
+类型判断用 isinstance(feature, HoleFeature) 取代 kind == "hole" 字符串判断；
+`kind` 字段 + `feature_from_dict` 仅用于 JSON 往返（asdict → feature_from_dict）。
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Mapping
+from typing import TYPE_CHECKING, Mapping
 
-from furniture_manufacturing.connectors.base import HoleSpec
+if TYPE_CHECKING:
+    # 仅类型标注用；运行时靠鸭子类型读取 HoleSpec 字段，避免
+    # features ↔ connectors（__init__ → trinity → features）循环导入。
+    from furniture_manufacturing.connectors.base import HoleSpec
+
 from furniture_manufacturing.manufacturing_models import MachiningOperation
-
-# 特征种类：一处加工动作的分类。
-FEATURE_KIND_HOLE = "hole"
-FEATURE_KIND_GROOVE = "groove"
-FEATURE_KIND_EDGE_BAND = "edge_band"
 
 
 @dataclass
 class Feature:
-    """一处加工特征：挂在某块板上的一个加工动作。
+    """一处加工特征（基类）：挂在某块板上的一个加工动作。
 
-    公共字段：
-    - kind：特征种类（hole/groove/edge_band）。
-    - feature_id：稳定 id（槽有 "left_side_back_groove" 等；孔/封边可空）。
-    - panel_label：宿主板。
-    - 位置：x_local/y_local/z_local 是局部原生坐标（板件参考系）；
-      x_global/y_global/z_global 是柜体坐标，属派生量，迁移期保留，
-      目标改为现算（见 references/coordinate-naming.md）。
-
-    孔专用（kind="hole"）：hole_type / diameter / depth / direction / is_face_hole /
-    connection_id。hole_type 经目录映射到五金材料，不存材料本身。
-
-    槽专用（kind="groove"）：size_x/y/z 为盒子尺寸（长/宽/深），position 用
-    x_global/y_global/z_global（当前 cut_box 只存柜体坐标，局部坐标待派生）。
-
-    封边专用（kind="edge_band"）：edges（封哪些边，如「四边」）+ material（封边条
-    规格，如「ABS 1.0mm同色」）。
+    只放三种加工共有的字段：宿主板 + 位置 + 备注。
+    具体加工是子类（HoleFeature / GrooveFeature / EdgeBandFeature），
+    各自携带自己的专属字段。
     """
 
-    # 身份：种类 + 稳定 id + 宿主板
-    kind: str = FEATURE_KIND_HOLE
-    feature_id: str = ""
+    # 判别标签（仅序列化/JSON 往返用；运行时类型判断仍用 isinstance）
+    kind: str = ""
+
+    # 宿主板
     panel_label: str = ""
 
     # 几何：局部原生位置（板件参考系）
     x_local: float = 0.0
     y_local: float = 0.0
     z_local: float = 0.0
-
-    # 孔专用：孔型（经目录映射到五金材料，不存材料本身）+ 形状
-    hole_type: str = ""
-    diameter: float = 0.0
-    depth: float = 0.0
-    direction: str = "+y"
-    is_face_hole: bool = True
-
-    # 连接点引用（字符串，第三步升级为实体）
-    connection_id: str = ""
-
-    # 槽专用：盒子尺寸（长/宽/深）
-    size_x: float = 0.0
-    size_y: float = 0.0
-    size_z: float = 0.0
-
-    # 封边专用：封哪些边 + 封边条规格
-    edges: str = ""
-    material: str = ""
 
     # 派生：柜体坐标（迁移期保留，目标现算）
     x_global: float = 0.0
@@ -83,10 +55,49 @@ class Feature:
     note: str = ""
 
 
-def from_hole_spec(hole: HoleSpec) -> Feature:
-    """把现有 HoleSpec 无损装进 Feature 契约（kind="hole"）。"""
-    return Feature(
-        kind=FEATURE_KIND_HOLE,
+@dataclass
+class HoleFeature(Feature):
+    """打孔：一个圆柱（位置 + 直径 + 深度 + 方向）。
+
+    hole_type 经目录映射到五金材料，不存材料本身。
+    """
+
+    hole_type: str = ""
+    diameter: float = 0.0
+    depth: float = 0.0
+    direction: str = "+y"
+    is_face_hole: bool = True
+
+    # 连接点引用（字符串，第三步升级为实体）
+    connection_id: str = ""
+
+
+@dataclass
+class GrooveFeature(Feature):
+    """开槽：一个盒子（位置 + 长/宽/深）。
+
+    cut_box 只存柜体坐标（pos_x/y/z → x_global/y_global/z_global），
+    局部坐标待后续派生（见 coordinate-naming.md）。
+    """
+
+    feature_id: str = ""  # 稳定 id，如 "left_side_back_groove"
+    size_x: float = 0.0
+    size_y: float = 0.0
+    size_z: float = 0.0
+
+
+@dataclass
+class EdgeBandFeature(Feature):
+    """封边：一条边（封哪条边 + 封边条材质）。"""
+
+    edges: str = ""
+    material: str = ""
+
+
+def from_hole_spec(hole: HoleSpec) -> HoleFeature:
+    """把现有 HoleSpec 无损装进 HoleFeature。"""
+    return HoleFeature(
+        kind="hole",
         panel_label=hole.panel_label,
         x_local=hole.x_local,
         y_local=hole.y_local,
@@ -104,16 +115,12 @@ def from_hole_spec(hole: HoleSpec) -> Feature:
     )
 
 
-def from_machining_operation(operation: MachiningOperation) -> Feature:
-    """把槽（cut_box）加工指令无损装进 Feature 契约（kind="groove"）。
-
-    cut_box 只存柜体坐标（pos_x/y/z），局部坐标待后续派生（目标见
-    coordinate-naming.md）。
-    """
-    return Feature(
-        kind=FEATURE_KIND_GROOVE,
-        feature_id=operation.id,
+def from_machining_operation(operation: MachiningOperation) -> GrooveFeature:
+    """把槽（cut_box）加工指令无损装进 GrooveFeature。"""
+    return GrooveFeature(
+        kind="groove",
         panel_label=operation.target_panel,
+        feature_id=operation.id,
         size_x=operation.size_x,
         size_y=operation.size_y,
         size_z=operation.size_z,
@@ -127,18 +134,38 @@ def from_machining_operation(operation: MachiningOperation) -> Feature:
 def from_edge_banding(
     panel_label: str,
     edge_banding: Mapping[str, str],
-) -> list[Feature]:
-    """把一块板的封边字典无损装进 Feature 契约（kind="edge_band"）。
+) -> list[EdgeBandFeature]:
+    """把一块板的封边字典无损装进 EdgeBandFeature 列表。
 
-    edge_banding 形如 {"四边": "ABS 1.0mm同色"}；每条封边 key 对应一个 Feature。
+    edge_banding 形如 {"四边": "ABS 1.0mm同色"}；每条封边 key 对应一个特征。
     空字典返回空列表（入槽背板等不封边）。
     """
     return [
-        Feature(
-            kind=FEATURE_KIND_EDGE_BAND,
+        EdgeBandFeature(
+            kind="edge",
             panel_label=panel_label,
             edges=edges,
             material=material,
         )
         for edges, material in edge_banding.items()
     ]
+
+
+_FEATURE_BY_KIND = {
+    "hole": HoleFeature,
+    "groove": GrooveFeature,
+    "edge": EdgeBandFeature,
+}
+
+
+def feature_from_dict(data: Mapping[str, object]) -> Feature:
+    """按判别标签 `kind` 把序列化字典还原成对应 Feature 子类。
+
+    与 `asdict` 互为逆向：`asdict(feature)` 携带 `kind`，这里据 `kind` 选子类
+    实例化。运行时类型判断仍用 `isinstance`，不靠 `kind` 字符串。
+    """
+    kind = data.get("kind")
+    cls = _FEATURE_BY_KIND.get(kind)
+    if cls is None:
+        raise ValueError(f"unknown feature kind: {kind!r}")
+    return cls(**data)

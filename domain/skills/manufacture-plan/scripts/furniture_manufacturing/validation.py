@@ -8,6 +8,7 @@ from furniture_panel_planning.panel_spec import FurnitureSpec, resolve_back_moun
 from furniture_panel_planning.panel_models import PanelPlacement
 
 from .connectors import ALL_CONNECTORS
+from .features import EdgeBandFeature, GrooveFeature, HoleFeature
 from .hole_validator import (
     HoleValidationError,
     validate_hole_bounds,
@@ -17,6 +18,7 @@ from .hole_validator import (
 from .manufacturing_bom import (
     BOMReport,
     VALID_MANUFACTURING_READINESS,
+    collect_features,
     emit_drilled_holes,
 )
 
@@ -68,28 +70,41 @@ def validate_manufacturing(
             "MANUFACTURING_PANEL_ID_MISMATCH",
             "manufacturing records must preserve every confirmed panel id",
         )
+    features = collect_features(bom)
+    grooves = [
+        feature for feature in features if isinstance(feature, GrooveFeature)
+    ]
+    hole_specs_by_panel: dict[str, list] = {}
+    edge_banding_by_panel: dict[str, dict[str, str]] = {}
+    for feature in features:
+        if isinstance(feature, HoleFeature):
+            hole_specs_by_panel.setdefault(feature.panel_label, []).append(feature)
+        elif isinstance(feature, EdgeBandFeature):
+            edge_banding_by_panel.setdefault(feature.panel_label, {})[
+                feature.edges
+            ] = feature.material
     operation_ids: set[str] = set()
-    for operation in bom.operations:
-        if operation.id in operation_ids:
+    for groove in grooves:
+        if groove.feature_id in operation_ids:
             report.add_error(
                 "DUPLICATE_OPERATION_ID",
-                f"duplicate machining operation: {operation.id}",
-                operation.id,
+                f"duplicate machining operation: {groove.feature_id}",
+                groove.feature_id,
             )
-        operation_ids.add(operation.id)
-        if operation.target_panel not in placement_ids:
+        operation_ids.add(groove.feature_id)
+        if groove.panel_label not in placement_ids:
             report.add_error(
                 "UNKNOWN_OPERATION_TARGET",
-                f"{operation.id} targets unknown panel {operation.target_panel}",
-                operation.id,
+                f"{groove.feature_id} targets unknown panel {groove.panel_label}",
+                groove.feature_id,
             )
         else:
-            target = placement_by_id[operation.target_panel]
+            target = placement_by_id[groove.panel_label]
             outside_target = False
             for axis, size, position, target_size, target_position in (
-                ("x", operation.size_x, operation.pos_x, target.size_x, target.pos_x),
-                ("y", operation.size_y, operation.pos_y, target.size_y, target.pos_y),
-                ("z", operation.size_z, operation.pos_z, target.size_z, target.pos_z),
+                ("x", groove.size_x, groove.x_global, target.size_x, target.pos_x),
+                ("y", groove.size_y, groove.y_global, target.size_y, target.pos_y),
+                ("z", groove.size_z, groove.z_global, target.size_z, target.pos_z),
             ):
                 if (
                     position < target_position - 1e-6
@@ -97,27 +112,21 @@ def validate_manufacturing(
                 ):
                     report.add_error(
                         "OPERATION_OUTSIDE_TARGET",
-                        f"{operation.id} exceeds {operation.target_panel} on {axis.upper()}",
-                        operation.id,
+                        f"{groove.feature_id} exceeds {groove.panel_label} on {axis.upper()}",
+                        groove.feature_id,
                     )
                     outside_target = True
-            if "back_groove" in operation.id and outside_target:
+            if "back_groove" in groove.feature_id and outside_target:
                 report.add_error(
                     "GROOVE_OUTSIDE_TARGET",
-                    f"{operation.id} must remain inside its target panel envelope",
-                    operation.id,
+                    f"{groove.feature_id} must remain inside its target panel envelope",
+                    groove.feature_id,
                 )
-        if operation.operation_type != "cut_box":
-            report.add_error(
-                "UNSUPPORTED_OPERATION",
-                f"unsupported machining operation: {operation.operation_type}",
-                operation.id,
-            )
-        if min(operation.size_x, operation.size_y, operation.size_z) <= 0:
+        if min(groove.size_x, groove.size_y, groove.size_z) <= 0:
             report.add_error(
                 "NON_POSITIVE_OPERATION_SIZE",
-                f"{operation.id} must have positive cutter dimensions",
-                operation.id,
+                f"{groove.feature_id} must have positive cutter dimensions",
+                groove.feature_id,
             )
     expected_back_groove_ids = {
         "left_side_back_groove",
@@ -125,13 +134,11 @@ def validate_manufacturing(
         "top_back_groove",
         "bottom_back_groove",
     }
-    back_groove_operations = [
-        operation
-        for operation in bom.operations
-        if "back_groove" in operation.id
+    back_grooves = [
+        groove for groove in grooves if "back_groove" in groove.feature_id
     ]
     actual_back_groove_ids = {
-        panel_role(operation.id) for operation in back_groove_operations
+        panel_role(groove.feature_id) for groove in back_grooves
     }
     back_mount = resolve_back_mount(spec.back_mount)
     if (
@@ -165,14 +172,14 @@ def validate_manufacturing(
         expected_groove_width = (
             spec.back_thickness + spec.groove_clearance
         )
-        for operation in back_groove_operations:
-            if abs(operation.size_y - expected_groove_width) > 1e-6:
+        for groove in back_grooves:
+            if abs(groove.size_y - expected_groove_width) > 1e-6:
                 report.add_error(
                     "GROOVE_WIDTH_MISMATCH",
-                    f"{operation.id} does not preserve the specified groove width",
-                    operation.id,
+                    f"{groove.feature_id} does not preserve the specified groove width",
+                    groove.feature_id,
                 )
-    elif back_mount != "groove" and back_groove_operations:
+    elif back_mount != "groove" and back_grooves:
         report.add_error(
             "UNEXPECTED_BACK_GROOVES",
             f"{back_mount} back strategy must not contain groove cuts",
@@ -191,7 +198,10 @@ def validate_manufacturing(
         {} if back_mount == "groove"
         else {"四边": "ABS 1.0mm同色"}
     )
-    if back_panel is None or back_panel.edge_banding != expected_back_edges:
+    if (
+        back_panel is None
+        or edge_banding_by_panel.get(back_panel.label, {}) != expected_back_edges
+    ):
         report.add_error(
             "BACK_EDGE_BANDING_MISMATCH",
             f"{back_mount} back strategy has incorrect edge banding",
@@ -201,7 +211,7 @@ def validate_manufacturing(
         item for item in bom.panels if item.panel_type == "back_rail"
     ]
     if any(
-        rail.edge_banding != {"四边": "ABS 1.0mm同色"}
+        edge_banding_by_panel.get(rail.label, {}) != {"四边": "ABS 1.0mm同色"}
         for rail in rails
     ):
         report.add_error(
@@ -211,11 +221,6 @@ def validate_manufacturing(
         )
 
     # ── 孔位几何校验：边界/深度/干涉（hole_validator）──────────────
-    hole_specs_by_panel: dict[str, list] = {}
-    for connector_cls in ALL_CONNECTORS:
-        connector = connector_cls()
-        for hole in connector.generate_holes_for_panels(bom.panels):
-            hole_specs_by_panel.setdefault(hole.panel_label, []).append(hole)
     panel_records_by_label = {item.label: item for item in bom.panels}
     for label, holes in hole_specs_by_panel.items():
         panel = panel_records_by_label.get(label)
@@ -238,5 +243,7 @@ def validate_manufacturing(
     drilled = emit_drilled_holes(bom)
     # 五金专属校验：由各 Connector 自声明，新增五金不再改这里
     for connector_cls in ALL_CONNECTORS:
-        connector_cls().validate(report, bom.panels, bom.hardware, drilled)
+        connector_cls().validate(
+            report, bom.panels, bom.hardware, drilled, bom.connection_points
+        )
     return report
