@@ -1,6 +1,6 @@
 # 家具跨阶段运行时
 
-只保存 CAD 阶段及跨阶段应用层：
+只保存 CAD 执行工具及跨阶段应用层：
 
 - `furniture_workflow/`：唯一 Orchestrator、状态、谱系、写入和持久化。
 - `furniture_cad/`：CAD Bridge/校验；`generate_furniture.py`、`server.py`：CLI/API。

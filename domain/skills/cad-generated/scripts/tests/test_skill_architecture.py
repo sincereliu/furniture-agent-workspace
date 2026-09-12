@@ -17,14 +17,14 @@ if str(INTENT_SCRIPTS_ROOT) not in sys.path:
 
 from furniture_design_intent.design_intent import EXECUTABLE_CATEGORIES
 
-STAGE_SKILLS = {
+PLANNING_STAGE_SKILLS = {
     "design_intent": "design-intent",
     "panels_planned": "panel-plan",
     "manufacturing_planned": "manufacture-plan",
     "feature_tree_planned": "feature-tree",
-    "cad_generated": "cad-artifacts",
     "delivery_validated": "delivery-report",
 }
+CAD_TOOL_HOME = "cad-artifacts"
 
 STAGE_REFERENCES = {
     "design-intent": (
@@ -49,7 +49,10 @@ STAGE_REFERENCES = {
         "references/connection-contact-defaults.md",
     ),
     "feature-tree": ("references/feature-tree-rules.md",),
-    "cad-artifacts": ("references/runtime-contract.md",),
+    "cad-artifacts": (
+        "TOOL.md",
+        "references/runtime-contract.md",
+    ),
     "delivery-report": ("references/delivery-checklist.md",),
 }
 
@@ -84,10 +87,10 @@ class SkillArchitectureTests(unittest.TestCase):
         )
         self.assertIn(policy_relative_path, repository_instructions)
 
-    def test_six_serial_stages_have_one_skill_each(self) -> None:
+    def test_planning_stages_have_one_skill_each(self) -> None:
         claimed_stages: dict[str, str] = {}
 
-        for stage, skill_name in STAGE_SKILLS.items():
+        for stage, skill_name in PLANNING_STAGE_SKILLS.items():
             skill_root = SKILLS_ROOT / skill_name
             skill_file = skill_root / "SKILL.md"
             agent_file = skill_root / "agents" / "openai.yaml"
@@ -102,23 +105,61 @@ class SkillArchitectureTests(unittest.TestCase):
             self.assertNotIn(claimed_stage, claimed_stages)
             claimed_stages[claimed_stage] = skill_name
 
-        self.assertEqual(claimed_stages, STAGE_SKILLS)
+        self.assertEqual(claimed_stages, PLANNING_STAGE_SKILLS)
         layout_skill = (SKILLS_ROOT / "layout-plan" / "SKILL.md").read_text(
             encoding="utf-8"
         )
         self.assertIn("独立按需步骤", layout_skill)
         self.assertNotRegex(layout_skill, re.compile(r"^阶段：`", re.MULTILINE))
 
+    def test_cad_generated_is_an_orchestrator_tool_not_an_agent_skill(self) -> None:
+        cad_root = SKILLS_ROOT / CAD_TOOL_HOME
+        tool_file = cad_root / "TOOL.md"
+        self.assertTrue(tool_file.is_file(), tool_file)
+        self.assertFalse((cad_root / "SKILL.md").exists())
+        self.assertFalse((cad_root / "agents" / "openai.yaml").exists())
+
+        tool_text = tool_file.read_text(encoding="utf-8")
+        match = re.search(r"^阶段：`([^\`]+)`$", tool_text, re.MULTILINE)
+        self.assertIsNotNone(match, tool_file)
+        self.assertEqual(match.group(1), "cad_generated", tool_file)
+        self.assertIn("generate_cad=True", tool_text)
+        self.assertNotRegex(
+            tool_text,
+            re.compile(r"^name:\s*cad-artifacts\s*$", re.MULTILINE),
+        )
+
+        router = (
+            WORKSPACE_ROOT / ".agents" / "skills" / "furniture-agent" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("generate_cad=True", router)
+        self.assertNotIn("$cad-artifacts", router)
+        self.assertNotIn("domain/skills/cad-artifacts/SKILL.md", router)
+
+        host_prompt = (
+            WORKSPACE_ROOT
+            / ".agents"
+            / "skills"
+            / "furniture-agent"
+            / "agents"
+            / "openai.yaml"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("$cad-artifacts", host_prompt)
+
     def test_router_uses_explicit_stage_skill_paths(self) -> None:
         router = (
             WORKSPACE_ROOT / ".agents" / "skills" / "furniture-agent" / "SKILL.md"
         ).read_text(encoding="utf-8")
 
-        for stage, skill_name in STAGE_SKILLS.items():
+        for stage, skill_name in PLANNING_STAGE_SKILLS.items():
             self.assertIn(
                 f"`{stage}`：`domain/skills/{skill_name}/SKILL.md`",
                 router,
             )
+        self.assertIn(
+            "`cad_generated`：Orchestrator tool（`run_next(..., generate_cad=True)`），实现 `domain/skills/cad-artifacts/TOOL.md`",
+            router,
+        )
         self.assertIn(
             "独立能力（不在上述串联阶段内）",
             router,
@@ -436,8 +477,9 @@ class SkillArchitectureTests(unittest.TestCase):
                 "insert/cover",
                 "drilled-holes",
             ),
-            "domain/skills/cad-artifacts/SKILL.md": (
-                "back_mount/back_rail_height",
+            "domain/skills/cad-artifacts/references/runtime-contract.md": (
+                "back_mount",
+                "back_rail_height",
                 "drilled-holes",
             ),
             (
