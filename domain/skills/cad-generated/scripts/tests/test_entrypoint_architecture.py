@@ -21,11 +21,19 @@ def imported_modules(path: Path) -> set[str]:
 class EntrypointArchitectureTests(unittest.TestCase):
     def test_serial_entrypoints_only_import_the_application_orchestrator(self) -> None:
         self.assertFalse((SCRIPTS_ROOT / "generate_furniture.py").exists())
+        self.assertFalse(
+            (SCRIPTS_ROOT / "furniture_workflow" / "planner.py").exists()
+        )
         orchestrator = (
             SCRIPTS_ROOT / "furniture_workflow" / "workflow_orchestrator.py"
         ).read_text(encoding="utf-8")
         self.assertNotIn("def execute_spec(", orchestrator)
         self.assertNotIn("auto_confirm", orchestrator)
+        pipeline = (
+            SCRIPTS_ROOT / "furniture_workflow" / "cabinet_pipeline.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("def plan_cabinet(", pipeline)
+        self.assertIn("class CabinetPipelineResult", pipeline)
 
         server_modules = imported_modules(SCRIPTS_ROOT / "server.py")
         self.assertIn("furniture_workflow.workflow_orchestrator", server_modules)
@@ -50,7 +58,7 @@ class EntrypointArchitectureTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("FurnitureOrchestrator", agent_skill)
         self.assertIn("FurnitureToolSession", agent_skill)
-        self.assertIn("不得从 Agent 直接调用 `plan_cabinet()`", agent_skill)
+        self.assertIn("`plan_cabinet` / `plan_furniture` 已删除", agent_skill)
         self.assertIn("generate_cad=True", agent_skill)
         self.assertNotIn("$cad-generated", agent_skill)
         self.assertNotIn("domain/skills/cad-generated/SKILL.md", agent_skill)

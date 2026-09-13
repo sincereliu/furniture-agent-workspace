@@ -35,7 +35,7 @@ result = session.call(name, arguments)  # arguments 为对象或 JSON 字符串
 | `furniture_select_stage_attempt` | 选用某次通过的 attempt，再确认 |
 | `furniture_revise_intent` | 新 Revision，从 `design_intent` 重来 |
 
-不提供：`plan_cabinet`、`CadBridge`、特征树发射器、一次性自动确认。房间 `layout-plan` 仍是独立 API，不在这组工具里。
+不提供：`CadBridge`、特征树发射器、一次性自动确认、压扁检查点的入口。房间 `layout-plan` 仍是独立 API，不在这组工具里。
 
 ## 调用规则（代码强制）
 

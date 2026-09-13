@@ -3,7 +3,7 @@
 Hosts register ``openai_tools()`` and dispatch with ``FurnitureToolSession.call``.
 This adapter only admits canonical structured fields and Orchestrator lifecycle
 operations. It does not parse natural language, fill construction defaults,
-auto-confirm stages, or expose ``plan_cabinet`` / ``CadBridge``.
+auto-confirm stages, or expose ``CadBridge``.
 """
 
 from __future__ import annotations

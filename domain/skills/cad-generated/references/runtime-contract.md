@@ -10,7 +10,7 @@
 - `wall_cabinet`：固定模板，含背板、层板、门板，无踢脚板。
 - 均支持显式 `groove/insert/cover`。
 
-它们不是任意家具配置器。承诺变体前检查 `planner.py` 和模板；其他类别未实现前只做意图/建模方案。
+它们不是任意家具配置器。承诺变体前检查板件拓扑模板；其他类别未实现前只做意图/建模方案。
 
 ## 六阶段状态与确认
 
@@ -141,6 +141,6 @@ Feature Tree v2 支持板件 `box` 和定向 `cut_box`；发射器先建板、�
 - `furniture_panel_planning/panel_pipeline.py::plan_panel_stage()`：从已确认意图直接首次物化功能数量、结构规格、精确净空、背板方案，并生成实体板件角色、尺寸和位置。
 - `furniture_manufacturing/manufacturing_bom.py::plan_manufacturing()`：材料、封边、五金、BOM、槽；`emit_drilled_holes()` 输出配合孔。
 
-`cabinet_pipeline.py::plan_cabinet()` 仅是无状态兼容门面；交互流程由 Orchestrator 分阶段调用，不合并检查点。
+`cabinet_pipeline.py::CabinetPipelineResult` 只是已确认板件+制造结果的快照，供 CAD 写入使用。Orchestrator 按阶段调用各 Skill，不合并检查点。
 
 CAD 阶段可持久化 BOM Markdown，不生成裁切清单；未创建时不得报告裁切清单。

@@ -1,5 +1,13 @@
 # 更新日志
 
+## 20260913.3 — 删除 plan_cabinet / plan_furniture 压扁门面
+
+去掉 `cabinet_pipeline.plan_cabinet()` 和 `planner.plan_furniture()`。板件与制造只经各自阶段入口或 Orchestrator 的 `run_next`。`CabinetPipelineResult` 保留为已确认阶段的 CAD 快照类型。
+
+### 边界
+
+- 删除压扁检查点的组合函数。无新增领域默认值或自然语言映射。
+
 ## 20260913.2 — 删除家具生成批处理入口
 
 去掉 `execute_spec()`、`run_until(auto_confirm=True)`、`generate_furniture.py` 和 `POST /api/plan-cabinet`。家具生成只保留逐步确认（`FurnitureToolSession` / `confirm_stage` + `run_next`）。独立 `/api/plan-layout*` 仍在。测试用 `confirm_through` 走同一套确认循环，不是产品入口。

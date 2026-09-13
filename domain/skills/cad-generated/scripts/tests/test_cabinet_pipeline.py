@@ -13,26 +13,28 @@ from runtime_paths import bootstrap_runtime_paths
 
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
-from furniture_panel_planning.panel_spec import FurnitureSpec
+from furniture_manufacturing.manufacturing_bom import plan_manufacturing
+from furniture_panel_planning.panel_planning import plan_panels
+from furniture_panel_planning.structure_planning import CabinetStructure
 from panel_fixtures import by_role, furniture_spec
-from furniture_workflow.cabinet_pipeline import plan_cabinet
 
 
-class CabinetPipelineTests(unittest.TestCase):
+class CabinetStageCompositionTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.result = plan_cabinet(
-            furniture_spec(
-                furniture_category="floor_cabinet",
-                width=800,
-                height=1000,
-                depth=600,
-                shelf_count=4,
-                n_doors=2,
-            )
+        self.spec = furniture_spec(
+            furniture_category="floor_cabinet",
+            width=800,
+            height=1000,
+            depth=600,
+            shelf_count=4,
+            n_doors=2,
         )
+        self.structure = CabinetStructure.from_spec(self.spec)
+        self.placements = plan_panels(self.spec, self.structure)
+        self.bom = plan_manufacturing(self.spec, self.placements)
 
     def test_floor_cabinet_uses_expected_coordinate_convention(self) -> None:
-        placements = by_role(self.result.placements)
+        placements = by_role(self.placements)
 
         left = placements["left_side_panel"]
         self.assertEqual((left.pos_x, left.pos_y, left.pos_z), (0.0, 0.0, 0.0))
@@ -44,22 +46,20 @@ class CabinetPipelineTests(unittest.TestCase):
         self.assertEqual(placements["bottom_panel"].pos_z, 50.0)
 
     def test_floor_cabinet_produces_panels_and_bom(self) -> None:
-        self.assertEqual(len(self.result.panels), len(self.result.placements))
-        self.assertEqual(self.result.bom.panel_count, len(self.result.panels))
-        self.assertEqual(self.result.bom.furniture_name, "落地柜")
-        self.assertEqual(self.result.bom.dimensions, "800×1000×600mm")
-        self.assertGreater(self.result.bom.total_area_m2, 0)
-        self.assertEqual(self.result.bom.readiness, "preliminary")
+        self.assertEqual(len(self.bom.panels), len(self.placements))
+        self.assertEqual(self.bom.panel_count, len(self.bom.panels))
+        self.assertEqual(self.bom.furniture_name, "落地柜")
+        self.assertEqual(self.bom.dimensions, "800×1000×600mm")
+        self.assertGreater(self.bom.total_area_m2, 0)
+        self.assertEqual(self.bom.readiness, "preliminary")
 
     def test_rejects_non_cabinet_type(self) -> None:
         with self.assertRaisesRegex(ValueError, "executable canonical category"):
-            plan_cabinet(
-                furniture_spec(
-                    furniture_category="wardrobe",
-                    width=1200,
-                    height=2000,
-                    depth=600,
-                )
+            furniture_spec(
+                furniture_category="wardrobe",
+                width=1200,
+                height=2000,
+                depth=600,
             )
 
 
