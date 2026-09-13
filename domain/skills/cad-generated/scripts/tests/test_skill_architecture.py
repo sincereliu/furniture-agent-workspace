@@ -175,6 +175,12 @@ class SkillArchitectureTests(unittest.TestCase):
             router,
         )
         self.assertIn("`domain/skills/layout-plan/SKILL.md`", router)
+        self.assertIn(
+            "domain/skills/cad-generated/references/agent-tool-contract.md",
+            router,
+        )
+        self.assertNotIn("confirmed_panel_sha256", router)
+        self.assertNotIn("store/<project-id>/panels/", router)
 
     def test_scientific_skills_are_routed_on_demand_to_stage_owned_adapters(
         self,
