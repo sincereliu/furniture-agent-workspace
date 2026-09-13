@@ -87,6 +87,10 @@ class SkillArchitectureTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn(policy_relative_path, repository_instructions)
+        self.assertIn(
+            ".agents/skills/furniture-agent/SKILL.md",
+            repository_instructions,
+        )
 
     def test_changelog_is_opt_in_per_update_files(self) -> None:
         repository_instructions = (WORKSPACE_ROOT / "AGENTS.md").read_text(
