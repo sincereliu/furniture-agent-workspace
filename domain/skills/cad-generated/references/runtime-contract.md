@@ -4,7 +4,7 @@
 
 ## 当前能力
 
-唯一应用层入口：`domain/skills/cad-generated/scripts/furniture_workflow/workflow_orchestrator.py`。它接受只含类别与成品外包络的已确认 `DesignIntent`；`execute_spec()` 接受 CLI/API 扁平 JSON，并把其他字段路由到 `Revision.stage_inputs` 的所属阶段。字段转换、阶段实现和校验归各 Skill，Orchestrator 只管理生命周期。
+唯一应用层入口：`domain/skills/cad-generated/scripts/furniture_workflow/workflow_orchestrator.py`。它接受只含类别与成品外包络的已确认 `DesignIntent`。板件/制造字段经 `create_project(..., stage_inputs=)` 或 `run_next`/`retry_stage` 的 `stage_input` 进入所属阶段。字段转换、阶段实现和校验归各 Skill，Orchestrator 只管理生命周期。没有一次性自动确认的批处理入口。
 
 - `floor_cabinet`：固定模板，含背板、踢脚板、层板、门板。
 - `wall_cabinet`：固定模板，含背板、层板、门板，无踢脚板。
@@ -46,7 +46,7 @@ result = orchestrator.run_next(
 )
 ```
 
-`run_next()`/默认 `run_until()` 不越过未确认检查点。Agent 返回当前输出后等待确认，不用批处理代替确认。
+`run_next()`/`run_until()` 不越过未确认检查点。返回当前输出后等待确认。
 
 - 意图确认：`confirm_stage(project, "design_intent")` 把 `confirmed=true` 的 `DesignIntent` 冻成 `store/<project-id>/intents/<intent-sha256>.json`。之后板件及后续规划只读这份冻结意图。
 - 板件确认：`confirm_stage(project, "panel_plan")` 把已确认板件冻成 `store/<project-id>/panels/<panel-sha256>.json`，并记下 `confirmed_panel_sha256`。有 Store 时制造、板件旁路分析、CAD `panel-plan.json` 和交付分析哈希都按该哈希读冻结文件，文件缺失则失败；无 Store 时读内存中已确认输出。`retry_stage(project, "manufacture_plan")` 不重跑板件。
@@ -69,8 +69,6 @@ store/<project-id>/
 ```
 
 未传入 `project_store` 时只更新内存中的 Revision；交互服务默认使用仓库根目录下已忽略的 `store/`。
-
-`execute_spec()` 仅供明确 CLI/API 批处理，会自动确认校验通过的中间阶段；交互 Agent 禁用。
 
 `layout-plan` 不在 `STAGE_SEQUENCE` 中。只有明确请求房间摆放、碰撞检查、SVG 或 Viewer 时才单独运行 `/api/plan-layout`；其结果不写入 `approved_stages`，也不是板件、CAD 或交付的前置条件。
 
@@ -103,25 +101,13 @@ store/<project-id>/
 
 ## API 契约
 
-`server.py` 的 `POST /api/plan-cabinet` 只适配一次性批处理并调用 `FurnitureOrchestrator.execute_spec()`：
+`server.py` 只提供独立房间布局：`POST /api/plan-layout`、`/api/plan-layout/preview`、`/api/plan-layout/viewer`。家具生成不走 HTTP 批处理，只走 [交互工具面](agent-tool-contract.md)。
 
-- 生成请求含完整板件字段。Pydantic 拒绝非法模式，Orchestrator 对缺字段、结构冲突或几何组合错误返回 `422`。
-- 请求可含 `constraints/constraint_mappings`；协议层按目标阶段路由，不得写入 `DesignIntent` 或静默丢弃。
-- 响应 `back_mount` 为有效模式；`readiness` 返回整份制造方案的 `preliminary/accepted/factory_ready` 状态；`panels` 保留备注/封边/模式，`hardware` 保留品牌/型号/暂定说明/孔数摘要。
-- 响应中的几何字段 `size_*`、`pos_*`、`x/y/z`、`local_*`、`diameter`、`depth` 虽未统一带 `_mm` 后缀，但口径统一为 mm；`length_mm/width_mm`、`width_mm/depth_mm/height_mm` 保持显式后缀。
-- `operations` 仅为入槽模式返回目标切削；`drilled_holes` 按板件返回全局/local 孔位，`hole_color_legend` 返回孔型图例。
+布局请求仍用规范字段 `furniture_category/width/depth/height`；`room/placement` 只供该独立 API。Pydantic 拒绝非法模式。未分类 `constraints` 在协议路由时拒绝。
 
 ## 生成
 
-根目录运行：
-
-```powershell
-.\.venv\Scripts\python.exe domain\skills\cad-generated\scripts\generate_furniture.py <spec.json> --force
-```
-
-产物名不同于规格文件名时用 `--name <artifact-name>`；仅允许字母、数字、连字符、下划线。
-
-写入 `generated/<artifact-name>/`：
+交互确认后的 CAD 写入 `generated/<project-id>/revision-<n>/`（或调用时给出的 `output_root`）：
 
 - `<artifact-name>.design-intent.json`
 - `<artifact-name>.panel-plan.json`
@@ -137,11 +123,11 @@ store/<project-id>/
 - `temp/cad-source/<artifact-name>/__cadgen__/models/<artifact-name>.step.py/assembly.json`
 - 同一 Viewer 组件包内由 `assembly.json` 引用的 `components/*.glb`
 
-build123d 入口源码以 `<artifact-name>.step.py`（交互模式为 `model.step.py`）只写入 `temp/cad-source/<artifact-name>/`。CAD Bridge 按 text-to-cad 0.5.1 直接运行该模型：`python <source.py> --json`（可加 `--force`），不调用已删除的 `skills/cad/scripts/gen`。STEP 按模型 `@step(out=...)` 写入交付目录；Viewer 视图从 cadgen store 导出到源码旁 `__cadgen__/models/<source>/assembly.json`。一次性 CLI 写上方目录；交互 Project/Revision 写 `<output-root>/<project-id>/revision-<n>/`。`workflow_artifact_writer.py` 写快照，`workflow_store.py` 将 Project/Revision、`stage_outputs`、`approved_stages` 存为 `project.json`。
+build123d 入口源码以 `<artifact-name>.step.py`（交互模式为 `model.step.py`）只写入 `temp/cad-source/<artifact-name>/`。CAD Bridge 按 text-to-cad 0.5.1 直接运行该模型：`python <source.py> --json`（可加 `--force`），不调用已删除的 `skills/cad/scripts/gen`。STEP 按模型 `@step(out=...)` 写入交付目录；Viewer 视图从 cadgen store 导出到源码旁 `__cadgen__/models/<source>/assembly.json`。交互 Project/Revision 写 `<output-root>/<project-id>/revision-<n>/`。`workflow_artifact_writer.py` 写快照，`workflow_store.py` 将 Project/Revision、`stage_outputs`、`approved_stages` 存为 `project.json`。
 
 运行时流水线为：
 
-`CLI / API / Agent tools -> FurnitureOrchestrator -> 设计意图 -> 板件 -> 制造/BOM -> 特征树 -> CAD Bridge -> STEP + Viewer 组件包 -> 交付验证`
+`Agent tools -> FurnitureOrchestrator -> 设计意图 -> 板件 -> 制造/BOM -> 特征树 -> CAD Bridge -> STEP + Viewer 组件包 -> 交付验证`
 
 独立房间摆放为：`明确布局请求 -> layout-plan -> 房间坐标/碰撞检查/SVG/互动 Viewer`。
 
@@ -157,4 +143,4 @@ Feature Tree v2 支持板件 `box` 和定向 `cut_box`；发射器先建板、�
 
 `cabinet_pipeline.py::plan_cabinet()` 仅是无状态兼容门面；交互流程由 Orchestrator 分阶段调用，不合并检查点。
 
-CLI 持久化 BOM Markdown，不生成裁切清单；命令未创建时不得报告裁切清单。
+CAD 阶段可持久化 BOM Markdown，不生成裁切清单；未创建时不得报告裁切清单。

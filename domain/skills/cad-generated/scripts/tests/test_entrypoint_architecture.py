@@ -20,18 +20,21 @@ def imported_modules(path: Path) -> set[str]:
 
 class EntrypointArchitectureTests(unittest.TestCase):
     def test_serial_entrypoints_only_import_the_application_orchestrator(self) -> None:
-        for filename in ("generate_furniture.py",):
-            modules = imported_modules(SCRIPTS_ROOT / filename)
-            self.assertIn("furniture_workflow.workflow_orchestrator", modules)
-            self.assertNotIn("furniture_layout.layout_pipeline", modules)
-            self.assertNotIn("furniture_feature_tree.feature_tree_emitter", modules)
-            self.assertNotIn("furniture_cad.cad_bridge", modules)
+        self.assertFalse((SCRIPTS_ROOT / "generate_furniture.py").exists())
+        orchestrator = (
+            SCRIPTS_ROOT / "furniture_workflow" / "workflow_orchestrator.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("def execute_spec(", orchestrator)
+        self.assertNotIn("auto_confirm", orchestrator)
 
         server_modules = imported_modules(SCRIPTS_ROOT / "server.py")
         self.assertIn("furniture_workflow.workflow_orchestrator", server_modules)
         self.assertIn("furniture_layout.layout_pipeline", server_modules)
         self.assertNotIn("furniture_feature_tree.feature_tree_emitter", server_modules)
         self.assertNotIn("furniture_cad.cad_bridge", server_modules)
+        server_text = (SCRIPTS_ROOT / "server.py").read_text(encoding="utf-8")
+        self.assertNotIn("/api/plan-cabinet", server_text)
+        self.assertNotIn("execute_spec", server_text)
 
         tool_modules = imported_modules(
             SCRIPTS_ROOT / "furniture_workflow" / "agent_tools.py"

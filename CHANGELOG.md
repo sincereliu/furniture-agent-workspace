@@ -1,5 +1,13 @@
 # 更新日志
 
+## 20260913.2 — 删除家具生成批处理入口
+
+去掉 `execute_spec()`、`run_until(auto_confirm=True)`、`generate_furniture.py` 和 `POST /api/plan-cabinet`。家具生成只保留逐步确认（`FurnitureToolSession` / `confirm_stage` + `run_next`）。独立 `/api/plan-layout*` 仍在。测试用 `confirm_through` 走同一套确认循环，不是产品入口。
+
+### 边界
+
+- 删除代码，无新增领域默认值或自然语言映射。测试辅助属试验夹具，不进入 Orchestrator。
+
 ## 20260913.1 — 制造层特征/连接点抽象与生产端反转
 
 把制造层的「每一处加工」统一为 Feature（判别联合），「配对的孔」打包为 ConnectionPoint（带 owner 归属），并反转生产端：`plan_manufacturing` 先生成一次孔 → Feature + ConnectionPoint 作为本源，BOM/校验/导出从它们派生。

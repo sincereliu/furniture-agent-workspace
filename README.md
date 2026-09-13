@@ -5,10 +5,10 @@
 ## 架构
 
 ```text
-CLI / FastAPI / Agent tools (furniture_*)
+Agent tools (furniture_*) / FastAPI layout
             |
             v
-FurnitureOrchestrator
+FurnitureOrchestrator  |  layout-plan runtime
             |
             +-- 设计意图 -> 板件 -> 制造/BOM -> 特征树
             +-- 按需科学分析 -> stage_analyses（不改阶段检查点）
@@ -18,7 +18,7 @@ FurnitureOrchestrator
 独立 layout-plan -> 房间摆放 / 碰撞检查 / SVG / Viewer
 ```
 
-`domain/skills/cad-generated/scripts/furniture_workflow/workflow_orchestrator.py` 是家具生成的唯一应用层入口。规划阶段实现由各自 Skill 的 `scripts/` 拥有；`cad_generated` 是 Orchestrator tool（`run_next(..., generate_cad=True)`），不是 Agent Skill。交互式 function-calling 经 `furniture_workflow/agent_tools.py` 的 `FurnitureToolSession` 调用 Orchestrator，不直接拼装规划器、发射器或 CAD Bridge。CLI/API 批处理仍走 `execute_spec()`。`layout-plan` 是明确请求时才调用的独立房间摆放能力，不是家具生成前置步骤。
+`domain/skills/cad-generated/scripts/furniture_workflow/workflow_orchestrator.py` 是家具生成的唯一应用层入口。规划阶段实现由各自 Skill 的 `scripts/` 拥有；`cad_generated` 是 Orchestrator tool（`run_next(..., generate_cad=True)`），不是 Agent Skill。交互式 function-calling 经 `furniture_workflow/agent_tools.py` 的 `FurnitureToolSession` 调用 Orchestrator，不直接拼装规划器、发射器或 CAD Bridge。没有一次性自动确认的批处理入口。`layout-plan` 是明确请求时才调用的独立房间摆放能力，不是家具生成前置步骤。
 
 ## 六阶段交互
 
@@ -61,9 +61,7 @@ FurnitureOrchestrator
 }
 ```
 
-设计意图变化使用 `revise()` 从第 1 阶段建立新 Revision。同一冻结意图上再试规划使用 `retry_stage()`；已确认板件冻成独立 JSON，对同一份板件再试制造不必重跑 `panel-plan`。直接改已有 `panel_plan`、`manufacture_plan` 或 `feature_tree_planned` 结果时使用 `revise_stage_output()`：新 Revision 只保留修改点之前已确认的结果，修改点及全部下游重新确认或生成。独立房间布局直接重新运行，不建立或使主流程 Revision 失效。完整批处理请求中的后续参数保存在 `stage_inputs`，不会污染 `DesignIntent`；`stage_inputs`、`stage_outputs`、`stage_attempts`、`approved_stages` 和工作流历史会随 Project JSON 一起保存，冻结意图、冻结板件与各次 attempt 另有独立 JSON 文件。
-
-`generate_furniture.py` 和 `execute_spec()` 是明确的一次性批处理入口，可以自动确认已通过验证的中间阶段；它们不用于交互式逐步设计。
+设计意图变化使用 `revise()` 从第 1 阶段建立新 Revision。同一冻结意图上再试规划使用 `retry_stage()`；已确认板件冻成独立 JSON，对同一份板件再试制造不必重跑 `panel-plan`。直接改已有 `panel_plan`、`manufacture_plan` 或 `feature_tree_planned` 结果时使用 `revise_stage_output()`：新 Revision 只保留修改点之前已确认的结果，修改点及全部下游重新确认或生成。独立房间布局直接重新运行，不建立或使主流程 Revision 失效。后续阶段参数保存在 `stage_inputs`，不会污染 `DesignIntent`；`stage_inputs`、`stage_outputs`、`stage_attempts`、`approved_stages` 和工作流历史会随 Project JSON 一起保存，冻结意图、冻结板件与各次 attempt 另有独立 JSON 文件。
 
 ## 按需科学分析
 
@@ -103,15 +101,13 @@ revision = orchestrator.apply_panel_optimization_candidate(project, 0)
 
 ## 入口
 
-```powershell
-# CLI：明确的一次性批处理，规划并生成 CAD
-.\.venv\Scripts\python.exe domain\skills\cad-generated\scripts\generate_furniture.py <spec.json> --force
+家具生成只走 `FurnitureToolSession`（`furniture_*` 工具）。独立房间布局 API：
 
-# API：只负责 HTTP 协议，内部同样调用 FurnitureOrchestrator
+```powershell
 .\.venv\Scripts\python.exe domain\skills\cad-generated\scripts\server.py
 ```
 
 `POST /api/plan-layout` 返回独立房间布局 JSON；`POST /api/plan-layout/preview` 直接返回 `image/svg+xml` 静态预览；`POST /api/plan-layout/viewer` 返回可直接打开的 `text/html` 互动 Viewer。
 
-可复用阶段代码放在对应的 `domain/skills/*/scripts/`；统一 Orchestrator、CLI/API 和集成测试放在 `domain/skills/cad-generated/scripts/`；一次性脚本和派生 CAD 源码放在 `temp/`；最终产物放在 `generated/`。
+可复用阶段代码放在对应的 `domain/skills/*/scripts/`；统一 Orchestrator、布局 API 和集成测试放在 `domain/skills/cad-generated/scripts/`；一次性脚本和派生 CAD 源码放在 `temp/`；最终产物放在 `generated/`。
 

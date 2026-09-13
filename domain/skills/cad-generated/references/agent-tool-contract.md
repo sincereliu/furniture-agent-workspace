@@ -3,7 +3,7 @@
 回答“任意 function-calling 宿主如何驱动家具生成，而不必读取本仓库 Skill？”  
 实现：`domain/skills/cad-generated/scripts/furniture_workflow/agent_tools.py`。
 
-这是交互协议适配器，不是新的规划器。生命周期仍由 `FurnitureOrchestrator` 执行。批处理继续走 `execute_spec()` / `generate_furniture.py`，不要注册进工具面。
+这是交互协议适配器，不是新的规划器。生命周期仍由 `FurnitureOrchestrator` 执行。没有一次性批处理入口，工具面不得自动确认。
 
 ## 注册
 
@@ -35,7 +35,7 @@ result = session.call(name, arguments)  # arguments 为对象或 JSON 字符串
 | `furniture_select_stage_attempt` | 选用某次通过的 attempt，再确认 |
 | `furniture_revise_intent` | 新 Revision，从 `design_intent` 重来 |
 
-不提供：`execute_spec`、`plan_cabinet`、`CadBridge`、特征树发射器、房间 `layout-plan`。
+不提供：`plan_cabinet`、`CadBridge`、特征树发射器、一次性自动确认。房间 `layout-plan` 仍是独立 API，不在这组工具里。
 
 ## 调用规则（代码强制）
 

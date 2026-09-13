@@ -28,6 +28,7 @@ from furniture_panel_planning.structure_planning import CabinetStructure
 from furniture_panel_planning.validation import validate_panels, validate_structure
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from furniture_workflow.workflow_state import WorkflowStage
+from workflow_test_support import confirm_through
 
 
 class BackMountModeTests(unittest.TestCase):
@@ -130,7 +131,7 @@ class BackMountModeTests(unittest.TestCase):
         for back_mount in ("groove", "insert", "cover"):
             with self.subTest(back_mount=back_mount):
                 spec = self._spec(back_mount)
-                result = orchestrator.execute_spec(
+                result = confirm_through(orchestrator, 
                     f"{back_mount}-back",
                     cabinet_data(
                         spec.furniture_category,

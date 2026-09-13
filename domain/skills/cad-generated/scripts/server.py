@@ -42,8 +42,8 @@ app = FastAPI(
     title="Furniture Agent — 板式家具拆单服务",
     version=API_VERSION,
     description=(
-        "板式家具参数化拆单 API：房间定位与 SVG 预览、"
-        "落地柜/吊柜规划、三种背板安装、BOM、加工与孔位输出"
+        "独立房间摆放 API：定位、碰撞检查、SVG 预览与互动 Viewer。"
+        "家具生成走交互工具面，不提供一次性拆单批处理。"
     ),
 )
 ORCHESTRATOR = FurnitureOrchestrator(
@@ -195,91 +195,6 @@ class CabinetRequest(BaseModel):
     )
 
 
-class PanelResponse(BaseModel):
-    label: str
-    name: str
-    panel_type: str
-    size_x: float = Field(description="板件在世界 X 轴上的尺寸 mm")
-    size_y: float = Field(description="板件在世界 Y 轴上的尺寸 mm")
-    size_z: float = Field(description="板件在世界 Z 轴上的尺寸 mm")
-    pos_x: float = Field(description="板件最小角点的世界 X 坐标 mm")
-    pos_y: float = Field(description="板件最小角点的世界 Y 坐标 mm")
-    pos_z: float = Field(description="板件最小角点的世界 Z 坐标 mm")
-    material: str
-    thickness: float = Field(description="板件厚度 mm")
-    length_mm: float = Field(description="制造/BOM 视图中的成品长度 mm")
-    width_mm: float = Field(description="制造/BOM 视图中的成品宽度 mm")
-    edge_banding: dict
-    note: str
-    back_mount: Literal["groove", "insert", "cover"]
-
-
-class HardwareDrillingResponse(BaseModel):
-    hole_type: str
-    quantity: int
-
-
-class HardwareResponse(BaseModel):
-    name: str
-    spec: str
-    quantity: int
-    unit: str
-    brand: str
-    model: str
-    note: str
-    drilling: list[HardwareDrillingResponse]
-
-
-class MachiningOperationResponse(BaseModel):
-    id: str
-    operation_type: str
-    target_panel: str
-    size_x: float = Field(description="加工包络在世界 X 轴上的尺寸 mm")
-    size_y: float = Field(description="加工包络在世界 Y 轴上的尺寸 mm")
-    size_z: float = Field(description="加工包络在世界 Z 轴上的尺寸 mm")
-    pos_x: float = Field(description="加工包络最小角点的世界 X 坐标 mm")
-    pos_y: float = Field(description="加工包络最小角点的世界 Y 坐标 mm")
-    pos_z: float = Field(description="加工包络最小角点的世界 Z 坐标 mm")
-    note: str
-
-
-class HoleResponse(BaseModel):
-    hole_type: str
-    color: str
-    x: float = Field(description="孔中心的世界 X 坐标 mm")
-    y: float = Field(description="孔中心的世界 Y 坐标 mm")
-    z: float = Field(description="孔中心的世界 Z 坐标 mm")
-    local_x: float = Field(description="孔中心相对板件局部坐标的 X 坐标 mm")
-    local_y: float = Field(description="孔中心相对板件局部坐标的 Y 坐标 mm")
-    local_z: float = Field(description="孔中心相对板件局部坐标的 Z 坐标 mm")
-    diameter: float = Field(description="孔径 mm")
-    depth: float = Field(description="钻入深度 mm")
-    direction: str
-    note: str
-    connection_id: str = ""
-
-
-class PanelDrillingResponse(BaseModel):
-    label: str
-    name: str
-    box: dict[str, float] = Field(description="板件轴对齐包络；各数值坐标与尺寸均为 mm")
-    holes: list[HoleResponse]
-
-
-class BOMResponse(BaseModel):
-    furniture_name: str
-    dimensions: str
-    readiness: Literal["preliminary", "accepted", "factory_ready"]
-    back_mount: Literal["groove", "insert", "cover"]
-    panel_count: int
-    total_area_m2: float
-    panels: list[PanelResponse]
-    hardware: list[HardwareResponse]
-    operations: list[MachiningOperationResponse]
-    hole_color_legend: dict[str, dict[str, str]] = Field(description="孔型图例；颜色与标签映射")
-    drilled_holes: list[PanelDrillingResponse] = Field(description="按板件分组的孔位结果；几何坐标与孔径深度统一为 mm")
-
-
 class LayoutPlanResponse(BaseModel):
     layout: dict[str, Any]
     layout_context: dict[str, str] | None = None
@@ -303,98 +218,6 @@ async def root():
     <p><a href="/docs">API 文档 (Swagger)</a></p>
     </body></html>
     """
-
-
-@app.post("/api/plan-cabinet", response_model=BOMResponse)
-async def plan_cabinet(req: CabinetRequest):
-    """规划柜体、拆单、返回 BOM"""
-    # Preserve an explicitly submitted null (for example the deterministic
-    # toe-kick support formula) while omitting fields the caller never sent.
-    spec = req.model_dump(exclude_unset=True)
-    try:
-        orchestration = ORCHESTRATOR.execute_spec(
-            f"api-{req.furniture_category}",
-            spec,
-        )
-    except (OSError, TypeError, ValueError) as e:
-        raise HTTPException(status_code=422, detail=str(e))
-
-    if orchestration.pipeline is None:
-        errors = [
-            issue.message
-            for validation in orchestration.revision.validations
-            for issue in validation.issues
-        ]
-        raise HTTPException(
-            status_code=400,
-            detail="; ".join(errors) or "furniture orchestration failed",
-        )
-
-    report = orchestration.pipeline.bom
-    drilled_holes = orchestration.drilled_holes or {
-        "color_legend": {},
-        "panels": [],
-    }
-
-    return BOMResponse(
-        furniture_name=report.furniture_name,
-        dimensions=report.dimensions,
-        readiness=report.readiness,
-        back_mount=orchestration.pipeline.spec.back_mount,
-        panel_count=report.panel_count,
-        total_area_m2=report.total_area_m2,
-        panels=[
-            PanelResponse(
-                label=p.label,
-                name=p.name,
-                panel_type=p.panel_type,
-                size_x=p.size_x,
-                size_y=p.size_y,
-                size_z=p.size_z,
-                pos_x=p.pos_x,
-                pos_y=p.pos_y,
-                pos_z=p.pos_z,
-                material=p.material,
-                thickness=p.thickness,
-                length_mm=p.length_mm,
-                width_mm=p.width_mm,
-                edge_banding=p.edge_banding,
-                note=p.note,
-                back_mount=p.back_mount,
-            )
-            for p in report.panels
-        ],
-        hardware=[
-            HardwareResponse(
-                name=h.name,
-                spec=h.spec,
-                quantity=h.quantity,
-                unit=h.unit,
-                brand=h.brand,
-                model=h.model,
-                note=h.note,
-                drilling=h.drilling or [],
-            )
-            for h in report.hardware
-        ],
-        operations=[
-            MachiningOperationResponse(
-                id=operation.id,
-                operation_type=operation.operation_type,
-                target_panel=operation.target_panel,
-                size_x=operation.size_x,
-                size_y=operation.size_y,
-                size_z=operation.size_z,
-                pos_x=operation.pos_x,
-                pos_y=operation.pos_y,
-                pos_z=operation.pos_z,
-                note=operation.note,
-            )
-            for operation in report.operations
-        ],
-        hole_color_legend=drilled_holes["color_legend"],
-        drilled_holes=drilled_holes["panels"],
-    )
 
 
 @app.post("/api/plan-layout", response_model=LayoutPlanResponse)

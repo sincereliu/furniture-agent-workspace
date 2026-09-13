@@ -28,6 +28,6 @@ description: 用于 design_intent 阶段，也是家具流水线的入口。当�
 ## 边界
 
 - 运行时仅含 `DesignIntent`（含吊柜挂装方式 `hanging_mode` 与挂高 `hanging_height_mm`）、`FinishedEnvelope`、目录中的可执行规范类别和外包络校验；不得导入或定义下游 `FurnitureSpec`。
-- CLI/API 完整请求由 `furniture_workflow/input_adapter.py` 拆成 `DesignIntent` 与 `stage_inputs`。扁平的 `furniture_category`、宽深高、挂装方式和挂高映射为设计意图的规范字段；门数、板厚等下游参数写入对应阶段输入，不进入 `DesignIntent`。
+- 扁平协议请求由 `furniture_workflow/input_adapter.py` 拆成 `DesignIntent` 与 `stage_inputs`。`furniture_category`、宽深高、挂装方式和挂高映射为设计意图的规范字段；门数、板厚等下游参数写入对应阶段输入，不进入 `DesignIntent`。独立房间布局 API 也走该拆分。
 - 确认后的 `DesignIntent` 是冻结 JSON，由 Orchestrator 持久化；意图变化用 `FurnitureOrchestrator.revise()` 新建 Revision，不得另建规格、状态机或入口。
 - 本阶段的阻塞项只允许是类别、外包络尺寸或吊柜挂装方式。

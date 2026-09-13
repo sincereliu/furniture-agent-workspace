@@ -26,8 +26,8 @@ description: 路由本仓库六阶段家具生成主流程、独立房间摆放�
 
 - 创建、修改或审查家具 Skill、CAD 执行工具及其运行时代码前，必须读取 [LLM 与运行时边界](references/llm-runtime-boundary.md)，并在完成前执行其中的边界审计；无法归入确定性代码类别的逻辑不得进入 `scripts/`。
 - 讨论或推理停在所属阶段；规划阶段实现由该 Skill 的 `scripts/` 拥有，CAD 执行由 `domain/skills/cad-generated/scripts/` 拥有，串联阶段顺序统一由 `FurnitureOrchestrator` 管理。
-- 交互式 function-calling 入口是 `FurnitureToolSession`（`domain/skills/cad-generated/scripts/furniture_workflow/agent_tools.py`）。宿主只注册 `openai_tools()` 导出的 `furniture_*` 工具；模型不必读取本仓库 Skill 也能确认、生成下一阶段、重试、选用 attempt、改意图。契约见 `domain/skills/cad-generated/references/agent-tool-contract.md`。不得注册 `execute_spec()`、`plan_cabinet()` 或 `CadBridge`。
-- 交互式家具生成 Agent 用 `confirm_stage()`、`run_next()`、`retry_stage()`、`select_stage_attempt()`：确认当前阶段、生成下一阶段、对着已确认上游再试一版或选用某次尝试，展示其 `stage_outputs`，然后等待“继续”。进入 `cad_generated` 时必须 `run_next(..., generate_cad=True)`。不得用 `execute_spec()` 越过确认；不得从 Agent 直接调用 `plan_cabinet()`、特征树发射器或 `CadBridge` 另建流水线。对应工具名为 `furniture_confirm_stage`、`furniture_run_next`、`furniture_retry_stage`、`furniture_select_stage_attempt`、`furniture_revise_intent`；开工用 `furniture_create_project`，读状态用 `furniture_get_project`。
+- 交互式 function-calling 入口是 `FurnitureToolSession`（`domain/skills/cad-generated/scripts/furniture_workflow/agent_tools.py`）。宿主只注册 `openai_tools()` 导出的 `furniture_*` 工具；模型不必读取本仓库 Skill 也能确认、生成下一阶段、重试、选用 attempt、改意图。契约见 `domain/skills/cad-generated/references/agent-tool-contract.md`。不得注册 `plan_cabinet()` 或 `CadBridge`。没有一次性批处理入口，不得自动确认中间阶段。
+- 交互式家具生成 Agent 用 `confirm_stage()`、`run_next()`、`retry_stage()`、`select_stage_attempt()`：确认当前阶段、生成下一阶段、对着已确认上游再试一版或选用某次尝试，展示其 `stage_outputs`，然后等待“继续”。进入 `cad_generated` 时必须 `run_next(..., generate_cad=True)`。不得从 Agent 直接调用 `plan_cabinet()`、特征树发射器或 `CadBridge` 另建流水线。对应工具名为 `furniture_confirm_stage`、`furniture_run_next`、`furniture_retry_stage`、`furniture_select_stage_attempt`、`furniture_revise_intent`；开工用 `furniture_create_project`，读状态用 `furniture_get_project`。
 - `confirm_stage(design_intent)` 把已确认意图冻成 JSON；板件及后续规划只读这份冻结意图。`confirm_stage(panel_plan)` 把已确认板件冻成 `store/<project-id>/panels/<sha256>.json` 并记下 `confirmed_panel_sha256`；有 Store 时制造、板件旁路分析、CAD 板件快照和交付哈希都按该哈希读冻结文件（缺失则失败），不满意制造时用 `retry_stage(manufacture_plan)`，不必重跑板件。同一冻结上游上用 `retry_stage()` 再试一版，用 `select_stage_attempt()` 选用某次通过的尝试，再 `confirm_stage()`。规划尝试失败只废这一次，不把整份 Revision 标为失败。
 - 修改设计意图用 `revise()`，从 `design_intent` 开始并作废下游尝试。直接改已有规划结果仍用 `revise_stage_output()`。新 Revision 只继承修改点之前的已确认输出；修改阶段及下游重新确认/生成。
 - 只有用户明确要求房间摆放、靠墙/居中、门窗或障碍物碰撞、摆放图或房间 Viewer 时才调用 `layout-plan`；它不写入主流程 `STAGE_SEQUENCE`，也不是 `panel_plan` 的前置条件。
@@ -35,7 +35,7 @@ description: 路由本仓库六阶段家具生成主流程、独立房间摆放�
 - 外部技能只从 `external/text-to-cad/skills/` 按需加载：家具 STEP 由 Orchestrator tool 生成；几何审查/快照用 `cad/SKILL.md`，审查/链接用 `cad-viewer/SKILL.md`，命名采购件用 `step-parts/SKILL.md`；忽略生成副本 `external/text-to-cad/plugins/cad/skills/`。
 - 科学分析只从 `external/scientific-agent-skills/skills/` 按当前阶段按需加载，不把整个集合注册为家具技能：板件尺寸链/公差审计读 `uncertainty-and-units/SKILL.md`，板件多目标候选读 `pymoo/SKILL.md`；制造样件试验读 `experimental-design/SKILL.md`，已有试验数据读 `statistical-analysis/SKILL.md`，板件流转/工位排队读 `simpy/SKILL.md`。
 - 科学分析是 `stage_analyses` 旁路证据，不是新的检查点，也不得直接覆盖 `stage_outputs`。候选方案经用户接受后，按字段所有者调用 `revise()` 或 `revise_stage_output()` 建立新 Revision，再重新确认受影响阶段及下游。
-- 仅明确的一次性家具生成批处理可用 `domain/skills/cad-generated/scripts/generate_furniture.py` 或 `execute_spec()`；`server.py` 的家具生成端点只适配协议并调用 Orchestrator，独立 `/api/plan-layout` 端点调用 `layout-plan` 自有运行时。
+- `server.py` 只提供独立 `/api/plan-layout` 房间摆放；家具生成没有 CLI/API 批处理，只走 Orchestrator 的确认 / `run_next` 与 `FurnitureToolSession`。
 - 声称可执行前检查实时代码、测试和入口；缺失则如实说明。
 
 ## 边界

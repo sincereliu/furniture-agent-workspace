@@ -56,7 +56,6 @@ from .input_adapter import (
     intent_from_spec as translate_intent_from_spec,
     manufacturing_stage_input,
     panel_stage_input,
-    stage_inputs_from_spec,
 )
 from .workflow_artifact_writer import prepare_artifact_dir, write_artifacts
 from .workflow_project import Project, Revision, StageAttempt
@@ -343,40 +342,6 @@ class FurnitureOrchestrator:
             raise ValueError("selected candidate no longer materializes reproducibly")
         return self.revise_stage_output(project, stage, output)
 
-    def execute_spec(
-        self,
-        name: str,
-        spec: dict[str, Any],
-        *,
-        output_root: str | Path | None = None,
-        artifact_name: str | None = None,
-        generate_cad: bool = False,
-        force: bool = False,
-        through_stage: str | WorkflowStage | None = None,
-    ) -> OrchestrationResult:
-        """Run an explicit batch request through the serial furniture workflow."""
-        intent = self.intent_from_spec(spec)
-        project = self.create_project(
-            name,
-            intent,
-            stage_inputs=stage_inputs_from_spec(spec),
-        )
-        self.confirm_intent(project)
-        target = parse_stage(through_stage) if through_stage else (
-            WorkflowStage.DELIVERY_VALIDATED
-            if generate_cad
-            else WorkflowStage.MANUFACTURING_PLANNED
-        )
-        return self.run_until(
-            project,
-            target,
-            output_root=output_root,
-            artifact_name=artifact_name,
-            generate_cad=generate_cad,
-            force=force,
-            auto_confirm=True,
-        )
-
     @staticmethod
     def intent_from_spec(spec: dict[str, Any]) -> DesignIntent:
         """Compatibility facade for the design-intent translation API."""
@@ -456,7 +421,6 @@ class FurnitureOrchestrator:
             artifact_name=artifact_name,
             generate_cad=generate_cad,
             force=force,
-            auto_confirm=False,
         )
         self._persist(project)
         return result
@@ -553,32 +517,6 @@ class FurnitureOrchestrator:
         self._persist(project)
         return revision
 
-    def run(
-        self,
-        project: Project,
-        *,
-        output_root: str | Path | None = None,
-        artifact_name: str | None = None,
-        generate_cad: bool = False,
-        force: bool = False,
-        through_stage: str | WorkflowStage | None = None,
-        auto_confirm: bool = False,
-    ) -> OrchestrationResult:
-        target = parse_stage(through_stage) if through_stage else (
-            WorkflowStage.DELIVERY_VALIDATED
-            if generate_cad
-            else WorkflowStage.FEATURE_TREE_PLANNED
-        )
-        return self.run_until(
-            project,
-            target,
-            output_root=output_root,
-            artifact_name=artifact_name,
-            generate_cad=generate_cad,
-            force=force,
-            auto_confirm=auto_confirm,
-        )
-
     def run_until(
         self,
         project: Project,
@@ -588,9 +526,8 @@ class FurnitureOrchestrator:
         artifact_name: str | None = None,
         generate_cad: bool = False,
         force: bool = False,
-        auto_confirm: bool = False,
     ) -> OrchestrationResult:
-        """Run toward a target, pausing at the first unconfirmed stage by default."""
+        """Run toward a target, pausing at the first unconfirmed stage."""
         target = parse_stage(target_stage)
         revision = project.latest
         attempted_stage: WorkflowStage | None = None
@@ -623,17 +560,8 @@ class FurnitureOrchestrator:
                 latest_attempt = revision.latest_attempt(next_stage)
                 if latest_attempt is not None and not latest_attempt.passed:
                     break
-                if auto_confirm:
-                    self.confirm_stage(project, next_stage)
-                else:
-                    break
+                break
 
-            if (
-                auto_confirm
-                and revision.workflow.current == target
-                and not revision.is_stage_approved(target)
-            ):
-                self.confirm_stage(project, target)
             self._persist(project)
             return self._result(project)
         except (OSError, TypeError, ValueError) as exc:

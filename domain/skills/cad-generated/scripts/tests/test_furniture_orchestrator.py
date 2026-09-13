@@ -24,6 +24,7 @@ from furniture_delivery_validation.validation import validate_delivery
 from furniture_design_intent.design_intent import DesignIntent, FinishedEnvelope
 from furniture_workflow.input_adapter import stage_inputs_from_spec
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
+from workflow_test_support import confirm_through, confirm_until
 from furniture_workflow.workflow_project import Project
 from furniture_workflow.workflow_state import STAGE_SEQUENCE, WorkflowStage, parse_stage
 from furniture_workflow.workflow_store import JsonProjectStore
@@ -150,7 +151,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         )
 
     def test_revising_panels_invalidates_and_regenerates_downstream(self) -> None:
-        result = self.orchestrator.execute_spec(
+        result = confirm_through(self.orchestrator, 
             "可修改柜体",
             cabinet_data(shelf_count=2, n_doors=2),
             through_stage=WorkflowStage.FEATURE_TREE_PLANNED,
@@ -193,10 +194,10 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         )
 
         self.orchestrator.confirm_stage(project, WorkflowStage.PANELS_PLANNED)
-        regenerated = self.orchestrator.run_until(
+        regenerated = confirm_until(
+            self.orchestrator,
             project,
-            WorkflowStage.FEATURE_TREE_PLANNED,
-            auto_confirm=True,
+            through_stage=WorkflowStage.FEATURE_TREE_PLANNED,
         )
 
         new_panel_output = regenerated.revision.stage_outputs[
@@ -208,14 +209,14 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             regenerated.revision.stage_outputs,
         )
 
-    def test_named_batch_generation_records_all_six_serial_stages(self) -> None:
+    def test_confirmed_generation_records_all_six_serial_stages(self) -> None:
         artifact_name = f"orchestrator-test-{uuid4().hex}"
         source_dir = WORKSPACE_ROOT / "temp" / "cad-source" / artifact_name
         try:
             with tempfile.TemporaryDirectory() as temporary_directory:
                 temporary_root = Path(temporary_directory)
                 orchestrator = fake_orchestrator(temporary_root)
-                result = orchestrator.execute_spec(
+                result = confirm_through(orchestrator, 
                     artifact_name,
                     cabinet_data("wall_cabinet"),
                     output_root=temporary_root / "outputs",
@@ -345,7 +346,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             shutil.rmtree(source_dir, ignore_errors=True)
 
     def test_revised_manufacturing_operation_must_remain_inside_target_panel(self) -> None:
-        result = self.orchestrator.execute_spec(
+        result = confirm_through(self.orchestrator, 
             "加工验证",
             cabinet_data(),
             through_stage=WorkflowStage.MANUFACTURING_PLANNED,
@@ -372,7 +373,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         )
 
     def test_manufacturing_readiness_must_use_known_state(self) -> None:
-        result = self.orchestrator.execute_spec(
+        result = confirm_through(self.orchestrator, 
             "制造状态验证",
             cabinet_data(),
             through_stage=WorkflowStage.MANUFACTURING_PLANNED,
@@ -407,7 +408,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as temporary_directory:
                 temporary_root = Path(temporary_directory)
                 orchestrator = fake_orchestrator(temporary_root)
-                result = orchestrator.execute_spec(
+                result = confirm_through(orchestrator, 
                     artifact_name,
                     cabinet_data("wall_cabinet"),
                     output_root=temporary_root / "outputs",
@@ -454,7 +455,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         self.assertNotIn("layout_planned", result.revision.stage_outputs)
 
     def test_serial_workflow_skips_room_layout_even_when_context_is_supplied(self) -> None:
-        result = self.orchestrator.execute_spec(
+        result = confirm_through(self.orchestrator, 
             "带房间信息的柜体",
             cabinet_data(
                 room={
@@ -552,7 +553,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         self.assertEqual(inputs["informational_constraints"], ["仅供卧室方案比较"])
 
     def test_malformed_dormant_parameters_fail_structured_admission(self) -> None:
-        result = self.orchestrator.execute_spec(
+        result = confirm_through(self.orchestrator, 
             "外盖背板柜体",
             cabinet_data(
                 back_mount="cover",
@@ -575,7 +576,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         )
 
     def test_active_groove_parameters_are_validated_at_panel_stage(self) -> None:
-        result = self.orchestrator.execute_spec(
+        result = confirm_through(self.orchestrator, 
             "错误入槽参数柜体",
             cabinet_data(back_mount="groove", groove_depth="invalid"),
             through_stage=WorkflowStage.PANELS_PLANNED,
@@ -606,7 +607,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         )
 
     def test_project_store_round_trips_stage_outputs_and_approvals(self) -> None:
-        result = self.orchestrator.execute_spec(
+        result = confirm_through(self.orchestrator, 
             "可恢复项目",
             cabinet_data(),
             through_stage=WorkflowStage.FEATURE_TREE_PLANNED,
@@ -681,7 +682,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             )
 
     def test_three_door_request_fails_at_panel_admission(self) -> None:
-        result = self.orchestrator.execute_spec(
+        result = confirm_through(self.orchestrator, 
             "三门柜体",
             cabinet_data(n_doors=3, shelf_count=0),
             through_stage=WorkflowStage.PANELS_PLANNED,
@@ -976,7 +977,7 @@ class FurnitureOrchestratorTests(unittest.TestCase):
             temporary_root = Path(temporary_directory)
             store = JsonProjectStore(temporary_root / "store")
             orchestrator = fake_orchestrator(temporary_root, project_store=store)
-            result = orchestrator.execute_spec(
+            result = confirm_through(orchestrator, 
                 "frozen-cad",
                 cabinet_data(),
                 through_stage=WorkflowStage.FEATURE_TREE_PLANNED,

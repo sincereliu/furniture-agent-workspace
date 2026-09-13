@@ -24,6 +24,7 @@ from furniture_workflow.workflow_orchestrator import (
 from furniture_workflow.workflow_state import WorkflowStage
 from furniture_workflow.workflow_store import JsonProjectStore
 from panel_fixtures import cabinet_data
+from workflow_test_support import confirm_through
 
 
 def cabinet_spec() -> dict[str, object]:
@@ -35,7 +36,7 @@ class ScientificAnalysisAdapterTests(unittest.TestCase):
         self.orchestrator = FurnitureOrchestrator(workspace_root=WORKSPACE_ROOT)
 
     def _project_through(self, stage: WorkflowStage):
-        return self.orchestrator.execute_spec(
+        return confirm_through(self.orchestrator, 
             "科学分析测试柜",
             cabinet_spec(),
             through_stage=stage,
@@ -89,7 +90,7 @@ class ScientificAnalysisAdapterTests(unittest.TestCase):
                 workspace_root=WORKSPACE_ROOT,
                 project_store=store,
             )
-            project = orchestrator.execute_spec(
+            project = confirm_through(orchestrator, 
                 "冻结分析柜",
                 cabinet_spec(),
                 through_stage=WorkflowStage.PANELS_PLANNED,
