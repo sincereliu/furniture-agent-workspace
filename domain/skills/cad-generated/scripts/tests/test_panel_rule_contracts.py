@@ -23,6 +23,7 @@ from furniture_panel_planning.construction_geometry import (
 from furniture_panel_planning.cabinet_identity import require_primary_handoff
 from furniture_panel_planning.joint_topology import PanelJoint
 from furniture_panel_planning.panel_pipeline import plan_panel_cabinets, plan_panel_stage
+from furniture_panel_planning.panel_review import panel_review_from_output
 from furniture_panel_planning.panel_planning import plan_panels
 from furniture_panel_planning.panel_rules import (
     toe_kick_support_clear_spacing,
@@ -424,6 +425,61 @@ class PanelRuleContractTests(unittest.TestCase):
                     "end_cam_face": "-z",
                 }
             )
+
+    def test_panel_review_lists_each_panel_and_contact_once(self) -> None:
+        intent = DesignIntent(
+            furniture_category="floor_cabinet",
+            finished_envelope=FinishedEnvelope(800, 600, 1000),
+            confirmed=True,
+        )
+        output = plan_panel_stage(intent, panel_parameters(n_doors=2))
+        spec, structure, panels = require_primary_handoff(output)
+        review = panel_review_from_output(output)
+        self.assertEqual(set(review), {"cabinets", "markdown"})
+        cabinet = review["cabinets"][0]
+        self.assertEqual(cabinet["id"], "cabinet_1")
+        self.assertEqual(cabinet["n_doors"], spec["n_doors"])
+        self.assertEqual(cabinet["shelf_count"], len(spec["shelves"]))
+        self.assertNotIn("spec", cabinet)
+        self.assertNotIn("structure", cabinet)
+        self.assertEqual(len(cabinet["panels"]), len(panels))
+        self.assertEqual(
+            cabinet["internal_clearance_mm"]["width"],
+            structure["internal_width"],
+        )
+        self.assertEqual(
+            cabinet["internal_clearance_mm"]["height"],
+            structure["internal_height"],
+        )
+        self.assertEqual(
+            cabinet["internal_clearance_mm"]["depth"],
+            structure["internal_y_end"] - structure["internal_y_start"],
+        )
+        for panel in cabinet["panels"]:
+            self.assertEqual(
+                set(panel),
+                {"parent_id", "role", "name", "panel_type", "size_mm", "pos_mm"},
+            )
+            self.assertNotIn("joints", panel)
+        flattened = [
+            (joint["bearing_id"], joint["end_id"], joint["face"])
+            for panel in panels
+            for joint in panel["joints"]
+        ]
+        unique = [
+            (item["bearing_id"], item["end_id"], item["face"])
+            for item in cabinet["contacts"]
+        ]
+        self.assertEqual(len(unique), len(set(unique)))
+        self.assertEqual(set(unique), set(flattened))
+        self.assertLess(len(unique), len(flattened))
+        for contact in cabinet["contacts"]:
+            self.assertNotIn("connection", contact)
+            self.assertNotIn("end_z", contact)
+        self.assertIn("内部净空", review["markdown"])
+        self.assertIn("左侧板", review["markdown"])
+        with self.assertRaisesRegex(ValueError, "does not support"):
+            require_primary_handoff(review)
 
 
 if __name__ == "__main__":

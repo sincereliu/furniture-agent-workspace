@@ -135,7 +135,7 @@ class AgentToolSurfaceTests(unittest.TestCase):
         self.assertFalse(generated["project"]["current_stage_approved"])
         self.assertEqual(generated["project"]["waiting_for"], TOOL_CONFIRM_STAGE)
         self.assertEqual(
-            generated["project"]["current_output"]["cabinets"][0]["spec"]["n_doors"],
+            generated["project"]["current_output"]["cabinets"][0]["n_doors"],
             2,
         )
 
@@ -165,7 +165,7 @@ class AgentToolSurfaceTests(unittest.TestCase):
         self.assertEqual(second["project"]["intent_sha256"], intent_sha)
         self.assertEqual(len(second["project"]["attempts"]["panel_plan"]), 2)
         self.assertEqual(
-            second["project"]["current_output"]["cabinets"][0]["spec"]["n_doors"],
+            second["project"]["current_output"]["cabinets"][0]["n_doors"],
             1,
         )
 
@@ -182,7 +182,7 @@ class AgentToolSurfaceTests(unittest.TestCase):
         )
         self.assertTrue(selected["ok"], selected)
         self.assertEqual(
-            selected["project"]["current_output"]["cabinets"][0]["spec"]["n_doors"],
+            selected["project"]["current_output"]["cabinets"][0]["n_doors"],
             2,
         )
 
@@ -314,6 +314,39 @@ class AgentToolSurfaceTests(unittest.TestCase):
         self.assertEqual(loaded["project"]["stage_sequence"], [
             stage.value for stage in STAGE_SEQUENCE
         ])
+
+    def test_panel_plan_snapshot_is_confirmation_review(self) -> None:
+        project_id = self._confirmed_intent()
+        generated = self.session.call(
+            TOOL_RUN_NEXT,
+            {
+                "project_id": project_id,
+                "stage_input": panel_parameters(n_doors=2),
+            },
+        )
+        self.assertTrue(generated["ok"], generated)
+        output = generated["project"]["current_output"]
+        cabinet = output["cabinets"][0]
+        self.assertIn("markdown", output)
+        self.assertEqual(cabinet["n_doors"], 2)
+        self.assertNotIn("spec", cabinet)
+        self.assertNotIn("structure", cabinet)
+        self.assertNotIn("joints", cabinet["panels"][0])
+        self.assertNotIn("connection", cabinet["contacts"][0])
+        self.assertIn("内部净空", output["markdown"])
+
+        confirmed = self.session.call(
+            TOOL_CONFIRM_STAGE,
+            {"project_id": project_id, "stage": "panel_plan"},
+        )
+        self.assertTrue(confirmed["ok"], confirmed)
+        digest = confirmed["project"]["confirmed_panel_sha256"]
+        frozen = json.loads(
+            self.store.panel_path(project_id, digest).read_text(encoding="utf-8")
+        )
+        self.assertEqual(set(frozen), {"cabinets"})
+        self.assertIn("spec", frozen["cabinets"][0])
+        self.assertIn("joints", frozen["cabinets"][0]["panels"][0])
 
     def test_include_output_false_omits_current_output(self) -> None:
         created = self.session.call(

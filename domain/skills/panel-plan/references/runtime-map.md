@@ -10,7 +10,7 @@
 
 ## 交接
 
-下游（制造、旁路分析、`revise_stage_output`）只通过 `cabinets_from_output()` / `require_primary_handoff()` 读板件结果。检查点只有 `cabinets[]`；交互主流程取第一台柜的 `spec` 与 `panels`。顶层不得再写 `spec/structure/panels/cabinet_id`。
+下游（制造、旁路分析、`revise_stage_output`）只通过 `cabinets_from_output()` / `require_primary_handoff()` 读板件结果。检查点只有 `cabinets[]`；交互主流程取第一台柜的 `spec` 与 `panels`。顶层不得再写 `spec/structure/panels/cabinet_id`。工具快照 `current_output` 对 `panel_plan` 是 `panel_review.py` 从这棵树派生的确认审查清单，不是冻结文件本身。
 
 确认后的板件冻成 `store/<project-id>/panels/<sha256>.json`，Revision 记下 `confirmed_panel_sha256`。有 Project Store 时，制造、板件旁路分析、CAD 板件快照和交付哈希按该哈希读冻结文件，文件缺失则失败；未确认、旧项目没有该哈希、或没有 Store 时仍读内存中的 `stage_outputs.panel_plan`。不重跑 `plan_panel_stage()`。
 
@@ -24,6 +24,7 @@
 | `construction_geometry.py` | 层板/抽屉/踢脚/背拉条盒子 | calculation |
 | `topology_solver.py` | 读柜型 YAML，物化板件位置与语义面 | calculation |
 | `joint_topology.py` | 承面–端面接触几何；不解析连不连 | calculation |
+| `panel_review.py` | 确认审查清单：净空、板件一行一条、接触去重；不含连不连 | calculation / structured_protocol |
 | `validation.py` | 检查点不变量 | validation |
 | `quantitative_audit.py` / `design_optimization.py` | 旁路分析 | 只写 `stage_analyses` |
 

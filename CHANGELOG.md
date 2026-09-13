@@ -1,5 +1,13 @@
 # 更新日志
 
+## 20260913.7 — 板件确认审查清单
+
+工具快照里 `panel_plan` 的 `current_output` 改为从 `cabinets[]` 派生的确认审查清单：外包络、内部净空、板件一行一条、接触去重，并带可直接展示的 `markdown`。冻结板件 JSON 与下游仍只读 `cabinets[]`，审查清单不含 `connection`。
+
+### 边界
+
+- 新增 `panel_review.py`（`calculation` / `structured_protocol`，确定性投影，不选方案、不解析连不连）。无自然语言映射，无 LLM 决策。
+
 ## 20260913.6 — BOMReport 成为下游唯一通道
 
 把 feature-tree 需要的场景参数（`furniture_category` / `width` / `depth` / `height` / `board_thickness`）收进 `BOMReport`（由 spec 原样带回），feature-tree 阶段改读 `BOMReport`，不再直接从设计层 `spec` 取——消除「设计层数据直通下游」的旁路，保证下游只有 BOMReport 一个入口。

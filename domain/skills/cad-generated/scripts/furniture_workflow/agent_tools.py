@@ -91,6 +91,10 @@ _PANEL_STAGE_INPUT_HINT = (
     "door_thickness, drawer_bottom_thickness, drawer_back_thickness. "
     "Optional cabinet_id. Do not send furniture_category or envelope fields."
 )
+_PANEL_OUTPUT_HINT = (
+    "For panel_plan, current_output is the confirmation review "
+    "(markdown or panel/contact tables), not the frozen cabinets tree."
+)
 _MANUFACTURING_STAGE_INPUT_HINT = (
     "For manufacture_plan, stage_input is {parameters: {...}, appearance?: {...}} "
     "or a flat parameters object. Known parameter keys: door_hinge_side "
@@ -353,7 +357,12 @@ def project_snapshot(
     current_output = None
     if include_output and serial is not None:
         output = revision.stage_outputs.get(serial.value)
-        current_output = deepcopy(output) if output is not None else None
+        if output is not None and serial == WorkflowStage.PANELS_PLANNED:
+            from furniture_panel_planning.panel_review import panel_review_from_output
+
+            current_output = panel_review_from_output(output)
+        elif output is not None:
+            current_output = deepcopy(output)
     validation = _latest_validation(revision, serial)
     return {
         "id": project.id,
@@ -727,6 +736,7 @@ _OPENAI_TOOLS: list[dict[str, Any]] = [
             "description": (
                 "Return the current revision snapshot: stage, approvals, "
                 "allowed_actions, attempts, validation, and current_output. "
+                f"{_PANEL_OUTPUT_HINT} "
                 "Call this when you need state; do not infer a later stage."
             ),
             "parameters": {
@@ -776,6 +786,7 @@ _OPENAI_TOOLS: list[dict[str, Any]] = [
                 "Requires the current stage to be confirmed. If that next stage "
                 f"already has attempts, call {TOOL_RETRY_STAGE} instead. "
                 "Entering cad_generated requires generate_cad=true. "
+                f"Show current_output and wait. {_PANEL_OUTPUT_HINT} "
                 f"{_PANEL_STAGE_INPUT_HINT} {_MANUFACTURING_STAGE_INPUT_HINT}"
             ),
             "parameters": {
@@ -817,7 +828,8 @@ _OPENAI_TOOLS: list[dict[str, Any]] = [
                 "Re-run a planning stage against the frozen confirmed upstream. "
                 f"Retryable stages: {_RETRYABLE_TEXT}. Failed attempts do not "
                 "fail the whole revision. Show the new current_output and wait "
-                f"for confirmation. {_PANEL_STAGE_INPUT_HINT} "
+                f"for confirmation. {_PANEL_OUTPUT_HINT} "
+                f"{_PANEL_STAGE_INPUT_HINT} "
                 f"{_MANUFACTURING_STAGE_INPUT_HINT}"
             ),
             "parameters": {

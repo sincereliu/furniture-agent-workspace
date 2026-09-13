@@ -44,7 +44,7 @@ result = session.call(name, arguments)  # arguments 为对象或 JSON 字符串
 - 进入 `cad_generated` 必须 `generate_cad=true`；省略 `output_root` 时使用工作区约定路径 `generated`。
 - 未知字段、历史别名（`furniture_type` / `type` / `overall_size`）返回 `UNKNOWN_ARGUMENT`。
 - 失败 Revision 只能 `furniture_revise_intent`。
-- 每次成功调用后展示 `project.current_output`，按 `waiting_for` / `allowed_actions` 停，不要连跳。
+- 每次成功调用后展示 `project.current_output`，按 `waiting_for` / `allowed_actions` 停，不要连跳。`panel_plan` 展示审查清单的 `markdown` 或板件/接触表，不要把冻结 `cabinets[]` 树当确认界面。
 
 ## 快照字段
 
@@ -53,7 +53,7 @@ result = session.call(name, arguments)  # arguments 为对象或 JSON 字符串
 - `id` / `revision_id` / `current_stage` / `approved_stages` / `next_stage`
 - `allowed_actions`、`waiting_for`、`cad_generation_required`
 - `attempts`（编号、是否通过、错误；不含整份输出）
-- `current_output`（当前阶段输出；`include_output=false` 可省略）
+- `current_output`（当前阶段输出；`include_output=false` 可省略）。`panel_plan` 是确认审查清单（净空、板件一行一条、接触去重、`markdown`），不是冻结 `cabinets[]` 树；冻结板件仍在 Store。
 - `intent` 与冻结哈希
 
 `allowed_actions` 是状态机合法转移，不是方案推荐。

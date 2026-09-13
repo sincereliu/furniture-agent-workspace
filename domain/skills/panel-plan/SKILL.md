@@ -20,7 +20,7 @@ description: 用于 panel_plan 阶段。当用户说“几扇门”“几层板�
 
 - 提案必须覆盖契约中的必填字段。用户没说的构造值按 [提案契约](references/panel-proposal-contract.md) 的候选起点写成具体值并标成假设，一次确认。料档可省略，按 [料档与工艺卡](references/sheet-stock-catalog.md) 展开，不进假设清单。
 - 停问清单与 `null` 口径只在提案契约。
-- 展示给用户：一份假设清单；代码准入后再展示柜体 `id`、`back_mount` requested/effective、内部净空和板件清单（含所属柜体）。
+- 展示给用户：一份假设清单；代码准入后展示工具快照 `current_output` 的确认审查清单（柜体、背板安装、内部净空、板件一行一条、接触去重），不要展开完整 `cabinets` 树。清单由运行时从检查点派生，见 [运行时映射](references/runtime-map.md)。
 - 按当前任务读对应 reference，不要一次加载全部规则。
 
 ## 参考导航
