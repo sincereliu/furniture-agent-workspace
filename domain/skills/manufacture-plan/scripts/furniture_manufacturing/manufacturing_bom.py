@@ -10,10 +10,11 @@ from furniture_panel_planning.panel_spec import FurnitureSpec, resolve_back_moun
 from furniture_panel_planning.panel_models import PanelPlacement
 
 from .manufacturing_edge_banding import get_edge_banding
-from .connection_points import ConnectionPoint, collect_connection_points
+from .connection_points import ConnectionPoint
 from .connectors import ALL_CONNECTORS
 from .features import (
     Feature,
+    GrooveFeature,
     HoleFeature,
     from_edge_banding,
     from_hole_spec,
@@ -60,6 +61,12 @@ class BOMReport:
     panels: list[PanelRecord]
     hardware: list[HardwareRecord]
     operations: list[MachiningOperation]
+    # 设计层回传（spec 原样带回）：feature-tree 等下游场景参数，保证 BOMReport 单一通道
+    furniture_category: str = ""
+    width: float = 0.0
+    depth: float = 0.0
+    height: float = 0.0
+    board_thickness: float = 0.0
     total_area_m2: float = 0.0
     readiness: str = "preliminary"
     requested_options: dict[str, Any] = field(default_factory=dict)
@@ -141,14 +148,26 @@ def _resolve_joint_connections(panels: list[PanelRecord]) -> None:
 def _derive_features_and_points(
     panels: List[PanelRecord],
     operations: List[MachiningOperation],
-    holes_by_connector: Mapping[Any, list],
 ) -> tuple[list[Feature], list[ConnectionPoint]]:
-    """从「生成一次」的孔 + 槽 + 封边派生 Feature 与 ConnectionPoint 本源。"""
-    hole_features = [
-        from_hole_spec(hole)
-        for holes in holes_by_connector.values()
-        for hole in holes
-    ]
+    """从连接件「按点产出」的 ConnectionPoint + 槽 + 封边派生 Feature 本源。
+
+    连接点类连接件（三合一/背板）直接产出 ConnectionPoint（其 holes 即 HoleFeature）；
+    其余连接件逐孔产出 HoleSpec → HoleFeature。槽/封边仍由 operations/edge_banding 派生。
+    """
+    connection_points: list[ConnectionPoint] = []
+    hole_features: list[HoleFeature] = []
+    for connector_cls in ALL_CONNECTORS:
+        connector = connector_cls()
+        if connector.produces_connection_points:
+            points = connector.generate_connection_points(panels)
+            connection_points.extend(points)
+            for point in points:
+                hole_features.extend(point.holes)
+        else:
+            hole_features.extend(
+                from_hole_spec(hole)
+                for hole in connector.generate_holes_for_panels(panels)
+            )
     groove_features = [
         from_machining_operation(operation)
         for operation in operations
@@ -160,14 +179,6 @@ def _derive_features_and_points(
         for edge_feature in from_edge_banding(panel.label, panel.edge_banding)
     ]
     features = hole_features + groove_features + edge_features
-    connection_points: list[ConnectionPoint] = []
-    for connector_cls, holes in holes_by_connector.items():
-        connection_points.extend(
-            collect_connection_points(
-                [from_hole_spec(hole) for hole in holes],
-                owner=connector_cls.__name__,
-            )
-        )
     return features, connection_points
 
 
@@ -180,11 +191,7 @@ def recompute_features(
     供 `revise_stage_output` 在直接编辑制造输出后重算，保持
     features/connection_points 与 panels/operations 一致（避免持久化快照漂移）。
     """
-    holes_by_connector = {
-        connector_cls: connector_cls().generate_holes_for_panels(panels)
-        for connector_cls in ALL_CONNECTORS
-    }
-    return _derive_features_and_points(panels, operations, holes_by_connector)
+    return _derive_features_and_points(panels, operations)
 
 
 def plan_manufacturing(
@@ -223,14 +230,8 @@ def plan_manufacturing(
     _resolve_joint_connections(panels)
     operations = _back_groove_operations(spec, back_mount, placements)
 
-    # ── 本源：生成一次孔 → Feature + ConnectionPoint ──
-    holes_by_connector = {
-        connector_cls: connector_cls().generate_holes_for_panels(panels)
-        for connector_cls in ALL_CONNECTORS
-    }
-    features, connection_points = _derive_features_and_points(
-        panels, operations, holes_by_connector
-    )
+    # ── 本源：连接件按点产出 ConnectionPoint + 逐孔 HoleFeature → Feature ──
+    features, connection_points = _derive_features_and_points(panels, operations)
 
     dimensions = f"{spec.width:.0f}×{spec.height:.0f}×{spec.depth:.0f}mm"
     connector_options = options.get("options", {})
@@ -249,6 +250,11 @@ def plan_manufacturing(
             features=features,
         ),
         operations=operations,
+        furniture_category=spec.furniture_category,
+        width=spec.width,
+        depth=spec.depth,
+        height=spec.height,
+        board_thickness=spec.board_thickness,
         total_area_m2=sum(panel.area_m2 for panel in panels),
         readiness="preliminary",
         requested_options=options,
@@ -473,12 +479,16 @@ def format_bom_markdown(report: BOMReport) -> str:
             f"{panel.edge_banding_summary()} | {panel.note} |"
         )
     lines.extend(["", f"**总展开面积**: {report.total_area_m2:.4f} m²"])
-    if report.operations:
-        lines.extend(["", f"### 加工操作 ({len(report.operations)} 项)", ""])
-        for operation in report.operations:
+    grooves = [
+        feature for feature in report.features
+        if isinstance(feature, GrooveFeature)
+    ]
+    if grooves:
+        lines.extend(["", f"### 加工操作 ({len(grooves)} 项)", ""])
+        for groove in grooves:
             lines.append(
-                f"- {operation.note}: {operation.target_panel}, "
-                f"{operation.size_x:g}×{operation.size_y:g}×{operation.size_z:g}mm"
+                f"- {groove.note}: {groove.panel_label}, "
+                f"{groove.size_x:g}×{groove.size_y:g}×{groove.size_z:g}mm"
             )
     if report.hardware:
         lines.extend(["", f"### 五金清单 ({len(report.hardware)} 项)", ""])

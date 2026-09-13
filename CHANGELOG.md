@@ -1,12 +1,28 @@
 # 更新日志
 
-## 20260913.4 — 加工特征类五金 BOM 统一到 Feature
+## 20260913.6 — BOMReport 成为下游唯一通道
 
-铰链、二合一、隔板钉的 BOM 数量从「按板件尺寸/规则重数」改为「数 Feature（孔即真源）」：铰链 = 数 `hinge` 杯孔、二合一 = 数 `two_in_one_cam` 孔、隔板钉 = 数 `shelf_pin` 孔。滑轨（装配件，非加工特征）暂不统一，仍按抽屉实例数。
+把 feature-tree 需要的场景参数（`furniture_category` / `width` / `depth` / `height` / `board_thickness`）收进 `BOMReport`（由 spec 原样带回），feature-tree 阶段改读 `BOMReport`，不再直接从设计层 `spec` 取——消除「设计层数据直通下游」的旁路，保证下游只有 BOMReport 一个入口。
 
 ### 边界
 
-- 新增 `count_hole_features`（`calculation`，按 isinstance 过滤 HoleFeature 数孔）；`Connector.boms()` 增加 `features` 参数（`schema`）。无自然语言映射，无 LLM 决策。
+- `BOMReport` 新增 5 个回传字段（`schema`，spec 原样带回）；feature-tree 阶段改为读 `manufacturing.*`（`calculation` 不变）。无自然语言映射，无 LLM 决策。
+
+## 20260913.5 — 连接件按点产出 ConnectionPoint
+
+三合一/背板连接件新增 `generate_connection_points()`，直接产出带 owner 的 ConnectionPoint（轮/杆/螺母三件套打包），不再由 `plan_manufacturing` 从逐孔 HoleSpec 事后分组。`Connector.produces_connection_points` 标记哪些连接件按点产出；`_derive_features_and_points` 据此收集连接点（其 `holes` 即 HoleFeature）与其余连接件的逐孔 HoleFeature。
+
+### 边界
+
+- 新增 `generate_connection_points` / `produces_connection_points`（`schema` + `calculation`，把连接点分组从规划阶段下移到连接件生产端）；`_own_connection_points` 复用 `generate_connection_points` 作兜底（去重）。无自然语言映射，无 LLM 决策。
+
+## 20260913.4 — 加工特征类五金 BOM 与 BOM 展示统一到 Feature
+
+铰链、二合一、隔板钉的 BOM 数量从「按板件尺寸/规则重数」改为「数 Feature（孔即真源）」：铰链 = 数 `hinge` 杯孔、二合一 = 数 `two_in_one_cam` 孔、隔板钉 = 数 `shelf_pin` 孔。滑轨（装配件，非加工特征）暂不统一，仍按抽屉实例数。`format_bom_markdown` 的「加工操作」段也从读 `operations` 改为读 `report.features` 里的 `GrooveFeature`（板件清单仍读 `panels`，Feature 覆盖不到板件）。
+
+### 边界
+
+- 新增 `count_hole_features`（`calculation`，按 isinstance 过滤 HoleFeature 数孔）；`Connector.boms()` 增加 `features` 参数（`schema`）；`format_bom_markdown` 加工操作段遍历 `GrooveFeature`（`calculation`）。无自然语言映射，无 LLM 决策。
 
 ## 20260913.3 — 删除 plan_cabinet / plan_furniture 压扁门面
 

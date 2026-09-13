@@ -641,18 +641,17 @@ class FurnitureOrchestrator:
             return
 
         if stage == WorkflowStage.FEATURE_TREE_PLANNED:
-            spec = self._spec_from_revision(revision, project_id=project.id)
             manufacturing = self._bom_from_revision(revision)
             try:
                 feature_tree = panels_to_feature_tree(
                     manufacturing.panels,
                     manufacturing.operations,
-                    furniture_category=spec.furniture_category,
+                    furniture_category=manufacturing.furniture_category,
                     parameters={
-                        "width": spec.width,
-                        "depth": spec.depth,
-                        "height": spec.height,
-                        "board_thickness": spec.board_thickness,
+                        "width": manufacturing.width,
+                        "depth": manufacturing.depth,
+                        "height": manufacturing.height,
+                        "board_thickness": manufacturing.board_thickness,
                     },
                 )
             except (TypeError, ValueError) as exc:
@@ -1052,6 +1051,11 @@ class FurnitureOrchestrator:
             operations=[
                 MachiningOperation(**item) for item in output.get("operations", [])
             ],
+            furniture_category=str(output.get("furniture_category", "")),
+            width=float(output.get("width", 0.0)),
+            depth=float(output.get("depth", 0.0)),
+            height=float(output.get("height", 0.0)),
+            board_thickness=float(output.get("board_thickness", 0.0)),
             total_area_m2=float(output.get("total_area_m2", 0.0)),
             readiness=str(output.get("readiness", "preliminary")),
             requested_options=dict(output.get("requested_options", {})),

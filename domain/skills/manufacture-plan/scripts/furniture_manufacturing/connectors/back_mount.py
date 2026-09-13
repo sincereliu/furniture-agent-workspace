@@ -38,6 +38,7 @@ class BackMountConnector(Connector):
     """
 
     name = "背板安装连接件"
+    produces_connection_points = True
     hole_type_for_json = "back_mount"
     catalog_entry = "three_in_one"
     rules_section = "back_mount_drilling"
@@ -71,17 +72,24 @@ class BackMountConnector(Connector):
             return self._insert_holes(panels)
         return []
 
+    def generate_connection_points(
+        self,
+        panels: List[PanelRecord],
+    ) -> List[ConnectionPoint]:
+        """背板三合一：轮/杆/螺母三件套按 connection_id 打包为带 owner 的连接点。"""
+        return collect_connection_points(
+            [from_hole_spec(h) for h in self.generate_holes_for_panels(panels)],
+            owner=self.__class__.__name__,
+        )
+
     def _own_connection_points(
         self,
         panels: List[PanelRecord],
         connection_points: List[ConnectionPoint] | None,
     ) -> List[ConnectionPoint]:
-        """本连接件自己的连接点：有共享列表就按 owner 过滤，否则自推导。"""
+        """本连接件自己的连接点：有共享列表就按 owner 过滤，否则按点产出。"""
         if connection_points is None:
-            return collect_connection_points(
-                [from_hole_spec(h) for h in self.generate_holes_for_panels(panels)],
-                owner=self.__class__.__name__,
-            )
+            return self.generate_connection_points(panels)
         return [
             p for p in connection_points if p.owner == self.__class__.__name__
         ]

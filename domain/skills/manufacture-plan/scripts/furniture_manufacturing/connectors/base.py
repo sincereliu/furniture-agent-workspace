@@ -61,6 +61,7 @@ class HoleSpec:
 
 class Connector:
     name: str = ""
+    produces_connection_points: bool = False  # True=按连接点产出（配对孔打包），三合一/背板覆盖
     hole_type_for_json: str = ""
     catalog_entry: str = ""
     rules_section: str | None = None
@@ -113,6 +114,17 @@ class Connector:
             for panel in panels
             for hole in self.generate_holes(panel)
         ]
+
+    def generate_connection_points(
+        self,
+        panels: List[PanelRecord],
+    ) -> List[ConnectionPoint]:
+        """按连接点产出：配对孔打包成一个 ConnectionPoint 实体。
+
+        默认无连接点（返回空）；三合一/背板覆盖本方法，把轮/杆/螺母
+        三件套按 connection_id 分组为带 owner 的 ConnectionPoint。
+        """
+        return []
 
     def boms(
         self,
