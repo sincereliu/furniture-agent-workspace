@@ -88,6 +88,15 @@ class SkillArchitectureTests(unittest.TestCase):
         )
         self.assertIn(policy_relative_path, repository_instructions)
 
+    def test_changelog_is_opt_in_per_update_files(self) -> None:
+        repository_instructions = (WORKSPACE_ROOT / "AGENTS.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("changelog/", repository_instructions)
+        self.assertIn("明确要求写更新日志", repository_instructions)
+        self.assertFalse((WORKSPACE_ROOT / "CHANGELOG.md").exists())
+        self.assertTrue((WORKSPACE_ROOT / "changelog").is_dir())
+
     def test_planning_stages_have_one_skill_each(self) -> None:
         claimed_stages: dict[str, str] = {}
 
