@@ -175,7 +175,7 @@ class CabinetRequest(BaseModel):
     drawer_back_clearance: float | None = Field(default=None, ge=0, description="抽屉后部净空 mm")
     appearance: dict[str, Any] = Field(
         default_factory=dict,
-        description="制造阶段使用的饰面和外观偏好",
+        description="制造阶段按材质角色(carcass/door/back)的基材/表面选型，键来自材料目录",
     )
     room: RoomRequest | None = Field(
         default=None,

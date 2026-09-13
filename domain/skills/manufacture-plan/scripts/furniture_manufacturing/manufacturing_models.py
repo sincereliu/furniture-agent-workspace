@@ -19,6 +19,8 @@ class PanelRecord:
     size_y: float
     size_z: float
     quantity: int = 1
+    substrate: str = ""
+    surface: str = ""
     drill_length: float = 0.0
     edge_banding: Dict[str, str] = field(default_factory=dict)
     note: str = ""

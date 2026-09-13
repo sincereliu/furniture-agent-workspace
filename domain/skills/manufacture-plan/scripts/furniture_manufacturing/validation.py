@@ -36,11 +36,14 @@ def validate_manufacturing(
             "requested_options",
         )
     if bom.appearance:
-        report.add_warning(
-            "REQUESTED_APPEARANCE_PENDING",
-            "appearance preferences are recorded for manufacturing review",
-            "appearance",
-        )
+        for panel in bom.panels:
+            if not panel.substrate or not panel.surface:
+                report.add_error(
+                    "APPEARANCE_NOT_MATERIALIZED",
+                    f"{panel.label} has appearance selection but missing "
+                    "substrate/surface materialization",
+                    panel.label,
+                )
     if bom.readiness not in VALID_MANUFACTURING_READINESS:
         report.add_error(
             "INVALID_MANUFACTURING_READINESS",

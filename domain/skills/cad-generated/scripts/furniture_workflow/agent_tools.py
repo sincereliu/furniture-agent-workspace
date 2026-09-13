@@ -99,7 +99,9 @@ _MANUFACTURING_STAGE_INPUT_HINT = (
     "For manufacture_plan, stage_input is {parameters: {...}, appearance?: {...}} "
     "or a flat parameters object. Known parameter keys: door_hinge_side "
     "(left|right, required for a single door), movable_shelf_connector "
-    "(two_in_one|shelf_pin, required when movable shelves exist)."
+    "(two_in_one|shelf_pin, required when movable shelves exist). "
+    "appearance selects material per role: {carcass|door|back: "
+    "{substrate, surface}} with keys from materials_catalog.yaml."
 )
 
 

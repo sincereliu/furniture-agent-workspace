@@ -21,6 +21,7 @@ from .features import (
     from_machining_operation,
 )
 from .manufacturing_models import HardwareRecord, MachiningOperation, PanelRecord
+from .materials_catalog import substrate_keys, surface_keys, substrate_name, surface_name
 
 
 FURNITURE_NAMES = {
@@ -52,6 +53,9 @@ MANUFACTURING_OPTION_FIELDS = frozenset(
         "door_hinge_side",
     }
 )
+
+# appearance 按板件材质角色选型（对应 PanelPlacement.material_role）
+MATERIAL_ROLES = frozenset({"carcass", "door", "back"})
 
 
 @dataclass
@@ -194,6 +198,65 @@ def recompute_features(
     return _derive_features_and_points(panels, operations)
 
 
+def _normalize_appearance(
+    appearance: Mapping[str, Any] | None,
+    placements: list[PanelPlacement],
+) -> dict[str, dict[str, str]]:
+    """校验并规范化 appearance 选型（按 material_role）。
+
+    严格准入，不做静默默认：
+    - 空 appearance 表示不物化（返回空 dict，向后兼容旧调用）；
+    - 角色键只能是 carcass/door/back；
+    - 每个实际出现的 material_role 必须有对应选型，缺则报错；
+    - 无对应板件的角色键报错（选型集合须与实际板件一致）；
+    - 每份选型的 substrate/surface 键必须在材料目录里（查表）。
+    """
+    raw = dict(appearance or {})
+    if not raw:
+        return {}
+    actual_roles = {placement.material_role for placement in placements}
+    unknown = sorted(set(raw) - MATERIAL_ROLES)
+    if unknown:
+        raise ValueError(
+            "appearance roles must be one of: "
+            + ", ".join(sorted(MATERIAL_ROLES))
+            + "; got: "
+            + ", ".join(unknown)
+        )
+    missing = sorted(actual_roles - set(raw))
+    if missing:
+        raise ValueError(
+            "appearance missing selection for material_role: " + ", ".join(missing)
+        )
+    extra = sorted(set(raw) - actual_roles)
+    if extra:
+        raise ValueError(
+            "appearance has selection for absent material_role: " + ", ".join(extra)
+        )
+    valid_substrate = set(substrate_keys())
+    valid_surface = set(surface_keys())
+    normalized: dict[str, dict[str, str]] = {}
+    for role, selection in raw.items():
+        if not isinstance(selection, Mapping):
+            raise ValueError(
+                f"appearance[{role}] must be an object with 'substrate' and 'surface'"
+            )
+        substrate = selection.get("substrate")
+        surface = selection.get("surface")
+        if substrate not in valid_substrate:
+            raise ValueError(
+                f"appearance[{role}].substrate unknown: {substrate!r}; "
+                "valid: " + ", ".join(sorted(valid_substrate))
+            )
+        if surface not in valid_surface:
+            raise ValueError(
+                f"appearance[{role}].surface unknown: {surface!r}; "
+                "valid: " + ", ".join(sorted(valid_surface))
+            )
+        normalized[role] = {"substrate": substrate, "surface": surface}
+    return normalized
+
+
 def plan_manufacturing(
     spec: FurnitureSpec,
     placements: list[PanelPlacement],
@@ -220,10 +283,12 @@ def plan_manufacturing(
     door_hinge_side = options.get("door_hinge_side")
     hinge_side_by_label = _derive_door_hinge_sides(placements, door_hinge_side)
     back_mount = resolve_back_mount(spec.back_mount)
+    appearance_by_role = _normalize_appearance(appearance, placements)
     panels = [
         _manufacturing_panel(
             spec, back_mount, movable_shelf_connector,
             hinge_side_by_label.get(item.id), item,
+            appearance_by_role.get(item.material_role),
         )
         for item in placements
     ]
@@ -258,7 +323,7 @@ def plan_manufacturing(
         total_area_m2=sum(panel.area_m2 for panel in panels),
         readiness="preliminary",
         requested_options=options,
-        appearance=dict(appearance or {}),
+        appearance=appearance_by_role,
         features=features,
         connection_points=connection_points,
     )
@@ -286,6 +351,7 @@ def _manufacturing_panel(
     movable_shelf_connector: str,
     door_hinge_side: str | None,
     placement: PanelPlacement,
+    material_selection: Mapping[str, str] | None = None,
 ) -> PanelRecord:
     if placement.material_role == "back":
         material = f"{spec.back_thickness:g}mm背板"
@@ -320,11 +386,14 @@ def _manufacturing_panel(
             drill_length = placement.size_x
         elif placement.panel_type == "door":
             drill_length = placement.size_z
+    selection = material_selection or {}
     return PanelRecord(
         label=placement.id,
         name=placement.name,
         panel_type=placement.panel_type,
         material=material,
+        substrate=selection.get("substrate", ""),
+        surface=selection.get("surface", ""),
         thickness=thickness,
         length_mm=placement.size_x,
         width_mm=placement.size_y,
@@ -458,6 +527,15 @@ def estimate_hardware(
     return hardware
 
 
+def _material_label(panel: PanelRecord) -> str:
+    """板件材质显示名：基材 · 表面；未物化时占位。"""
+    substrate = substrate_name(panel.substrate) if panel.substrate else ""
+    surface = surface_name(panel.surface) if panel.surface else ""
+    if substrate and surface:
+        return f"{substrate} · {surface}"
+    return substrate or surface or "—"
+
+
 def format_bom_markdown(report: BOMReport) -> str:
     lines = [
         f"## 拆单报告 - {report.furniture_name}",
@@ -468,12 +546,12 @@ def format_bom_markdown(report: BOMReport) -> str:
         "",
         f"### 板件清单 ({report.panel_count} 块)",
         "",
-        "| 序号 | 名称 | 类型 | 开料尺寸(mm) | 厚度 | 数量 | 封边 | 备注 |",
-        "|------|------|------|-------------|------|------|------|------|",
+        "| 序号 | 名称 | 类型 | 材质 | 开料尺寸(mm) | 厚度 | 数量 | 封边 | 备注 |",
+        "|------|------|------|------|-------------|------|------|------|------|",
     ]
     for index, panel in enumerate(report.panels, 1):
         lines.append(
-            f"| {index} | {panel.name} | {panel.panel_type} | "
+            f"| {index} | {panel.name} | {panel.panel_type} | {_material_label(panel)} | "
             f"{panel.length_mm:.0f}×{panel.width_mm:.0f} | "
             f"{panel.thickness:.0f} | {panel.quantity} | "
             f"{panel.edge_banding_summary()} | {panel.note} |"

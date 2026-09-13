@@ -1,0 +1,28 @@
+# ============================================================================
+# 材料目录 — 单一真源
+# ============================================================================
+# 键规则：全小写；段间 __（维度边界），段内词 _；键 = 稳定代号（引用用），
+# name = 可读全名（可改）。等级（grade）、触感（凹凸）后期按需再加，不建空段。
+#
+# TODO（待办）：颜色增多后，可考虑按 finish×grain 规则抽象派生 surface 键；
+# 当前先显式枚举（name 手工书写更准确，且不生成现实中不存在的组合）。
+# ============================================================================
+
+# ── 基材（substrate）：饰面下的芯材种类 ──
+substrate:
+  particleboard: { name: 颗粒板 }
+  eco_board:     { name: 生态板 }
+
+# ── 表面（surface）：颜色__表面处理__纹理 ──
+# finish: soft_touch肤感 / gloss高光 / double_faced双饰面
+# grain:  plain无纹理 / grain有纹理（有方向 → 排版/校验用）
+# 规则：肤感、高光只能配 plain；双饰面 plain/grain 均可（已由下方枚举承载）
+surface:
+  white__soft_touch__plain:    { name: 肤感白 }
+  white__gloss__plain:         { name: 高光白 }
+  white__double_faced__plain:  { name: 双饰面白 }
+  white__double_faced__grain:  { name: 双饰面白木纹 }
+  oak__soft_touch__plain:      { name: 肤感橡木色 }
+  oak__gloss__plain:           { name: 高光橡木色 }
+  oak__double_faced__plain:    { name: 双饰面橡木色 }
+  oak__double_faced__grain:    { name: 双饰面橡木纹 }

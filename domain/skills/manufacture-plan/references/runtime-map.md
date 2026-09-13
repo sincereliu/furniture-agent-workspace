@@ -22,6 +22,15 @@
 - 活动层板连接方式由制造阶段输入 `movable_shelf_connector`（`two_in_one`/`shelf_pin`）显式选择，经 `plan_manufacturing` 盖章到 `PanelRecord`；`TwoInOneConnector`/`ShelfPinConnector` 只处理选中自己的板件，避免两者同时出孔/BOM。有活动层板却未提供时运行时拒绝。
 - `PanelJoint.connection`（连不连）由制造层在 `plan_manufacturing` 按面板类型重解析；默认口径见 [连接与接触默认规则](connection-contact-defaults.md)。`off` 的接触不进入三合一打孔。轴方向和制造层派生的 `cam_face` 只用于选择三合一五金，不再回答「连不连」。
 
+## 材料目录与 appearance 物化
+
+- 材质单一真源 `materials_catalog.yaml`：`substrate`（基材）+ `surface`（表面）两个独立维度；键=稳定代号（全小写、段间 `__`、段内 `_`），`name`=可读全名。键唯一由 `materials_catalog.py` 的重复键检测兜底。
+- `surface` 键 = `颜色__表面处理__纹理`；`finish`（soft_touch/gloss/double_faced）与 `grain`（plain/grain）的组合当前显式枚举；颜色增多后按规则派生（yaml 顶部 TODO）。
+- `appearance` 输入按材质角色选型：`{carcass|door|back: {substrate, surface}}`，键值必须命中目录（查表准入）；角色键只能是三个、缺角色/多余角色报错，不做静默默认。空 appearance 不物化（向后兼容）。
+- 物化：`plan_manufacturing` 按 `placement.material_role` 把 substrate/surface 键写进 `PanelRecord.substrate/surface`；`material` 字符串仍表达「料厚+角色」。
+- `validation.py`：appearance 非空时每块板 substrate/surface 必须非空（`APPEARANCE_NOT_MATERIALIZED`）。
+- 语义：`BOMReport.appearance` 是选型输入记录，`PanelRecord.substrate/surface` 是物化真相；revise 直接编辑输出后两者可不同步。
+
 ## 生成与产物
 
 - 单板规则实现 `generate_holes()`；需要配合板时覆盖 `generate_holes_for_panels()` 生成成对孔。
@@ -44,6 +53,7 @@
 - ~~背板三合一孔类型合并~~（已落地）：`back_insert_cam/rod/nut` → `three_in_one_cam/rod/nut`，校验/BOM 按 `connection_id` 区分柜体 vs 背板。
 - cover（外盖）改三合一（留待以后确定）：方向已厘清——反向角色（背板=母件，偏心轮在侧/顶/底板上）；且背板需 18mm（预埋螺母深 11mm 放不进 9mm 薄背板）。几何与装配可达性待确定后再实现；当前 cover 仍视为组装现场工艺、不钻孔。
 - 完整抽屉组件（门+抽屉混合区、托底轨、有面板）：`references/drawer-component-design.md`。
+- appearance 与板件材质一致性（待定，讨论后再定）：`revise_stage_output` 直接编辑制造输出后，`BOMReport.appearance`（选型输入记录）与 `PanelRecord.substrate/surface`（物化真相）可不同步；下游当前只读 panels，无实际影响。候选方案：① `PanelRecord` 加 `material_role` + validation 逐值一致性校验；② `BOMReport` 不再存 appearance，材质只存 panels，选型留 `stage_inputs`。
 
 ## 相关契约
 
