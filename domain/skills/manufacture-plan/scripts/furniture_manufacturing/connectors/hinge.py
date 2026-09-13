@@ -6,7 +6,12 @@
 """
 
 from typing import Any, Dict, List, Mapping
-from furniture_manufacturing.connectors.base import Connector, HoleSpec, _opposite
+from furniture_manufacturing.connectors.base import (
+    Connector,
+    HoleSpec,
+    _opposite,
+    count_hole_features,
+)
 from furniture_manufacturing.manufacturing_models import HardwareRecord, MachiningOperation, PanelRecord
 
 
@@ -146,11 +151,12 @@ class HingeConnector(Connector):
         *,
         options: Mapping[str, Any] | None = None,
         connection_points: List[Any] | None = None,
+        features: List[Any] | None = None,
     ) -> List[HardwareRecord]:
         """生成铰链 BOM 清单。
 
-        条目与品牌由确认选择（options[本 catalog_entry]）决定；未选择时
-        仅当目录唯一才返回，否则抛错——不再按固定规格静默挑选。
+        数量 = 铰链杯孔数（孔即真源）；条目与品牌由确认选择决定，
+        未选择时仅当目录唯一才返回，否则抛错。
         """
         doors = [p for p in panels if p.panel_type == "door"]
         if not doors:
@@ -161,9 +167,15 @@ class HingeConnector(Connector):
         brand = self.resolve_brand(entry.get("brands", []), opts.get("brand"))
         records: List[HardwareRecord] = []
         for door in doors:
-            count, _, _ = self._hinge_count(
-                door.size_z, self.rules.get(self.rules_section, {})
-            )
+            if features is None:
+                count, _, _ = self._hinge_count(
+                    door.size_z, self.rules.get(self.rules_section, {})
+                )
+            else:
+                count = count_hole_features(
+                    [f for f in features if f.panel_label == door.label],
+                    "hinge",
+                )
             records.append(HardwareRecord(
                 name=self.name,
                 spec=f"{brand['name']} {brand['model']} {entry.get('angle', 100)}°",

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Mapping
 import yaml
 from furniture_manufacturing.connection_points import ConnectionPoint
+from furniture_manufacturing.features import HoleFeature
 from furniture_manufacturing.manufacturing_models import HardwareRecord, MachiningOperation, PanelRecord
 
 
@@ -25,6 +26,19 @@ def make_connection_id(female_id: str, male_id: str, row_index: int) -> str:
     row_index 是同一连接边上的第几排（前后排 / 沿边排，按位置从小到大）。
     """
     return f"{female_id}→{male_id}#{row_index}"
+
+
+def count_hole_features(features: List[Any] | None, hole_type: str) -> int:
+    """数 Feature 列表里指定孔型的孔数（按 isinstance 过滤 HoleFeature）。
+
+    让「加工特征类五金」的 BOM 数量也走 Feature（孔即真源），而不是按
+    板件尺寸/规则重数一遍。
+    """
+    return sum(
+        1
+        for feature in (features or [])
+        if isinstance(feature, HoleFeature) and feature.hole_type == hole_type
+    )
 
 
 @dataclass
@@ -106,6 +120,7 @@ class Connector:
         *,
         options: Mapping[str, Any] | None = None,
         connection_points: List[ConnectionPoint] | None = None,
+        features: List[Any] | None = None,
     ) -> List[HardwareRecord]:
         raise NotImplementedError
 

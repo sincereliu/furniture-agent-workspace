@@ -608,6 +608,7 @@ class TrinityConnector(Connector):
         *,
         options: Mapping[str, Any] | None = None,
         connection_points: List[ConnectionPoint] | None = None,
+        features: List[Any] | None = None,
     ) -> List[HardwareRecord]:
         """生成三合一 BOM 清单。
 

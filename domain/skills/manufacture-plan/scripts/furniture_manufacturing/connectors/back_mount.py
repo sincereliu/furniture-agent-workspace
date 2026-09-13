@@ -92,6 +92,7 @@ class BackMountConnector(Connector):
         *,
         options: Mapping[str, Any] | None = None,
         connection_points: List[ConnectionPoint] | None = None,
+        features: List[Any] | None = None,
     ) -> List[HardwareRecord]:
         mode = self._mode(panels)
         if mode != "insert":

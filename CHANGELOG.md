@@ -1,5 +1,13 @@
 # 更新日志
 
+## 20260913.4 — 加工特征类五金 BOM 统一到 Feature
+
+铰链、二合一、隔板钉的 BOM 数量从「按板件尺寸/规则重数」改为「数 Feature（孔即真源）」：铰链 = 数 `hinge` 杯孔、二合一 = 数 `two_in_one_cam` 孔、隔板钉 = 数 `shelf_pin` 孔。滑轨（装配件，非加工特征）暂不统一，仍按抽屉实例数。
+
+### 边界
+
+- 新增 `count_hole_features`（`calculation`，按 isinstance 过滤 HoleFeature 数孔）；`Connector.boms()` 增加 `features` 参数（`schema`）。无自然语言映射，无 LLM 决策。
+
 ## 20260913.3 — 删除 plan_cabinet / plan_furniture 压扁门面
 
 去掉 `cabinet_pipeline.plan_cabinet()` 和 `planner.plan_furniture()`。板件与制造只经各自阶段入口或 Orchestrator 的 `run_next`。`CabinetPipelineResult` 保留为已确认阶段的 CAD 快照类型。

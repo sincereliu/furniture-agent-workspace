@@ -246,6 +246,7 @@ def plan_manufacturing(
             panels,
             options=connector_options,
             connection_points=connection_points,
+            features=features,
         ),
         operations=operations,
         total_area_m2=sum(panel.area_m2 for panel in panels),
@@ -430,11 +431,12 @@ def estimate_hardware(
     *,
     options: Mapping[str, Any] | None = None,
     connection_points: list[ConnectionPoint] | None = None,
+    features: list[Feature] | None = None,
 ) -> List[HardwareRecord]:
-    """从「已分组、带 owner」的连接点派生五金 BOM。
+    """从 Feature + ConnectionPoint 派生五金 BOM。
 
-    connection_points 由 plan_manufacturing 生成一次（Feature/ConnectionPoint 本源）；
-    缺省时各连接件自行重推导，保持独立调用可用。
+    features/connection_points 由 plan_manufacturing 生成一次（Feature/ConnectionPoint
+    本源）；缺省时各连接件自行重推导，保持独立调用可用。
     """
     hardware: List[HardwareRecord] = []
     for connector_cls in ALL_CONNECTORS:
@@ -444,6 +446,7 @@ def estimate_hardware(
                 panels,
                 options=options,
                 connection_points=connection_points,
+                features=features,
             )
         )
     return hardware

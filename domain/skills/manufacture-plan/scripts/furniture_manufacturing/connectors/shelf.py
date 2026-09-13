@@ -11,7 +11,12 @@
 
 from typing import Any, Dict, List, Mapping
 
-from furniture_manufacturing.connectors.base import Connector, HoleSpec, _opposite
+from furniture_manufacturing.connectors.base import (
+    Connector,
+    HoleSpec,
+    _opposite,
+    count_hole_features,
+)
 from furniture_manufacturing.manufacturing_models import HardwareRecord, MachiningOperation, PanelRecord
 
 
@@ -118,6 +123,7 @@ class TwoInOneConnector(Connector):
         *,
         options: Mapping[str, Any] | None = None,
         connection_points: List[Any] | None = None,
+        features: List[Any] | None = None,
     ) -> List[HardwareRecord]:
         shelves = _selected_shelves(panels, self.catalog_entry)
         if not shelves:
@@ -126,7 +132,10 @@ class TwoInOneConnector(Connector):
         opts = (options or {}).get(self.catalog_entry, {})
         opts = dict(opts) if isinstance(opts, Mapping) else {}
         brand = self.resolve_brand(spec.get("brands", []), opts.get("brand"))
-        total = sum(len(_shelf_positions(p.drill_length)) * 2 for p in shelves)
+        if features is None:
+            total = sum(len(_shelf_positions(p.drill_length)) * 2 for p in shelves)
+        else:
+            total = count_hole_features(features, "two_in_one_cam")
         return [HardwareRecord(
             name=self.name,
             spec="偏心轮+连接杆（实物规格待确认）",
@@ -188,6 +197,7 @@ class ShelfPinConnector(Connector):
         *,
         options: Mapping[str, Any] | None = None,
         connection_points: List[Any] | None = None,
+        features: List[Any] | None = None,
     ) -> List[HardwareRecord]:
         shelves = _selected_shelves(panels, self.catalog_entry)
         if not shelves:
@@ -196,7 +206,10 @@ class ShelfPinConnector(Connector):
         opts = (options or {}).get(self.catalog_entry, {})
         opts = dict(opts) if isinstance(opts, Mapping) else {}
         brand = self.resolve_brand(spec.get("brands", []), opts.get("brand"))
-        total = sum(len(_shelf_positions(p.drill_length)) * 2 for p in shelves)
+        if features is None:
+            total = sum(len(_shelf_positions(p.drill_length)) * 2 for p in shelves)
+        else:
+            total = count_hole_features(features, "shelf_pin")
         return [HardwareRecord(
             name=self.name,
             spec="钉（实物规格待确认）",
