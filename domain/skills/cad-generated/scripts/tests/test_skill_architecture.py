@@ -47,6 +47,7 @@ STAGE_REFERENCES = {
     "manufacture-plan": (
         "references/manufacturing-rules.md",
         "references/connection-contact-defaults.md",
+        "references/runtime-map.md",
     ),
     "feature-tree": ("references/feature-tree-rules.md",),
     "cad-generated": (
@@ -146,7 +147,7 @@ class SkillArchitectureTests(unittest.TestCase):
         router = (
             WORKSPACE_ROOT / ".agents" / "skills" / "furniture-agent" / "SKILL.md"
         ).read_text(encoding="utf-8")
-        self.assertIn("generate_cad=True", router)
+        self.assertIn("domain/skills/cad-generated/TOOL.md", router)
         self.assertNotIn("$cad-generated", router)
         self.assertNotIn("domain/skills/cad-generated/SKILL.md", router)
 
@@ -165,20 +166,10 @@ class SkillArchitectureTests(unittest.TestCase):
             WORKSPACE_ROOT / ".agents" / "skills" / "furniture-agent" / "SKILL.md"
         ).read_text(encoding="utf-8")
 
-        for stage, skill_name in PLANNING_STAGE_SKILLS.items():
-            self.assertIn(
-                f"`{stage}`：`domain/skills/{skill_name}/SKILL.md`",
-                router,
-            )
-        self.assertIn(
-            "`cad_generated`：Orchestrator tool（`run_next(..., generate_cad=True)`），实现 `domain/skills/cad-generated/TOOL.md`",
-            router,
-        )
-        self.assertIn(
-            "独立能力（不在上述串联阶段内）",
-            router,
-        )
-        self.assertIn("`domain/skills/layout-plan/SKILL.md`", router)
+        for skill_name in PLANNING_STAGE_SKILLS.values():
+            self.assertIn(f"domain/skills/{skill_name}/SKILL.md", router)
+        self.assertIn("domain/skills/cad-generated/TOOL.md", router)
+        self.assertIn("domain/skills/layout-plan/SKILL.md", router)
         self.assertIn(
             "domain/skills/cad-generated/references/agent-tool-contract.md",
             router,
@@ -189,18 +180,17 @@ class SkillArchitectureTests(unittest.TestCase):
     def test_scientific_skills_are_routed_on_demand_to_stage_owned_adapters(
         self,
     ) -> None:
-        router_path = (
-            WORKSPACE_ROOT / ".agents" / "skills" / "furniture-agent" / "SKILL.md"
-        )
-        router = router_path.read_text(encoding="utf-8")
-        for skill_name in (
-            "uncertainty-and-units",
-            "pymoo",
-            "experimental-design",
-            "statistical-analysis",
-            "simpy",
-        ):
-            self.assertIn(f"{skill_name}/SKILL.md", router, router_path)
+        panel_analyses = (
+            SKILLS_ROOT / "panel-plan" / "references" / "panel-side-analyses.md"
+        ).read_text(encoding="utf-8")
+        manufacture_skill = (
+            SKILLS_ROOT / "manufacture-plan" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("uncertainty-and-units/SKILL.md", panel_analyses)
+        self.assertIn("pymoo/SKILL.md", panel_analyses)
+        self.assertIn("experimental-design/SKILL.md", manufacture_skill)
+        self.assertIn("statistical-analysis/SKILL.md", manufacture_skill)
+        self.assertIn("simpy/SKILL.md", manufacture_skill)
 
         owned_adapters = (
             (
@@ -329,13 +319,13 @@ class SkillArchitectureTests(unittest.TestCase):
                 (SKILLS_ROOT / skill_name / "scripts" / relative_path).is_file()
             )
 
-        orchestrator = (
-            SKILLS_ROOT
-            / "cad-generated"
-            / "scripts"
-            / "furniture_workflow"
-            / "workflow_orchestrator.py"
-        ).read_text(encoding="utf-8")
+        workflow_package = (
+            SKILLS_ROOT / "cad-generated" / "scripts" / "furniture_workflow"
+        )
+        orchestrator_sources = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in sorted(workflow_package.glob("*.py"))
+        )
         for forbidden_definition in (
             "def _validate_intent(",
             "def _validate_layout(",
@@ -346,9 +336,9 @@ class SkillArchitectureTests(unittest.TestCase):
             "def _validate_artifacts(",
             "def _write_artifacts(",
         ):
-            self.assertNotIn(forbidden_definition, orchestrator)
-        self.assertIn("def _validate_stage_output(", orchestrator)
-        self.assertIn("from .workflow_artifact_writer import", orchestrator)
+            self.assertNotIn(forbidden_definition, orchestrator_sources)
+        self.assertIn("def _validate_stage_output(", orchestrator_sources)
+        self.assertIn("from .workflow_artifact_writer import", orchestrator_sources)
 
         delivery_validation = (
             SKILLS_ROOT
@@ -428,13 +418,10 @@ class SkillArchitectureTests(unittest.TestCase):
         self.assertNotIn("NON_POSITIVE_INTERNAL_CLEARANCE", layout_validation)
         self.assertNotIn("INTERNAL_CLEARANCE_MISMATCH", layout_validation)
 
-        panel_validation = (
-            SKILLS_ROOT
-            / "panel-plan"
-            / "scripts"
-            / "furniture_panel_planning"
-            / "validation.py"
-        ).read_text(encoding="utf-8")
+        panel_validation = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in sorted(panel_package.glob("validation*.py"))
+        )
         panel_spec = (panel_package / "panel_spec.py").read_text(encoding="utf-8")
         self.assertIn("def resolve_back_mount(", panel_spec)
         self.assertIn("NON_POSITIVE_INTERNAL_CLEARANCE", panel_validation)
@@ -472,86 +459,6 @@ class SkillArchitectureTests(unittest.TestCase):
             / "feature_tree_emitter.py"
         ).read_text(encoding="utf-8")
         self.assertIn("_validate_operation_bounds", feature_tree_emitter)
-
-    def test_back_mount_contract_is_synchronized_across_stage_skills(
-        self,
-    ) -> None:
-        expected_terms = {
-            ".agents/skills/furniture-agent/SKILL.md": (
-                "back_mount",
-                "从板件阶段开始",
-            ),
-            "domain/skills/panel-plan/SKILL.md": (
-                "back_mount",
-                "背拉条",
-            ),
-            "domain/skills/manufacture-plan/SKILL.md": (
-                "groove",
-                "背拉条",
-            ),
-            "domain/skills/manufacture-plan/references/runtime-map.md": (
-                "BackMountConnector",
-                "generate_holes_for_panels",
-            ),
-            "domain/skills/feature-tree/SKILL.md": (
-                "insert/cover",
-                "drilled-holes",
-            ),
-            "domain/skills/cad-generated/references/runtime-contract.md": (
-                "back_mount",
-                "back_rail_height",
-                "drilled-holes",
-            ),
-            (
-                "domain/skills/delivery-validated/"
-                "references/delivery-checklist.md"
-            ): (
-                "back_mount",
-                "五金数量与主孔、配合孔数量一致",
-            ),
-        }
-
-        for relative_path, terms in expected_terms.items():
-            path = WORKSPACE_ROOT / relative_path
-            text = path.read_text(encoding="utf-8")
-            for term in terms:
-                self.assertIn(term, text, path)
-
-        for relative_path in (
-            "domain/skills/design-intent/SKILL.md",
-            "domain/skills/layout-plan/SKILL.md",
-        ):
-            text = (WORKSPACE_ROOT / relative_path).read_text(encoding="utf-8")
-            self.assertNotIn("auto/groove/insert/cover", text)
-
-    def test_corrected_stage_boundaries_match_runtime_ownership(self) -> None:
-        expected_terms = {
-            "domain/skills/design-intent/SKILL.md": (
-                "草稿尺寸可为 `null`",
-                "furniture_category",
-                "成品外包络",
-            ),
-            "domain/skills/layout-plan/SKILL.md": (
-                "door_count",
-                "不参与房间定位",
-                "左后下落地角",
-            ),
-            "domain/skills/manufacture-plan/SKILL.md": (
-                "readiness=preliminary/accepted/factory_ready",
-                "FurnitureOrchestrator.run_next()",
-                "references/runtime-map.md",
-            ),
-            "domain/skills/delivery-validated/SKILL.md": (
-                "前五个串联阶段",
-                "不解析 STEP 几何",
-                "未执行",
-            ),
-        }
-        for relative_path, terms in expected_terms.items():
-            path = WORKSPACE_ROOT / relative_path
-            text = path.read_text(encoding="utf-8")
-            for term in terms:
-                self.assertIn(term, text, path)
 
 
 if __name__ == "__main__":

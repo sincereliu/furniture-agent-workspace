@@ -45,8 +45,6 @@ description: 用于 panel_plan 阶段。当用户说“几扇门”“几层板�
 
 ## 边界
 
-- 运行时在 `scripts/furniture_panel_planning/`；模块职责和入口见 [运行时映射](references/runtime-map.md)。代码不得按自然语言、柜型或内置 profile 选择方案。料档省略由工艺卡展开，属于结构化协议，见 [料档与工艺卡](references/sheet-stock-catalog.md)。
-- `panel_plan` 的对象树是 `cabinets[]`：每个柜体是父对象，带 `id` 以及自己的 `spec/interior/back_mount_resolution/assemblies`。`interior` 含 `cavity`（内腔宽高深和角点）与 `zones`（前开口分区）。加载旧冻结文件时，`require_primary_handoff()` 仍可从柜级 `structure/panels` 还原，新输出不得再写这些字段。`assemblies` 再分成 `carcass`、可选 `base`、`fronts` 和 `drawers[]`；板件写在所属子装配下，接触也只写在该装配内。板件带 `parent_id`（所属柜体）、`assembly_id`（所属子装配）和 `role`（柜内角色，如 `left_side_panel`）；全局 `id` 为 `{cabinet_id}__{role}`，避免多柜撞名。当前踢脚工法是侧板落地：`base.construction=integrated`，踢脚板仍挂在 `carcass`。当前抽屉前板即盒体前脸，写在该抽屉的 `box.panels`，不进 `fronts`。检查点只写这棵树，不在柜级再抄一份 `panels`。下游读法见 [运行时映射](references/runtime-map.md)。分析记录属于旁路证据，不并入板件事实。
-- 可选结构化字段 `cabinet_id` 是身份，不是构造参数，写入提案后由运行时弹出再准入 `FurnitureSpec`。缺省为 `cabinet_1`。交互式主流程目前仍是一份意图对应一台柜；多柜可经 `plan_panel_cabinets()` 组合，不同外包络仍要多份已确认意图。
-- 本阶段只产出板件尺寸、相对柜体原点的位置，以及板件之间的承面–端面关系。接触由几何推导：一条接触是承面被端面顶住。口径见 [术语规范表](references/terminology-glossary.md)。「连不连」见制造 [连接与接触默认规则](../manufacture-plan/references/connection-contact-defaults.md)。本轮没有逐条连接的提案覆盖字段。
-- 同一冻结意图上再试一版用 `retry_stage()`；直接改已生成的板件结果用 `revise_stage_output()`，使本阶段及下游失效。
+- 运行时在 `scripts/furniture_panel_planning/`；对象树、入口和下游读法见 [运行时映射](references/runtime-map.md)。代码不得按自然语言、柜型或内置 profile 选择方案。料档省略由工艺卡展开，见 [料档与工艺卡](references/sheet-stock-catalog.md)。
+- 本阶段只产出尺寸、位置和承面–端面接触。口径见 [术语规范表](references/terminology-glossary.md)。「连不连」见制造 [连接与接触默认规则](../manufacture-plan/references/connection-contact-defaults.md)。
+- 同一冻结意图上再试一版用 `retry_stage()`；直接改已生成的板件结果用 `revise_stage_output()`。

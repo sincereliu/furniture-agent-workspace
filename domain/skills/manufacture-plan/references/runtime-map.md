@@ -56,13 +56,7 @@
 - `validation.py`：BOM、每条槽是否落在目标板件包络内、铰链孔位置/进刀面/深度、背板五金和配合孔。
 - `hole_validator.py`：孔位几何（边界/深度/干涉）。深度按打孔方向的板件尺寸判定（端面钻入的连接杆/预孔可大于板厚）；正交配合孔（三合一杆↔轮）不判干涉。
 
-## 演进中需求（待评审）
-
-- 连接点级实体（杆/轮/螺母按连接点整体增删、校验按连接点对齐）：`references/connection-point-design.md`。已部分落地：`HoleSpec.connection_id` + 三合一/背板按连接点 1:1:1 校验；「删单个孔 → 静默孤儿」已修复（按连接点报缺件）。
-- ~~背板三合一孔类型合并~~（已落地）：`back_insert_cam/rod/nut` → `three_in_one_cam/rod/nut`，校验/BOM 按 `connection_id` 区分柜体 vs 背板。
-- cover（外盖）改三合一（留待以后确定）：方向已厘清——反向角色（背板=母件，偏心轮在侧/顶/底板上）；且背板需 18mm（预埋螺母深 11mm 放不进 9mm 薄背板）。几何与装配可达性待确定后再实现；当前 cover 仍视为组装现场工艺、不钻孔。
-- 完整抽屉组件（门+抽屉混合区、托底轨、有面板）：`references/drawer-component-design.md`。
-- appearance 与板件材质一致性（待定，讨论后再定）：`revise_stage_output` 直接编辑制造输出后，`BOMReport.appearance`（选型输入记录）与 `PanelRecord.substrate/surface`（物化真相）可不同步；下游当前只读 panels，无实际影响。候选方案：① `PanelRecord` 加 `material_role` + validation 逐值一致性校验；② `BOMReport` 不再存 appearance，材质只存 panels，选型留 `stage_inputs`。
+未落地与待议需求见 [backlog](backlog.md)，日常改孔位/BOM 不必读。
 
 ## 相关契约
 

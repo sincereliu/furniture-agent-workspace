@@ -43,7 +43,7 @@ description: 用于 manufacture_plan 阶段。当用户说"用什么五金""三�
 
 ## 边界
 
-- 运行时在 `scripts/furniture_manufacturing/`；代码契约与演进中需求见 [运行时映射](references/runtime-map.md)。
+- 运行时在 `scripts/furniture_manufacturing/`；代码契约见 [运行时映射](references/runtime-map.md)。未落地需求见 [backlog](references/backlog.md)，日常实现不必读。
 - 同一已确认板件上再试制造用 `retry_stage("manufacture_plan")`，冻结板件文件保持不变；直接改已有制造结果用 `revise_stage_output()`，使本阶段及下游失效。
 - 不发射特征树、不调用 CAD Bridge、不手改派生产物。
 - 试验、统计和生产仿真写入 `stage_analyses.manufacture_plan`，只提供证据或候选；它们不自动提升 `readiness`，不直接修改 BOM，也不构成现实工厂因果结论。

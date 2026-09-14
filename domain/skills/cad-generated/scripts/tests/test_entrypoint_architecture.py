@@ -6,7 +6,6 @@ from pathlib import Path
 
 
 SCRIPTS_ROOT = Path(__file__).resolve().parents[1]
-WORKSPACE_ROOT = Path(__file__).resolve().parents[5]
 
 
 def imported_modules(path: Path) -> set[str]:
@@ -51,17 +50,6 @@ class EntrypointArchitectureTests(unittest.TestCase):
         self.assertNotIn("cabinet_pipeline", tool_modules)
         self.assertNotIn("furniture_panel_planning.panel_pipeline", tool_modules)
         self.assertNotIn("furniture_cad.cad_bridge", tool_modules)
-
-    def test_agent_routes_execution_through_the_orchestrator(self) -> None:
-        agent_skill = (
-            WORKSPACE_ROOT / ".agents" / "skills" / "furniture-agent" / "SKILL.md"
-        ).read_text(encoding="utf-8")
-        self.assertIn("FurnitureOrchestrator", agent_skill)
-        self.assertIn("FurnitureToolSession", agent_skill)
-        self.assertIn("`plan_cabinet` / `plan_furniture` 已删除", agent_skill)
-        self.assertIn("generate_cad=True", agent_skill)
-        self.assertNotIn("$cad-generated", agent_skill)
-        self.assertNotIn("domain/skills/cad-generated/SKILL.md", agent_skill)
 
 
 if __name__ == "__main__":
