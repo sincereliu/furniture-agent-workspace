@@ -155,3 +155,15 @@ class HardwareRecord:
     note: str = ""
     drilling: list = None  # type: ignore[assignment]
 
+
+@dataclass(frozen=True)
+class MaterialRecord:
+    """材料 BOM 一项：基材(m²) / 饰面(m²) / 封边皮(m)。"""
+
+    category: str = ""    # substrate / surface / edge_banding
+    key: str = ""         # 稳定键（目录键）
+    name: str = ""        # 可读名
+    spec: str = ""        # 规格描述
+    quantity: float = 0.0
+    unit: str = ""        # m² / m
+

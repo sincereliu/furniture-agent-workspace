@@ -43,6 +43,7 @@
 
 - 单板规则实现 `generate_holes()`；需要配合板时覆盖 `generate_holes_for_panels()` 生成成对孔。
 - `estimate_hardware()` 与 `emit_drilled_holes()` 遍历 `ALL_CONNECTORS` 生成 BOM 与可序列化的全局/local 孔位数据。
+- `estimate_materials()` 从板件派生材料 BOM（`MaterialRecord` 三类）：基材（substrate，按基材+厚度汇总 m²）、饰面（surface，按表面汇总 m²）、封边皮（edge_banding，按材质/厚度/宽度/颜色汇总米数，四边周长 2×(长+宽)）；与五金 BOM 对称，写入 `BOMReport.materials`。
 - 实际 `.drilled-holes.json` / `.glb` 文件由 CAD 阶段 `workflow_artifact_writer.py` 写入；制造阶段只产出结构化孔位数据。
 
 ## 背板槽机制

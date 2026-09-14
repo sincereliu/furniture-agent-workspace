@@ -13,7 +13,7 @@ from .manufacturing_edge_banding import (
     DEFAULT_EDGE_BANDING_SELECTION,
     build_edge_banding,
 )
-from .edge_banding_catalog import material_keys, thickness_keys
+from .edge_banding_catalog import material_keys, material_name, thickness_keys
 from .connection_points import ConnectionPoint
 from .connectors import ALL_CONNECTORS
 from .features import (
@@ -24,7 +24,7 @@ from .features import (
     from_hole_spec,
     from_machining_operation,
 )
-from .manufacturing_models import HardwareRecord, MachiningOperation, PanelRecord
+from .manufacturing_models import HardwareRecord, MachiningOperation, MaterialRecord, PanelRecord
 from .materials_catalog import substrate_keys, surface_keys, substrate_name, surface_name
 
 
@@ -70,6 +70,7 @@ class BOMReport:
     panels: list[PanelRecord]
     hardware: list[HardwareRecord]
     operations: list[MachiningOperation]
+    materials: list[MaterialRecord] = field(default_factory=list)
     # 设计层回传（spec 原样带回）：feature-tree 等下游场景参数，保证 BOMReport 单一通道
     furniture_category: str = ""
     width: float = 0.0
@@ -360,6 +361,7 @@ def plan_manufacturing(
             features=features,
         ),
         operations=operations,
+        materials=estimate_materials(panels),
         furniture_category=spec.furniture_category,
         width=spec.width,
         depth=spec.depth,
@@ -584,6 +586,82 @@ def estimate_hardware(
     return hardware
 
 
+def estimate_materials(panels: List[PanelRecord]) -> List[MaterialRecord]:
+    """从板件派生材料 BOM：基材(m²) + 饰面(m²) + 封边皮(m)。
+
+    与 estimate_hardware 对称：五金从 Feature/ConnectionPoint 派生，
+    材料从 PanelRecord 的 substrate/surface/edge_banding 派生。
+    封边皮长度按「四边」周长 2×(长+宽) 计量；非四边集合暂不计量。
+    """
+    substrate_by_key: dict[tuple, float] = {}
+    surface_by_key: dict[str, float] = {}
+    edge_by_key: dict[tuple, float] = {}
+
+    for panel in panels:
+        if panel.substrate:
+            key = (panel.substrate, panel.thickness)
+            substrate_by_key[key] = substrate_by_key.get(key, 0.0) + panel.area_m2
+        if panel.surface:
+            surface_by_key[panel.surface] = (
+                surface_by_key.get(panel.surface, 0.0) + panel.area_m2
+            )
+        for edges, spec in panel.edge_banding.items():
+            if isinstance(spec, str):
+                continue  # 旧格式：无法结构化计量，跳过
+            if edges != "四边":
+                continue
+            perimeter_m = (
+                2 * (panel.length_mm + panel.width_mm) * panel.quantity / 1000
+            )
+            key = (
+                spec.get("material", ""),
+                spec.get("thickness_mm", 0.0),
+                spec.get("width_mm", 0.0),
+                spec.get("color", ""),
+            )
+            edge_by_key[key] = edge_by_key.get(key, 0.0) + perimeter_m
+
+    records: List[MaterialRecord] = []
+    for (substrate, thickness), area in sorted(substrate_by_key.items()):
+        records.append(
+            MaterialRecord(
+                category="substrate",
+                key=substrate,
+                name=substrate_name(substrate),
+                spec=f"{thickness:g}mm",
+                quantity=area,
+                unit="m²",
+            )
+        )
+    for surface, area in sorted(surface_by_key.items()):
+        records.append(
+            MaterialRecord(
+                category="surface",
+                key=surface,
+                name=surface_name(surface),
+                quantity=area,
+                unit="m²",
+            )
+        )
+    for (material, thickness_mm, width_mm, color), length_m in sorted(
+        edge_by_key.items()
+    ):
+        spec = f"{thickness_mm:g}×{width_mm:g}mm"
+        if color:
+            spec += f" {color}"
+        records.append(
+            MaterialRecord(
+                category="edge_banding",
+                key=material,
+                name=material_name(material),
+                spec=spec,
+                quantity=length_m,
+                unit="m",
+            )
+        )
+    return records
+
+
 def _material_label(panel: PanelRecord) -> str:
     """板件材质显示名：基材 · 表面；未物化时占位。"""
     substrate = substrate_name(panel.substrate) if panel.substrate else ""
@@ -625,6 +703,11 @@ def format_bom_markdown(report: BOMReport) -> str:
                 f"- {groove.note}: {groove.panel_label}, "
                 f"{groove.size_x:g}×{groove.size_y:g}×{groove.size_z:g}mm"
             )
+    if report.materials:
+        lines.extend(["", f"### 材料清单 ({len(report.materials)} 项)", ""])
+        for item in report.materials:
+            spec = f" {item.spec}" if item.spec else ""
+            lines.append(f"- {item.name}{spec} ×{item.quantity:.3f}{item.unit}")
     if report.hardware:
         lines.extend(["", f"### 五金清单 ({len(report.hardware)} 项)", ""])
         for item in report.hardware:

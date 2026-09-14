@@ -30,6 +30,7 @@ from furniture_manufacturing.manufacturing_bom import (
 from furniture_manufacturing.manufacturing_models import (
     HardwareRecord,
     MachiningOperation,
+    MaterialRecord,
     PanelRecord,
 )
 from furniture_manufacturing.production_simulation import simulate_production
@@ -1050,6 +1051,9 @@ class FurnitureOrchestrator:
             hardware=[HardwareRecord(**item) for item in output.get("hardware", [])],
             operations=[
                 MachiningOperation(**item) for item in output.get("operations", [])
+            ],
+            materials=[
+                MaterialRecord(**item) for item in output.get("materials", [])
             ],
             furniture_category=str(output.get("furniture_category", "")),
             width=float(output.get("width", 0.0)),
