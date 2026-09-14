@@ -7,6 +7,7 @@ from typing import Any, Mapping, Sequence
 
 from furniture_design_intent.design_intent import DesignIntent
 
+from .assembly_tree import build_cabinet_tree
 from .cabinet_identity import DEFAULT_CABINET_ID, admit_cabinet_id
 from .panel_planning import plan_panels
 from .panel_spec import FurnitureSpec
@@ -47,6 +48,9 @@ def plan_panel_cabinets(
         spec = FurnitureSpec.from_intent(intent, values)
         structure = CabinetStructure.from_spec(spec)
         panels = plan_panels(spec, structure, cabinet_id=cabinet_id)
+        assemblies, openings = build_cabinet_tree(
+            cabinet_id, spec, structure, panels
+        )
         cabinets.append(
             {
                 "id": cabinet_id,
@@ -56,7 +60,8 @@ def plan_panel_cabinets(
                     "requested": requested_back_mount,
                     "effective": spec.back_mount,
                 },
-                "panels": [asdict(item) for item in panels],
+                "assemblies": assemblies,
+                "openings": openings,
             }
         )
     return {"cabinets": cabinets}

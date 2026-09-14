@@ -15,6 +15,7 @@ from runtime_paths import bootstrap_runtime_paths
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 from furniture_design_intent.design_intent import DesignIntent, FinishedEnvelope
+from furniture_panel_planning.assembly_tree import flatten_panels_for_handoff
 from furniture_panel_planning.cabinet_identity import panel_role
 from furniture_panel_planning.construction_geometry import (
     drawer_panel_boxes,
@@ -194,11 +195,13 @@ class PanelRuleContractTests(unittest.TestCase):
         )
         self.assertEqual(set(output), {"cabinets"})
         self.assertEqual([item["id"] for item in output["cabinets"]], ["cab_a", "cab_b"])
-        roles_a = {panel_role(item["id"]) for item in output["cabinets"][0]["panels"]}
-        roles_b = {panel_role(item["id"]) for item in output["cabinets"][1]["panels"]}
+        panels_a = flatten_panels_for_handoff(output["cabinets"][0])
+        panels_b = flatten_panels_for_handoff(output["cabinets"][1])
+        roles_a = {panel_role(item["id"]) for item in panels_a}
+        roles_b = {panel_role(item["id"]) for item in panels_b}
         self.assertEqual(roles_a, roles_b)
-        ids_a = {item["id"] for item in output["cabinets"][0]["panels"]}
-        ids_b = {item["id"] for item in output["cabinets"][1]["panels"]}
+        ids_a = {item["id"] for item in panels_a}
+        ids_b = {item["id"] for item in panels_b}
         self.assertFalse(ids_a & ids_b)
 
     def test_shelf_entries_require_shelf_type(self) -> None:
@@ -358,10 +361,24 @@ class PanelRuleContractTests(unittest.TestCase):
         )
         output = plan_panel_stage(intent, panel_parameters())
         self.assertEqual(set(output), {"cabinets"})
+        cabinet = output["cabinets"][0]
+        self.assertEqual(
+            set(cabinet),
+            {
+                "id",
+                "spec",
+                "structure",
+                "back_mount_resolution",
+                "assemblies",
+                "openings",
+            },
+        )
         spec, structure, panels = require_primary_handoff(output)
         self.assertEqual(spec["board_thickness"], 18.0)
         self.assertIn("internal_width", structure)
         self.assertTrue(panels)
+        self.assertTrue(all(item["assembly_id"] for item in panels))
+        self.assertTrue(all(item["joints"] for item in panels if item["role"] == "left_side_panel"))
 
         with self.assertRaisesRegex(ValueError, "requires cabinets"):
             require_primary_handoff({})
@@ -373,6 +390,85 @@ class PanelRuleContractTests(unittest.TestCase):
                     "panels": panels,
                 }
             )
+        legacy = {
+            "cabinets": [
+                {
+                    "id": "cabinet_1",
+                    "spec": spec,
+                    "structure": structure,
+                    "panels": panels,
+                }
+            ]
+        }
+        _, _, legacy_panels = require_primary_handoff(legacy)
+        self.assertEqual(len(legacy_panels), len(panels))
+
+    def test_assembly_tree_keeps_integrated_toe_kick_on_carcass(self) -> None:
+        intent = DesignIntent(
+            furniture_category="floor_cabinet",
+            finished_envelope=FinishedEnvelope(800, 600, 1000),
+            confirmed=True,
+        )
+        output = plan_panel_stage(intent, panel_parameters(n_doors=2))
+        cabinet = output["cabinets"][0]
+        assemblies = cabinet["assemblies"]
+        carcass_roles = {item["role"] for item in assemblies["carcass"]["panels"]}
+        self.assertEqual(assemblies["base"]["construction"], "integrated")
+        self.assertEqual(assemblies["base"]["panels"], [])
+        self.assertIn("toe_kick_front", carcass_roles)
+        self.assertIn("left_side_panel", carcass_roles)
+        front_roles = {item["role"] for item in assemblies["fronts"]["panels"]}
+        self.assertEqual(front_roles, {"left_door", "right_door"})
+        self.assertEqual(assemblies["drawers"], [])
+        self.assertEqual(cabinet["openings"][0]["kind"], "doors")
+        self.assertEqual(
+            cabinet["openings"][0]["members"],
+            ["cabinet_1__left_door", "cabinet_1__right_door"],
+        )
+
+    def test_assembly_tree_nests_drawer_boxes(self) -> None:
+        intent = DesignIntent(
+            furniture_category="floor_cabinet",
+            finished_envelope=FinishedEnvelope(800, 600, 1000),
+            confirmed=True,
+        )
+        params = panel_parameters(n_doors=0, drawer_count=3)
+        params["shelves"] = []
+        params["top_gap_mm"] = 0
+        output = plan_panel_stage(intent, params)
+        cabinet = output["cabinets"][0]
+        drawers = cabinet["assemblies"]["drawers"]
+        self.assertEqual(len(drawers), 3)
+        self.assertEqual(cabinet["assemblies"]["fronts"]["panels"], [])
+        first = drawers[0]
+        self.assertEqual(first["id"], "cabinet_1__drawer_1")
+        box_roles = {item["role"] for item in first["box"]["panels"]}
+        self.assertIn("drawer_front_z68", box_roles)
+        self.assertIn("drawer_side_L_z68", box_roles)
+        self.assertEqual(first["front_id"], "cabinet_1__drawer_front_z68")
+        self.assertTrue(first["box"]["joints"])
+        self.assertEqual(cabinet["openings"][0]["kind"], "full_height_drawers")
+        self.assertEqual(
+            cabinet["openings"][0]["members"],
+            [
+                "cabinet_1__drawer_1",
+                "cabinet_1__drawer_2",
+                "cabinet_1__drawer_3",
+            ],
+        )
+        _, _, panels = require_primary_handoff(output)
+        drawer_ids = {item["id"] for item in first["box"]["panels"]}
+        for joint in first["box"]["joints"]:
+            self.assertIn(joint["bearing_id"], drawer_ids)
+            self.assertIn(joint["end_id"], drawer_ids)
+        self.assertEqual(
+            {item["assembly_id"] for item in panels if item["role"].startswith("drawer_")},
+            {
+                "cabinet_1__drawer_1",
+                "cabinet_1__drawer_2",
+                "cabinet_1__drawer_3",
+            },
+        )
 
     def test_contact_output_uses_bearing_and_end_ids(self) -> None:
         intent = DesignIntent(
@@ -381,11 +477,10 @@ class PanelRuleContractTests(unittest.TestCase):
             confirmed=True,
         )
         output = plan_panel_stage(intent, panel_parameters())
-        contacts = [
-            joint
-            for panel in output["cabinets"][0]["panels"]
-            for joint in panel["joints"]
-        ]
+        cabinet = output["cabinets"][0]
+        self.assertNotIn("panels", cabinet)
+        carcass = cabinet["assemblies"]["carcass"]
+        contacts = list(carcass["joints"])
         self.assertTrue(contacts)
         for joint in contacts:
             self.assertIn("bearing_id", joint)
@@ -397,7 +492,8 @@ class PanelRuleContractTests(unittest.TestCase):
             restored = PanelJoint.from_dict(joint)
             self.assertEqual(restored.bearing_id, joint["bearing_id"])
             self.assertEqual(restored.end_id, joint["end_id"])
-        for panel in output["cabinets"][0]["panels"]:
+        for panel in carcass["panels"]:
+            self.assertNotIn("joints", panel)
             self.assertNotIn("cam_face", panel)
             self.assertNotIn("door_hinge_gap", panel)
 

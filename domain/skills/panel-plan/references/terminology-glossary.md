@@ -30,10 +30,14 @@
 | 卷后背板厚 | `back_thickness` | mm | `groove/cover` 为常量 `9`；`insert` 等于料板厚。提案可省略。 |
 | 门板厚 | `door_thickness` | mm | 料板目录 `18/22`。省略则等于 `board_thickness`。 |
 | 柜体实例 | `cabinet_id` / `cabinets[].id` | 标识符 | 柜体父对象身份；缺省 `cabinet_1`。不得包含 `__`。 |
+| 子装配 | `assemblies` | 对象 | 柜内 `carcass`、可选 `base`、`fronts`、`drawers[]`。检查点事实源。 |
+| 底座工法 | `assemblies.base.construction` | 枚举 | 当前只允许 `integrated`（侧板落地，踢脚板挂在 `carcass`）。 |
+| 前开口分区 | `openings[]` | 列表 | `kind` 为 `doors` 或 `full_height_drawers`；成员是门板 id 或抽屉装配 id。 |
 | 板件柜内角色 | `role` | 字符串 | 柜内稳定角色名，如 `left_side_panel`。输出必须写出。 |
 | 板件所属柜体 | `parent_id` | 标识符 | 必须等于所属 `cabinets[].id`。输出必须写出。 |
+| 板件所属子装配 | `assembly_id` | 标识符 | 如 `cabinet_1__carcass`、`cabinet_1__drawer_1`。输出必须写出。 |
 | 板件全局标识 | `id` | 字符串 | `{cabinet_id}__{role}`。输出不得再写裸角色名。 |
-| 板件接触 | `joints` | 列表 | 该板参与的定向接触；每条是承面被端面顶住。 |
+| 板件接触 | `joints` | 列表 | 检查点写在所属子装配上；交接派生列表才回贴到板上。每条是承面被端面顶住。 |
 
 ## 接触口径
 
@@ -66,7 +70,7 @@
 - `back_offset` 表示背板基准相对柜体背侧的偏移；`cover` 模式下背板位于 `Y=0`，不再消费该偏移来决定内部起点。
 - `panel` 在本阶段指制造板件记录，不指 CAD 实体、网格或 feature tree 节点。
 - `structure` 在本阶段指确定性柜体结构几何与内部净空，不指房间布局结果。
-- `cabinets[]` 是板件阶段的对象树和检查点唯一形状；`spec/structure/panels` 只写在各柜体内。
+- `cabinets[]` 是板件阶段的对象树和检查点唯一形状；`spec/structure/assemblies/openings` 只写在各柜体内，柜级不得再抄 `panels`。
 
 ## 本阶段不接受的历史名
 

@@ -26,6 +26,7 @@ class PanelPlacement:
     note: str = ""
     role: str = ""  # cabinet-local role, e.g. left_side_panel
     parent_id: str = ""  # owning cabinet instance id
+    assembly_id: str = ""  # owning sub-assembly, e.g. cabinet_1__carcass
     door_overlay: str | None = None      # "full" / "half" / "inset", only for door panels
     inner_face: str = ""                 # panel face pointing toward cabinet interior
     outer_face: str = ""                 # panel face pointing toward cabinet exterior

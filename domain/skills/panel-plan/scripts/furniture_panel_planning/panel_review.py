@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+from .assembly_tree import flatten_panels_for_handoff, iter_assembly_joints
 from .cabinet_identity import cabinets_from_output
 
 
@@ -38,13 +39,12 @@ def _review_cabinet(cabinet: Mapping[str, Any]) -> dict[str, Any]:
         raise ValueError("cabinet requires id")
     spec = cabinet.get("spec")
     structure = cabinet.get("structure")
-    panels = cabinet.get("panels")
     if not isinstance(spec, Mapping):
         raise ValueError(f"{cabinet_id} requires spec")
     if not isinstance(structure, Mapping):
         raise ValueError(f"{cabinet_id} requires structure")
-    if not isinstance(panels, list):
-        raise ValueError(f"{cabinet_id} requires panels")
+    panels = flatten_panels_for_handoff(cabinet)
+    contacts = _unique_contacts(iter_assembly_joints(cabinet))
     resolution = cabinet.get("back_mount_resolution")
     if not isinstance(resolution, Mapping):
         resolution = {}
@@ -80,7 +80,7 @@ def _review_cabinet(cabinet: Mapping[str, Any]) -> dict[str, Any]:
         "shelf_count": len(shelves),
         "toe_kick_height_mm": spec["toe_kick_height"],
         "panels": [_review_panel(item) for item in panels],
-        "contacts": _unique_contacts(panels),
+        "contacts": contacts,
     }
 
 
@@ -105,19 +105,13 @@ def _review_panel(panel: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _unique_contacts(panels: list[Any]) -> list[dict[str, Any]]:
+def _unique_contacts(joints: list[Any]) -> list[dict[str, Any]]:
     unique: dict[tuple[Any, ...], dict[str, Any]] = {}
-    for panel in panels:
-        if not isinstance(panel, Mapping):
-            raise ValueError("each panel must be an object")
-        joints = panel.get("joints") or []
-        if not isinstance(joints, list):
-            raise ValueError(f"{panel.get('id', 'panel')} joints must be a list")
-        for joint in joints:
-            if not isinstance(joint, Mapping):
-                raise ValueError("each contact must be an object")
-            contact = {field: joint[field] for field in _CONTACT_KEY_FIELDS}
-            unique[tuple(contact[field] for field in _CONTACT_KEY_FIELDS)] = contact
+    for joint in joints:
+        if not isinstance(joint, Mapping):
+            raise ValueError("each contact must be an object")
+        contact = {field: joint[field] for field in _CONTACT_KEY_FIELDS}
+        unique[tuple(contact[field] for field in _CONTACT_KEY_FIELDS)] = contact
     return [unique[key] for key in sorted(unique)]
 
 
