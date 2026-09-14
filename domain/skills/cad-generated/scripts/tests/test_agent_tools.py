@@ -68,6 +68,13 @@ class AgentToolSurfaceTests(unittest.TestCase):
         self.assertNotIn("plan_cabinet", blob)
         self.assertNotIn("CadBridge", blob)
         self.assertNotIn("n_doors\":", blob.replace(" ", ""))
+        self.assertNotIn("include_output", blob)
+        self.assertNotIn("current_output", blob)
+        self.assertNotIn("allowed_actions", blob)
+        self.assertNotIn("waiting_for", blob)
+        self.assertIn("include_view", blob)
+        self.assertIn("current_view", blob)
+        self.assertIn("allowed_tools", blob)
         for item in tools:
             parameters = item["function"]["parameters"]
             self.assertFalse(parameters.get("additionalProperties", True))
@@ -103,9 +110,14 @@ class AgentToolSurfaceTests(unittest.TestCase):
         )
         self.assertTrue(created["ok"], created)
         project_id = created["project"]["id"]
+        self.assertTrue(created["progressed"])
         self.assertEqual(created["project"]["current_stage"], "design_intent")
-        self.assertEqual(created["project"]["waiting_for"], TOOL_CONFIRM_STAGE)
-        self.assertIn(TOOL_CONFIRM_STAGE, created["project"]["allowed_actions"])
+        self.assertEqual(created["project"]["required_tool"], TOOL_CONFIRM_STAGE)
+        self.assertIn(TOOL_CONFIRM_STAGE, created["project"]["allowed_tools"])
+        self.assertNotIn("advanced", created)
+        self.assertNotIn("waiting_for", created["project"])
+        self.assertNotIn("allowed_actions", created["project"])
+        self.assertNotIn("current_output", created["project"])
 
         skipped = self.session.call(
             TOOL_RUN_NEXT,
@@ -120,7 +132,7 @@ class AgentToolSurfaceTests(unittest.TestCase):
         )
         self.assertTrue(confirmed["ok"], confirmed)
         self.assertTrue(confirmed["project"]["intent_confirmed"])
-        self.assertEqual(confirmed["project"]["waiting_for"], TOOL_RUN_NEXT)
+        self.assertEqual(confirmed["project"]["required_tool"], TOOL_RUN_NEXT)
 
         generated = self.session.call(
             TOOL_RUN_NEXT,
@@ -130,12 +142,12 @@ class AgentToolSurfaceTests(unittest.TestCase):
             },
         )
         self.assertTrue(generated["ok"], generated)
-        self.assertTrue(generated["advanced"])
+        self.assertTrue(generated["progressed"])
         self.assertEqual(generated["project"]["current_stage"], "panel_plan")
         self.assertFalse(generated["project"]["current_stage_approved"])
-        self.assertEqual(generated["project"]["waiting_for"], TOOL_CONFIRM_STAGE)
+        self.assertEqual(generated["project"]["required_tool"], TOOL_CONFIRM_STAGE)
         self.assertEqual(
-            generated["project"]["current_output"]["cabinets"][0]["n_doors"],
+            generated["project"]["current_view"]["cabinets"][0]["n_doors"],
             2,
         )
 
@@ -165,7 +177,7 @@ class AgentToolSurfaceTests(unittest.TestCase):
         self.assertEqual(second["project"]["intent_sha256"], intent_sha)
         self.assertEqual(len(second["project"]["attempts"]["panel_plan"]), 2)
         self.assertEqual(
-            second["project"]["current_output"]["cabinets"][0]["n_doors"],
+            second["project"]["current_view"]["cabinets"][0]["n_doors"],
             1,
         )
 
@@ -182,7 +194,7 @@ class AgentToolSurfaceTests(unittest.TestCase):
         )
         self.assertTrue(selected["ok"], selected)
         self.assertEqual(
-            selected["project"]["current_output"]["cabinets"][0]["n_doors"],
+            selected["project"]["current_view"]["cabinets"][0]["n_doors"],
             2,
         )
 
@@ -196,7 +208,7 @@ class AgentToolSurfaceTests(unittest.TestCase):
         self.assertEqual(failed["project"]["current_stage"], "design_intent")
         self.assertTrue(failed["project"]["current_stage_approved"])
         self.assertFalse(failed["project"]["attempts"]["panel_plan"][0]["passed"])
-        self.assertEqual(failed["project"]["waiting_for"], TOOL_RETRY_STAGE)
+        self.assertEqual(failed["project"]["required_tool"], TOOL_RETRY_STAGE)
 
         reused = self.session.call(
             TOOL_RUN_NEXT,
@@ -239,7 +251,7 @@ class AgentToolSurfaceTests(unittest.TestCase):
         self.assertEqual(revised["project"]["current_stage"], "design_intent")
         self.assertFalse(revised["project"]["intent_confirmed"])
         self.assertEqual(
-            revised["project"]["current_output"]["furniture_category"],
+            revised["project"]["current_view"]["furniture_category"],
             "wall_cabinet",
         )
         self.assertNotIn("panel_plan", revised["project"]["attempts"])
@@ -288,6 +300,13 @@ class AgentToolSurfaceTests(unittest.TestCase):
         self.assertFalse(unknown_field["ok"])
         self.assertEqual(unknown_field["error"]["code"], "UNKNOWN_ARGUMENT")
 
+        legacy_include = self.session.call(
+            TOOL_GET_PROJECT,
+            {"project_id": created["project"]["id"], "include_output": False},
+        )
+        self.assertFalse(legacy_include["ok"])
+        self.assertEqual(legacy_include["error"]["code"], "UNKNOWN_ARGUMENT")
+
     def test_json_argument_string_and_store_reload(self) -> None:
         created = self.session.call(
             TOOL_CREATE_PROJECT,
@@ -325,7 +344,7 @@ class AgentToolSurfaceTests(unittest.TestCase):
             },
         )
         self.assertTrue(generated["ok"], generated)
-        output = generated["project"]["current_output"]
+        output = generated["project"]["current_view"]
         cabinet = output["cabinets"][0]
         self.assertIn("markdown", output)
         self.assertEqual(cabinet["n_doors"], 2)
@@ -355,7 +374,7 @@ class AgentToolSurfaceTests(unittest.TestCase):
             frozen["cabinets"][0]["assemblies"]["carcass"]["panels"][0],
         )
 
-    def test_include_output_false_omits_current_output(self) -> None:
+    def test_include_view_false_omits_current_view(self) -> None:
         created = self.session.call(
             TOOL_CREATE_PROJECT,
             {
@@ -368,10 +387,11 @@ class AgentToolSurfaceTests(unittest.TestCase):
         )
         summary = self.session.call(
             TOOL_GET_PROJECT,
-            {"project_id": created["project"]["id"], "include_output": False},
+            {"project_id": created["project"]["id"], "include_view": False},
         )
         self.assertTrue(summary["ok"])
-        self.assertIsNone(summary["project"]["current_output"])
+        self.assertFalse(summary["progressed"])
+        self.assertIsNone(summary["project"]["current_view"])
 
     def _confirmed_intent(self) -> str:
         created = self.session.call(

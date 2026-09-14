@@ -19,7 +19,7 @@
 - 当前抽屉前板即盒体前脸，写在该抽屉的 `box.panels`，不进 `fronts`。
 - 可选提案字段 `cabinet_id` 是身份不是构造参数，准入 `FurnitureSpec` 前弹出；缺省 `cabinet_1`。交互主流程一份意图一台柜；多柜用 `plan_panel_cabinets()`，不同外包络仍要多份已确认意图。
 
-交接函数从 `spec` 派生运行时 `CabinetStructure`，再由 `flatten_panels_for_handoff()` 得到板件列表（接触按装配收口后回贴到相关板上，供制造使用）。旧冻结文件若只有柜级 `structure/panels`，交接函数按旧形状还原，不重跑规划。顶层不得再写 `spec/structure/panels/cabinet_id`。工具快照 `current_output` 对 `panel_plan` 是 `panel_review.py` 从这棵树派生的确认审查清单，不是冻结文件本身。分析记录属于旁路证据，不并入板件事实。
+交接函数从 `spec` 派生运行时 `CabinetStructure`，再由 `flatten_panels_for_handoff()` 得到板件列表（接触按装配收口后回贴到相关板上，供制造使用）。旧冻结文件若只有柜级 `structure/panels`，交接函数按旧形状还原，不重跑规划。顶层不得再写 `spec/structure/panels/cabinet_id`。工具快照 `current_view` 对 `panel_plan` 是 `panel_review.py` 从这棵树派生的确认审查清单，不是冻结文件本身。分析记录属于旁路证据，不并入板件事实。
 
 确认后的板件冻成 `store/<project-id>/panels/<sha256>.json`，Revision 记下 `confirmed_panel_sha256`。有 Project Store 时，制造、板件旁路分析、CAD 板件快照和交付哈希按该哈希读冻结文件，文件缺失则失败；未确认、旧项目没有该哈希、或没有 Store 时仍读内存中的 `stage_outputs.panel_plan`。不重跑 `plan_panel_stage()`。
 

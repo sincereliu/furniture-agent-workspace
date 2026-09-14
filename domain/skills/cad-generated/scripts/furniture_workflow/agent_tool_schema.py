@@ -46,7 +46,7 @@ _CREATE_KEYS = frozenset(
 )
 _REVISE_KEYS = frozenset({"project_id"}) | (_CREATE_KEYS - {"name"})
 _ENVELOPE_KEYS = frozenset(_INTENT_FLAT_KEYS)
-_GET_KEYS = frozenset({"project_id", "include_output"})
+_GET_KEYS = frozenset({"project_id", "include_view"})
 _CONFIRM_KEYS = frozenset({"project_id", "stage"})
 _RUN_NEXT_KEYS = frozenset(
     {
@@ -73,8 +73,8 @@ _PANEL_STAGE_INPUT_HINT = (
     "door_thickness, drawer_bottom_thickness, drawer_back_thickness. "
     "Optional cabinet_id. Do not send furniture_category or envelope fields."
 )
-_PANEL_OUTPUT_HINT = (
-    "For panel_plan, current_output is the confirmation review "
+_PANEL_VIEW_HINT = (
+    "For panel_plan, current_view is the confirmation review "
     "(markdown or panel/contact tables), not the frozen cabinets tree."
 )
 _MANUFACTURING_STAGE_INPUT_HINT = (
@@ -165,8 +165,8 @@ _OPENAI_TOOLS: list[dict[str, Any]] = [
             "name": TOOL_GET_PROJECT,
             "description": (
                 "Return the current revision snapshot: stage, approvals, "
-                "allowed_actions, attempts, validation, and current_output. "
-                f"{_PANEL_OUTPUT_HINT} "
+                "allowed_tools, attempts, validation, and current_view. "
+                f"{_PANEL_VIEW_HINT} "
                 "Call this when you need state; do not infer a later stage."
             ),
             "parameters": {
@@ -174,9 +174,9 @@ _OPENAI_TOOLS: list[dict[str, Any]] = [
                 "additionalProperties": False,
                 "properties": {
                     "project_id": {"type": "string"},
-                    "include_output": {
+                    "include_view": {
                         "type": "boolean",
-                        "description": "Include current_output. Defaults to true.",
+                        "description": "Include current_view. Defaults to true.",
                     },
                 },
                 "required": ["project_id"],
@@ -216,7 +216,7 @@ _OPENAI_TOOLS: list[dict[str, Any]] = [
                 "Requires the current stage to be confirmed. If that next stage "
                 f"already has attempts, call {TOOL_RETRY_STAGE} instead. "
                 "Entering cad_generated requires generate_cad=true. "
-                f"Show current_output and wait. {_PANEL_OUTPUT_HINT} "
+                f"Show current_view and wait. {_PANEL_VIEW_HINT} "
                 f"{_PANEL_STAGE_INPUT_HINT} {_MANUFACTURING_STAGE_INPUT_HINT}"
             ),
             "parameters": {
@@ -257,8 +257,8 @@ _OPENAI_TOOLS: list[dict[str, Any]] = [
             "description": (
                 "Re-run a planning stage against the frozen confirmed upstream. "
                 f"Retryable stages: {_RETRYABLE_TEXT}. Failed attempts do not "
-                "fail the whole revision. Show the new current_output and wait "
-                f"for confirmation. {_PANEL_OUTPUT_HINT} "
+                "fail the whole revision. Show the new current_view and wait "
+                f"for confirmation. {_PANEL_VIEW_HINT} "
                 f"{_PANEL_STAGE_INPUT_HINT} "
                 f"{_MANUFACTURING_STAGE_INPUT_HINT}"
             ),

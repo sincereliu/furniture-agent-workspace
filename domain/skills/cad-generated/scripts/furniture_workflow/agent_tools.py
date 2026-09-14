@@ -76,7 +76,7 @@ class FurnitureToolSession:
             payload = _parse_arguments(arguments)
             if tool == TOOL_CREATE_PROJECT:
                 project = self._create_project(payload)
-                return self._ok(tool, project, include_output=True, advanced=True)
+                return self._ok(tool, project, include_view=True, progressed=True)
             if tool not in TOOL_NAMES:
                 raise ToolProtocolError(
                     "UNKNOWN_TOOL",
@@ -86,12 +86,12 @@ class FurnitureToolSession:
             project = self._load_project(project_id)
             if tool == TOOL_GET_PROJECT:
                 _reject_unknown_keys(payload, _GET_KEYS)
-                include_output = _optional_bool(
-                    payload.get("include_output"),
-                    "include_output",
+                include_view = _optional_bool(
+                    payload.get("include_view"),
+                    "include_view",
                     default=True,
                 )
-                return self._ok(tool, project, include_output=include_output)
+                return self._ok(tool, project, include_view=include_view)
             if tool == TOOL_CONFIRM_STAGE:
                 return self._confirm_stage(project, payload)
             if tool == TOOL_RUN_NEXT:
@@ -134,7 +134,7 @@ class FurnitureToolSession:
         return self._ok(
             TOOL_CONFIRM_STAGE,
             project,
-            advanced=project.latest.workflow.current != before
+            progressed=project.latest.workflow.current != before
             or project.latest.is_stage_approved(stage),
         )
 
@@ -178,7 +178,7 @@ class FurnitureToolSession:
         return self._ok(
             TOOL_RUN_NEXT,
             project,
-            advanced=project.latest.workflow.current != before,
+            progressed=project.latest.workflow.current != before,
         )
 
     def _retry_stage(
@@ -199,7 +199,7 @@ class FurnitureToolSession:
         return self._ok(
             TOOL_RETRY_STAGE,
             project,
-            advanced=project.latest.workflow.current != before,
+            progressed=project.latest.workflow.current != before,
         )
 
     def _select_attempt(
@@ -220,7 +220,7 @@ class FurnitureToolSession:
         intent = _intent_from_payload(payload)
         self.orchestrator.revise(project, intent)
         self._remember(project)
-        return self._ok(TOOL_REVISE_INTENT, project, advanced=True)
+        return self._ok(TOOL_REVISE_INTENT, project, progressed=True)
 
     def _load_project(self, project_id: str) -> Project:
         store = self.orchestrator.project_store
@@ -247,15 +247,15 @@ class FurnitureToolSession:
         tool: str,
         project: Project,
         *,
-        include_output: bool = True,
-        advanced: bool = False,
+        include_view: bool = True,
+        progressed: bool = False,
     ) -> dict[str, Any]:
         return {
             "ok": True,
             "tool": tool,
             "error": None,
-            "advanced": advanced,
-            "project": project_snapshot(project, include_output=include_output),
+            "progressed": progressed,
+            "project": project_snapshot(project, include_view=include_view),
         }
 
     def _error(
@@ -269,9 +269,9 @@ class FurnitureToolSession:
             "ok": False,
             "tool": tool or "",
             "error": {"code": code, "message": message},
-            "advanced": False,
+            "progressed": False,
             "project": (
-                project_snapshot(project, include_output=False)
+                project_snapshot(project, include_view=False)
                 if project is not None
                 else None
             ),
@@ -281,7 +281,7 @@ class FurnitureToolSession:
 def project_snapshot(
     project: Project,
     *,
-    include_output: bool = True,
+    include_view: bool = True,
 ) -> dict[str, Any]:
     revision = project.latest
     current = revision.workflow.current
@@ -291,15 +291,15 @@ def project_snapshot(
         index = stage_index(serial)
         if index < len(STAGE_SEQUENCE) - 1:
             next_stage = STAGE_SEQUENCE[index + 1]
-    current_output = None
-    if include_output and serial is not None:
+    current_view = None
+    if include_view and serial is not None:
         output = revision.stage_outputs.get(serial.value)
         if output is not None and serial == WorkflowStage.PANELS_PLANNED:
             from furniture_panel_planning.panel_review import panel_review_from_output
 
-            current_output = panel_review_from_output(output)
+            current_view = panel_review_from_output(output)
         elif output is not None:
-            current_output = deepcopy(output)
+            current_view = deepcopy(output)
     validation = _latest_validation(revision, serial)
     return {
         "id": project.id,
@@ -318,44 +318,44 @@ def project_snapshot(
         "intent_confirmed": bool(revision.intent.confirmed),
         "intent_sha256": revision.intent_sha256,
         "confirmed_panel_sha256": revision.confirmed_panel_sha256,
-        "allowed_actions": allowed_actions(revision),
-        "waiting_for": waiting_for(revision),
+        "allowed_tools": allowed_tools(revision),
+        "required_tool": required_tool(revision),
         "cad_generation_required": next_stage == WorkflowStage.CAD_GENERATED,
         "selected_attempts": dict(revision.selected_attempts),
         "attempts": _attempt_summaries(revision),
         "current_validation": validation,
-        "current_output": current_output,
+        "current_view": current_view,
         "stage_sequence": list(_STAGE_VALUES),
     }
 
 
-def allowed_actions(revision: Revision) -> list[str]:
-    actions = [TOOL_GET_PROJECT, TOOL_REVISE_INTENT]
+def allowed_tools(revision: Revision) -> list[str]:
+    tools = [TOOL_GET_PROJECT, TOOL_REVISE_INTENT]
     current = revision.workflow.current
     if current == WorkflowStage.FAILED or current not in STAGE_SEQUENCE:
-        return actions
+        return tools
     if not revision.is_stage_approved(current):
         if current.value in revision.stage_outputs:
-            actions.append(TOOL_CONFIRM_STAGE)
+            tools.append(TOOL_CONFIRM_STAGE)
         if current in RETRYABLE_STAGES:
-            actions.append(TOOL_RETRY_STAGE)
+            tools.append(TOOL_RETRY_STAGE)
             if _has_passed_attempt(revision, current):
-                actions.append(TOOL_SELECT_ATTEMPT)
-        return actions
+                tools.append(TOOL_SELECT_ATTEMPT)
+        return tools
     index = stage_index(current)
     if index == len(STAGE_SEQUENCE) - 1:
-        return actions
+        return tools
     next_stage = STAGE_SEQUENCE[index + 1]
     if next_stage in RETRYABLE_STAGES and revision.attempts_for(next_stage):
-        actions.append(TOOL_RETRY_STAGE)
+        tools.append(TOOL_RETRY_STAGE)
         if _has_passed_attempt(revision, next_stage):
-            actions.append(TOOL_SELECT_ATTEMPT)
+            tools.append(TOOL_SELECT_ATTEMPT)
     else:
-        actions.append(TOOL_RUN_NEXT)
-    return actions
+        tools.append(TOOL_RUN_NEXT)
+    return tools
 
 
-def waiting_for(revision: Revision) -> str | None:
+def required_tool(revision: Revision) -> str | None:
     current = revision.workflow.current
     if current == WorkflowStage.FAILED or current not in STAGE_SEQUENCE:
         return TOOL_REVISE_INTENT
@@ -617,9 +617,9 @@ __all__ = [
     "TOOL_RUN_NEXT",
     "TOOL_SELECT_ATTEMPT",
     "ToolProtocolError",
-    "allowed_actions",
+    "allowed_tools",
     "openai_tools",
     "project_snapshot",
     "tool_names",
-    "waiting_for",
+    "required_tool",
 ]
