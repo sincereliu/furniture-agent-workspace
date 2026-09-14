@@ -33,6 +33,24 @@ from .workflow_state import (
 )
 
 
+def _canonicalize_stage_input(
+    key: str, stage_input: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Wrap a flat parameters object; keep manufacturing appearance as a sibling."""
+    payload = deepcopy(dict(stage_input))
+    if "parameters" in payload:
+        return payload
+    if key == "panels":
+        return {"parameters": payload}
+    if key == "manufacturing":
+        appearance = payload.pop("appearance", None)
+        wrapped = {"parameters": payload}
+        if appearance is not None:
+            wrapped["appearance"] = appearance
+        return wrapped
+    return payload
+
+
 class RevisionOpsMixin:
     def revise(self, project: Project, intent: DesignIntent) -> Revision:
         """Start a new revision at stage 1; all parent artifacts become stale."""
@@ -323,7 +341,4 @@ class RevisionOpsMixin:
         key = STAGE_INPUT_KEYS.get(stage)
         if key is None:
             raise ValueError(f"stage does not accept retry inputs: {stage.value}")
-        payload = deepcopy(dict(stage_input))
-        if key == "panels" and "parameters" not in payload:
-            payload = {"parameters": payload}
-        revision.stage_inputs[key] = payload
+        revision.stage_inputs[key] = _canonicalize_stage_input(key, stage_input)

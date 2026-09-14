@@ -75,6 +75,8 @@ result = session.call(name, arguments)  # arguments 为对象或 JSON 字符串
 - 第一次板件/制造：`furniture_run_next` 的 `stage_input`
 - 再试：`furniture_retry_stage` 的 `stage_input`
 
+板件与制造都接受 `{parameters: {...}}`，或扁平 parameters 对象（运行时会包一层）。制造的 `appearance` 与 `parameters` 平级，不要写进 `parameters`。封边选型 `edge_banding` 写在制造 `parameters` 里。
+
 工具面不补构造默认值。料档字段可省略，由车间工艺卡展开。缺字段或非法组合由阶段运行时拒绝，并记为失败 attempt。
 
 ## 与 Skill 的关系

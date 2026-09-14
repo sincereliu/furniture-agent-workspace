@@ -181,6 +181,21 @@ class FurnitureOrchestratorAdmissionTests(unittest.TestCase):
         self.assertEqual(inputs["panels"]["parameters"]["top_gap_mm"], 300)
         self.assertEqual(inputs["panels"]["parameters"]["back_mount"], "cover")
 
+    def test_flat_request_routes_edge_banding_to_manufacturing(self) -> None:
+        inputs = stage_inputs_from_spec(
+            {
+                "furniture_category": "floor_cabinet",
+                "width": 800,
+                "depth": 600,
+                "height": 1000,
+                "edge_banding": {"material": "abs", "thickness": "t1_0"},
+            }
+        )
+        self.assertEqual(
+            inputs["manufacturing"]["parameters"]["edge_banding"],
+            {"material": "abs", "thickness": "t1_0"},
+        )
+
     def test_flat_requests_reject_legacy_type_field(self) -> None:
         with self.assertRaisesRegex(ValueError, "must use furniture_category"):
             self.orchestrator.intent_from_spec(

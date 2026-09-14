@@ -393,6 +393,42 @@ class AgentToolSurfaceTests(unittest.TestCase):
         self.assertFalse(summary["progressed"])
         self.assertIsNone(summary["project"]["current_view"])
 
+    def test_run_next_wraps_flat_manufacturing_stage_input(self) -> None:
+        project_id = self._confirmed_panels(n_doors=1)
+        generated = self.session.call(
+            TOOL_RUN_NEXT,
+            {
+                "project_id": project_id,
+                "stage_input": {
+                    "door_hinge_side": "left",
+                    "appearance": _appearance_valid(),
+                },
+            },
+        )
+        self.assertTrue(generated["ok"], generated)
+        self.assertEqual(generated["project"]["current_stage"], "manufacture_plan")
+        view = generated["project"]["current_view"]
+        self.assertEqual(view["requested_options"]["door_hinge_side"], "left")
+        self.assertEqual(view["appearance"], _appearance_valid())
+        self.assertNotIn("appearance", view["requested_options"])
+
+    def test_nested_manufacturing_stage_input_still_works(self) -> None:
+        project_id = self._confirmed_panels(n_doors=1)
+        generated = self.session.call(
+            TOOL_RUN_NEXT,
+            {
+                "project_id": project_id,
+                "stage_input": {
+                    "parameters": {"door_hinge_side": "right"},
+                    "appearance": _appearance_valid(),
+                },
+            },
+        )
+        self.assertTrue(generated["ok"], generated)
+        view = generated["project"]["current_view"]
+        self.assertEqual(view["requested_options"]["door_hinge_side"], "right")
+        self.assertEqual(view["appearance"], _appearance_valid())
+
     def _confirmed_intent(self) -> str:
         created = self.session.call(
             TOOL_CREATE_PROJECT,
@@ -405,6 +441,23 @@ class AgentToolSurfaceTests(unittest.TestCase):
             },
         )
         project_id = created["project"]["id"]
+        confirmed = self.session.call(
+            TOOL_CONFIRM_STAGE,
+            {"project_id": project_id},
+        )
+        self.assertTrue(confirmed["ok"], confirmed)
+        return project_id
+
+    def _confirmed_panels(self, **panel_overrides: object) -> str:
+        project_id = self._confirmed_intent()
+        generated = self.session.call(
+            TOOL_RUN_NEXT,
+            {
+                "project_id": project_id,
+                "stage_input": panel_parameters(**panel_overrides),
+            },
+        )
+        self.assertTrue(generated["ok"], generated)
         confirmed = self.session.call(
             TOOL_CONFIRM_STAGE,
             {"project_id": project_id},
@@ -454,6 +507,55 @@ class OrchestratorRunNextStageInputTests(unittest.TestCase):
         )
         spec = result.revision.stage_outputs["panel_plan"]["cabinets"][0]["spec"]
         self.assertEqual(spec["n_doors"], 1)
+
+    def test_run_next_wraps_flat_manufacturing_stage_input(self) -> None:
+        from furniture_design_intent.design_intent import DesignIntent, FinishedEnvelope
+
+        orchestrator = FurnitureOrchestrator(workspace_root=WORKSPACE_ROOT)
+        project = orchestrator.create_project(
+            "扁平制造输入",
+            DesignIntent(
+                furniture_category="floor_cabinet",
+                finished_envelope=FinishedEnvelope(800, 600, 1000),
+            ),
+        )
+        orchestrator.confirm_stage(project)
+        orchestrator.run_next(project, stage_input=panel_parameters(n_doors=1))
+        orchestrator.confirm_stage(project)
+        result = orchestrator.run_next(
+            project,
+            stage_input={
+                "door_hinge_side": "left",
+                "appearance": _appearance_valid(),
+            },
+        )
+        stored = result.revision.stage_inputs["manufacturing"]
+        self.assertEqual(stored["parameters"]["door_hinge_side"], "left")
+        self.assertNotIn("door_hinge_side", stored)
+        self.assertEqual(stored["appearance"], _appearance_valid())
+        self.assertEqual(
+            result.revision.stage_outputs["manufacture_plan"]["requested_options"][
+                "door_hinge_side"
+            ],
+            "left",
+        )
+
+
+def _appearance_valid() -> dict[str, dict[str, str]]:
+    return {
+        "carcass": {
+            "substrate": "particleboard",
+            "surface": "white__soft_touch__plain",
+        },
+        "door": {
+            "substrate": "particleboard",
+            "surface": "oak__double_faced__grain",
+        },
+        "back": {
+            "substrate": "particleboard",
+            "surface": "white__double_faced__plain",
+        },
+    }
 
 
 if __name__ == "__main__":
