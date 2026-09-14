@@ -5,7 +5,7 @@
 ## 使用原则
 
 - 文档、测试、代码和 API 契约只使用本文件中的规范名。
-- 本阶段提案、序列化 spec、structure 和板件输出不接受历史别名；出现未知字段时运行时拒绝。
+- 本阶段提案、序列化 spec、interior 和板件输出不接受历史别名；出现未知字段时运行时拒绝。
 - 除专门声明外，线性尺寸统一为 mm；计数字段无单位。
 
 ## 规范名
@@ -32,7 +32,8 @@
 | 柜体实例 | `cabinet_id` / `cabinets[].id` | 标识符 | 柜体父对象身份；缺省 `cabinet_1`。不得包含 `__`。 |
 | 子装配 | `assemblies` | 对象 | 柜内 `carcass`、可选 `base`、`fronts`、`drawers[]`。检查点事实源。 |
 | 底座工法 | `assemblies.base.construction` | 枚举 | 当前只允许 `integrated`（侧板落地，踢脚板挂在 `carcass`）。 |
-| 前开口分区 | `openings[]` | 列表 | `kind` 为 `doors` 或 `full_height_drawers`；成员是门板 id 或抽屉装配 id。 |
+| 内腔 | `interior.cavity` | 对象 | 可用内腔：`width/height/depth` 与最小角点 `origin.{x,y,z}`。不是缝隙 `clearance`。 |
+| 内腔分区 | `interior.zones[]` | 列表 | `kind` 为 `doors` 或 `full_height_drawers`；成员是门板 id 或抽屉装配 id。 |
 | 板件柜内角色 | `role` | 字符串 | 柜内稳定角色名，如 `left_side_panel`。输出必须写出。 |
 | 板件所属柜体 | `parent_id` | 标识符 | 必须等于所属 `cabinets[].id`。输出必须写出。 |
 | 板件所属子装配 | `assembly_id` | 标识符 | 如 `cabinet_1__carcass`、`cabinet_1__drawer_1`。输出必须写出。 |
@@ -69,14 +70,14 @@
 - `front_gap` 表示门前脸与柜体前方的深度方向间隙，不等于门边缝。
 - `back_offset` 表示背板基准相对柜体背侧的偏移；`cover` 模式下背板位于 `Y=0`，不再消费该偏移来决定内部起点。
 - `panel` 在本阶段指制造板件记录，不指 CAD 实体、网格或 feature tree 节点。
-- `structure` 在本阶段指确定性柜体结构几何与内部净空，不指房间布局结果。
-- `cabinets[]` 是板件阶段的对象树和检查点唯一形状；`spec/structure/assemblies/openings` 只写在各柜体内，柜级不得再抄 `panels`。
+- `interior` 在本阶段指柜体内腔与分区，不指房间布局、踢脚区或背板基准。
+- `cabinets[]` 是板件阶段的对象树和检查点唯一形状；`spec/interior/assemblies` 只写在各柜体内，柜级不得再抄 `panels` 或 `structure`。
 
 ## 本阶段不接受的历史名
 
 - `furniture_type`、`type`：用 `furniture_category`。
 - `door_margin`：用 `front_face_margin`。
-- `door_count`：用 `n_doors`。layout 子系统仍用 `door_count` 作为自己的序列化名，但不进入本阶段提案或 structure。
+- `door_count`：用 `n_doors`。layout 子系统仍用 `door_count` 作为自己的序列化名，但不进入本阶段提案或 interior。
 - `movable_shelf_connector`、`door_hinge_side`：制造阶段输入，不是板件 spec 字段。
 - `back_mount=auto`、`gap_below_mm="auto"`：不再接受；背板必须写 `groove`/`insert`/`cover`，计算层只写 `null`。
 - `toe_kick_support_count=null`：不再接受；必须写非负整数。

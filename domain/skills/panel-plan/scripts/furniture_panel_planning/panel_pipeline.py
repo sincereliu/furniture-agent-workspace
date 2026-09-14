@@ -48,20 +48,19 @@ def plan_panel_cabinets(
         spec = FurnitureSpec.from_intent(intent, values)
         structure = CabinetStructure.from_spec(spec)
         panels = plan_panels(spec, structure, cabinet_id=cabinet_id)
-        assemblies, openings = build_cabinet_tree(
+        assemblies, interior = build_cabinet_tree(
             cabinet_id, spec, structure, panels
         )
         cabinets.append(
             {
                 "id": cabinet_id,
                 "spec": asdict(spec),
-                "structure": asdict(structure),
+                "interior": interior,
                 "back_mount_resolution": {
                     "requested": requested_back_mount,
                     "effective": spec.back_mount,
                 },
                 "assemblies": assemblies,
-                "openings": openings,
             }
         )
     return {"cabinets": cabinets}

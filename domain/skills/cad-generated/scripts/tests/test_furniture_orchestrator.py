@@ -815,7 +815,11 @@ class FurnitureOrchestratorTests(unittest.TestCase):
         result = self.orchestrator.run_next(project)
         panel_output = result.revision.stage_outputs["panel_plan"]
         self.assertEqual(first_cabinet_spec(panel_output)["board_thickness"], 18.0)
-        self.assertEqual(panel_output["cabinets"][0]["structure"]["back_mount"], "groove")
+        self.assertEqual(first_cabinet_spec(panel_output)["back_mount"], "groove")
+        self.assertEqual(
+            panel_output["cabinets"][0]["interior"]["cavity"]["width"],
+            764.0,
+        )
         self.assertEqual(
             result.revision.selected_attempts["panel_plan"],
             1,

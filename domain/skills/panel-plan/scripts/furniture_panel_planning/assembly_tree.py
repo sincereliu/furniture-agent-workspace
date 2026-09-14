@@ -21,15 +21,16 @@ CABINET_OUTPUT_FIELDS = frozenset(
     {
         "id",
         "spec",
-        "structure",
+        "interior",
         "back_mount_resolution",
         "assemblies",
-        "openings",
     }
 )
 ASSEMBLY_OBJECT_FIELDS = frozenset({"carcass", "base", "fronts", "drawers"})
 BASE_CONSTRUCTIONS = frozenset({"integrated"})
-OPENING_KINDS = frozenset({"doors", "full_height_drawers"})
+ZONE_KINDS = frozenset({"doors", "full_height_drawers"})
+INTERIOR_FIELDS = frozenset({"cavity", "zones"})
+CAVITY_FIELDS = frozenset({"width", "height", "depth", "origin"})
 
 _DRAWER_ROLE = re.compile(
     r"^(drawer_front|drawer_side_L|drawer_side_R|drawer_back|drawer_bottom)_(z-?\d+)$"
@@ -42,8 +43,8 @@ def build_cabinet_tree(
     spec: FurnitureSpec,
     structure: CabinetStructure,
     panels: list[PanelPlacement],
-) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    """Group solved panels into the checkpoint assembly tree."""
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Group solved panels into assemblies and the interior cavity/zones."""
     carcass_panels: list[PanelPlacement] = []
     front_panels: list[PanelPlacement] = []
     drawer_groups: dict[str, list[PanelPlacement]] = {}
@@ -103,24 +104,25 @@ def build_cabinet_tree(
     if spec.n_doors != len(front_panels):
         raise ValueError("front assemblies must match n_doors")
 
-    openings: list[dict[str, Any]] = []
+    zones: list[dict[str, Any]] = []
     if spec.n_doors > 0:
-        openings.append(
+        zones.append(
             {
-                "id": f"{cabinet_id}__opening_front",
+                "id": f"{cabinet_id}__zone_front",
                 "kind": "doors",
                 "members": [item.id for item in front_panels],
             }
         )
     if spec.drawer_count > 0:
-        openings.append(
+        zones.append(
             {
-                "id": f"{cabinet_id}__opening_front",
+                "id": f"{cabinet_id}__zone_front",
                 "kind": "full_height_drawers",
                 "members": drawer_ids,
             }
         )
-    return assemblies, openings
+    interior = {"cavity": structure.cavity(), "zones": zones}
+    return assemblies, interior
 
 
 def iter_assembly_panels(cabinet: Mapping[str, Any]) -> list[dict[str, Any]]:

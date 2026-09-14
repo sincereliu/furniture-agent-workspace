@@ -12,7 +12,9 @@ from .assembly_tree import (
     ASSEMBLY_OBJECT_FIELDS,
     BASE_CONSTRUCTIONS,
     CABINET_OUTPUT_FIELDS,
-    OPENING_KINDS,
+    CAVITY_FIELDS,
+    INTERIOR_FIELDS,
+    ZONE_KINDS,
     flatten_panels_for_handoff,
 )
 from .cabinet_identity import (
@@ -58,17 +60,17 @@ def validate_panel_output(
                     f"{cabinet.get('id')} does not support: " + ", ".join(unknown)
                 )
             raw_spec = cabinet.get("spec")
-            raw_structure = cabinet.get("structure")
             if not isinstance(raw_spec, Mapping):
                 raise ValueError(f"{cabinet.get('id')} requires spec")
-            if not isinstance(raw_structure, Mapping):
-                raise ValueError(f"{cabinet.get('id')} requires structure")
+            if not isinstance(cabinet.get("interior"), Mapping):
+                raise ValueError(f"{cabinet.get('id')} requires interior")
+            spec = FurnitureSpec.from_dict(raw_spec)
             raw_panels = flatten_panels_for_handoff(cabinet)
             parsed.append(
                 (
                     str(cabinet["id"]),
-                    FurnitureSpec.from_dict(raw_spec),
-                    CabinetStructure.from_dict(raw_structure),
+                    spec,
+                    CabinetStructure.from_spec(spec),
                     [PanelPlacement.from_dict(item) for item in raw_panels],
                     cabinet,
                 )
@@ -334,7 +336,9 @@ def _validate_assembly_tree(
                     f"{item.get('id')} assembly_id must be {expected_id}",
                     str(item.get("id") or expected_id),
                 )
-    report.issues.extend(_validate_openings(cabinet_id, spec, cabinet, panels).issues)
+    report.issues.extend(
+        _validate_interior(cabinet_id, spec, structure, cabinet, panels).issues
+    )
     return report
 
 
@@ -432,19 +436,104 @@ def _validate_scoped_joints(
     return report
 
 
-def _validate_openings(
+def _validate_interior(
+    cabinet_id: str,
+    spec: FurnitureSpec,
+    structure: CabinetStructure,
+    cabinet: Mapping[str, Any],
+    panels: list[PanelPlacement],
+) -> ValidationReport:
+    report = ValidationReport(stage="panel_plan")
+    interior = cabinet.get("interior")
+    if not isinstance(interior, Mapping):
+        report.add_error(
+            "MISSING_INTERIOR",
+            f"{cabinet_id} requires interior",
+            "interior",
+        )
+        return report
+    unknown = sorted(set(interior) - INTERIOR_FIELDS)
+    if unknown:
+        report.add_error(
+            "UNKNOWN_INTERIOR_FIELD",
+            f"{cabinet_id} interior does not support: " + ", ".join(unknown),
+            "interior",
+        )
+    cavity = interior.get("cavity")
+    if not isinstance(cavity, Mapping):
+        report.add_error(
+            "MISSING_INTERIOR_CAVITY",
+            f"{cabinet_id} requires interior.cavity",
+            "interior.cavity",
+        )
+    else:
+        unknown_cavity = sorted(set(cavity) - CAVITY_FIELDS)
+        if unknown_cavity:
+            report.add_error(
+                "UNKNOWN_CAVITY_FIELD",
+                f"{cabinet_id} cavity does not support: " + ", ".join(unknown_cavity),
+                "interior.cavity",
+            )
+        expected = structure.cavity()
+        origin = cavity.get("origin")
+        expected_origin = expected["origin"]
+        if not isinstance(origin, Mapping):
+            report.add_error(
+                "MISSING_CAVITY_ORIGIN",
+                f"{cabinet_id} cavity requires origin",
+                "interior.cavity.origin",
+            )
+            origin = {}
+        for name in ("width", "height", "depth"):
+            try:
+                actual = float(cavity[name])
+            except (KeyError, TypeError, ValueError):
+                report.add_error(
+                    "INTERIOR_CAVITY_MISMATCH",
+                    f"{cabinet_id} cavity.{name} must match the admitted spec",
+                    f"interior.cavity.{name}",
+                )
+                continue
+            if abs(actual - float(expected[name])) > 1e-6:
+                report.add_error(
+                    "INTERIOR_CAVITY_MISMATCH",
+                    f"{cabinet_id} cavity.{name} must match the admitted spec",
+                    f"interior.cavity.{name}",
+                )
+        for axis in ("x", "y", "z"):
+            try:
+                actual = float(origin[axis])
+            except (KeyError, TypeError, ValueError):
+                report.add_error(
+                    "INTERIOR_CAVITY_MISMATCH",
+                    f"{cabinet_id} cavity.origin.{axis} must match the admitted spec",
+                    f"interior.cavity.origin.{axis}",
+                )
+                continue
+            if abs(actual - float(expected_origin[axis])) > 1e-6:
+                report.add_error(
+                    "INTERIOR_CAVITY_MISMATCH",
+                    f"{cabinet_id} cavity.origin.{axis} must match the admitted spec",
+                    f"interior.cavity.origin.{axis}",
+                )
+    report.issues.extend(_validate_zones(cabinet_id, spec, cabinet, panels).issues)
+    return report
+
+
+def _validate_zones(
     cabinet_id: str,
     spec: FurnitureSpec,
     cabinet: Mapping[str, Any],
     panels: list[PanelPlacement],
 ) -> ValidationReport:
     report = ValidationReport(stage="panel_plan")
-    openings = cabinet.get("openings")
-    if not isinstance(openings, list):
+    interior = cabinet.get("interior")
+    zones = interior.get("zones") if isinstance(interior, Mapping) else None
+    if not isinstance(zones, list):
         report.add_error(
-            "MISSING_OPENINGS",
-            f"{cabinet_id} requires openings",
-            "openings",
+            "MISSING_ZONES",
+            f"{cabinet_id} requires interior.zones",
+            "interior.zones",
         )
         return report
     panel_ids = {item.id for item in panels}
@@ -458,55 +547,55 @@ def _validate_openings(
         expected_kind = "doors"
     elif spec.drawer_count > 0:
         expected_kind = "full_height_drawers"
-    if expected_kind and len(openings) != 1:
+    if expected_kind and len(zones) != 1:
         report.add_error(
-            "OPENING_COUNT_MISMATCH",
-            f"{cabinet_id} requires one front opening",
-            "openings",
+            "ZONE_COUNT_MISMATCH",
+            f"{cabinet_id} requires one front zone",
+            "interior.zones",
         )
-    if not expected_kind and openings:
+    if not expected_kind and zones:
         report.add_error(
-            "UNEXPECTED_OPENING",
-            f"{cabinet_id} has no front opening",
-            "openings",
+            "UNEXPECTED_ZONE",
+            f"{cabinet_id} has no front zone",
+            "interior.zones",
         )
-    for opening in openings:
-        if not isinstance(opening, Mapping):
+    for zone in zones:
+        if not isinstance(zone, Mapping):
             report.add_error(
-                "INVALID_OPENING",
-                f"{cabinet_id} openings must be objects",
-                "openings",
+                "INVALID_ZONE",
+                f"{cabinet_id} zones must be objects",
+                "interior.zones",
             )
             continue
-        kind = opening.get("kind")
-        if kind not in OPENING_KINDS:
+        kind = zone.get("kind")
+        if kind not in ZONE_KINDS:
             report.add_error(
-                "INVALID_OPENING_KIND",
-                f"{cabinet_id} opening kind is not supported",
-                "openings",
+                "INVALID_ZONE_KIND",
+                f"{cabinet_id} zone kind is not supported",
+                "interior.zones",
             )
             continue
         if expected_kind and kind != expected_kind:
             report.add_error(
-                "OPENING_KIND_MISMATCH",
-                f"{cabinet_id} front opening must be {expected_kind}",
-                "openings",
+                "ZONE_KIND_MISMATCH",
+                f"{cabinet_id} front zone must be {expected_kind}",
+                "interior.zones",
             )
-        members = opening.get("members")
+        members = zone.get("members")
         if not isinstance(members, list) or not members:
             report.add_error(
-                "MISSING_OPENING_MEMBERS",
-                f"{cabinet_id} opening requires members",
-                "openings",
+                "MISSING_ZONE_MEMBERS",
+                f"{cabinet_id} zone requires members",
+                "interior.zones",
             )
             continue
         allowed = panel_ids if kind == "doors" else drawer_ids
         for member in members:
             if member not in allowed:
                 report.add_error(
-                    "UNKNOWN_OPENING_MEMBER",
-                    f"{member} is not in the {kind} opening",
-                    "openings",
+                    "UNKNOWN_ZONE_MEMBER",
+                    f"{member} is not in the {kind} zone",
+                    "interior.zones",
                 )
     return report
 

@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import re
+from dataclasses import asdict
 from typing import Any, Iterable, Mapping
 
 from .assembly_tree import flatten_panels_for_handoff
+from .panel_spec import FurnitureSpec
+from .structure_planning import CabinetStructure
 
 DEFAULT_CABINET_ID = "cabinet_1"
 PANEL_ID_SEPARATOR = "__"
@@ -98,15 +101,18 @@ def primary_cabinet(output: Mapping[str, Any]) -> dict[str, Any]:
 def require_primary_handoff(
     output: Mapping[str, Any],
 ) -> tuple[Mapping[str, Any], Mapping[str, Any], list[Any]]:
-    """Return spec, structure, and derived panels from the first cabinet."""
+    """Return spec, derived structure, and derived panels from the first cabinet."""
     cabinet = primary_cabinet(output)
     spec = cabinet.get("spec")
-    structure = cabinet.get("structure")
     cabinet_id = cabinet.get("id") or DEFAULT_CABINET_ID
     if not isinstance(spec, Mapping):
         raise ValueError(f"{cabinet_id} requires spec")
-    if not isinstance(structure, Mapping):
-        raise ValueError(f"{cabinet_id} requires structure")
+    if "interior" in cabinet:
+        structure = asdict(CabinetStructure.from_spec(FurnitureSpec.from_dict(spec)))
+    else:
+        structure = cabinet.get("structure")
+        if not isinstance(structure, Mapping):
+            raise ValueError(f"{cabinet_id} requires interior")
     if "assemblies" in cabinet:
         panels = flatten_panels_for_handoff(cabinet)
     else:

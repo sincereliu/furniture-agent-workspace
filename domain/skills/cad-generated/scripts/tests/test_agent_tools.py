@@ -346,6 +346,8 @@ class AgentToolSurfaceTests(unittest.TestCase):
         )
         self.assertEqual(set(frozen), {"cabinets"})
         self.assertIn("spec", frozen["cabinets"][0])
+        self.assertIn("interior", frozen["cabinets"][0])
+        self.assertNotIn("structure", frozen["cabinets"][0])
         self.assertNotIn("panels", frozen["cabinets"][0])
         self.assertIn("joints", frozen["cabinets"][0]["assemblies"]["carcass"])
         self.assertNotIn(

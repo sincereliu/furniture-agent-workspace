@@ -38,11 +38,14 @@ def _review_cabinet(cabinet: Mapping[str, Any]) -> dict[str, Any]:
     if not cabinet_id:
         raise ValueError("cabinet requires id")
     spec = cabinet.get("spec")
-    structure = cabinet.get("structure")
+    interior = cabinet.get("interior")
     if not isinstance(spec, Mapping):
         raise ValueError(f"{cabinet_id} requires spec")
-    if not isinstance(structure, Mapping):
-        raise ValueError(f"{cabinet_id} requires structure")
+    if not isinstance(interior, Mapping):
+        raise ValueError(f"{cabinet_id} requires interior")
+    cavity = interior.get("cavity")
+    if not isinstance(cavity, Mapping):
+        raise ValueError(f"{cabinet_id} requires interior.cavity")
     panels = flatten_panels_for_handoff(cabinet)
     contacts = _unique_contacts(iter_assembly_joints(cabinet))
     resolution = cabinet.get("back_mount_resolution")
@@ -62,9 +65,9 @@ def _review_cabinet(cabinet: Mapping[str, Any]) -> dict[str, Any]:
             "height": spec["height"],
         },
         "internal_clearance_mm": {
-            "width": structure["internal_width"],
-            "depth": structure["internal_y_end"] - structure["internal_y_start"],
-            "height": structure["internal_height"],
+            "width": cavity["width"],
+            "depth": cavity["depth"],
+            "height": cavity["height"],
         },
         "back_mount": {
             "requested": requested,

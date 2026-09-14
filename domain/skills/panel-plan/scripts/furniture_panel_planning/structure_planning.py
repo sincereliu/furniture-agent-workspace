@@ -77,3 +77,16 @@ class CabinetStructure:
             toe_kick_front_y=carcass_y_end - spec.toe_kick_reveal_front,
             n_doors=spec.n_doors,
         )
+
+    def cavity(self) -> dict[str, Any]:
+        """Return the interior usable box: size plus minimum-corner origin."""
+        return {
+            "width": self.internal_width,
+            "height": self.internal_height,
+            "depth": self.internal_y_end - self.internal_y_start,
+            "origin": {
+                "x": self.internal_x_start,
+                "y": self.internal_y_start,
+                "z": self.internal_z_start,
+            },
+        }

@@ -367,10 +367,9 @@ class PanelRuleContractTests(unittest.TestCase):
             {
                 "id",
                 "spec",
-                "structure",
+                "interior",
                 "back_mount_resolution",
                 "assemblies",
-                "openings",
             },
         )
         spec, structure, panels = require_primary_handoff(output)
@@ -420,9 +419,9 @@ class PanelRuleContractTests(unittest.TestCase):
         front_roles = {item["role"] for item in assemblies["fronts"]["panels"]}
         self.assertEqual(front_roles, {"left_door", "right_door"})
         self.assertEqual(assemblies["drawers"], [])
-        self.assertEqual(cabinet["openings"][0]["kind"], "doors")
+        self.assertEqual(cabinet["interior"]["zones"][0]["kind"], "doors")
         self.assertEqual(
-            cabinet["openings"][0]["members"],
+            cabinet["interior"]["zones"][0]["members"],
             ["cabinet_1__left_door", "cabinet_1__right_door"],
         )
 
@@ -447,9 +446,14 @@ class PanelRuleContractTests(unittest.TestCase):
         self.assertIn("drawer_side_L_z68", box_roles)
         self.assertEqual(first["front_id"], "cabinet_1__drawer_front_z68")
         self.assertTrue(first["box"]["joints"])
-        self.assertEqual(cabinet["openings"][0]["kind"], "full_height_drawers")
+        cavity = cabinet["interior"]["cavity"]
+        self.assertEqual(cavity["width"], 764)
+        self.assertEqual(cavity["height"], 914)
+        self.assertEqual(cavity["depth"], 553)
+        self.assertEqual(cavity["origin"], {"x": 18, "y": 27, "z": 68})
+        self.assertEqual(cabinet["interior"]["zones"][0]["kind"], "full_height_drawers")
         self.assertEqual(
-            cabinet["openings"][0]["members"],
+            cabinet["interior"]["zones"][0]["members"],
             [
                 "cabinet_1__drawer_1",
                 "cabinet_1__drawer_2",
