@@ -78,14 +78,14 @@ def validate_manufacturing(
         feature for feature in features if isinstance(feature, GrooveFeature)
     ]
     hole_specs_by_panel: dict[str, list] = {}
-    edge_banding_by_panel: dict[str, dict[str, str]] = {}
+    edge_banding_by_panel: dict[str, set[str]] = {}
     for feature in features:
         if isinstance(feature, HoleFeature):
             hole_specs_by_panel.setdefault(feature.panel_label, []).append(feature)
         elif isinstance(feature, EdgeBandFeature):
-            edge_banding_by_panel.setdefault(feature.panel_label, {})[
+            edge_banding_by_panel.setdefault(feature.panel_label, set()).add(
                 feature.edges
-            ] = feature.material
+            )
     operation_ids: set[str] = set()
     for groove in grooves:
         if groove.feature_id in operation_ids:
@@ -197,13 +197,10 @@ def validate_manufacturing(
             "panels",
         )
     back_panel = index_by_role(bom.panels).get("back_panel")
-    expected_back_edges = (
-        {} if back_mount == "groove"
-        else {"四边": "ABS 1.0mm同色"}
-    )
+    expected_back_edges = set() if back_mount == "groove" else {"四边"}
     if (
         back_panel is None
-        or edge_banding_by_panel.get(back_panel.label, {}) != expected_back_edges
+        or edge_banding_by_panel.get(back_panel.label, set()) != expected_back_edges
     ):
         report.add_error(
             "BACK_EDGE_BANDING_MISMATCH",
@@ -214,7 +211,7 @@ def validate_manufacturing(
         item for item in bom.panels if item.panel_type == "back_rail"
     ]
     if any(
-        edge_banding_by_panel.get(rail.label, {}) != {"四边": "ABS 1.0mm同色"}
+        edge_banding_by_panel.get(rail.label, set()) != {"四边"}
         for rail in rails
     ):
         report.add_error(

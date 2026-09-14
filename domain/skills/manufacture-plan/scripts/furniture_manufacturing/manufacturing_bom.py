@@ -9,7 +9,11 @@ from furniture_panel_planning.cabinet_identity import index_by_role, qualify_pan
 from furniture_panel_planning.panel_spec import FurnitureSpec, resolve_back_mount
 from furniture_panel_planning.panel_models import PanelPlacement
 
-from .manufacturing_edge_banding import get_edge_banding
+from .manufacturing_edge_banding import (
+    DEFAULT_EDGE_BANDING_SELECTION,
+    build_edge_banding,
+)
+from .edge_banding_catalog import material_keys, thickness_keys
 from .connection_points import ConnectionPoint
 from .connectors import ALL_CONNECTORS
 from .features import (
@@ -51,6 +55,7 @@ MANUFACTURING_OPTION_FIELDS = frozenset(
         "options",
         "movable_shelf_connector",
         "door_hinge_side",
+        "edge_banding",
     }
 )
 
@@ -257,6 +262,42 @@ def _normalize_appearance(
     return normalized
 
 
+def _normalize_edge_banding_selection(raw: Any) -> dict[str, str]:
+    """校验封边选型 {material, thickness}，缺省用默认 abs/t1_0。
+
+    键值必须命中封边皮目录（查表准入）；未知字段/键报错。
+    """
+    selection = dict(DEFAULT_EDGE_BANDING_SELECTION)
+    if raw is None:
+        return selection
+    if not isinstance(raw, Mapping):
+        raise ValueError(
+            "edge_banding option must be an object with 'material' and 'thickness'"
+        )
+    unknown = sorted(set(raw) - {"material", "thickness"})
+    if unknown:
+        raise ValueError(
+            "edge_banding option does not support: " + ", ".join(unknown)
+        )
+    material = raw.get("material")
+    thickness = raw.get("thickness")
+    if material is not None:
+        if material not in material_keys():
+            raise ValueError(
+                f"edge_banding material unknown: {material!r}; "
+                "valid: " + ", ".join(material_keys())
+            )
+        selection["material"] = material
+    if thickness is not None:
+        if thickness not in thickness_keys():
+            raise ValueError(
+                f"edge_banding thickness unknown: {thickness!r}; "
+                "valid: " + ", ".join(thickness_keys())
+            )
+        selection["thickness"] = thickness
+    return selection
+
+
 def plan_manufacturing(
     spec: FurnitureSpec,
     placements: list[PanelPlacement],
@@ -284,11 +325,15 @@ def plan_manufacturing(
     hinge_side_by_label = _derive_door_hinge_sides(placements, door_hinge_side)
     back_mount = resolve_back_mount(spec.back_mount)
     appearance_by_role = _normalize_appearance(appearance, placements)
+    edge_banding_selection = _normalize_edge_banding_selection(
+        options.get("edge_banding")
+    )
     panels = [
         _manufacturing_panel(
             spec, back_mount, movable_shelf_connector,
             hinge_side_by_label.get(item.id), item,
             appearance_by_role.get(item.material_role),
+            edge_banding_selection,
         )
         for item in placements
     ]
@@ -352,6 +397,7 @@ def _manufacturing_panel(
     door_hinge_side: str | None,
     placement: PanelPlacement,
     material_selection: Mapping[str, str] | None = None,
+    edge_banding_selection: Mapping[str, str] | None = None,
 ) -> PanelRecord:
     if placement.material_role == "back":
         material = f"{spec.back_thickness:g}mm背板"
@@ -402,7 +448,10 @@ def _manufacturing_panel(
         size_z=placement.size_z,
         quantity=placement.quantity,
         drill_length=drill_length,
-        edge_banding=_edge_banding_for(placement.panel_type, back_mount),
+        edge_banding=_edge_banding_for(
+            placement.panel_type, back_mount, thickness,
+            selection.get("surface", ""), edge_banding_selection,
+        ),
         note=placement.note,
         pos_x=placement.pos_x,
         pos_y=placement.pos_y,
@@ -421,10 +470,18 @@ def _manufacturing_panel(
     )
 
 
-def _edge_banding_for(panel_type: str, back_mount: str) -> dict[str, str]:
+def _edge_banding_for(
+    panel_type: str,
+    back_mount: str,
+    thickness: float,
+    surface: str,
+    selection: Mapping[str, str],
+) -> dict:
     if panel_type == "back" and back_mount == "groove":
         return {}
-    return get_edge_banding(panel_type)
+    return build_edge_banding(
+        panel_type, thickness=thickness, surface=surface, selection=selection
+    )
 
 
 def _back_groove_operations(

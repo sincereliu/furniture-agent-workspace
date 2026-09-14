@@ -16,7 +16,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Mapping
+from typing import Any, TYPE_CHECKING, Mapping
 
 if TYPE_CHECKING:
     # 仅类型标注用；运行时靠鸭子类型读取 HoleSpec 字段，避免
@@ -88,10 +88,13 @@ class GrooveFeature(Feature):
 
 @dataclass
 class EdgeBandFeature(Feature):
-    """封边：一条边（封哪条边 + 封边条材质）。"""
+    """封边：一条边（封哪条边 + 封边皮材质/厚度/宽度/颜色）。"""
 
     edges: str = ""
-    material: str = ""
+    material: str = ""          # 材质键：abs/pvc/laser
+    thickness_mm: float = 0.0   # 封边皮自身厚度
+    width_mm: float = 0.0       # 封边皮宽度（= 板厚）
+    color: str = ""             # 同色 → surface 的 color 段
 
 
 def from_hole_spec(hole: HoleSpec) -> HoleFeature:
@@ -133,22 +136,38 @@ def from_machining_operation(operation: MachiningOperation) -> GrooveFeature:
 
 def from_edge_banding(
     panel_label: str,
-    edge_banding: Mapping[str, str],
+    edge_banding: Mapping[str, Any],
 ) -> list[EdgeBandFeature]:
     """把一块板的封边字典无损装进 EdgeBandFeature 列表。
 
-    edge_banding 形如 {"四边": "ABS 1.0mm同色"}；每条封边 key 对应一个特征。
+    edge_banding 形如 {"四边": {"material": "abs", "thickness_mm": 1.0,
+    "width_mm": 18.0, "color": "white"}}；旧格式值可为字符串（整体当 material）。
     空字典返回空列表（入槽背板等不封边）。
     """
-    return [
-        EdgeBandFeature(
-            kind="edge",
-            panel_label=panel_label,
-            edges=edges,
-            material=material,
-        )
-        for edges, material in edge_banding.items()
-    ]
+    features = []
+    for edges, spec in edge_banding.items():
+        if isinstance(spec, str):
+            features.append(
+                EdgeBandFeature(
+                    kind="edge",
+                    panel_label=panel_label,
+                    edges=edges,
+                    material=spec,
+                )
+            )
+        else:
+            features.append(
+                EdgeBandFeature(
+                    kind="edge",
+                    panel_label=panel_label,
+                    edges=edges,
+                    material=spec.get("material", ""),
+                    thickness_mm=float(spec.get("thickness_mm", 0.0)),
+                    width_mm=float(spec.get("width_mm", 0.0)),
+                    color=spec.get("color", ""),
+                )
+            )
+    return features
 
 
 _FEATURE_BY_KIND = {

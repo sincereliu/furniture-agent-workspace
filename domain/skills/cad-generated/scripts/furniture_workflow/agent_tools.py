@@ -101,7 +101,8 @@ _MANUFACTURING_STAGE_INPUT_HINT = (
     "(left|right, required for a single door), movable_shelf_connector "
     "(two_in_one|shelf_pin, required when movable shelves exist). "
     "appearance selects material per role: {carcass|door|back: "
-    "{substrate, surface}} with keys from materials_catalog.yaml."
+    "{substrate, surface}} with keys from materials_catalog.yaml. "
+    "edge_banding selects {material, thickness} from edge_banding_catalog.yaml."
 )
 
 

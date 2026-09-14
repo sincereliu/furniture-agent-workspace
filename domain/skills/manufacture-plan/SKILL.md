@@ -12,7 +12,7 @@ description: 用于 manufacture_plan 阶段。当用户说"用什么五金""三�
 1. 检查前置：`design_intent` 与 `panel_plan` 均已确认；独立 `layout-plan` 结果不是前置条件。有 Project Store 时制造按确认时记下的 `confirmed_panel_sha256` 读 `store/<project-id>/panels/<sha256>.json`，文件缺失则失败，不静默改用内存里的板件，也不重跑 `panel-plan`。无 Store 时读内存中已确认的 `stage_outputs.panel_plan`。
 2. 由 LLM 根据完整上下文理解制造需求，提出整份策略草案，并把未明确的假设逐项列出给用户确认。策略覆盖：
    - 材料：类别、等级、厚度、纹理、可见面、饰面；材质选型按角色（柜体/门板/背板）引用 `materials_catalog.yaml` 的 `substrate`/`surface` 键，经 `appearance` 输入、代码查表准入；
-   - 封边：封哪些边、封边厚度及余量；
+   - 封边：封哪些边、封边皮材质/厚度；选型 `{material, thickness}` 经 `requested_options.edge_banding` 输入（默认 ABS 1.0mm）、代码查表准入；封边宽度（=板厚）与颜色（同色=surface 颜色段）由代码派生；
    - 连接：螺钉、木榫、偏心件（三合一/二合一）、槽/企口、胶合；
    - 活动层板连接：`movable_shelf_connector`（`two_in_one` 二合一 / `shelf_pin` 隔板钉），有活动层板时必须显式选择，不得由代码静默补齐；
    - 五金：铰链、滑轨、拉手、层板托、固定、防倾倒及荷载；单门铰链侧 `door_hinge_side`（`left`/`right`）是制造输入，双门由制造按门板位置派生；

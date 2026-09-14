@@ -193,10 +193,8 @@ class BackMountModeTests(unittest.TestCase):
                 panels = by_role(bom.panels)
 
                 self.assertEqual(
-                    panels["back_panel"].edge_banding,
-                    {}
-                    if back_mount == "groove"
-                    else {"四边": "ABS 1.0mm同色"},
+                    list(panels["back_panel"].edge_banding.keys()),
+                    [] if back_mount == "groove" else ["四边"],
                 )
                 self.assertEqual(
                     {panel.back_mount for panel in bom.panels},
@@ -208,8 +206,8 @@ class BackMountModeTests(unittest.TestCase):
                     if panel.panel_type == "back_rail"
                 ):
                     self.assertEqual(
-                        rail.edge_banding,
-                        {"四边": "ABS 1.0mm同色"},
+                        list(rail.edge_banding.keys()),
+                        ["四边"],
                     )
 
                 drilled = emit_drilled_holes(bom)

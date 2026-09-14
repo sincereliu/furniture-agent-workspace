@@ -24,12 +24,20 @@
 
 ## 材料目录与 appearance 物化
 
-- 材质单一真源 `materials_catalog.yaml`：`substrate`（基材）+ `surface`（表面）两个独立维度；键=稳定代号（全小写、段间 `__`、段内 `_`），`name`=可读全名。键唯一由 `materials_catalog.py` 的重复键检测兜底。
+- 材质单一真源 `materials_catalog.yaml`：`substrate`（基材）+ `surface`（表面）两个独立维度；键=稳定代号（全小写、段间 `__`、段内 `_`），`name`=可读全名。键唯一由公共 `catalog_loader.py` 的重复键检测兜底。
 - `surface` 键 = `颜色__表面处理__纹理`；`finish`（soft_touch/gloss/double_faced）与 `grain`（plain/grain）的组合当前显式枚举；颜色增多后按规则派生（yaml 顶部 TODO）。
 - `appearance` 输入按材质角色选型：`{carcass|door|back: {substrate, surface}}`，键值必须命中目录（查表准入）；角色键只能是三个、缺角色/多余角色报错，不做静默默认。空 appearance 不物化（向后兼容）。
 - 物化：`plan_manufacturing` 按 `placement.material_role` 把 substrate/surface 键写进 `PanelRecord.substrate/surface`；`material` 字符串仍表达「料厚+角色」。
 - `validation.py`：appearance 非空时每块板 substrate/surface 必须非空（`APPEARANCE_NOT_MATERIALIZED`）。
 - 语义：`BOMReport.appearance` 是选型输入记录，`PanelRecord.substrate/surface` 是物化真相；revise 直接编辑输出后两者可不同步。
+
+## 封边皮
+
+- 封边皮单一真源 `edge_banding_catalog.yaml`：`material`（abs/pvc/laser）+ `thickness`（t0_8/t1_0/t2_0）两个独立维度；键唯一由公共 `catalog_loader.py` 的重复键检测兜底。
+- 封边选型 `{material, thickness}` 经 `requested_options.edge_banding` 输入，默认 `abs/t1_0`（= 历史「ABS 1.0mm」）；查表准入。
+- 两个派生属性（不进目录、代码确定性计算）：宽度 = 板件厚度；颜色 = 同色，取 surface 键的 color 段（`white__soft_touch__plain` → `white`）。
+- `EdgeBandFeature` 承载结构化封边：`material`（键）+ `thickness_mm` + `width_mm` + `color`；`from_edge_banding` 兼容旧字符串格式。
+- 封哪些边：四边规则保留（`manufacturing_edge_banding.py` 的 `FOUR_EDGE_TYPES`）；入槽背板不封边；「见光边」依赖见光面建模，列未来。
 
 ## 生成与产物
 

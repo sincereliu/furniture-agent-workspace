@@ -80,9 +80,22 @@ class PanelRecord:
     def edge_banding_summary(self) -> str:
         if not self.edge_banding:
             return "无"
-        return ", ".join(
-            f"{edge}:{material}" for edge, material in self.edge_banding.items()
-        )
+        from furniture_manufacturing.edge_banding_catalog import material_name
+
+        parts = []
+        for edge, spec in self.edge_banding.items():
+            if isinstance(spec, str):
+                parts.append(f"{edge}:{spec}")
+                continue
+            material = material_name(spec.get("material", "")) or spec.get("material", "")
+            thickness_mm = spec.get("thickness_mm", 0.0)
+            width_mm = spec.get("width_mm", 0.0)
+            color = spec.get("color", "")
+            label = f"{material} {thickness_mm:g}×{width_mm:g}mm"
+            if color:
+                label += f" {color}"
+            parts.append(f"{edge}:{label}")
+        return ", ".join(parts)
 
     # ── 几何接口（孔位定位 / 局部坐标化的地基）─────────────────────
     # 当前为轴对齐矩形实现；异形/姿态内核只需替换这几个方法的内部实现，

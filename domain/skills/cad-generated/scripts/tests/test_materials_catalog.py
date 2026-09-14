@@ -14,8 +14,8 @@ bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 import yaml
 
+from furniture_manufacturing.catalog_loader import UniqueKeyLoader
 from furniture_manufacturing.materials_catalog import (
-    _UniqueKeyLoader,
     substrate_keys,
     substrate_name,
     surface_keys,
@@ -49,7 +49,7 @@ class MaterialsCatalogTests(unittest.TestCase):
             "  particleboard: { name: 重复 }\n"
         )
         with self.assertRaises(ValueError):
-            yaml.load(raw, Loader=_UniqueKeyLoader)
+            yaml.load(raw, Loader=UniqueKeyLoader)
 
 
 if __name__ == "__main__":
