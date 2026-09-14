@@ -12,13 +12,18 @@ from runtime_paths import bootstrap_runtime_paths
 
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
-from panel_fixtures import furniture_spec
+from copy import deepcopy
+
+from panel_fixtures import cabinet_data, furniture_spec
 from furniture_manufacturing.manufacturing_bom import (
     format_bom_markdown,
     plan_manufacturing,
 )
 from furniture_panel_planning.panel_planning import plan_panels
 from furniture_panel_planning.structure_planning import CabinetStructure
+from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
+from furniture_workflow.workflow_state import WorkflowStage
+from workflow_test_support import confirm_through
 
 
 def _appearance():
@@ -80,6 +85,35 @@ class MaterialsBomTests(unittest.TestCase):
         self.assertIn("### 材料清单", markdown)
         self.assertIn("颗粒板", markdown)
         self.assertIn("ABS封边", markdown)
+
+    def test_revised_panels_recompute_materials(self) -> None:
+        orchestrator = FurnitureOrchestrator(
+            workspace_root=WORKSPACE_ROOT, project_store=None
+        )
+        spec = cabinet_data(n_doors=2)
+        spec["appearance"] = _appearance()
+        result = confirm_through(
+            orchestrator,
+            "材料重算",
+            spec,
+            through_stage=WorkflowStage.MANUFACTURING_PLANNED,
+        )
+        edited = deepcopy(
+            result.revision.stage_outputs[WorkflowStage.MANUFACTURING_PLANNED.value]
+        )
+        edited["panels"][0]["substrate"] = "eco_board"
+        revision = orchestrator.revise_stage_output(
+            result.project,
+            WorkflowStage.MANUFACTURING_PLANNED,
+            edited,
+        )
+        materials = revision.stage_outputs[
+            WorkflowStage.MANUFACTURING_PLANNED.value
+        ]["materials"]
+        substrate_keys = {
+            item["key"] for item in materials if item["category"] == "substrate"
+        }
+        self.assertIn("eco_board", substrate_keys)
 
 
 if __name__ == "__main__":

@@ -24,6 +24,7 @@ from furniture_manufacturing.features import feature_from_dict
 from furniture_manufacturing.manufacturing_bom import (
     BOMReport,
     emit_drilled_holes,
+    estimate_materials,
     plan_manufacturing,
     recompute_features,
 )
@@ -181,7 +182,7 @@ class FurnitureOrchestrator:
             revision.intent.to_dict()
         )
         if changed_stage == WorkflowStage.MANUFACTURING_PLANNED:
-            # 直接编辑制造输出后，重算派生快照（features/connection_points），
+            # 直接编辑制造输出后，重算派生快照（features/connection_points/materials），
             # 避免它们与 panels/operations 漂移。
             revised_panels = [
                 PanelRecord.from_dict(item)
@@ -199,6 +200,9 @@ class FurnitureOrchestrator:
                 "features": [asdict(feature) for feature in features],
                 "connection_points": [
                     asdict(point) for point in connection_points
+                ],
+                "materials": [
+                    asdict(record) for record in estimate_materials(revised_panels)
                 ],
             }
         revision.stage_outputs[changed_stage.value] = deepcopy(output)
