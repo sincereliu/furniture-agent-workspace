@@ -24,7 +24,7 @@
 - `south`：东 → 西
 - `west`：南 → 北
 
-`placement.mode=wall` 使用 `host_wall + offset_mm + origin_z_mm`，可选 `fill`。背面贴墙、正面朝向室内。  
+`placement.mode=wall` 使用 `host_wall + offset_mm + origin_z_mm`，可选 `fill`。背面贴墙、正面朝向室内。墙摆的原点与 `rotation_z_deg` 都由 `host_wall` 派生，不接受自由坐标，也转不动——要旋转或要离开墙面，就改成 `mode=free`。  
 `placement.mode=free` 使用 `origin_x_mm/origin_y_mm/origin_z_mm + rotation_z_deg`。
 
 `fill=true` 仅用于 `mode=wall`。代码用该墙净长（扣除与该件高度相交的门窗、贴墙障碍、已摆家具）写入沿墙 `width` 和 `offset_mm`。未给 `offset_mm` 时取最长空段；给了则从该偏移铺到该空段终点。客户同时给了 width 与 fill 时，以墙净长为准。

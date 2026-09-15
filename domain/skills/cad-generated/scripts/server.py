@@ -9,6 +9,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 from typing import Any, Literal
+from uuid import uuid4
 
 SCRIPT_ROOT = Path(__file__).resolve().parent
 WORKSPACE_ROOT = Path(__file__).resolve().parents[4]
@@ -24,7 +25,15 @@ from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
+from furniture_layout.editor import render_editor
 from furniture_layout.pipeline import generate_room_cad, plan_room_scene
+from furniture_layout.scene import RoomScene
+from furniture_layout.scene_edit import apply_edit
+from furniture_layout.scene_store import (
+    list_scene_ids,
+    load_scene_source,
+    save_scene_source,
+)
 from furniture_layout.validation import validate_room_scene
 
 API_VERSION = "0.7.0"
@@ -111,6 +120,38 @@ class RoomSceneResponse(BaseModel):
     cad: dict[str, Any] | None = None
 
 
+class RoomSceneSaveRequest(BaseModel):
+    """保存场景的「源」：房间定义 + 多件包络及其摆放请求。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    scene_id: str = Field(default="", description="场景 id；留空则自动生成")
+    room: RoomRequest
+    items: list[SceneItemRequest] = Field(..., min_length=1)
+
+
+class RoomSceneEditRequest(BaseModel):
+    """单次编辑：move / rotate / resize 三者之一，只改目标 item。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    op: Literal["move", "rotate", "resize"]
+    item_id: str = Field(..., min_length=1)
+    # move：按当前 mode 二选一 —— wall 用 host_wall/offset_mm，free 用 origin_x_mm/origin_y_mm
+    mode: Literal["wall", "free"] | None = None
+    host_wall: Literal["south", "east", "north", "west"] | None = None
+    offset_mm: float | None = Field(default=None, ge=0)
+    origin_x_mm: float | None = None
+    origin_y_mm: float | None = None
+    origin_z_mm: float | None = Field(default=None, ge=0)
+    # rotate
+    rotation_z_deg: float | None = None
+    # resize
+    width: float | None = Field(default=None, gt=0)
+    depth: float | None = Field(default=None, gt=0)
+    height: float | None = Field(default=None, gt=0)
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok", "version": API_VERSION}
@@ -191,6 +232,95 @@ async def plan_room_viewer(req: RoomSceneRequest) -> HTMLResponse:
 async def plan_room_cad(req: RoomSceneRequest):
     payload = req.model_copy(update={"generate_cad": True})
     return RoomSceneResponse(**_plan_scene(payload))
+
+
+@app.post("/api/room-scene/save")
+async def save_room_scene(req: RoomSceneSaveRequest):
+    """保存场景的源；派生结果（摆放/预览）不落盘，读取时重算。"""
+    scene_id = req.scene_id or f"scene-{uuid4().hex[:12]}"
+    payload = req.model_dump(exclude_none=True)
+    try:
+        path = save_scene_source(
+            scene_id,
+            payload["room"],
+            payload["items"],
+            root=OUTPUT_ROOT,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"scene_id": scene_id, "path": str(path)}
+
+
+@app.get("/api/room-scene/{scene_id}", response_model=RoomSceneResponse)
+async def load_room_scene(scene_id: str):
+    """读取场景的源并重算摆放、预览与 Viewer。"""
+    try:
+        source = load_scene_source(scene_id, root=OUTPUT_ROOT)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return RoomSceneResponse(**plan_room_scene(source["room"], source["items"]))
+
+
+@app.get("/api/room-scenes")
+async def list_room_scenes():
+    return {"scene_ids": list_scene_ids(root=OUTPUT_ROOT)}
+
+
+@app.post("/api/room-scene/{scene_id}/edit", response_model=RoomSceneResponse)
+async def edit_room_scene(scene_id: str, req: RoomSceneEditRequest):
+    """应用一次编辑：重算并校验通过才落盘，失败即整体拒绝（不留半成品）。"""
+    try:
+        source = load_scene_source(scene_id, root=OUTPUT_ROOT)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    op = req.model_dump(exclude_none=True)
+    try:
+        edited = apply_edit(source, op)
+        scene = plan_room_scene(edited["room"], edited["items"])
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    report = validate_room_scene(scene)
+    if not report.passed:
+        raise HTTPException(
+            status_code=422,
+            detail="; ".join(issue.message for issue in report.issues),
+        )
+
+    save_scene_source(
+        scene_id,
+        edited["room"],
+        edited["items"],
+        root=OUTPUT_ROOT,
+    )
+    return RoomSceneResponse(**scene)
+
+
+@app.get("/api/room-scene/{scene_id}/editor", response_class=HTMLResponse)
+async def room_scene_editor(scene_id: str) -> HTMLResponse:
+    """可编辑视图：点选家具拖动，松手发一个 edit op。"""
+    try:
+        source = load_scene_source(scene_id, root=OUTPUT_ROOT)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    try:
+        planned = plan_room_scene(source["room"], source["items"])
+        scene = RoomScene.from_dict(
+            {"room": planned["room"], "items": planned["items"]}
+        )
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    editor = render_editor(scene_id, scene)
+    return HTMLResponse(content=str(editor["html"]))
 
 
 def main() -> None:

@@ -1,4 +1,4 @@
-﻿# 家具运行时契约
+# 家具运行时契约
 
 改编排、产物路径、扁平协议或 store 布局时读本文。做家具或改某一阶段规则时不要读；用当前阶段 Skill。这里只定义运行时契约、命令、路径和限制。
 
@@ -101,7 +101,17 @@ store/<project-id>/
 
 ## API 契约
 
-`server.py` 只提供独立房间场景：`POST /api/plan-room`、`/api/plan-room/preview`、`/api/plan-room/viewer`、`/api/plan-room/cad`。请求体为 `room + items[]`。家具生成不走 HTTP 批处理，只走 [交互工具面](agent-tool-contract.md)。
+`server.py` 只提供独立房间场景：`POST /api/plan-room`、`/api/plan-room/preview`、`/api/plan-room/viewer`、`/api/plan-room/cad`。请求体为 `room + items[]`。
+
+场景状态（供交互编辑）：`POST /api/room-scene/save` 保存场景的**源**（房间定义 + 多件包络及其摆放请求），`GET /api/room-scene/{scene_id}` 读取源并重算摆放/预览/Viewer，`GET /api/room-scenes` 列出已保存场景，`POST /api/room-scene/{scene_id}/edit` 应用**一次**编辑。只存源、**不存派生结果**（摆放坐标、footprint、净距、预览都在读取时重算）；存储独立于家具主流程，不写 `stage_outputs`。
+
+编辑是**单 op、原子**：`move`（按当前 `mode` 二选一——`wall` 收 `host_wall`/`offset_mm`，`free` 收 `origin_x_mm`/`origin_y_mm`；**混给即拒**，换模式必须显式给 `mode` 并给出目标模式的坐标）、`rotate`（`rotation_z_deg`）、`resize`（`width`/`depth`/`height` 任意子集，至少一个）。每个 op 只接受自己的字段，白名单外即拒；**重算与校验通过才落盘**，失败整体拒绝，不留半成品。批量 op 留待多选拖动或场景级操作出现时再加。
+
+`rotate` 只对 `free` 摆放有定义：`wall` 的原点与 `rotation_z_deg` 都由 `host_wall` 派生（见 `placement.py`），直接转会被拒。所以 rotate 可以带 `mode: "free"` + `origin_x_mm`/`origin_y_mm`，在**同一个 op 里**把墙摆改成自由摆放并给出绕中心旋转后的原点；带 `host_wall`/`offset_mm` 的 rotate 一律拒绝（否则 `rotation_z_deg: 0` 会伪装成一次沿墙移动）。
+
+可编辑视图：`GET /api/room-scene/{scene_id}/editor` 返回自包含 HTML（复用预览的轨道相机与透视投影）。**点包络任意位置**都能选中（命中判定用凸盒 6 个面投影的并集，外加 5px 容差，免得点描边穿透去转视角）。选中后家具上方出现橙色圆点，拖它旋转：角度绕包络中心算，默认吸附 15°、按住 Shift 精细到 1°，`wall` 家具会在同一次 op 里转成 `free`。拖动改位置：靠墙件沿墙滑动（发 `offset_mm`），往房间内拖过 26px 阈值就转成自由摆放（发 `mode: "free"` + 自由坐标）；自由件平面移动（发 `origin_x_mm`/`origin_y_mm`）。**4px 死区**——纯点击只选中、不发 op。拖动和旋转都**限制在房间内**（旋转扫出墙体的部分按最小位移收回，否则校验会整单拒绝）。拖动期间只做本地预览，松手才发一个 op；后端拒绝时显示原因并**回退到服务端状态**（所见即真实）。空白处拖拽仍转视角。
+
+家具生成不走 HTTP 批处理，只走 [交互工具面](agent-tool-contract.md)。
 
 ## 生成
 
@@ -127,7 +137,7 @@ build123d 入口源码以 `<artifact-name>.step.py`（交互模式为 `model.ste
 
 `Agent tools -> FurnitureOrchestrator -> 设计意图 -> 板件 -> 制造/BOM -> 特征树 -> CAD Bridge -> STEP + Viewer 组件包 -> 交付验证`
 
-独立房间场景为：`明确房间请求 -> layout-plan -> 多件坐标/碰撞/SVG/Viewer -> 可选房间包络 CAD`。
+独立房间场景为：`明确房间请求 -> layout-plan -> 多件坐标/碰撞/SVG/Viewer -> 可选房间包络 CAD`；场景可保存为「源」后重新读取重算，不产生 Revision。
 
 Feature Tree v2 支持板件 `box` 和定向 `cut_box`；发射器先建板、再切削、最后装配加工后的板件。
 
