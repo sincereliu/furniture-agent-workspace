@@ -1,4 +1,4 @@
-﻿interface:
-  display_name: "家具布局规划"
-  short_description: "计算柜体包络、房间位置、碰撞和 SVG 预览"
-  default_prompt: "仅在用户明确要求摆放图时使用 $layout-plan，根据家具外包络规划房间定位并展示预览；遇到越界、门窗遮挡或障碍物碰撞时停止。门数、层板数和结构决策直接交给板件规划，不把本技能作为家具生成前置步骤。"
+interface:
+  display_name: "房间场景布局"
+  short_description: "按房间尺寸摆多件家具包络，校验碰撞，并可生成房间 CAD"
+  default_prompt: "仅在用户要设计功能房间、摆家具或出房间图时使用 $layout-plan。把口述整理成 room + items[]，调用运行时规划；越界或碰撞时停止并改提案。客户确认后再生成房屋与家具包络 CAD。柜体内部结构交给 design-intent 六阶段，不把本技能当作家具生成前置步骤。"

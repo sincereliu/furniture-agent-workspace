@@ -35,12 +35,14 @@ class EntrypointArchitectureTests(unittest.TestCase):
         self.assertIn("class CabinetPipelineResult", pipeline)
 
         server_modules = imported_modules(SCRIPTS_ROOT / "server.py")
-        self.assertIn("furniture_workflow.workflow_orchestrator", server_modules)
-        self.assertIn("furniture_layout.layout_pipeline", server_modules)
+        self.assertIn("furniture_layout.pipeline", server_modules)
+        self.assertNotIn("furniture_workflow.workflow_orchestrator", server_modules)
         self.assertNotIn("furniture_feature_tree.feature_tree_emitter", server_modules)
         self.assertNotIn("furniture_cad.cad_bridge", server_modules)
         server_text = (SCRIPTS_ROOT / "server.py").read_text(encoding="utf-8")
         self.assertNotIn("/api/plan-cabinet", server_text)
+        self.assertNotIn("/api/plan-layout", server_text)
+        self.assertIn("/api/plan-room", server_text)
         self.assertNotIn("execute_spec", server_text)
 
         tool_modules = imported_modules(

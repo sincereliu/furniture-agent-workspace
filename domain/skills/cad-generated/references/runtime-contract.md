@@ -70,7 +70,7 @@ store/<project-id>/
 
 未传入 `project_store` 时只更新内存中的 Revision；交互服务默认使用仓库根目录下已忽略的 `store/`。
 
-`layout-plan` 不在 `STAGE_SEQUENCE` 中。只有明确请求房间摆放、碰撞检查、SVG 或 Viewer 时才单独运行 `/api/plan-layout`；其结果不写入 `approved_stages`，也不是板件、CAD 或交付的前置条件。
+`layout-plan` 不在 `STAGE_SEQUENCE` 中。只有明确请求功能房间摆放或房间 CAD 时才单独运行 `/api/plan-room`；其结果不写入 `approved_stages`，也不是板件、柜体 CAD 或交付的前置条件。
 
 ## 可执行 JSON
 
@@ -93,7 +93,7 @@ store/<project-id>/
 
 `width/depth/height` 必须在意图确认前明确提供；不再用类别预设替代客户确认的外包络。板件必填字段必须完整提交；料档字段（`board_thickness` / `back_thickness` / `door_thickness` / `drawer_bottom_thickness` / `drawer_back_thickness`）可省略，由车间工艺卡展开（料板 18、卷后背板 9、门与抽屉盒同料板）。代码不按柜型静默补其他默认方案。完整值经确定性准入后才写入 `panel_plan.cabinets[].spec`。
 
-契约为扁平 JSON。规范字段使用 `furniture_category/width/depth/height`；适配器只把外包络字段转成 `DesignIntent`，把板件规范字段路由到 `stage_inputs.panels`，把制造选项（含 `door_hinge_side`、`movable_shelf_connector`、`edge_banding`）和外观路由到 `stage_inputs.manufacturing`；`room/placement` 只供独立房间布局 API 使用。扁平请求不再接受历史 `type`，该字段仅在旧序列化 spec 加载时恢复。历史 `furniture_type`/`overall_size`/`mount_mode`/`mounting_height` 仍可映射到规范名。可选 `constraints` 必须有阶段映射；未分类约束在协议路由时拒绝。扁平示例里的 `door_hinge_side` 是制造选项，不是板件规范字段。
+契约为扁平 JSON。规范字段使用 `furniture_category/width/depth/height`；适配器只把外包络字段转成 `DesignIntent`，把板件规范字段路由到 `stage_inputs.panels`，把制造选项（含 `door_hinge_side`、`movable_shelf_connector`、`edge_banding`）和外观路由到 `stage_inputs.manufacturing`。房间场景不进入家具扁平协议。扁平请求不再接受历史 `type`，该字段仅在旧序列化 spec 加载时恢复。历史 `furniture_type`/`overall_size`/`mount_mode`/`mounting_height` 仍可映射到规范名。可选 `constraints` 必须有阶段映射；未分类约束在协议路由时拒绝。扁平示例里的 `door_hinge_side` 是制造选项，不是板件规范字段。
 
 `back_mount` 接受 `groove/insert/cover`，但不进入意图或布局输出。板件阶段不从板厚推断模式；`back_rail_height/groove_depth/groove_clearance` 仅对 `groove` 生效，`back_rail_height=0` 关闭背拉条。
 
@@ -101,9 +101,7 @@ store/<project-id>/
 
 ## API 契约
 
-`server.py` 只提供独立房间布局：`POST /api/plan-layout`、`/api/plan-layout/preview`、`/api/plan-layout/viewer`。家具生成不走 HTTP 批处理，只走 [交互工具面](agent-tool-contract.md)。
-
-布局请求仍用规范字段 `furniture_category/width/depth/height`；`room/placement` 只供该独立 API。Pydantic 拒绝非法模式。未分类 `constraints` 在协议路由时拒绝。
+`server.py` 只提供独立房间场景：`POST /api/plan-room`、`/api/plan-room/preview`、`/api/plan-room/viewer`、`/api/plan-room/cad`。请求体为 `room + items[]`。家具生成不走 HTTP 批处理，只走 [交互工具面](agent-tool-contract.md)。
 
 ## 生成
 
@@ -129,7 +127,7 @@ build123d 入口源码以 `<artifact-name>.step.py`（交互模式为 `model.ste
 
 `Agent tools -> FurnitureOrchestrator -> 设计意图 -> 板件 -> 制造/BOM -> 特征树 -> CAD Bridge -> STEP + Viewer 组件包 -> 交付验证`
 
-独立房间摆放为：`明确布局请求 -> layout-plan -> 房间坐标/碰撞检查/SVG/互动 Viewer`。
+独立房间场景为：`明确房间请求 -> layout-plan -> 多件坐标/碰撞/SVG/Viewer -> 可选房间包络 CAD`。
 
 Feature Tree v2 支持板件 `box` 和定向 `cut_box`；发射器先建板、再切削、最后装配加工后的板件。
 
@@ -137,7 +135,7 @@ Feature Tree v2 支持板件 `box` 和定向 `cut_box`；发射器先建板、�
 
 ## 运行时板件与 BOM 路径
 
-- `furniture_layout/layout_pipeline.py::plan_layout_stage()`：独立计算房间定位、碰撞和预览，不进入家具生成串联流程。
+- `furniture_layout/pipeline.py::plan_room_scene()`：独立计算多件房间定位、碰撞和预览；`generate_room_cad()` 发射房屋与包络 CAD。不进入家具生成串联流程。
 - `furniture_panel_planning/panel_pipeline.py::plan_panel_stage()`：从已确认意图直接首次物化功能数量、结构规格、精确净空、背板方案，并生成实体板件角色、尺寸和位置。
 - `furniture_manufacturing/manufacturing_bom.py::plan_manufacturing()`：材料、封边、五金、BOM、槽；`emit_drilled_holes()` 输出配合孔。
 

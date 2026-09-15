@@ -20,7 +20,6 @@ from furniture_panel_planning.panel_spec import FurnitureSpec
 from panel_fixtures import by_role, furniture_spec
 from furniture_feature_tree.feature_tree_builder import panels_to_feature_tree
 from furniture_feature_tree.feature_tree_emitter import write_build123d_source
-from furniture_layout.layout_pipeline import plan_layout
 from furniture_manufacturing.manufacturing_bom import plan_manufacturing
 from furniture_manufacturing.validation import validate_manufacturing
 from furniture_panel_planning.panel_planning import plan_panels
@@ -38,7 +37,6 @@ class BackGroovePipelineTests(unittest.TestCase):
             shelf_count=0,
             n_doors=0,
         )
-        self.layout = plan_layout(self.spec)
         self.structure = CabinetStructure.from_spec(self.spec)
         self.placements = plan_panels(self.spec, self.structure)
         self.manufacturing = plan_manufacturing(self.spec, self.placements)
@@ -47,13 +45,6 @@ class BackGroovePipelineTests(unittest.TestCase):
             self.manufacturing.operations,
             furniture_category=self.spec.furniture_category,
         )
-
-    def test_layout_defers_exact_regions_to_panel_structure(self) -> None:
-        payload = asdict(self.layout)
-        self.assertNotIn("internal_width", payload)
-        self.assertNotIn("panels", payload)
-        self.assertNotIn("placements", payload)
-        self.assertIn("internal_width", asdict(self.structure))
 
     def test_panel_stage_owns_back_and_toe_kick_dimensions(self) -> None:
         panels = by_role(self.placements)

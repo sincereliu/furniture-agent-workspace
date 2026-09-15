@@ -7,8 +7,7 @@ from html import escape
 from math import radians, sqrt, tan
 from typing import Iterable
 
-from .layout_planning import CabinetLayout
-from .room_planning import RoomOpening, RoomPlacementPlan
+from .scene import RoomOpening, RoomScene
 
 
 PREVIEW_WIDTH_PX = 960
@@ -62,12 +61,10 @@ class PerspectiveProjector:
         )
 
 
-def render_layout_preview(
-    plan: RoomPlacementPlan,
-    layout: CabinetLayout,
-) -> dict[str, object]:
-    """Render a transparent room volume and opaque furniture envelope."""
-    room = plan.room
+def render_preview(scene: RoomScene) -> dict[str, object]:
+    """Render a transparent room volume and opaque furniture envelopes."""
+    room = scene.room
+    item_summary = "、".join(item.label for item in scene.items) or "家具"
     project = _build_projector(
         room.width_mm,
         room.depth_mm,
@@ -91,9 +88,9 @@ def render_layout_preview(
             "</title>"
         ),
         (
-            f'<desc id="desc">{escape(plan.furniture_label)}在'
+            f'<desc id="desc">{escape(item_summary)}在'
             f'{escape(room.name)}中的透视三维占位；房间为透明包络，'
-            "蓝色不透明长方体为家具成品包络。</desc>"
+            "不透明长方体为家具成品包络。</desc>"
         ),
         "<defs>",
         (
@@ -185,22 +182,30 @@ def render_layout_preview(
         )
         obstacle_boxes.append((sort_depth, obstacle_svg))
 
-    furniture_svg, furniture_sort_depth = _render_solid_box(
-        footprint=plan.furniture_footprint,
-        z_start=plan.placement.origin_z_mm,
-        z_end=plan.placement.origin_z_mm + layout.height,
-        project=project,
-        side_colors=("#1d4ed8", "#2563eb", "#1e40af", "#3b82f6"),
-        top_fill="url(#furniture-top)",
-        stroke="#1e3a8a",
-        label=plan.furniture_label,
-        label_color="white",
-        shadow=True,
+    palettes = (
+        (("#1d4ed8", "#2563eb", "#1e40af", "#3b82f6"), "url(#furniture-top)", "#1e3a8a"),
+        (("#047857", "#059669", "#065f46", "#34d399"), "#6ee7b7", "#064e3b"),
+        (("#b45309", "#d97706", "#92400e", "#f59e0b"), "#fcd34d", "#78350f"),
+        (("#6d28d9", "#7c3aed", "#5b21b6", "#a78bfa"), "#ddd6fe", "#4c1d95"),
     )
+    furniture_boxes: list[tuple[float, list[str]]] = []
+    for index, item in enumerate(scene.items):
+        side_colors, top_fill, stroke = palettes[index % len(palettes)]
+        furniture_svg, furniture_sort_depth = _render_solid_box(
+            footprint=item.footprint,
+            z_start=item.placement.origin_z_mm,
+            z_end=item.z_end,
+            project=project,
+            side_colors=side_colors,
+            top_fill=top_fill,
+            stroke=stroke,
+            label=item.label,
+            label_color="white",
+            shadow=True,
+        )
+        furniture_boxes.append((furniture_sort_depth, furniture_svg))
 
-    solid_boxes = obstacle_boxes + [
-        (furniture_sort_depth, furniture_svg)
-    ]
+    solid_boxes = obstacle_boxes + furniture_boxes
     for _, box_svg in sorted(
         solid_boxes,
         key=lambda item: item[0],
@@ -210,7 +215,7 @@ def render_layout_preview(
 
     _append_axis_indicator(svg)
 
-    placement_label = _placement_label(plan)
+    caption = _scene_caption(scene)
     svg.extend(
         [
             (
@@ -220,17 +225,13 @@ def render_layout_preview(
             (
                 '<text x="94" y="646" font-family="sans-serif" '
                 'font-size="14" font-weight="700" fill="#0f172a">'
-                f'{escape(plan.furniture_label)} · '
-                f'{layout.width:g} × {layout.depth:g} × {layout.height:g} mm'
+                f"{escape(item_summary)} · {len(scene.items)} 件"
                 "</text>"
             ),
             (
                 '<text x="94" y="671" font-family="sans-serif" '
                 'font-size="13" fill="#475569">'
-                f'{escape(placement_label)} · '
-                f'原点 ({plan.placement.origin_x_mm:g}, '
-                f'{plan.placement.origin_y_mm:g}, '
-                f'{plan.placement.origin_z_mm:g}) mm'
+                f"{escape(caption)}"
                 "</text>"
             ),
             "</svg>",
@@ -242,12 +243,8 @@ def render_layout_preview(
         "width_px": PREVIEW_WIDTH_PX,
         "height_px": PREVIEW_HEIGHT_PX,
         "alt_text": (
-            f"{plan.furniture_label}在{room.name}中的透视三维包络位置："
-            f"房间透明，家具为不透明长方体；原点 "
-            f"({plan.placement.origin_x_mm:g}, "
-            f"{plan.placement.origin_y_mm:g}, "
-            f"{plan.placement.origin_z_mm:g}) mm，"
-            f"旋转 {plan.placement.rotation_z_deg:g}°"
+            f"{item_summary}在{room.name}中的透视三维包络位置："
+            "房间透明，家具为不透明长方体"
         ),
         "svg": "".join(svg),
     }
@@ -605,21 +602,22 @@ def _polygon(
     )
 
 
-def _placement_label(plan: RoomPlacementPlan) -> str:
+def _scene_caption(scene: RoomScene) -> str:
     wall_names = {
         "south": "南墙",
         "east": "东墙",
         "north": "北墙",
         "west": "西墙",
     }
-    position = wall_names.get(
-        plan.placement.host_wall or "",
-        "自由摆放",
-    )
-    return (
-        f"位置：{position} · 旋转 {plan.placement.rotation_z_deg:g}°"
-        f" · 标高 {plan.placement.origin_z_mm:g} mm"
-    )
+    parts: list[str] = []
+    for item in scene.items:
+        position = wall_names.get(item.placement.host_wall or "", "自由摆放")
+        fill = "铺满 · " if item.placement.fill else ""
+        parts.append(
+            f"{item.label} {fill}{position} "
+            f"{item.width:g}×{item.depth:g}×{item.height:g}"
+        )
+    return "；".join(parts)
 
 
 def _subtract(first: Point3D, second: Point3D) -> Vector3D:

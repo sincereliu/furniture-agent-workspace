@@ -1,1 +1,1 @@
-"""Layout-planning stage runtime."""
+"""Independent room-scene layout runtime."""

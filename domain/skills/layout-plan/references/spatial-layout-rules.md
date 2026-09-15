@@ -1,74 +1,63 @@
 # 空间布局规则
 
-回答“家具在房间的哪个位置、是否越界或碰撞，以及摆放预览长什么样？”；这是独立按需能力，不位于家具生成串联阶段内，也不生成结构净空、板件或 CAD。
+回答“这些家具在房间里怎么放、是否越界或碰撞，以及房间 CAD 包络长什么样？”  
+独立按需能力，不位于家具生成串联阶段内，不生成板件或柜体 STEP。
 
 ## 坐标约定
 
-- 默认毫米，柜体局部 `W×D×H` 对应 X 左→右、Y 后→前、Z 向上。
-- 柜体局部原点 `(0,0,0)` 为成品外包络左后下落地角；用范围/偏移描述区域，不转成 CAD 基元中心。
+- 默认毫米。件局部 `W×D×H` 对应 X 左→右、Y 后→前、Z 向上。
+- 件局部原点 `(0,0,0)` 为外包络左后下落地角。
 - 房间原点是平面图西北角的地面点；房间 X 向东、Y 向南、Z 向上。
-- `room_placement.placement` 将柜体局部原点转换到房间坐标；`rotation_z_deg` 从房间 X 轴逆时针计算。
+- `placement` 将局部原点转换到房间坐标；`rotation_z_deg` 从房间 X 轴逆时针计算。
 
-## 房间定位输入
+## 输入
 
-成功的独立布局请求始终包含房间定位和 SVG 预览。用户未指定时使用以下可见默认假设：
+必须提供：
 
-- 房间：`4200×3600×2800 mm` 的矩形“默认卧室（系统假设）”，门窗和障碍物为空；
-- 位置：沿北墙居中，落地柜标高为 `0`；
-- 吊柜：沿北墙居中；若已确认意图提供了挂装方式，则按方式定位——`flush_ceiling` 贴顶（`origin_z_mm = 房高 − 柜高`），`free_hanging_height` 用挂高 `hanging_height_mm` 作 `origin_z_mm`；否则默认保留 `450 mm` 顶部净距；空间不足时降至不低于地面。
+- `room`：`id`、`width_mm`/`depth_mm`/`height_mm`（矩形），可选 `name`、`openings[]`、`obstacles[]`。
+- `items[]`：每件 `id`、`category`、`width`/`depth`/`height`、`placement`。缺一则失败，不猜默认卧室，不猜默认家具。
 
-只提供 `layout.room` 或 `layout.placement` 时，仅补齐缺失项。`layout_context.room_source` 与 `layout_context.placement_source` 必须说明数据来自用户还是系统默认；默认场景不是现场实测数据，用户可在确认前修改。
+沿墙偏移按房间边界顺时针：
 
-`room`：
+- `north`：西 → 东
+- `east`：北 → 南
+- `south`：东 → 西
+- `west`：南 → 北
 
-- `id/name`：房间标识与展示名。
-- `width_mm/depth_mm/height_mm`：当前支持矩形房间。
-- `openings[]`：门窗所在 `wall`、沿墙 `offset_mm`、宽高和窗台高。
-- `obstacles[]`：柱、管井等轴对齐长方体的位置与尺寸。
+`placement.mode=wall` 使用 `host_wall + offset_mm + origin_z_mm`，可选 `fill`。背面贴墙、正面朝向室内。  
+`placement.mode=free` 使用 `origin_x_mm/origin_y_mm/origin_z_mm + rotation_z_deg`。
 
-沿墙偏移按房间边界顺时针定义：
+`fill=true` 仅用于 `mode=wall`。代码用该墙净长（扣除与该件高度相交的门窗、贴墙障碍、已摆家具）写入沿墙 `width` 和 `offset_mm`。未给 `offset_mm` 时取最长空段；给了则从该偏移铺到该空段终点。客户同时给了 width 与 fill 时，以墙净长为准。
 
-- `north`：西 → 东；
-- `east`：北 → 南；
-- `south`：东 → 西；
-- `west`：南 → 北。
+## 拒绝条件
 
-`placement.mode=wall` 使用 `host_wall + offset_mm + origin_z_mm`，运行时自动推导原点和朝向，使柜体背面贴墙、正面朝向室内。`placement.mode=free` 使用 `origin_x_mm/origin_y_mm/origin_z_mm + rotation_z_deg`。
+- 件越出房间或超过层高
+- 与障碍物或另一件家具正体积相交
+- 沿宿主墙遮挡垂直范围相交的门窗
 
-布局必须拒绝以下情况：柜体越出房间、超过层高、与障碍物发生正体积相交，或沿宿主墙遮挡垂直范围相交的门窗。边界接触不视为碰撞。
+边界接触不视为碰撞。缺房间尺寸、缺 `items`、fill 没有空段，均失败。
 
-## 当前可执行决策
+## 输出
 
-- 成品外包络可继承已确认 `DesignIntent`，也可来自独立请求中明确给出的同等字段；本能力不得改变尺寸口径。
-- 房间与摆放位置属于布局输入；默认值必须在 `layout_context` 明示来源。
+- `room`：标准化房间、门窗、障碍物
+- `items[]`：已解析 placement、footprint、六向净距；fill 后的 width 为沿墙实宽
+- `preview`：透视 SVG，房间透明，家具为不透明包络
+- `viewer`：自包含互动 HTML
+- `cad`：仅请求生成时出现，含 cadgen 源码、STEP、Viewer 路径
 
-层板、门、抽屉、开放格、隔板分区、挂衣/设备/装饰区、滑门、盖门/嵌门、固定/可调层板差异都属于家具本体规划，不属于房间摆放。已支持的数量字段进入 `panel_plan`，不得要求用户先运行本能力。房间安装障碍只按本文件的长方体包络校验，不推断基层、管线或现场可施工性。
+预览、Viewer、CAD 必须由当前房间和全部包络实时重建。
 
-## 运行时输出
+## 房间 CAD
 
-`CabinetLayout` 以 `furniture_category/width/depth/height` 作为摆放计算依据。当前序列化结构为兼容旧调用仍可含 `door_count`，但该字段不参与房间定位，也不向家具生成主流程提供数据。
+房屋：地面薄板 + 四面墙薄板（墙厚 100 mm）。门窗为墙上 `cut_box`。障碍物与每件家具为外包络盒，带原点与 `rotation_z_deg`。房间不做成封闭实心体。
 
-完整 `layout_planned` 输出保持 `layout` 向后兼容，并增加：
+源码：`temp/cad-source/layout-<id>/model.step.py`  
+STEP：`generated/layout/<id>/room.step`
 
-- `layout_context`：房间和摆放位置的来源，明确标记系统默认假设；
-- `room_placement.room`：标准化房间、门窗和障碍物；
-- `room_placement.placement`：已解析的房间原点、标高、旋转及宿主墙；
-- `room_placement.furniture_footprint`：房间平面坐标中的四角占地；
-- `room_placement.clearances_mm`：西、东、南、北、地面和顶面的净距；
-- `preview`：`image/svg+xml` 内联透视三维包络预览、视图类型、尺寸和替代文本。投影必须表现近大远小和空间边线汇聚；房间为透明六面体，家具为不透明成品包络，门窗和障碍物仍按房间坐标展示。
-- `viewer`：`text/html` 自包含互动三维包络 Viewer，不依赖外网；支持鼠标/触摸拖拽环绕、滚轮缩放、透视/正视/左视/右视/俯视和重置。Viewer 必须由当前房间、家具包络、门窗及障碍物实时重建。
-
-静态预览与 Viewer 必须由当前房间、柜体包络和定位实时重建；修改定位后不得沿用旧占地、旧 SVG 或旧 Viewer。
-
-功能数量、板厚、背板模式、柜体前后范围、内部 `X/Y/Z` 净空和踢脚区域全部由板件阶段基于已确认意图首次计算；布局预览只表达成品外包络，不暗示内部结构已经确定。
-
-## 类别指导
-
-- 地柜：本能力只表达其成品外包络；踢脚和功能数量留给板件阶段。
-- 吊柜：已确认意图的挂装方式决定 `origin_z_mm`（贴顶或自由挂高）；独立请求可显式提供 `origin_z_mm`，若为 0 则警告；挂墙结构和安装策略不进入 `CabinetLayout`。
+这不是家具主流程的 `cad_generated`。不要调用 `furniture_run_next(..., generate_cad=True)`，也不要直调 `CadBridge`。
 
 ## 边界
 
-- 不定义板件记录、封边/钻孔/五金、特征树、CAD/STEP、命令或产物。
-- 房间定位只影响场景展示和布局校验；主流程板件直接使用已确认意图与板件输入，不得把房间世界坐标混入板件尺寸。
-- 独立布局结果不写入主流程 `STAGE_SEQUENCE`、`approved_stages` 或 CAD 交付清单，也不使任何家具生成阶段失效。
+- 不定义板件、封边、钻孔、五金、特征树或柜体 STEP。
+- 房间坐标不混入板件尺寸。
+- 结果不写入 `STAGE_SEQUENCE`、`approved_stages` 或家具 CAD 交付清单。

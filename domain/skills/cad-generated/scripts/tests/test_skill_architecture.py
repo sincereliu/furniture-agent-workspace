@@ -31,7 +31,10 @@ STAGE_REFERENCES = {
         "references/intent-capture-rules.md",
         "references/intake/catalog.yaml",
     ),
-    "layout-plan": ("references/spatial-layout-rules.md",),
+    "layout-plan": (
+        "references/spatial-layout-rules.md",
+        "references/room-scene-guide.md",
+    ),
     "panel-plan": (
         "references/panel-definition-rules.md",
         "references/panel-proposal-contract.md",
@@ -359,10 +362,15 @@ class SkillArchitectureTests(unittest.TestCase):
         layout_source = "\n".join(
             path.read_text(encoding="utf-8")
             for path in layout_package.glob("*.py")
+            if path.name != "cad.py"
         )
+        cad_source = (layout_package / "cad.py").read_text(encoding="utf-8")
         self.assertNotIn("PanelPlacement", layout_source)
         self.assertNotIn("cut_box", layout_source)
+        self.assertIn("cut_box", cad_source)
         self.assertFalse((layout_package / "layout_template.py").exists())
+        self.assertFalse((layout_package / "layout_spec.py").exists())
+        self.assertFalse((layout_package / "layout_planning.py").exists())
 
         panel_package = (
             SKILLS_ROOT

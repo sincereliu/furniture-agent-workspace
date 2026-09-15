@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from copy import deepcopy
 from math import hypot
+import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
-from xml.etree import ElementTree
 
 
 SCRIPT_ROOT = Path(__file__).resolve().parents[1]
@@ -16,92 +16,71 @@ from runtime_paths import bootstrap_runtime_paths
 
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
-from furniture_workflow.input_adapter import (
-    layout_stage_input,
-    panel_stage_input,
-    stage_inputs_from_spec,
-)
-from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
+from furniture_layout.cad import write_room_cad_source
+from furniture_layout.pipeline import generate_room_cad, plan_room_scene
+from furniture_layout.preview import _build_projector
+from furniture_layout.scene import RoomScene
+from furniture_layout.validation import validate_room_scene
 from furniture_workflow.workflow_state import STAGE_SEQUENCE, WorkflowStage
-from furniture_layout.layout_pipeline import plan_layout_stage
-from furniture_layout.layout_preview import _build_projector
-from furniture_layout.layout_spec import LayoutSpec
-from furniture_layout.validation import validate_layout_output
 
 
-def wardrobe_spec(
-    *,
-    wall: str = "south",
-    offset_mm: float = 500,
-) -> dict:
+def bedroom_room() -> dict:
     return {
-        "furniture_category": "floor_cabinet",
-        "width": 1800,
-        "depth": 600,
-        "height": 2400,
-        "room": {
-            "id": "bedroom",
-            "name": "主卧",
-            "width_mm": 4200,
-            "depth_mm": 3600,
-            "height_mm": 2800,
-            "openings": [
-                {
-                    "id": "bedroom_door",
-                    "kind": "door",
-                    "wall": "south",
-                    "offset_mm": 3000,
-                    "width_mm": 900,
-                    "height_mm": 2100,
-                }
-            ],
-            "obstacles": [
-                {
-                    "id": "column",
-                    "kind": "column",
-                    "x_mm": 3700,
-                    "y_mm": 2900,
-                    "z_mm": 0,
-                    "width_mm": 300,
-                    "depth_mm": 400,
-                    "height_mm": 2800,
-                }
-            ],
-        },
-        "placement": {
-            "mode": "wall",
-            "host_wall": wall,
-            "offset_mm": offset_mm,
-            "origin_z_mm": 0,
-        },
+        "id": "bedroom",
+        "name": "主卧",
+        "width_mm": 4200,
+        "depth_mm": 3600,
+        "height_mm": 2800,
+        "openings": [
+            {
+                "id": "bedroom_door",
+                "kind": "door",
+                "wall": "east",
+                "offset_mm": 2000,
+                "width_mm": 900,
+                "height_mm": 2100,
+            }
+        ],
+        "obstacles": [],
     }
 
 
-def run_independent_layout(name: str, spec: dict):
-    orchestrator = FurnitureOrchestrator(workspace_root=WORKSPACE_ROOT)
-    intent = orchestrator.intent_from_spec(spec).confirm()
-    stage_inputs = stage_inputs_from_spec(spec)
-    panel_parameters = panel_stage_input(stage_inputs).get("parameters", {})
-    options = {
-        key: panel_parameters[key]
-        for key in ("n_doors",)
-        if key in panel_parameters
-    }
-    context = layout_stage_input(stage_inputs)
-    layout_spec = LayoutSpec.from_intent(intent, options)
-    output = plan_layout_stage(
-        layout_spec,
-        room=context.get("room"),
-        placement=context.get("placement"),
-        furniture_label=name,
-    )
-    return layout_spec, output, validate_layout_output(layout_spec, output)
+def bedroom_items() -> list[dict]:
+    return [
+        {
+            "id": "bed",
+            "label": "床",
+            "category": "bed",
+            "width": 1800,
+            "depth": 2000,
+            "height": 450,
+            "placement": {
+                "mode": "wall",
+                "host_wall": "north",
+                "offset_mm": 1200,
+                "origin_z_mm": 0,
+            },
+        },
+        {
+            "id": "wardrobe",
+            "label": "衣柜",
+            "category": "wardrobe",
+            "width": 800,
+            "depth": 600,
+            "height": 2400,
+            "placement": {
+                "mode": "wall",
+                "host_wall": "east",
+                "fill": True,
+                "origin_z_mm": 0,
+            },
+        },
+    ]
 
 
-class RoomLayoutPreviewTests(unittest.TestCase):
+class RoomSceneLayoutTests(unittest.TestCase):
     def test_preview_projection_makes_near_geometry_larger(self) -> None:
         project = _build_projector(4200, 3600, 2800)
-
         near_bottom = project((4200, 0, 0))
         near_top = project((4200, 0, 1000))
         far_bottom = project((0, 3600, 0))
@@ -114,288 +93,139 @@ class RoomLayoutPreviewTests(unittest.TestCase):
             far_top[0] - far_bottom[0],
             far_top[1] - far_bottom[1],
         )
-
         self.assertGreater(near_height, far_height * 1.5)
 
-    def test_missing_room_context_uses_visible_default_bedroom(self) -> None:
-        _, output, report = run_independent_layout(
-            "1600衣柜",
+    def test_missing_room_dimensions_fail(self) -> None:
+        with self.assertRaisesRegex(ValueError, "width_mm"):
+            plan_room_scene(
+                {"id": "bedroom", "name": "主卧", "depth_mm": 3600, "height_mm": 2800},
+                bedroom_items(),
+            )
+
+    def test_empty_items_fail(self) -> None:
+        with self.assertRaisesRegex(ValueError, "items"):
+            plan_room_scene(bedroom_room(), [])
+
+    def test_bedroom_places_bed_and_fills_east_wall_around_door(self) -> None:
+        output = plan_room_scene(bedroom_room(), bedroom_items())
+        report = validate_room_scene(output)
+        self.assertTrue(report.passed, report.to_dict())
+        self.assertNotIn(getattr(WorkflowStage, "LAYOUT_PLANNED", "layout_planned"), STAGE_SEQUENCE)
+
+        items = {item["id"]: item for item in output["items"]}
+        bed = items["bed"]
+        wardrobe = items["wardrobe"]
+        self.assertEqual(bed["placement"]["host_wall"], "north")
+        self.assertEqual(bed["placement"]["origin_x_mm"], 1200)
+        self.assertEqual(bed["placement"]["origin_y_mm"], 0)
+        self.assertEqual(bed["placement"]["rotation_z_deg"], 0)
+        self.assertEqual(wardrobe["placement"]["host_wall"], "east")
+        self.assertTrue(wardrobe["placement"]["fill"])
+        self.assertEqual(wardrobe["placement"]["offset_mm"], 0)
+        self.assertEqual(wardrobe["width"], 2000)
+        self.assertEqual(wardrobe["placement"]["origin_x_mm"], 4200)
+        self.assertEqual(wardrobe["placement"]["origin_y_mm"], 0)
+        self.assertEqual(wardrobe["placement"]["rotation_z_deg"], 90)
+        self.assertIn("<svg", output["preview"]["svg"])
+        self.assertIn("主卧", output["preview"]["svg"])
+        self.assertIn("床", output["preview"]["svg"])
+        self.assertIn("衣柜", output["preview"]["svg"])
+        self.assertIn('<canvas id="scene"', output["viewer"]["html"])
+
+    def test_two_items_that_overlap_fail_validation(self) -> None:
+        items = [
             {
-                "furniture_category": "floor_cabinet",
-                "width": 1600,
+                "id": "left",
+                "label": "左柜",
+                "category": "wardrobe",
+                "width": 2000,
                 "depth": 600,
                 "height": 2400,
+                "placement": {
+                    "mode": "wall",
+                    "host_wall": "north",
+                    "offset_mm": 0,
+                },
             },
-        )
-
-        self.assertEqual(
-            output["layout_context"],
             {
-                "room_source": "default_bedroom",
-                "placement_source": "default_north_wall_centered",
+                "id": "right",
+                "label": "右柜",
+                "category": "wardrobe",
+                "width": 2000,
+                "depth": 600,
+                "height": 2400,
+                "placement": {
+                    "mode": "wall",
+                    "host_wall": "north",
+                    "offset_mm": 1000,
+                },
             },
-        )
-        self.assertEqual(
-            output["room_placement"]["room"],
-            {
-                "id": "default_bedroom",
-                "name": "默认卧室（系统假设）",
-                "width_mm": 4200.0,
-                "depth_mm": 3600.0,
-                "height_mm": 2800.0,
-                "openings": [],
-                "obstacles": [],
-            },
-        )
-        self.assertEqual(
-            output["room_placement"]["placement"]["origin_x_mm"],
-            1300,
-        )
-        self.assertEqual(
-            output["room_placement"]["placement"]["host_wall"],
-            "north",
-        )
-        self.assertEqual(
-            output["preview"]["view_kind"],
-            "perspective_envelope",
-        )
-        self.assertEqual(output["viewer"]["media_type"], "text/html")
-        self.assertEqual(
-            output["viewer"]["view_kind"],
-            "interactive_orbit_envelope",
-        )
-        self.assertIn("drag_orbit", output["viewer"]["controls"])
-        self.assertIn('data-view="top"', output["viewer"]["html"])
-        self.assertIn('addEventListener("pointermove"', output["viewer"]["html"])
-        self.assertIn('addEventListener("wheel"', output["viewer"]["html"])
-        self.assertIn("透明为房间", output["preview"]["svg"])
-        self.assertIn("默认卧室（系统假设）", output["preview"]["svg"])
-        self.assertTrue(report.passed)
-
-    def test_missing_placement_centers_furniture_in_provided_room(self) -> None:
-        spec = wardrobe_spec()
-        del spec["placement"]
-        _, output, report = run_independent_layout(
-            "主卧衣柜",
-            spec,
-        )
-
-        self.assertTrue(report.passed)
-        self.assertEqual(output["layout_context"]["room_source"], "provided")
-        self.assertEqual(
-            output["layout_context"]["placement_source"],
-            "default_north_wall_centered",
-        )
-        self.assertEqual(
-            output["room_placement"]["placement"]["origin_x_mm"],
-            1200,
-        )
-
-    def test_wall_cabinet_default_placement_uses_confirmed_mounting_height(
-        self,
-    ) -> None:
-        _, output, report = run_independent_layout(
-            "吊柜",
-            {
-                "furniture_category": "wall_cabinet",
-                "width": 800,
-                "depth": 350,
-                "height": 900,
-                "hanging_mode": "free_hanging_height",
-                "hanging_height_mm": 1800,
-            },
-        )
-
-        self.assertTrue(report.passed)
-        self.assertEqual(
-            output["room_placement"]["placement"]["origin_z_mm"],
-            1800,
-        )
-        self.assertEqual(
-            output["room_placement"]["clearances_mm"]["floor"],
-            1800,
-        )
-
-    def test_wall_cabinet_flush_ceiling_placement_uses_room_height(self) -> None:
-        _, output, report = run_independent_layout(
-            "到顶吊柜",
-            {
-                "furniture_category": "wall_cabinet",
-                "width": 800,
-                "depth": 350,
-                "height": 900,
-                "hanging_mode": "flush_ceiling",
-            },
-        )
-
-        self.assertTrue(report.passed)
-        # 默认卧室层高 2800，贴顶 → 底边 = 2800 - 900 = 1900
-        self.assertEqual(
-            output["room_placement"]["placement"]["origin_z_mm"],
-            1900,
-        )
-
-    def test_independent_layout_emits_room_position_footprint_and_svg(self) -> None:
-        _, output, report = run_independent_layout(
-            "主卧衣柜",
-            wardrobe_spec(),
-        )
-
-        self.assertNotIn(WorkflowStage.LAYOUT_PLANNED, STAGE_SEQUENCE)
-        room_placement = output["room_placement"]
-        placement = room_placement["placement"]
-        self.assertEqual(placement["host_wall"], "south")
-        self.assertEqual(placement["origin_x_mm"], 3700)
-        self.assertEqual(placement["origin_y_mm"], 3600)
-        self.assertEqual(placement["rotation_z_deg"], 180)
-        self.assertEqual(
-            room_placement["furniture_footprint"],
-            [
-                {"x_mm": 3700.0, "y_mm": 3600.0},
-                {"x_mm": 1900.0, "y_mm": 3600.0},
-                {"x_mm": 1900.0, "y_mm": 3000.0},
-                {"x_mm": 3700.0, "y_mm": 3000.0},
-            ],
-        )
-        self.assertEqual(room_placement["clearances_mm"]["north"], 3000)
-        self.assertEqual(output["preview"]["media_type"], "image/svg+xml")
-        self.assertEqual(
-            output["preview"]["view_kind"],
-            "perspective_envelope",
-        )
-        self.assertIn("<svg", output["preview"]["svg"])
-        self.assertIn("三维包络预览", output["preview"]["svg"])
-        self.assertIn("主卧衣柜", output["preview"]["svg"])
-        self.assertEqual(
-            ElementTree.fromstring(output["preview"]["svg"]).tag,
-            "{http://www.w3.org/2000/svg}svg",
-        )
-        self.assertTrue(report.passed)
-
-    def test_north_wall_position_derives_room_transform(self) -> None:
-        spec = wardrobe_spec(wall="north", offset_mm=400)
-        spec["room"]["obstacles"] = []
-        _, output, report = run_independent_layout(
-            "北墙衣柜",
-            spec,
-        )
-
-        self.assertTrue(report.passed)
-        placement = output["room_placement"]["placement"]
-        self.assertEqual(placement["origin_x_mm"], 400)
-        self.assertEqual(placement["origin_y_mm"], 0)
-        self.assertEqual(placement["rotation_z_deg"], 0)
-        self.assertEqual(
-            output["room_placement"]["clearances_mm"]["north"],
-            0,
-        )
-
-    def test_free_position_supports_rotation(self) -> None:
-        spec = wardrobe_spec()
-        spec["placement"] = {
-            "mode": "free",
-            "origin_x_mm": 1000,
-            "origin_y_mm": 1000,
-            "origin_z_mm": 0,
-            "rotation_z_deg": 90,
-        }
-        _, output, report = run_independent_layout(
-            "自由摆放衣柜",
-            spec,
-        )
-
-        self.assertTrue(report.passed)
-        footprint = output["room_placement"]["furniture_footprint"]
-        self.assertEqual(
-            footprint,
-            [
-                {"x_mm": 1000.0, "y_mm": 1000.0},
-                {"x_mm": 1000.0, "y_mm": 2800.0},
-                {"x_mm": 400.0, "y_mm": 2800.0},
-                {"x_mm": 400.0, "y_mm": 1000.0},
-            ],
-        )
-    def test_layout_rejects_furniture_outside_room(self) -> None:
-        _, _, report = run_independent_layout(
-            "越界衣柜",
-            wardrobe_spec(offset_mm=3000),
-        )
-
-        self.assertFalse(report.passed)
-        self.assertIn(
-            "FURNITURE_OUTSIDE_ROOM",
-            {issue.code for issue in report.issues},
-        )
-
-    def test_layout_rejects_opening_and_obstacle_collisions(self) -> None:
-        door_spec = wardrobe_spec(offset_mm=2200)
-        _, _, door_report = run_independent_layout(
-            "遮门衣柜",
-            door_spec,
-        )
-        self.assertIn(
-            "FURNITURE_OPENING_COLLISION",
-            {issue.code for issue in door_report.issues},
-        )
-
-        free_door_spec = wardrobe_spec()
-        free_door_spec["placement"] = {
-            "mode": "free",
-            "origin_x_mm": 0,
-            "origin_y_mm": 3000,
-            "origin_z_mm": 0,
-            "rotation_z_deg": 0,
-        }
-        _, _, free_door_report = run_independent_layout(
-            "自由摆放遮门衣柜",
-            free_door_spec,
-        )
-        self.assertIn(
-            "FURNITURE_OPENING_COLLISION",
-            {
-                issue.code for issue in free_door_report.issues
-            },
-        )
-
-        obstacle_spec = wardrobe_spec()
-        obstacle_spec["room"]["obstacles"] = [
-            {
-                "id": "low_column",
-                "kind": "column",
-                "x_mm": 2000,
-                "y_mm": 3200,
-                "z_mm": 0,
-                "width_mm": 300,
-                "depth_mm": 300,
-                "height_mm": 2800,
-            }
         ]
-        _, _, obstacle_report = run_independent_layout(
-            "撞柱衣柜",
-            obstacle_spec,
-        )
-        self.assertIn(
-            "FURNITURE_OBSTACLE_COLLISION",
-            {
-                issue.code for issue in obstacle_report.issues
-            },
+        output = plan_room_scene(bedroom_room(), items)
+        report = validate_room_scene(output)
+        self.assertFalse(report.passed)
+        self.assertTrue(
+            any(issue.code == "FURNITURE_ITEM_COLLISION" for issue in report.issues)
         )
 
-    def test_revised_position_must_refresh_transform_and_preview(self) -> None:
-        layout_spec, output, report = run_independent_layout(
-            "可修改衣柜位置",
-            wardrobe_spec(),
-        )
-        self.assertTrue(report.passed)
-        edited = deepcopy(output)
-        edited["room_placement"]["placement"]["offset_mm"] = 700
-        edited_report = validate_layout_output(layout_spec, edited)
+    def test_cad_source_contains_room_and_item_transforms(self) -> None:
+        output = plan_room_scene(bedroom_room(), bedroom_items())
+        scene = RoomScene.from_dict(output)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            source_path = Path(temporary_directory) / "model.step.py"
+            write_room_cad_source(scene, source_path)
+            source = source_path.read_text(encoding="utf-8")
+        self.assertIn("cut_box", source)
+        self.assertIn("4200", source)
+        self.assertIn("3600", source)
+        self.assertIn("'id': 'bed'", source)
+        self.assertIn("'id': 'wardrobe'", source)
+        self.assertIn("'rotation_z_deg': 90.0", source)
+        self.assertIn("'x': 1200.0", source)
 
-        self.assertFalse(edited_report.passed)
-        issue_codes = {issue.code for issue in edited_report.issues}
-        self.assertIn("WALL_PLACEMENT_TRANSFORM_MISMATCH", issue_codes)
-        self.assertIn("LAYOUT_PREVIEW_MISMATCH", issue_codes)
-        self.assertIn("LAYOUT_VIEWER_MISMATCH", issue_codes)
+    def test_generate_room_cad_uses_bridge_and_records_paths(self) -> None:
+        output = plan_room_scene(bedroom_room(), bedroom_items())
+
+        class FakeBridge:
+            def generate_from_source(self, source_path, step_path, force=False):
+                Path(step_path).parent.mkdir(parents=True, exist_ok=True)
+                Path(step_path).write_text("STEP", encoding="utf-8")
+                package = (
+                    Path(source_path).parent
+                    / "__cadgen__"
+                    / "models"
+                    / Path(source_path).name
+                )
+                package.mkdir(parents=True, exist_ok=True)
+                (package / "assembly.json").write_text(
+                    json.dumps({"ok": True}),
+                    encoding="utf-8",
+                )
+                return type(
+                    "BridgeResult",
+                    (),
+                    {
+                        "status": "ok",
+                        "message": "ok",
+                        "step_path": str(step_path),
+                        "topology_path": str(package / "assembly.json"),
+                        "viewer_package_path": str(package),
+                    },
+                )()
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            workspace = Path(temporary_directory)
+            result = generate_room_cad(
+                output,
+                workspace_root=workspace,
+                output_root=workspace / "generated",
+                cad_bridge=FakeBridge(),
+                artifact_id="bedroom",
+            )
+        self.assertEqual(result["cad"]["status"], "ok")
+        self.assertTrue(result["cad"]["source_path"].endswith("model.step.py"))
+        self.assertTrue(result["cad"]["step_path"].endswith("room.step"))
+        self.assertIn("cad", result)
 
 
 if __name__ == "__main__":

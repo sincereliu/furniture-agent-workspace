@@ -10,7 +10,6 @@ import sys
 from pathlib import Path
 from typing import Any, Literal
 
-# skill 自带运行包，服务入口与它位于同一个 scripts 目录。
 SCRIPT_ROOT = Path(__file__).resolve().parent
 WORKSPACE_ROOT = Path(__file__).resolve().parents[4]
 OUTPUT_ROOT = WORKSPACE_ROOT / "generated"
@@ -23,40 +22,26 @@ bootstrap_runtime_paths(WORKSPACE_ROOT)
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field
 
-from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
-from furniture_workflow.workflow_store import JsonProjectStore
-from furniture_workflow.input_adapter import (
-    layout_stage_input,
-    panel_stage_input,
-    stage_inputs_from_spec,
-)
-from furniture_layout.layout_pipeline import plan_layout_stage
-from furniture_layout.layout_spec import LayoutSpec
-from furniture_layout.validation import validate_layout_output
+from furniture_layout.pipeline import generate_room_cad, plan_room_scene
+from furniture_layout.validation import validate_room_scene
 
-API_VERSION = "0.6.0"
+API_VERSION = "0.7.0"
 
 app = FastAPI(
-    title="Furniture Agent — 板式家具拆单服务",
+    title="Furniture Agent — 房间场景布局",
     version=API_VERSION,
     description=(
-        "独立房间摆放 API：定位、碰撞检查、SVG 预览与互动 Viewer。"
+        "独立房间场景 API：多件包络摆放、碰撞检查、SVG 预览、互动 Viewer 与房间 CAD。"
         "家具生成走交互工具面，不提供一次性拆单批处理。"
     ),
 )
-ORCHESTRATOR = FurnitureOrchestrator(
-    workspace_root=WORKSPACE_ROOT,
-    project_store=JsonProjectStore(WORKSPACE_ROOT / "store"),
-)
 
-# 静态文件服务 — 挂载 generated 目录，供访问 STEP/GLB 文件
 OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
 app.mount("/generated", StaticFiles(directory=str(OUTPUT_ROOT)), name="generated")
 
 
-# ── 请求/响应模型 ──
 class RoomOpeningRequest(BaseModel):
     id: str = Field(default="", description="门窗标识")
     kind: str = Field(default="opening", description="opening / door / window")
@@ -88,7 +73,7 @@ class RoomRequest(BaseModel):
     obstacles: list[RoomObstacleRequest] = Field(default_factory=list)
 
 
-class FurniturePlacementRequest(BaseModel):
+class ItemPlacementRequest(BaseModel):
     mode: Literal["wall", "free"] = Field(default="wall")
     host_wall: Literal["south", "east", "north", "west"] | None = None
     offset_mm: float | None = Field(default=None, ge=0)
@@ -96,114 +81,36 @@ class FurniturePlacementRequest(BaseModel):
     origin_y_mm: float | None = None
     origin_z_mm: float = Field(default=0, ge=0)
     rotation_z_deg: float | None = None
+    fill: bool = False
 
 
-class CabinetRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
-
-    furniture_category: str = Field(
-        ...,
-        validation_alias=AliasChoices("furniture_category", "furniture_type"),
-        description="家具类别: floor_cabinet（地柜） / wall_cabinet（吊柜）",
-    )
-    width: float = Field(..., gt=0, description="总宽 mm (X)")
-    depth: float = Field(..., gt=0, description="总深 mm (Y)")
-    height: float = Field(..., gt=0, description="总高 mm (Z)")
-    hanging_height_mm: float | None = Field(
-        default=None,
-        gt=0,
-        validation_alias=AliasChoices(
-            "hanging_height_mm",
-            "hanging_height",
-            "mounting_height_mm",
-            "mounting_height",
-        ),
-        description="挂高：吊柜底边离地高度 mm；地柜无需提供",
-    )
-    hanging_mode: Literal["free_hanging_height", "flush_ceiling"] | None = Field(
-        default=None,
-        validation_alias=AliasChoices("hanging_mode", "mount_mode"),
-        description="吊柜挂装方式：free_hanging_height（自由挂高）/ flush_ceiling（贴顶到顶）",
-    )
-
-    @field_validator("hanging_mode", mode="before")
-    @classmethod
-    def _normalize_hanging_mode(cls, value: Any) -> Any:
-        if value == "free_height":
-            return "free_hanging_height"
-        return value
-    board_thickness: float | None = Field(default=None, gt=0, description="料板厚 mm，目录 18/22，省略则 18")
-    back_thickness: float | None = Field(default=None, gt=0, description="卷后背板厚 mm，必须为 9，可省略")
-    door_thickness: float | None = Field(default=None, gt=0, description="门板厚 mm，目录 18/22，省略则同料板")
-    toe_kick_height: float | None = Field(default=None, ge=0, description="踢脚线高 mm")
-    back_offset: float | None = Field(default=None, ge=0, description="背板后移 mm")
-    front_face_margin: float | None = Field(default=None, ge=0, description="前脸四周边距 mm（门板与抽屉前板共用）")
-    front_gap: float | None = Field(default=None, ge=0, description="门前脸与柜体前方的深度间隙 mm")
-    shelves: list[dict[str, Any]] | None = Field(
-        default=None,
-        description="层板列表（从上到下）：[{shelf_type: fixed|movable, gap_below_mm: 净高mm|null}]",
-    )
-    top_gap_mm: float | None = Field(default=None, ge=0, description="顶格净高 mm（最上层板顶面到顶板底面）")
-    n_doors: int | None = Field(default=None, ge=0, description="门板数量")
-    door_hinge_side: Literal["left", "right"] | None = Field(
-        default=None,
-        description="单门铰链侧；仅 n_doors=1 时有效，双门由代码确定性推导",
-    )
-    drawer_count: int | None = Field(default=None, ge=0, description="整高抽屉数量")
-    movable_shelf_connector: Literal["two_in_one", "shelf_pin"] | None = Field(
-        default=None,
-        description="活动层板连接方式：two_in_one（二合一）/ shelf_pin（隔板钉）",
-    )
-    groove_depth: float | None = Field(default=None, gt=0, description="背板入槽深度 mm")
-    groove_clearance: float | None = Field(default=None, ge=0, description="槽宽相对背板厚度的余量 mm")
-    back_mount: Literal["groove", "insert", "cover"] | None = Field(
-        default=None,
-        description="板件阶段的背板安装方式：groove / insert / cover",
-    )
-    back_rail_height: float | None = Field(
-        default=None,
-        ge=0,
-        description="入槽模式背拉条高度 mm；0 表示不生成背拉条",
-    )
-    toe_kick_reveal_front: float | None = Field(default=None, ge=0, description="前踢脚板后缩 mm")
-    toe_kick_reveal_back: float | None = Field(default=None, ge=0, description="后踢脚板前移 mm")
-    toe_kick_support_count: int | None = Field(default=None, ge=0, description="踢脚支撑板数量")
-    drawer_side_clearance: float | None = Field(default=None, gt=0, description="抽屉每侧净空 mm")
-    drawer_layer_gap: float | None = Field(default=None, ge=0, description="抽屉层间缝 mm")
-    drawer_bottom_thickness: float | None = Field(default=None, gt=0, description="抽屉底板厚 mm，省略则同料板")
-    drawer_back_thickness: float | None = Field(default=None, gt=0, description="抽屉背板厚 mm，省略则同料板")
-    drawer_back_clearance: float | None = Field(default=None, ge=0, description="抽屉后部净空 mm")
-    appearance: dict[str, Any] = Field(
-        default_factory=dict,
-        description="制造阶段按材质角色(carcass/door/back)的基材/表面选型，键来自材料目录",
-    )
-    room: RoomRequest | None = Field(
-        default=None,
-        description="独立房间布局使用的房间模型",
-    )
-    placement: FurniturePlacementRequest | None = Field(
-        default=None,
-        description="家具在房间中的沿墙或自由摆放位置",
-    )
-    constraints: list[str] = Field(
-        default_factory=list,
-        description="需要映射到所属阶段或明确标为 informational 的约束",
-    )
-    constraint_mappings: dict[str, str] = Field(
-        default_factory=dict,
-        description="约束到 layout/structure/manufacturing/外包络字段或 informational 的映射",
-    )
+class SceneItemRequest(BaseModel):
+    id: str = Field(default="")
+    label: str = Field(default="")
+    category: str
+    width: float = Field(..., gt=0)
+    depth: float = Field(..., gt=0)
+    height: float = Field(..., gt=0)
+    placement: ItemPlacementRequest
 
 
-class LayoutPlanResponse(BaseModel):
-    layout: dict[str, Any]
-    layout_context: dict[str, str] | None = None
-    room_placement: dict[str, Any] | None = None
+class RoomSceneRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    room: RoomRequest
+    items: list[SceneItemRequest] = Field(..., min_length=1)
+    generate_cad: bool = False
+    artifact_id: str | None = None
+
+
+class RoomSceneResponse(BaseModel):
+    room: dict[str, Any]
+    items: list[dict[str, Any]]
     preview: dict[str, Any] | None = None
     viewer: dict[str, Any] | None = None
+    cad: dict[str, Any] | None = None
 
 
-# ── 路由 ──
 @app.get("/health")
 async def health():
     return {"status": "ok", "version": API_VERSION}
@@ -211,7 +118,6 @@ async def health():
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    """API 入口页面"""
     return """
     <html><body style="font-family:sans-serif;padding:40px;">
     <h1>Furniture Agent API</h1>
@@ -220,54 +126,46 @@ async def root():
     """
 
 
-@app.post("/api/plan-layout", response_model=LayoutPlanResponse)
-async def plan_layout(req: CabinetRequest):
-    """独立规划房间摆放；不进入家具生成的串联阶段。"""
+def _plan_scene(req: RoomSceneRequest) -> dict[str, Any]:
     payload = req.model_dump(exclude_none=True)
     try:
-        intent = ORCHESTRATOR.intent_from_spec(payload).confirm()
-        stage_inputs = stage_inputs_from_spec(payload)
-        panel_parameters = panel_stage_input(stage_inputs).get("parameters", {})
-        layout_options = {
-            key: panel_parameters[key]
-            for key in ("n_doors",)
-            if key in panel_parameters
-        }
-        context = layout_stage_input(stage_inputs)
-        spec = LayoutSpec.from_intent(intent, layout_options)
-        output = plan_layout_stage(
-            spec,
-            room=context.get("room"),
-            placement=context.get("placement"),
-            furniture_label=f"layout-{req.furniture_category}",
-        )
-        report = validate_layout_output(spec, output)
+        output = plan_room_scene(payload["room"], payload["items"])
+        report = validate_room_scene(output)
     except (TypeError, ValueError) as exc:
-        raise HTTPException(
-            status_code=422,
-            detail=str(exc),
-        ) from exc
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     if not report.passed:
         raise HTTPException(
             status_code=422,
             detail="; ".join(issue.message for issue in report.issues),
         )
-    return LayoutPlanResponse(**output)
+    if req.generate_cad:
+        try:
+            output = generate_room_cad(
+                output,
+                workspace_root=WORKSPACE_ROOT,
+                output_root=OUTPUT_ROOT,
+                artifact_id=req.artifact_id,
+            )
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return output
+
+
+@app.post("/api/plan-room", response_model=RoomSceneResponse)
+async def plan_room(req: RoomSceneRequest):
+    """独立规划房间多件包络摆放；不进入家具生成的串联阶段。"""
+    return RoomSceneResponse(**_plan_scene(req))
 
 
 @app.post(
-    "/api/plan-layout/preview",
+    "/api/plan-room/preview",
     response_class=Response,
     responses={200: {"content": {"image/svg+xml": {}}}},
 )
-async def plan_layout_preview(req: CabinetRequest) -> Response:
-    """返回可直接在浏览器中显示的独立 SVG 房间摆放预览。"""
-    result = await plan_layout(req)
+async def plan_room_preview(req: RoomSceneRequest) -> Response:
+    result = await plan_room(req)
     if result.preview is None:
-        raise HTTPException(
-            status_code=422,
-            detail="layout preview was not generated",
-        )
+        raise HTTPException(status_code=422, detail="layout preview was not generated")
     return Response(
         content=str(result.preview["svg"]),
         media_type="image/svg+xml",
@@ -275,13 +173,12 @@ async def plan_layout_preview(req: CabinetRequest) -> Response:
 
 
 @app.post(
-    "/api/plan-layout/viewer",
+    "/api/plan-room/viewer",
     response_class=HTMLResponse,
     responses={200: {"content": {"text/html": {}}}},
 )
-async def plan_layout_viewer(req: CabinetRequest) -> HTMLResponse:
-    """返回可拖拽旋转、缩放和切换标准视角的独立 Viewer。"""
-    result = await plan_layout(req)
+async def plan_room_viewer(req: RoomSceneRequest) -> HTMLResponse:
+    result = await plan_room(req)
     if result.viewer is None:
         raise HTTPException(
             status_code=422,
@@ -290,9 +187,15 @@ async def plan_layout_viewer(req: CabinetRequest) -> HTMLResponse:
     return HTMLResponse(content=str(result.viewer["html"]))
 
 
-# ── 启动入口 ──
+@app.post("/api/plan-room/cad", response_model=RoomSceneResponse)
+async def plan_room_cad(req: RoomSceneRequest):
+    payload = req.model_copy(update={"generate_cad": True})
+    return RoomSceneResponse(**_plan_scene(payload))
+
+
 def main() -> None:
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
 

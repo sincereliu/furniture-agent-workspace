@@ -298,18 +298,11 @@ def _legacy_stage_inputs(raw_intent: dict[str, Any]) -> dict[str, Any]:
         for key in list(structure)
         if key in manufacturing_keys
     }
-    room = layout.pop("room", None)
-    placement = layout.pop("placement", None)
-    # ``door_count`` is retained here only for loading historical layout-shaped
-    # payloads into the canonical panel-stage ``n_doors`` input.
     for key in ("n_doors", "door_count"):
         if key in layout:
             structure[key] = layout.pop(key)
     result: dict[str, Any] = {
-        "layout": {
-            "room": room,
-            "placement": placement,
-        },
+        "layout": {},
         "panels": {"parameters": structure},
         "manufacturing": {
             "parameters": manufacturing,
@@ -331,7 +324,7 @@ def _legacy_stage_inputs(raw_intent: dict[str, Any]) -> dict[str, Any]:
             if field in {"n_doors", "door_count"}:
                 result["panels"].setdefault("constraints", []).append(record)
             else:
-                result["layout"].setdefault("constraints", []).append(record)
+                result.setdefault("informational_constraints", []).append(constraint)
         elif target.startswith("structure."):
             result["panels"].setdefault("constraints", []).append(record)
         elif target == "informational":

@@ -14,10 +14,6 @@ def utc_now() -> str:
 
 class WorkflowStage(str, Enum):
     DESIGN_INTENT = "design_intent"
-    # ``layout_planned`` is retained as a persisted/API compatibility value.
-    # It is an independent room-placement workflow, not a serial furniture
-    # generation checkpoint.
-    LAYOUT_PLANNED = "layout_planned"
     PANELS_PLANNED = "panel_plan"
     MANUFACTURING_PLANNED = "manufacture_plan"
     FEATURE_TREE_PLANNED = "feature_tree_planned"
@@ -67,10 +63,6 @@ def parse_stage(value: str | WorkflowStage) -> WorkflowStage:
 def stage_index(stage: WorkflowStage) -> int:
     if stage == WorkflowStage.FAILED:
         raise ValueError("failed is not a runnable workflow stage")
-    if stage == WorkflowStage.LAYOUT_PLANNED:
-        raise ValueError(
-            "layout_planned is independent and is not part of the serial workflow"
-        )
     return STAGE_SEQUENCE.index(stage)
 
 
@@ -132,8 +124,4 @@ class WorkflowState:
             for item in data.get("history", [])
         ]
         current = parse_stage(str(data["current"]))
-        # Schema versions that placed room layout between intent and panels
-        # resume at the last serial checkpoint before that retired dependency.
-        if current == WorkflowStage.LAYOUT_PLANNED:
-            current = WorkflowStage.DESIGN_INTENT
         return cls(current=current, history=history)

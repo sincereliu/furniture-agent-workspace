@@ -411,30 +411,22 @@ class FurnitureOrchestratorLifecycleTests(unittest.TestCase):
         )
         self.assertNotIn("layout_planned", result.revision.stage_outputs)
 
-    def test_serial_workflow_skips_room_layout_even_when_context_is_supplied(self) -> None:
-        result = confirm_through(self.orchestrator, 
-            "带房间信息的柜体",
-            cabinet_data(
-                room={
-                    "width_mm": 4200,
-                    "depth_mm": 3600,
-                    "height_mm": 2800,
-                },
-                placement={
-                    "mode": "wall",
-                    "host_wall": "north",
-                    "offset_mm": 500,
-                },
-            ),
-            through_stage=WorkflowStage.PANELS_PLANNED,
-        )
-
-        self.assertEqual(
-            result.revision.workflow.current,
-            WorkflowStage.PANELS_PLANNED,
-        )
-        self.assertNotIn("layout_planned", result.revision.stage_outputs)
-        self.assertIn("panel_plan", result.revision.stage_outputs)
+    def test_furniture_spec_rejects_room_scene_fields(self) -> None:
+        with self.assertRaisesRegex(ValueError, "room"):
+            stage_inputs_from_spec(
+                cabinet_data(
+                    room={
+                        "width_mm": 4200,
+                        "depth_mm": 3600,
+                        "height_mm": 2800,
+                    },
+                    placement={
+                        "mode": "wall",
+                        "host_wall": "north",
+                        "offset_mm": 500,
+                    },
+                )
+            )
 
     def test_draft_intent_preserves_null_dimensions_and_cannot_confirm(self) -> None:
         intent = DesignIntent.from_dict(

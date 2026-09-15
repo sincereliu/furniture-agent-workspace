@@ -17,8 +17,6 @@ bootstrap_runtime_paths(WORKSPACE_ROOT)
 from furniture_design_intent.design_intent import DesignIntent, FinishedEnvelope
 from furniture_panel_planning.panel_spec import FurnitureSpec
 from panel_fixtures import by_role, cabinet_data, furniture_spec
-from furniture_layout.layout_pipeline import plan_layout
-from furniture_layout.validation import validate_layout
 from furniture_manufacturing.manufacturing_bom import (
     emit_drilled_holes,
     plan_manufacturing,
@@ -60,7 +58,6 @@ class BackMountModeTests(unittest.TestCase):
         for back_mount, expected in expected_layouts.items():
             with self.subTest(back_mount=back_mount):
                 spec = self._spec(back_mount)
-                layout = plan_layout(spec)
                 structure = CabinetStructure.from_spec(spec)
                 placements = plan_panels(spec, structure)
                 panels = by_role(placements)
@@ -187,7 +184,6 @@ class BackMountModeTests(unittest.TestCase):
         for back_mount in ("insert", "cover", "groove"):
             with self.subTest(back_mount=back_mount):
                 spec = self._spec(back_mount)
-                layout = plan_layout(spec)
                 placements = plan_panels(spec, CabinetStructure.from_spec(spec))
                 bom = plan_manufacturing(spec, placements)
                 panels = by_role(bom.panels)
@@ -278,7 +274,7 @@ class BackMountModeTests(unittest.TestCase):
                 spec.groove_clearance = -10
                 if back_mount == "cover":
                     spec.back_offset = -100
-                plan_layout(spec)
+                CabinetStructure.from_spec(spec)
 
         with self.assertRaisesRegex(ValueError, "back_mount"):
             invalid = self._spec("unsupported")

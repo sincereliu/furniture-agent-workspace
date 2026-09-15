@@ -4,7 +4,7 @@
 
 ## 内置自动硬关卡
 
-1. 当前 Revision 必须包含并确认 `design_intent`、`panel_plan`、`manufacture_plan`、`feature_tree_planned`、`cad_generated` 五个串联前置阶段，且每阶段最近一份 `ValidationReport` 通过。独立房间布局不在交付谱系中。
+1. 当前 Revision 必须包含并确认 `design_intent`、`panel_plan`、`manufacture_plan`、`feature_tree_planned`、`cad_generated` 五个串联前置阶段，且每阶段最近一份 `ValidationReport` 通过。房间场景不在交付谱系中。
 2. Manifest 与每个 Artifact 的 `source_revision_id` 必须等于当前 Revision；任何 `stale` 产物均失败。
 3. 必需产物种类齐全，文件存在、非空，实时大小与 SHA-256 和 Manifest 一致；
    孔位 JSON/GLB/STEP、STEP Viewer 侧车和逐板六面钻 XML 均须登记。

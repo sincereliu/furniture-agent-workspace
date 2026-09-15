@@ -5,28 +5,28 @@ from __future__ import annotations
 from html import escape
 import json
 
-from .layout_planning import CabinetLayout
-from .room_planning import RoomPlacementPlan
+from .scene import RoomScene
 
 
 VIEWER_WIDTH_PX = 960
 VIEWER_HEIGHT_PX = 720
 
 
-def render_layout_viewer(
-    plan: RoomPlacementPlan,
-    layout: CabinetLayout,
-) -> dict[str, object]:
+def render_viewer(scene: RoomScene) -> dict[str, object]:
     """Return deterministic HTML that renders the current layout interactively."""
-    scene = {
-        "room": plan.room.to_dict(),
-        "furniture": {
-            "label": plan.furniture_label,
-            "footprint": [list(point) for point in plan.furniture_footprint],
-            "z_start": plan.placement.origin_z_mm,
-            "z_end": plan.placement.origin_z_mm + layout.height,
-            "dimensions": [layout.width, layout.depth, layout.height],
-        },
+    item_summary = "、".join(item.label for item in scene.items) or "家具"
+    payload = {
+        "room": scene.room.to_dict(),
+        "items": [
+            {
+                "label": item.label,
+                "footprint": [list(point) for point in item.footprint],
+                "z_start": item.placement.origin_z_mm,
+                "z_end": item.z_end,
+                "dimensions": [item.width, item.depth, item.height],
+            }
+            for item in scene.items
+        ],
         "obstacles": [
             {
                 "label": obstacle.kind,
@@ -34,20 +34,20 @@ def render_layout_viewer(
                 "z_start": obstacle.z_mm,
                 "z_end": obstacle.z_mm + obstacle.height_mm,
             }
-            for obstacle in plan.room.obstacles
+            for obstacle in scene.room.obstacles
         ],
-        "openings": [opening.to_dict() for opening in plan.room.openings],
+        "openings": [opening.to_dict() for opening in scene.room.openings],
     }
     scene_json = (
-        json.dumps(scene, ensure_ascii=False, separators=(",", ":"))
+        json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
         .replace("&", "\\u0026")
         .replace("<", "\\u003c")
         .replace(">", "\\u003e")
     )
     html = (
         _VIEWER_HTML.replace("__SCENE_JSON__", scene_json)
-        .replace("__ROOM_NAME__", escape(plan.room.name, quote=True))
-        .replace("__FURNITURE_LABEL__", escape(plan.furniture_label, quote=True))
+        .replace("__ROOM_NAME__", escape(scene.room.name, quote=True))
+        .replace("__FURNITURE_LABEL__", escape(item_summary, quote=True))
     )
     return {
         "media_type": "text/html",
@@ -65,7 +65,7 @@ def render_layout_viewer(
             "reset",
         ],
         "alt_text": (
-            f"{plan.furniture_label}在{plan.room.name}中的可旋转三维包络；"
+            f"{item_summary}在{scene.room.name}中的可旋转三维包络；"
             "拖拽旋转、滚轮缩放，并可选择正视、左右视图和俯视"
         ),
         "html": html,
@@ -163,10 +163,11 @@ function solidFaces(box,kind,project,cam){
   return boxFaces.filter(face=>visible(face,verts,cam)).map((face,index)=>({points:face.map(i=>project(verts[i])),depth:face.reduce((s,i)=>s+project(verts[i]).depth,0)/face.length,fill:palette[boxFaces.indexOf(face)],stroke:kind==="furniture"?"#172554":"#7f1d1d"}))
 }
 function drawSolids(project,cam){
-  const entries=[...scene.obstacles.map(box=>({box,kind:"obstacle"})),{box:scene.furniture,kind:"furniture"}],faces=[];
+  const entries=[...scene.obstacles.map(box=>({box,kind:"obstacle"})),...(scene.items||[]).map(box=>({box,kind:"furniture"}))],faces=[];
   for(const entry of entries)faces.push(...solidFaces(entry.box,entry.kind,project,cam));
   faces.sort((a,b)=>b.depth-a.depth);for(const face of faces){path(face.points);ctx.fillStyle=face.fill;ctx.fill();ctx.strokeStyle=face.stroke;ctx.lineWidth=2;ctx.stroke()}
-  const f=scene.furniture,c=[f.footprint.reduce((s,p)=>s+p[0],0)/4,f.footprint.reduce((s,p)=>s+p[1],0)/4,(f.z_start+f.z_end)/2],p=project(c);ctx.font="700 16px Microsoft YaHei, sans-serif";ctx.textAlign="center";ctx.textBaseline="middle";ctx.lineWidth=4;ctx.strokeStyle="rgba(30,58,138,.9)";ctx.strokeText(f.label,p.x,p.y);ctx.fillStyle="#fff";ctx.fillText(f.label,p.x,p.y)
+  ctx.font="700 16px Microsoft YaHei, sans-serif";ctx.textAlign="center";ctx.textBaseline="middle";
+  for(const f of scene.items||[]){const c=[f.footprint.reduce((s,p)=>s+p[0],0)/4,f.footprint.reduce((s,p)=>s+p[1],0)/4,(f.z_start+f.z_end)/2],p=project(c);ctx.lineWidth=4;ctx.strokeStyle="rgba(30,58,138,.9)";ctx.strokeText(f.label,p.x,p.y);ctx.fillStyle="#fff";ctx.fillText(f.label,p.x,p.y)}
 }
 function drawAxis(){const x=W-88,y=H-58,axes=[[36,12,"#dc2626","X"],[-31,12,"#16a34a","Y"],[0,-39,"#2563eb","Z"]];ctx.lineWidth=3;ctx.font="700 12px sans-serif";for(const [dx,dy,color,label] of axes){ctx.strokeStyle=color;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+dx,y+dy);ctx.stroke();ctx.fillStyle=color;ctx.beginPath();ctx.arc(x+dx,y+dy,4,0,Math.PI*2);ctx.fill();ctx.fillText(label,x+dx+8,y+dy+4)}}
 function render(){ctx.clearRect(0,0,W,H);const gradient=ctx.createRadialGradient(W*.5,H*.38,20,W*.5,H*.42,W*.72);gradient.addColorStop(0,"#fff");gradient.addColorStop(1,"#e8eef5");ctx.fillStyle=gradient;ctx.fillRect(0,0,W,H);const cam=camera(),project=projector(cam);drawRoom(project,cam);drawSolids(project,cam);drawAxis()}
