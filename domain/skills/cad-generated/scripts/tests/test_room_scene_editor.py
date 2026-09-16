@@ -85,7 +85,25 @@ class RoomSceneEditorTests(unittest.TestCase):
         self.assertIn("select_item", controls)
         self.assertIn("drag_item", controls)
         self.assertIn("drag_rotate_handle", controls)
+        self.assertIn("drag_height_handle", controls)
+        self.assertIn("front_orientation", controls)
+        self.assertIn("manual_distance_input", controls)
+        self.assertIn("manual_rotation_input", controls)
+        self.assertIn("view_transition", controls)
+        self.assertIn("dimension_readout", controls)
+        self.assertIn("view_elevation", controls)
+        self.assertIn("collision_stop", controls)
         self.assertIn("旋转", str(result["alt_text"]))
+        self.assertIn("接触", str(result["alt_text"]))
+        self.assertIn("离地高度", str(result["alt_text"]))
+
+    def test_editor_offers_orthographic_views(self) -> None:
+        html = str(render_editor("demo", _scene())["html"])
+        for view in ("perspective", "top", "front", "back", "left", "right"):
+            self.assertIn(f'data-view="{view}"', html)
+        # 立面视图必须落在 pitch 0，编辑器据此切换成竖直平面拖动
+        self.assertIn("front:{yaw:Math.PI/2,pitch:0}", html)
+        self.assertIn("left:{yaw:Math.PI,pitch:0}", html)
 
 
 class RoomSceneEditorApiTests(unittest.TestCase):

@@ -1,9 +1,21 @@
 """Generate an editable room-scene view.
 
 点选一件家具后拖动：靠墙件沿墙滑动（发 `offset_mm`），自由件平面移动（发
-`origin_x_mm`/`origin_y_mm`）。选中后家具上方有一个橙色圆点，拖它就是旋转
-（发 `rotation_z_deg`）；墙摆的旋转由 `host_wall` 派生，所以旋转墙摆会在同一
-个 op 里改成自由摆放。靠墙件往房间内拖过阈值也会转成自由摆放。
+`origin_x_mm`/`origin_y_mm`）。选中后家具上方有两个手柄——橙色圆点拖了是旋转
+（发 `rotation_z_deg`），蓝色圆点拖了改离地高度（发 `origin_z_mm`）；墙摆的
+旋转由 `host_wall` 派生，所以旋转墙摆会在同一个 op 里改成自由摆放。靠墙件往
+房间内拖过阈值也会转成自由摆放。
+
+相机是同一套轨道相机，除了透视/俯视，还有前/后/左/右四个立面视图。相机接近
+水平（pitch 很小）时地面射线求交会退化，所以那种视角下拖动改成在「水平轴 +
+高度」这个竖直平面里走，上下拖就是改高度。
+
+选中件的四向净距（到最近的家具/障碍物/墙）直接画在图上：先找同一高度带、垂直
+方向有重叠的最近邻，找不到才退到墙。
+
+拖动与旋转**本地就按服务端的碰撞规则求解**（见 collision.py：SAT 正体积相交，
+贴边接触放行），撞上就停在接触处，不会先穿过再回弹。求解在**整数毫米**上进行，
+和服务端落盘取整口径一致，预览即落盘值。
 
 拖动期间只做本地预览，松手才发**一个** edit op，由后端重算并校验——失败会显示
 原因，不回退本地已画的形状。
@@ -19,7 +31,7 @@ from .scene import RoomScene
 
 
 EDITOR_WIDTH_PX = 960
-EDITOR_HEIGHT_PX = 720
+EDITOR_HEIGHT_PX = 600
 
 
 def render_editor(scene_id: str, scene: RoomScene) -> dict[str, object]:
@@ -60,13 +72,28 @@ def render_editor(scene_id: str, scene: RoomScene) -> dict[str, object]:
             "select_item",
             "drag_item",
             "drag_rotate_handle",
+            "drag_height_handle",
+            "front_orientation",
+            "manual_distance_input",
+            "manual_rotation_input",
+            "view_transition",
+            "dimension_readout",
+            "item_size_readout",
+            "view_elevation",
             "drag_orbit",
+            "drag_pan",
             "wheel_zoom",
+            "collision_stop",
         ],
         "alt_text": (
             f"{scene.room.name}的可编辑包络视图；点击家具包络任意位置可选中，"
-            "拖动改位置（靠墙件沿墙滑动，拖离墙面或拖橙色圆点会转成自由摆放），"
-            "拖橙色圆点旋转；空白处拖动旋转视角"
+            "拖动改位置（撞到别的家具或障碍物会停在接触处），"
+            "拖橙点或旋转环改朝向、拖蓝点改离地高度；"
+            "每件的正面用绿色描边标出（约定：局部 +Y 为正面），选中件还有指向正面的箭头；"
+            "选中件四周显示到最近邻的净距，并沿自身局部轴标出宽/深/高；"
+            "净距、朝向、离地高度都能在右侧直接输入；"
+            "视角可选透视/俯视/前/后/左/右（切换带过渡），"
+            "空白处拖动转视角、右键或 Shift+左键拖动平移、滚轮缩放"
         ),
         "html": html,
     }
@@ -80,40 +107,120 @@ _EDITOR_HTML = r"""<!doctype html>
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'">
 <title>__ROOM_NAME__ · 布局编辑</title>
 <style>
-:root{font-family:Inter,"Microsoft YaHei",system-ui,sans-serif;color:#0f172a;background:#eef2f7}
+:root{
+  --ink:#0f172a;--muted:#64748b;--line:#e2e8f0;--line-strong:#cbd5e1;
+  --accent:#4f46e5;--accent-soft:#eef2ff;--amber:#f59e0b;--amber-ink:#b45309;
+  --danger:#dc2626;--surface:#ffffff;--canvas:#eef1f6;
+  font-family:Inter,"Microsoft YaHei",system-ui,-apple-system,"Segoe UI",sans-serif;
+  color:var(--ink);
+}
 *{box-sizing:border-box}
-body{margin:0;min-height:100vh;display:grid;place-items:center;padding:16px}
-.editor{width:min(960px,100%);background:#f8fafc;border:1px solid #cbd5e1;border-radius:18px;box-shadow:0 18px 50px rgba(15,23,42,.16);overflow:hidden}
-header{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:16px 18px 12px;background:#fff;border-bottom:1px solid #e2e8f0}
-h1{font-size:18px;margin:0 0 4px}.hint{font-size:12px;color:#64748b;margin:0}
-.toolbar{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:7px}
-button{appearance:none;border:1px solid #cbd5e1;background:#fff;color:#334155;border-radius:9px;padding:7px 10px;font:inherit;font-size:12px;font-weight:600;cursor:pointer}
-button:hover,button:focus-visible{border-color:#2563eb;color:#1d4ed8;outline:none}
-button[aria-pressed="true"]{background:#2563eb;border-color:#2563eb;color:#fff}
-.stage{position:relative;background:radial-gradient(circle at 50% 38%,#fff 0,#f1f5f9 58%,#e2e8f0 100%)}
-canvas{display:block;width:100%;height:auto;touch-action:none;cursor:default}
+html,body{height:100%}
+body{margin:0;background:linear-gradient(180deg,#f7f9fc 0,#eef1f6 100%);padding:18px;display:flex;justify-content:center}
+.app{width:min(1320px,100%);height:100%;display:grid;grid-template-rows:auto minmax(0,1fr);gap:14px}
+.topbar{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap}
+.titles h1{margin:0;font-size:21px;font-weight:700;letter-spacing:-.01em}
+.titles p{margin:4px 0 0;font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.toolbar{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:4px;box-shadow:0 1px 2px rgba(15,23,42,.05)}
+.toolbar button{appearance:none;border:0;background:transparent;color:var(--muted);border-radius:8px;padding:7px 11px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;transition:background .12s,color .12s}
+.toolbar button:hover{background:#f1f5f9;color:var(--ink)}
+.toolbar button[aria-pressed="true"]{background:var(--accent);color:#fff;box-shadow:0 1px 3px rgba(79,70,229,.35)}
+.workspace{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:14px;min-height:0}
+.stage{position:relative;height:100%;min-height:340px;border-radius:16px;overflow:hidden;background:var(--canvas);border:1px solid var(--line);box-shadow:0 1px 2px rgba(15,23,42,.05),0 18px 40px -26px rgba(15,23,42,.42)}
+canvas{display:block;width:100%;height:100%;touch-action:none;cursor:default}
 canvas.orbiting{cursor:grabbing}
 canvas.moving{cursor:move}
-.badge{position:absolute;left:16px;bottom:14px;padding:7px 10px;border-radius:9px;background:rgba(255,255,255,.9);border:1px solid rgba(203,213,225,.9);font-size:12px;color:#475569;backdrop-filter:blur(6px);max-width:70%}
-.badge.error{color:#b91c1c;border-color:#fecaca;background:rgba(254,242,242,.94)}
-footer{display:flex;justify-content:space-between;gap:16px;padding:10px 18px 13px;background:#fff;border-top:1px solid #e2e8f0;font-size:12px;color:#64748b}
+canvas.panning{cursor:grabbing}
+.toast{position:absolute;left:14px;bottom:14px;max-width:calc(100% - 28px);padding:8px 12px;border-radius:10px;background:rgba(255,255,255,.94);border:1px solid var(--line-strong);font-size:12.5px;color:#334155;box-shadow:0 4px 14px -6px rgba(15,23,42,.28);backdrop-filter:blur(8px);transition:border-color .12s,color .12s}
+.toast.warn{color:var(--amber-ink);border-color:#fcd34d;background:rgba(255,251,235,.96)}
+.toast.error{color:#b91c1c;border-color:#fecaca;background:rgba(254,242,242,.96)}
+.sidebar{display:flex;flex-direction:column;gap:12px;min-height:0;overflow:auto}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:13px 14px;box-shadow:0 1px 2px rgba(15,23,42,.04)}
+.card h2{margin:0 0 10px;font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#94a3b8}
+.list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px}
+.item-row{width:100%;display:flex;align-items:center;gap:9px;appearance:none;border:1px solid transparent;background:transparent;border-radius:9px;padding:7px 9px;font:inherit;font-size:13px;color:#334155;cursor:pointer;text-align:left;transition:background .12s,border-color .12s}
+.item-row:hover{background:#f8fafc}
+.item-row.active{background:var(--accent-soft);border-color:#c7d2fe;color:#3730a3;font-weight:600}
+.item-row .dot{width:9px;height:9px;border-radius:3px;background:#8ea9e8;box-shadow:inset 0 0 0 1px rgba(15,23,42,.14);flex:none}
+.item-row.active .dot{background:var(--amber)}
+.item-row .name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item-row .mode{font-size:10.5px;font-weight:600;color:#94a3b8;border:1px solid var(--line);border-radius:999px;padding:1px 7px;flex:none}
+.item-row.active .mode{color:#6366f1;border-color:#c7d2fe;background:#fff}
+.detail{margin:0;display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:12.5px;align-items:center}
+.detail dt{color:var(--muted)}
+.detail dd{margin:0;display:flex;align-items:center;justify-content:flex-end;gap:6px;text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+.detail .who{color:#94a3b8;font-weight:500;font-size:11px}
+.detail input.num{width:62px;border:1px solid var(--line);border-radius:7px;padding:3px 6px;font:inherit;font-size:12.5px;font-weight:600;text-align:right;color:var(--ink);font-variant-numeric:tabular-nums;background:#fff}
+.detail input.num:hover{border-color:var(--line-strong)}
+.detail input.num:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.stepper{display:inline-flex;align-items:center;justify-content:flex-end;gap:6px}
+.step{appearance:none;border:1px solid var(--line);background:#fff;border-radius:6px;width:21px;height:21px;padding:0;font:inherit;font-size:13px;font-weight:700;line-height:1;color:#475569;cursor:pointer}
+.step:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.empty{margin:0;font-size:12.5px;color:#94a3b8}
+.legend{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px;font-size:12.5px;color:#475569}
+.legend li{display:flex;align-items:center;gap:9px}
+.chip{width:14px;height:10px;border-radius:3px;flex:none;box-shadow:inset 0 0 0 1px rgba(15,23,42,.16)}
+.chip.furniture{background:#8ea9e8}
+.chip.selected{background:var(--amber)}
+.chip.height{background:#3b82f6}
+.chip.dim{background:#a78bfa}
+.chip.size{background:#334155}
+.chip.front{background:#047857}
+.chip.obstacle{background:#e79a9a}
+.chip.opening{background:#7dd3fc}
+.tips{margin:11px 0 0;padding-top:10px;border-top:1px dashed var(--line);font-size:11.5px;line-height:1.7;color:#94a3b8}
+.hint-inline{margin:8px 0 0;font-size:11.5px;color:#94a3b8;line-height:1.6}
+@media (max-width:980px){.workspace{grid-template-columns:minmax(0,1fr)}.stage{min-height:420px}.app{height:auto}}
 </style>
 </head>
 <body>
-<main class="editor" aria-label="可编辑家具布局">
-  <header>
-    <div><h1>__ROOM_NAME__ · 布局编辑</h1><p class="hint">点击选中家具 · 拖动移动 · 空白处拖拽转视角 · 滚轮缩放</p></div>
+<main class="app" aria-label="可编辑家具布局">
+  <header class="topbar">
+    <div class="titles">
+      <h1>__ROOM_NAME__ · 布局编辑</h1>
+      <p id="room-meta"></p>
+    </div>
     <nav class="toolbar" aria-label="视角选择">
       <button type="button" data-view="perspective" aria-pressed="true">透视</button>
       <button type="button" data-view="top" aria-pressed="false">俯视</button>
-      <button type="button" data-view="reset" aria-pressed="false">重置视角</button>
+      <button type="button" data-view="front" aria-pressed="false">前视</button>
+      <button type="button" data-view="back" aria-pressed="false">后视</button>
+      <button type="button" data-view="left" aria-pressed="false">左视</button>
+      <button type="button" data-view="right" aria-pressed="false">右视</button>
+      <button type="button" data-view="reset" aria-pressed="false">复位</button>
+      <button type="button" id="toggle-dims" aria-pressed="true">标注</button>
     </nav>
   </header>
-  <section class="stage">
-    <canvas id="scene" width="960" height="600" aria-label="房间与家具包络；点选家具后可拖动移动、拖橙色圆点旋转"></canvas>
-    <div class="badge" id="status">点击一件家具开始</div>
-  </section>
-  <footer><span>透明线框：房间</span><span>蓝色实体：家具包络（可拖动移动）</span><span>橙色圆点：旋转，按住 Shift 精细到 1°</span><span>红色实体：障碍物</span></footer>
+  <div class="workspace">
+    <section class="stage">
+      <canvas id="scene" width="960" height="600" aria-label="房间与家具包络；点选家具后可拖动移动、拖橙点旋转、拖蓝点改离地高度"></canvas>
+      <div class="toast" id="status">点击一件家具开始</div>
+    </section>
+    <aside class="sidebar">
+      <section class="card">
+        <h2>家具</h2>
+        <ul class="list" id="item-list"></ul>
+      </section>
+      <section class="card">
+        <h2>选中</h2>
+        <div id="detail"><p class="empty">未选中任何家具</p></div>
+      </section>
+      <section class="card">
+        <h2>图例</h2>
+        <ul class="legend">
+          <li><i class="chip furniture"></i>家具包络</li>
+          <li><i class="chip selected"></i>选中 / 旋转环与手柄（橙）</li>
+          <li><i class="chip height"></i>离地高度手柄（蓝）</li>
+          <li><i class="chip dim"></i>净距标注线（紫）</li>
+          <li><i class="chip size"></i>本体尺寸 宽/深/高（深灰）</li>
+          <li><i class="chip front"></i>正面（绿边）</li>
+          <li><i class="chip obstacle"></i>障碍物</li>
+          <li><i class="chip opening"></i>门窗</li>
+        </ul>
+        <p class="tips">拖动撞到别的东西会停在接触处<br>选中件：紫线是四向净距，灰线是本体宽/深/高<br>橙点或旋转环拖了调朝向（Shift 1°）· 蓝点调离地高度<br>前/后/左/右视里上下拖 = 改高度<br>右侧的距离 / 朝向 / 离地可输入，也可用 − / ＋ 走整数档<br>空白处拖拽转视角 · 右键/中键/Shift+左键拖拽平移 · 滚轮缩放 · Esc 取消选中</p>
+      </section>
+    </aside>
+  </div>
 </main>
 <script id="scene-data" type="application/json">__SCENE_JSON__</script>
 <script>
@@ -127,12 +234,39 @@ const normalizeItems=items=>items.map(item=>{
   return {...item,placement,z_start:zStart,z_end:item.z_end!==undefined?item.z_end:zStart+(item.height||0),footprint:(item.footprint||[]).map(p=>Array.isArray(p)?[p[0],p[1]]:[p.x_mm,p.y_mm])};
 });
 scene.items=normalizeItems(scene.items||[]);
+scene.obstacles=scene.obstacles||[];
+scene.openings=scene.openings||[];
 const canvas=document.getElementById("scene"),ctx=canvas.getContext("2d"),status=document.getElementById("status");
-const W=canvas.width,H=canvas.height,room=scene.room;
-const target=[room.width_mm/2,room.depth_mm/2,room.height_mm*.42];
+const room=scene.room;
+// 视图中心。平移是就地改它（相机的一切都相对它算）；切视角时动画回 HOME_TARGET。
+const HOME_TARGET=[room.width_mm/2,room.depth_mm/2,room.height_mm*.42];
+const target=[...HOME_TARGET];
 const diagonal=Math.hypot(room.width_mm,room.depth_mm,room.height_mm);
-const defaults={yaw:-Math.PI/4,pitch:.95,distance:diagonal*1.28};
-const state={...defaults,orbiting:false,lastX:0,lastY:0,active:"perspective",selectedId:null,handle:null};
+const DEFAULT_YAW=-Math.PI/4,DEFAULT_PITCH=.95;
+// 立面视图把相机放到水平（pitch 0）并从四个方向看；前视=站在南边往北看，依此类推。
+const VIEWS={
+  perspective:{yaw:DEFAULT_YAW,pitch:DEFAULT_PITCH},
+  top:{yaw:-Math.PI/2,pitch:1.48},
+  front:{yaw:Math.PI/2,pitch:0},
+  back:{yaw:-Math.PI/2,pitch:0},
+  right:{yaw:0,pitch:0},
+  left:{yaw:Math.PI,pitch:0},
+};
+// 相机几乎与地面齐平时，地面射线求交会退化（交点跑到几万毫米外），
+// 所以这个角度以下改成在竖直平面里拖：横向 = 该视图的水平轴，纵向 = 高度。
+const ELEVATION_MAX_PITCH=.12;
+let W=960,H=600,uiScale=1;
+// 画布按设备像素比放大，线更锐利；阈值仍按 CSS 像素定义，用 px() 换算。
+function fitCanvas(){
+  const rect=canvas.getBoundingClientRect();
+  const cssWidth=rect.width||960,cssHeight=rect.height||600;
+  const ratio=Math.min(2,window.devicePixelRatio||1);
+  W=Math.max(320,Math.round(cssWidth*ratio));
+  H=Math.max(200,Math.round(cssHeight*ratio));
+  canvas.width=W;canvas.height=H;
+  uiScale=W/cssWidth;
+}
+const px=css=>css*uiScale;
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const sub=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]];
 const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
@@ -140,9 +274,11 @@ const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]]
 const norm=a=>{const n=Math.hypot(...a)||1;return a.map(v=>v/n)};
 const midpoint=pts=>pts[0].map((_,i)=>pts.reduce((s,p)=>s+p[i],0)/pts.length);
 const focal=()=>H/(2*Math.tan(48*Math.PI/360));
-function camera(){
-  const cp=Math.cos(state.pitch),sp=Math.sin(state.pitch),cy=Math.cos(state.yaw),sy=Math.sin(state.yaw);
-  const position=[target[0]+state.distance*cp*cy,target[1]+state.distance*cp*sy,target[2]+state.distance*sp];
+function camera(distance,pitch,yaw){
+  const p=pitch===undefined?state.pitch:pitch,y=yaw===undefined?state.yaw:yaw;
+  const d=distance===undefined?state.distance:distance;
+  const cp=Math.cos(p),sp=Math.sin(p),cy=Math.cos(y),sy=Math.sin(y);
+  const position=[target[0]+d*cp*cy,target[1]+d*cp*sy,target[2]+d*sp];
   const forward=norm(sub(target,position)),right=norm(cross(forward,[0,0,1])),up=norm(cross(right,forward));
   return{position,forward,right,up};
 }
@@ -163,58 +299,499 @@ function unprojectToGround(sx,sy){
   if(!(t>0))return null;
   return [cam.position[0]+dir[0]*t,cam.position[1]+dir[1]*t];
 }
+// 竖直平面拖动：屏幕位移按该点的透视尺度换算成毫米。
+// 屏幕 y 变小 = 往上 = z 变大，所以取负号。
+function verticalPlaneScale(point){
+  const depth=projector(camera())(point).depth;
+  return depth/focal();
+}
 function screenPoint(event){
   const rect=canvas.getBoundingClientRect();
   return [(event.clientX-rect.left)*(W/rect.width),(event.clientY-rect.top)*(H/rect.height)];
 }
+// 平视时按屏幕像素换算成毫米，拖动才和画面 1:1。
+// 中心沿相机的右/上方向走，所以任何视角下都是「往哪拖、画面往哪走」。
+function panBy(dxCss,dyCss){
+  const cam=camera(),per=uiScale*state.distance/focal();
+  for(let i=0;i<3;i++)target[i]+=(-cam.right[i]*dxCss+cam.up[i]*dyCss)*per;
+}
+// 取景要按房间中心算，否则平移过之后会把房间框到画外。
+function withHomeCentre(run){
+  const saved=[target[0],target[1],target[2]];
+  target[0]=HOME_TARGET[0];target[1]=HOME_TARGET[1];target[2]=HOME_TARGET[2];
+  try{return run()}finally{target[0]=saved[0];target[1]=saved[1];target[2]=saved[2]}
+}
+
+/* ---------- 碰撞：与 collision.py / placement.py 逐条对应 ---------- */
+const EPSILON_MM=1e-6;
+// ranges_overlap
+function rangesOverlap(a0,a1,b0,b1){return Math.min(a1,b1)>Math.max(a0,b0)+EPSILON_MM}
+// polygons_overlap：SAT，正面积相交才算撞，贴边接触放行。
+function polygonsOverlap(first,second){
+  for(const polygon of [first,second]){
+    for(let index=0;index<polygon.length;index++){
+      const point=polygon[index],next=polygon[(index+1)%polygon.length];
+      const axis=[-(next[1]-point[1]),next[0]-point[0]];
+      let minA=Infinity,maxA=-Infinity,minB=Infinity,maxB=-Infinity;
+      for(const candidate of first){const value=candidate[0]*axis[0]+candidate[1]*axis[1];if(value<minA)minA=value;if(value>maxA)maxA=value}
+      for(const candidate of second){const value=candidate[0]*axis[0]+candidate[1]*axis[1];if(value<minB)minB=value;if(value>maxB)maxB=value}
+      if(maxA<=minB+EPSILON_MM||maxB<=minA+EPSILON_MM)return false;
+    }
+  }
+  return true;
+}
+// footprint_span_on_wall：只有包络真的贴在那面墙上才算有跨度。
+function spanOnWall(wall,footprint){
+  const xs=footprint.map(point=>point[0]),ys=footprint.map(point=>point[1]);
+  if(wall==="north"&&Math.min(...ys)<=EPSILON_MM)return[Math.min(...xs),Math.max(...xs)];
+  if(wall==="east"&&Math.max(...xs)>=room.width_mm-EPSILON_MM)return[Math.min(...ys),Math.max(...ys)];
+  if(wall==="south"&&Math.max(...ys)>=room.depth_mm-EPSILON_MM)return[room.width_mm-Math.max(...xs),room.width_mm-Math.min(...xs)];
+  if(wall==="west"&&Math.min(...xs)<=EPSILON_MM)return[room.depth_mm-Math.max(...ys),room.depth_mm-Math.min(...ys)];
+  return null;
+}
+// item_outside_room + obstacle_collisions + item_collisions + opening_collisions。
+// 返回撞上的东西（用来提示和描边），没撞返回 null。
+function blockerAt(footprint,zStart,zEnd,ignoreId){
+  const xs=footprint.map(point=>point[0]),ys=footprint.map(point=>point[1]);
+  if(Math.min(...xs)<-EPSILON_MM||Math.max(...xs)>room.width_mm+EPSILON_MM
+    ||Math.min(...ys)<-EPSILON_MM||Math.max(...ys)>room.depth_mm+EPSILON_MM)return{label:"房间边界",id:null};
+  for(const obstacle of scene.obstacles){
+    if(rangesOverlap(zStart,zEnd,obstacle.z_start,obstacle.z_end)&&polygonsOverlap(footprint,obstacle.footprint)){
+      return{label:obstacle.label||"障碍物",id:null};
+    }
+  }
+  for(const other of scene.items){
+    if(other.id===ignoreId)continue;
+    if(rangesOverlap(zStart,zEnd,other.z_start,other.z_end)&&polygonsOverlap(footprint,other.footprint)){
+      return{label:other.label,id:other.id};
+    }
+  }
+  for(const opening of scene.openings){
+    const span=spanOnWall(opening.wall,footprint);
+    if(!span)continue;
+    if(rangesOverlap(span[0],span[1],opening.offset_mm,opening.offset_mm+opening.width_mm)
+      &&rangesOverlap(zStart,zEnd,opening.sill_height_mm,opening.sill_height_mm+opening.height_mm)){
+      return{label:"门窗",id:null};
+    }
+  }
+  return null;
+}
+// 从 from（必须可用）朝 to 走，二分找最远的可用整数位置：撞上就停在接触处。
+function resolveInteger(from,to,probe){
+  const startBlocker=probe(from);
+  if(startBlocker)return{value:from,blocker:startBlocker};
+  if(from===to)return{value:from,blocker:null};
+  const step=to>from?1:-1;
+  const endBlocker=probe(to);
+  if(!endBlocker)return{value:to,blocker:null};
+  let low=from,high=to,blocker=endBlocker;
+  while(Math.abs(high-low)>1){
+    const middle=low+step*Math.floor(Math.abs(high-low)/2);
+    const hit=probe(middle);
+    if(hit){high=middle;blocker=hit}else{low=middle}
+  }
+  return{value:low,blocker};
+}
+
 function boxVertices(box){const b=box.footprint.map(p=>[p[0],p[1],box.z_start]),t=box.footprint.map(p=>[p[0],p[1],box.z_end]);return[...b,...t]}
 const boxFaces=[[0,3,2,1],[4,5,6,7],[0,1,5,4],[1,2,6,5],[2,3,7,6],[3,0,4,7]];
+const boxFaceAlpha=[.55,.95,.82,.72,.88,.76];
 const roomFaces=[[0,1,2,3],[4,7,6,5],[0,4,5,1],[1,5,6,2],[2,6,7,3],[3,7,4,0]];
 const roomEdges=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+const FURNITURE="#7d9ae0",OBSTACLE="#dd8f8f";
 function visible(face,verts,cam){const a=verts[face[0]],b=verts[face[1]],c=verts[face[2]],normal=cross(sub(b,a),sub(c,b));return dot(normal,sub(cam.position,midpoint(face.map(i=>verts[i]))))>0}
 function path(points){ctx.beginPath();ctx.moveTo(points[0].x,points[0].y);for(const p of points.slice(1))ctx.lineTo(p.x,p.y);ctx.closePath()}
 function roomVertices(){const w=room.width_mm,d=room.depth_mm,h=room.height_mm;return[[0,0,0],[w,0,0],[w,d,0],[0,d,0],[0,0,h],[w,0,h],[w,d,h],[0,d,h]]}
+// 取景：二分出把整个房间装进画面（留 20% 余量，给手柄和墙面留空间）的最小距离，
+// 窗口尺寸/房间比例/视角都不用手调。深度 <= 0 表示角点跑到相机后面，投影会翻号
+// 变垃圾值，必须直接判为「装不下」，否则二分会被这种假的小跨度骗到相机贴脸。
+function roomFits(distance,pitch,yaw){
+  const cam=camera(distance,pitch,yaw),project=projector(cam),verts=roomVertices();
+  let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+  for(const vertex of verts){
+    const rel=sub(vertex,cam.position);
+    if(dot(rel,cam.forward)<=1)return false;
+    const p=project(vertex);
+    minX=Math.min(minX,p.x);maxX=Math.max(maxX,p.x);
+    minY=Math.min(minY,p.y);maxY=Math.max(maxY,p.y);
+  }
+  return (maxX-minX)/W<=.8&&(maxY-minY)/H<=.8;
+}
+function fitDistance(pitch,yaw){
+  let low=diagonal*.4,high=diagonal*3;
+  for(let i=0;i<44;i++){
+    const mid=(low+high)/2;
+    if(roomFits(mid,pitch,yaw))high=mid;else low=mid;
+  }
+  return high;
+}
 function openingPoints(o){const s=o.offset_mm,e=s+o.width_mm,z0=o.sill_height_mm,z1=z0+o.height_mm,w=room.width_mm,d=room.depth_mm;if(o.wall==="north")return[[s,0,z0],[e,0,z0],[e,0,z1],[s,0,z1]];if(o.wall==="east")return[[w,s,z0],[w,e,z0],[w,e,z1],[w,s,z1]];if(o.wall==="south")return[[w-s,d,z0],[w-e,d,z0],[w-e,d,z1],[w-s,d,z1]];return[[0,d-s,z0],[0,d-e,z0],[0,d-e,z1],[0,d-s,z1]]}
-function drawRoom(project,cam){
-  const verts=roomVertices(),faces=roomFaces.map(face=>({face,depth:face.reduce((s,i)=>s+project(verts[i]).depth,0)/face.length})).sort((a,b)=>b.depth-a.depth);
-  for(const item of faces){const pts=item.face.map(i=>project(verts[i]));path(pts);ctx.fillStyle="rgba(186,230,253,.055)";ctx.fill()}
-  for(const opening of scene.openings){const pts=openingPoints(opening).map(project);path(pts);ctx.fillStyle="rgba(34,211,238,.34)";ctx.fill();ctx.strokeStyle="rgba(8,145,178,.8)";ctx.lineWidth=2;ctx.stroke()}
-  ctx.strokeStyle="rgba(71,85,105,.72)";ctx.lineWidth=1.6;for(const edge of roomEdges){const a=project(verts[edge[0]]),b=project(verts[edge[1]]);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke()}
+function gridStep(){
+  const longest=Math.max(room.width_mm,room.depth_mm);
+  for(const step of [200,250,500,1000,2000])if(longest/step<=14)return step;
+  return 5000;
+}
+function drawBackdrop(){
+  const gradient=ctx.createLinearGradient(0,0,0,H);
+  gradient.addColorStop(0,"#f9fbfd");gradient.addColorStop(1,"#e7ecf3");
+  ctx.fillStyle=gradient;ctx.fillRect(0,0,W,H);
+}
+function drawFloor(project){
+  const w=room.width_mm,d=room.depth_mm;
+  const quad=()=>path([[0,0],[w,0],[w,d],[0,d]].map(point=>project([point[0],point[1],0])));
+  quad();
+  const gradient=ctx.createLinearGradient(0,H*.12,0,H*.96);
+  gradient.addColorStop(0,"#ffffff");gradient.addColorStop(1,"#eef2f7");
+  ctx.fillStyle=gradient;ctx.fill();
+  ctx.save();quad();ctx.clip();
+  const step=gridStep();
+  ctx.strokeStyle="rgba(148,163,184,.45)";ctx.lineWidth=1;
+  for(let x=step;x<w;x+=step){const a=project([x,0,0]),b=project([x,d,0]);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke()}
+  for(let y=step;y<d;y+=step){const a=project([0,y,0]),b=project([w,y,0]);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke()}
+  ctx.restore();
+  quad();
+  ctx.strokeStyle="rgba(100,116,139,.50)";ctx.lineWidth=px(1.4);ctx.stroke();
+}
+// roomFaces[2..5] 依次是北/东/南/西墙，法线朝房间内。透视视角下只画远端那两面，
+// 免得近墙在家具前面盖一层灰罩；立面视图里相机在房间外侧水平看，改画「正对相机」
+// 那一面（也就是能看到内表面的那面墙），房间才立得起来。
+const wallFaces={north:2,east:3,south:4,west:5};
+function drawWalls(project,cam){
+  const verts=roomVertices();
+  const elevation=isElevation();
+  const shown=Object.entries(wallFaces).filter(([,i])=>visible(roomFaces[i],verts,cam)).map(([name])=>name);
+  const farWalls=new Set(shown);
+  const faces=roomFaces.slice(2).filter(face=>visible(face,verts,cam))
+    .map(face=>({face,depth:face.reduce((s,i)=>s+project(verts[i]).depth,0)/face.length}))
+    .sort((a,b)=>b.depth-a.depth);
+  for(const entry of faces){
+    path(entry.face.map(index=>project(verts[index])));
+    ctx.fillStyle="rgba(148,163,184,.16)";ctx.fill();
+  }
+  for(const opening of scene.openings){
+    const corners=openingPoints(opening);
+    if(!farWalls.has(opening.wall)){
+      // 近端/侧向的门窗画成墙脚的粗虚线 + 名目，像平面图的洞口标注：看得见，又不盖住家具。
+      const a=project(corners[0]),b=project(corners[1]);
+      ctx.setLineDash([px(7),px(5)]);
+      ctx.strokeStyle="rgba(2,132,199,.75)";ctx.lineWidth=px(3);
+      ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.font=`700 ${Math.round(px(12))}px "Microsoft YaHei",system-ui,sans-serif`;
+      ctx.textAlign="center";ctx.textBaseline="middle";
+      ctx.lineWidth=px(3.5);ctx.strokeStyle="rgba(255,255,255,.92)";
+      ctx.strokeText(openingLabel(opening.kind),(a.x+b.x)/2,(a.y+b.y)/2);
+      ctx.fillStyle="#0369a1";
+      ctx.fillText(openingLabel(opening.kind),(a.x+b.x)/2,(a.y+b.y)/2);
+    }else{
+      path(corners.map(project));
+      ctx.fillStyle="rgba(125,211,252,.34)";ctx.fill();
+      ctx.strokeStyle="rgba(2,132,199,.7)";ctx.lineWidth=px(1.5);ctx.stroke();
+    }
+  }
+  ctx.strokeStyle="rgba(100,116,139,.45)";ctx.lineWidth=px(1.3);
+  for(const edge of roomEdges){
+    const a=project(verts[edge[0]]),b=project(verts[edge[1]]);
+    ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+  }
+  if(elevation){
+    // 立面视图没有地面网格可参照，给个地脚线，房间才不像悬空。
+    const floor=[[0,0,0],[room.width_mm,0,0],[room.width_mm,room.depth_mm,0],[0,room.depth_mm,0]].map(v=>project(v));
+    path(floor);
+    ctx.strokeStyle="rgba(100,116,139,.6)";ctx.lineWidth=px(1.8);ctx.stroke();
+  }
+}
+function drawShadows(project){
+  if(isElevation())return;
+  for(const box of scene.items){
+    path(box.footprint.map(point=>project([point[0],point[1],0])));
+    ctx.fillStyle=box.id===state.selectedId?"rgba(180,83,9,.16)":"rgba(15,23,42,.10)";
+    ctx.fill();
+  }
 }
 function drawSolids(project,cam){
   const faces=[];
-  for(const obstacle of scene.obstacles){
-    const verts=boxVertices(obstacle);
-    for(const face of boxFaces)if(visible(face,verts,cam))faces.push({points:face.map(i=>project(verts[i])),depth:face.reduce((s,i)=>s+project(verts[i]).depth,0)/face.length,fill:"#dc2626",stroke:"#7f1d1d"});
-  }
-  for(const box of scene.items){
-    const verts=boxVertices(box),selected=box.id===state.selectedId;
-    for(const face of boxFaces)if(visible(face,verts,cam))faces.push({points:face.map(i=>project(verts[i])),depth:face.reduce((s,i)=>s+project(verts[i]).depth,0)/face.length,fill:selected?"#f59e0b":"#2563eb",stroke:selected?"#92400e":"#172554"});
-  }
+  const push=(box,base,selected,blocked,markFront)=>{
+    const verts=boxVertices(box);
+    boxFaces.forEach((face,index)=>{
+      if(!visible(face,verts,cam))return;
+      // boxFaces[4] = [2,3,7,6]，两边正是 footprint[2]→[3]，
+      // 也就是局部 +Y 那条边——正面。给家具的正面换个描边色。
+      const front=markFront&&index===4;
+      faces.push({
+        points:face.map(i=>project(verts[i])),
+        depth:face.reduce((s,i)=>s+project(verts[i]).depth,0)/face.length,
+        fill:base,alpha:boxFaceAlpha[index],
+        stroke:blocked?"#dc2626":front?"#047857":(selected?"#b45309":"rgba(30,41,79,.55)"),
+        width:blocked?px(2.4):front?px(2.6):(selected?px(2.4):px(1.2)),
+      });
+    });
+  };
+  for(const obstacle of scene.obstacles)push(obstacle,OBSTACLE,false,false,false);
+  for(const box of scene.items)push(box,FURNITURE,box.id===state.selectedId,box.id===state.blocked,true);
   faces.sort((a,b)=>b.depth-a.depth);
-  for(const face of faces){path(face.points);ctx.fillStyle=face.fill;ctx.fill();ctx.strokeStyle=face.stroke;ctx.lineWidth=2;ctx.stroke()}
-  ctx.font="700 16px Microsoft YaHei, sans-serif";ctx.textAlign="center";ctx.textBaseline="middle";
+  for(const face of faces){
+    path(face.points);
+    ctx.globalAlpha=face.alpha;ctx.fillStyle=face.fill;ctx.fill();ctx.globalAlpha=1;
+    ctx.strokeStyle=face.stroke;ctx.lineWidth=face.width;ctx.stroke();
+  }
+  // 正面也可能背对相机：再在正面那侧的墙脚补一条绿线，任何角度都看得出正面对哪。
+  ctx.strokeStyle="#047857";ctx.lineWidth=px(2.4);ctx.lineCap="round";
+  for(const box of scene.items){
+    const a=project([box.footprint[2][0],box.footprint[2][1],box.z_start]);
+    const b=project([box.footprint[3][0],box.footprint[3][1],box.z_start]);
+    ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+  }
+  ctx.lineCap="butt";
+  ctx.font=`700 ${Math.round(px(15))}px "Microsoft YaHei",system-ui,sans-serif`;
+  ctx.textAlign="center";ctx.textBaseline="middle";
   for(const f of scene.items){
-    const c=[f.footprint.reduce((s,p)=>s+p[0],0)/4,f.footprint.reduce((s,p)=>s+p[1],0)/4,(f.z_start+f.z_end)/2],p=project(c);
-    ctx.lineWidth=4;ctx.strokeStyle="rgba(15,23,42,.9)";ctx.strokeText(f.label,p.x,p.y);ctx.fillStyle="#fff";ctx.fillText(f.label,p.x,p.y);
+    const center=footprintCenter(f),p=project([center[0],center[1],(f.z_start+f.z_end)/2]);
+    ctx.lineWidth=px(4);ctx.strokeStyle="rgba(15,23,42,.72)";ctx.strokeText(f.label,p.x,p.y);
+    ctx.fillStyle="#fff";ctx.fillText(f.label,p.x,p.y);
   }
 }
-function drawHandle(project){
+/* ---------- 净距：到最近邻（或墙）的四向标注 ---------- */
+// 先在同一高度带里、垂直方向有重叠的邻居中找最近的一件；没有才退到墙。
+// 与房间净距（clearances）同一套矩形口径，标注线才好读。
+function boxOf(footprint){
+  const xs=footprint.map(point=>point[0]),ys=footprint.map(point=>point[1]);
+  return{x0:Math.min(...xs),x1:Math.max(...xs),y0:Math.min(...ys),y1:Math.max(...ys)};
+}
+function distancesOf(item){
+  const box=boxOf(item.footprint);
+  const neighbours=[];
+  for(const other of scene.items){
+    if(other.id===item.id)continue;
+    neighbours.push({label:other.label,box:boxOf(other.footprint),z0:other.z_start,z1:other.z_end});
+  }
+  for(const obstacle of scene.obstacles){
+    neighbours.push({label:obstacle.label||"障碍物",box:boxOf(obstacle.footprint),z0:obstacle.z_start,z1:obstacle.z_end});
+  }
+  const result={};
+  for(const dir of ["west","east","north","south"]){
+    const horizontal=dir==="west"||dir==="east";
+    let best=null;
+    for(const other of neighbours){
+      if(!rangesOverlap(item.z_start,item.z_end,other.z0,other.z1))continue;
+      if(horizontal){
+        if(!rangesOverlap(box.y0,box.y1,other.box.y0,other.box.y1))continue;
+      }else{
+        if(!rangesOverlap(box.x0,box.x1,other.box.x0,other.box.x1))continue;
+      }
+      let gap;
+      if(dir==="west"){if(other.box.x1>box.x0+EPSILON_MM)continue;gap=box.x0-other.box.x1}
+      else if(dir==="east"){if(other.box.x0<box.x1-EPSILON_MM)continue;gap=other.box.x0-box.x1}
+      else if(dir==="north"){if(other.box.y1>box.y0+EPSILON_MM)continue;gap=box.y0-other.box.y1}
+      else{if(other.box.y0<box.y1-EPSILON_MM)continue;gap=other.box.y0-box.y1}
+      if(!best||gap<best.gap)best={gap,label:other.label};
+    }
+    const wallGap=dir==="west"?box.x0
+      :dir==="east"?room.width_mm-box.x1
+      :dir==="north"?box.y0
+      :room.depth_mm-box.y1;
+    result[dir]=best&&best.gap<=wallGap+EPSILON_MM?{gap:best.gap,label:best.label}
+      :{gap:wallGap,label:"墙"};
+  }
+  return result;
+}
+function drawDimensions(project){
+  if(!state.dims)return;
   const item=scene.items.find(candidate=>candidate.id===state.selectedId);
-  if(!item){state.handle=null;return}
-  const center=footprintCenter(item),top=project([center[0],center[1],item.z_end]);
-  const handle={x:clamp(top.x,18,W-18),y:clamp(top.y-44,18,H-18)};
+  if(!item)return;
+  const gaps=distancesOf(item),box=boxOf(item.footprint);
+  const midX=(box.x0+box.x1)/2,midY=(box.y0+box.y1)/2;
+  const specs=[
+    [box.x0,midY,box.x0-gaps.west.gap,midY,true],
+    [box.x1,midY,box.x1+gaps.east.gap,midY,true],
+    [midX,box.y0,midX,box.y0-gaps.north.gap,false],
+    [midX,box.y1,midX,box.y1+gaps.south.gap,false],
+  ];
+  const values=[gaps.west,gaps.east,gaps.north,gaps.south];
+  ctx.font=`700 ${Math.round(px(11.5))}px "Microsoft YaHei",system-ui,sans-serif`;
+  ctx.textAlign="center";ctx.textBaseline="middle";
+  specs.forEach((spec,index)=>{
+    const a=project([spec[0],spec[1],0]),b=project([spec[2],spec[3],0]);
+    const vertical=spec[4];
+    ctx.strokeStyle="rgba(124,58,237,.85)";ctx.lineWidth=px(1.4);
+    ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+    const tick=px(4.5);
+    for(const p of [a,b]){
+      ctx.beginPath();
+      if(vertical){ctx.moveTo(p.x,p.y-tick);ctx.lineTo(p.x,p.y+tick)}
+      else{ctx.moveTo(p.x-tick,p.y);ctx.lineTo(p.x+tick,p.y)}
+      ctx.stroke();
+    }
+    const label=String(Math.round(values[index].gap));
+    const lx=(a.x+b.x)/2,ly=(a.y+b.y)/2-px(10);
+    ctx.lineWidth=px(3.5);ctx.strokeStyle="rgba(255,255,255,.95)";
+    ctx.strokeText(label,lx,ly);
+    ctx.fillStyle="#6d28d9";
+    ctx.fillText(label,lx,ly);
+  });
+  drawItemDimensions(project,item);
+}
+// 家具本体的尺寸线：宽 / 深 / 高。都沿局部轴量，所以跟着朝向走，不是量 AABB。
+// 宽深两条朝包络中心让开一段，免得和外圈净距线、本体轮廓叠在一起。
+// 三条都从原点角（局部 0,0）出发，正好成一组坐标框。
+function itemDimensionSpecs(item){
+  const fp=item.footprint,centre=footprintCenter(item);
+  const smaller=Math.min(item.width,item.depth);
+  const inset=Math.min(Math.max(60,Math.min(180,smaller*0.2)),smaller*0.35);
+  const pull=(a,b)=>{
+    const mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2;
+    const length=Math.hypot(centre[0]-mx,centre[1]-my)||1;
+    const ux=(centre[0]-mx)/length,uy=(centre[1]-my)/length;
+    return [[a[0]+ux*inset,a[1]+uy*inset,0],[b[0]+ux*inset,b[1]+uy*inset,0]];
+  };
+  const corner=[fp[0][0],fp[0][1]];
+  return [
+    {label:`宽 ${Math.round(item.width)}`,ends:pull(fp[0],fp[1])},
+    {label:`深 ${Math.round(item.depth)}`,ends:pull(fp[0],fp[3])},
+    {label:`高 ${Math.round(item.height)}`,
+      ends:[[corner[0],corner[1],item.z_start],[corner[0],corner[1],item.z_end]]},
+  ];
+}
+function drawItemDimensions(project,item){
+  ctx.font=`700 ${Math.round(px(11))}px "Microsoft YaHei",system-ui,sans-serif`;
+  ctx.textAlign="center";ctx.textBaseline="middle";
+  const centre=footprintCenter(item);
+  const centreScreen=project([centre[0],centre[1],(item.z_start+item.z_end)/2]);
+  for(const spec of itemDimensionSpecs(item)){
+    const a=project(spec.ends[0]),b=project(spec.ends[1]);
+    const dx=b.x-a.x,dy=b.y-a.y,length=Math.hypot(dx,dy)||1;
+    const nx=-dy/length,ny=dx/length,tick=px(4.5);
+    ctx.strokeStyle="rgba(51,65,85,.9)";ctx.lineWidth=px(1.4);
+    ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(a.x-nx*tick,a.y-ny*tick);ctx.lineTo(a.x+nx*tick,a.y+ny*tick);
+    ctx.moveTo(b.x-nx*tick,b.y-ny*tick);ctx.lineTo(b.x+nx*tick,b.y+ny*tick);
+    ctx.stroke();
+    // 标签往外放（背离本体中心），免得挤在家具名和其他数字上。
+    const mx=(a.x+b.x)/2,my=(a.y+b.y)/2;
+    let ox=mx-centreScreen.x,oy=my-centreScreen.y;
+    const span=Math.hypot(ox,oy)||1;
+    const lx=mx+ox/span*px(11),ly=my+oy/span*px(11);
+    ctx.lineWidth=px(3.5);ctx.strokeStyle="rgba(255,255,255,.95)";ctx.strokeText(spec.label,lx,ly);
+    ctx.fillStyle="#334155";ctx.fillText(spec.label,lx,ly);
+  }
+}
+// 正面方向。约定见 spatial-layout-rules：件局部 X 左→右、Y 后→前，原点在左后下角，
+// 所以局部 +Y 那一侧就是正面（靠墙件背面贴墙、正面朝室内）。转到世界是 (−sinθ, cosθ)。
+function frontVector(item){
+  const rad=(item.placement.rotation_z_deg||0)*Math.PI/180;
+  return [-Math.sin(rad),Math.cos(rad)];
+}
+// 正面朝哪一边，说成人话。方向词的顺序是先东西后南北（西南、东南、东北、西北）。
+function frontCompass(item){
+  const vector=frontVector(item),parts=[];
+  if(vector[0]>0.38)parts.push("东");else if(vector[0]<-0.38)parts.push("西");
+  if(vector[1]>0.38)parts.push("南");else if(vector[1]<-0.38)parts.push("北");
+  return parts.join("")||"—";
+}
+// 正面方向在屏幕上的角度，用来画朝向箭头。
+function headingScreenAngle(item,project,center,height){
+  const vector=frontVector(item);
+  const reach=Math.max(200,room.width_mm*.08);
+  const pivot=project([center[0],center[1],height]);
+  const tip=project([center[0]+vector[0]*reach,center[1]+vector[1]*reach,height]);
+  return Math.atan2(tip.y-pivot.y,tip.x-pivot.x);
+}
+function drawRotateHandle(project){
+  const item=scene.items.find(candidate=>candidate.id===state.selectedId);
+  if(!item){state.handle=null;state.rotateRing=null;return}
+  const center=footprintCenter(item),height=(item.z_start+item.z_end)/2;
+  const pivot=project([center[0],center[1],height]);
+  const top=project([center[0],center[1],item.z_end]);
+  const handle={x:clamp(top.x+px(32),px(20),W-px(20)),y:clamp(top.y-px(48),px(20),H-px(20))};
   state.handle=handle;
-  ctx.strokeStyle="rgba(245,158,11,.85)";ctx.lineWidth=2;
+  // 旋转环：把转轴、刻度和当前朝向都画出来，整圈都是可抓区域。
+  const radius=px(74);
+  state.rotateRing={x:pivot.x,y:pivot.y,radius};
+  ctx.save();
+  ctx.setLineDash([px(3),px(5)]);
+  ctx.strokeStyle="rgba(180,83,9,.34)";ctx.lineWidth=px(1.2);
+  ctx.beginPath();ctx.arc(pivot.x,pivot.y,radius,0,Math.PI*2);ctx.stroke();
+  ctx.setLineDash([]);
+  for(let deg=0;deg<360;deg+=15){
+    const a=deg*Math.PI/180,major=deg%45===0;
+    const inner=radius-(major?px(7):px(4));
+    ctx.strokeStyle=major?"rgba(180,83,9,.5)":"rgba(180,83,9,.26)";
+    ctx.lineWidth=px(1.4);
+    ctx.beginPath();
+    ctx.moveTo(pivot.x+Math.cos(a)*inner,pivot.y+Math.sin(a)*inner);
+    ctx.lineTo(pivot.x+Math.cos(a)*radius,pivot.y+Math.sin(a)*radius);
+    ctx.stroke();
+  }
+  const heading=headingScreenAngle(item,project,center,height);
+  // 朝向箭头指向「正面」，箭头外再标个「前」。
+  const tipX=pivot.x+Math.cos(heading)*radius,tipY=pivot.y+Math.sin(heading)*radius;
+  ctx.strokeStyle="#047857";ctx.lineWidth=px(2.4);
+  ctx.beginPath();ctx.moveTo(pivot.x,pivot.y);ctx.lineTo(tipX,tipY);ctx.stroke();
+  const back=heading+Math.PI;
+  ctx.beginPath();
+  ctx.moveTo(tipX+Math.cos(back-0.42)*px(10),tipY+Math.sin(back-0.42)*px(10));
+  ctx.lineTo(tipX,tipY);
+  ctx.lineTo(tipX+Math.cos(back+0.42)*px(10),tipY+Math.sin(back+0.42)*px(10));
+  ctx.stroke();
+  ctx.restore();
+  const labelX=clamp(tipX+Math.cos(heading)*px(14),px(14),W-px(14));
+  const labelY=clamp(tipY+Math.sin(heading)*px(14),px(14),H-px(14));
+  ctx.font=`700 ${Math.round(px(12.5))}px "Microsoft YaHei",system-ui,sans-serif`;
+  ctx.textAlign="center";ctx.textBaseline="middle";
+  ctx.lineWidth=px(3.5);ctx.strokeStyle="rgba(255,255,255,.95)";ctx.strokeText("前",labelX,labelY);
+  ctx.fillStyle="#047857";ctx.fillText("前",labelX,labelY);
+  ctx.strokeStyle="rgba(180,83,9,.5)";ctx.lineWidth=px(1.6);
+  ctx.setLineDash([px(4),px(4)]);
   ctx.beginPath();ctx.moveTo(top.x,top.y);ctx.lineTo(handle.x,handle.y);ctx.stroke();
-  ctx.beginPath();ctx.arc(handle.x,handle.y,10,0,Math.PI*2);ctx.fillStyle="#f59e0b";ctx.fill();
-  ctx.strokeStyle="#92400e";ctx.lineWidth=2;ctx.stroke();
-  ctx.beginPath();ctx.arc(handle.x,handle.y,4,0,Math.PI*2);ctx.fillStyle="#fff";ctx.fill();
+  ctx.setLineDash([]);
+  ctx.beginPath();ctx.arc(handle.x,handle.y,px(14),0,Math.PI*2);
+  ctx.fillStyle="#f59e0b";ctx.fill();
+  ctx.strokeStyle="#b45309";ctx.lineWidth=px(2);ctx.stroke();
+  ctx.beginPath();ctx.arc(handle.x,handle.y,px(6.5),-Math.PI*.75,Math.PI*.55);
+  ctx.strokeStyle="#fff";ctx.lineWidth=px(2.2);ctx.stroke();
+  if(drag&&drag.kind==="rotate"){
+    // 拖动时就地显示角度，不用去猜吸附到哪了。
+    const label=`${Math.round(normalizeAngle(item.placement.rotation_z_deg||0))}°`;
+    ctx.font=`700 ${Math.round(px(13))}px "Microsoft YaHei",system-ui,sans-serif`;
+    ctx.textAlign="center";ctx.textBaseline="middle";
+    const lx=clamp(handle.x+px(28),px(26),W-px(26)),ly=handle.y-px(16);
+    ctx.lineWidth=px(4);ctx.strokeStyle="rgba(255,255,255,.95)";ctx.strokeText(label,lx,ly);
+    ctx.fillStyle="#b45309";ctx.fillText(label,lx,ly);
+  }
+}
+function drawHeightHandle(project){
+  const item=scene.items.find(candidate=>candidate.id===state.selectedId);
+  if(!item){state.heightHandle=null;return}
+  const center=footprintCenter(item),top=project([center[0],center[1],item.z_end]);
+  const handle={x:clamp(top.x-px(30),px(20),W-px(20)),y:clamp(top.y-px(46),px(20),H-px(20))};
+  state.heightHandle=handle;
+  ctx.strokeStyle="rgba(29,78,216,.5)";ctx.lineWidth=px(1.6);
+  ctx.setLineDash([px(4),px(4)]);
+  ctx.beginPath();ctx.moveTo(top.x,top.y);ctx.lineTo(handle.x,handle.y);ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.beginPath();ctx.arc(handle.x,handle.y,px(12),0,Math.PI*2);
+  ctx.fillStyle="#3b82f6";ctx.fill();
+  ctx.strokeStyle="#1d4ed8";ctx.lineWidth=px(2);ctx.stroke();
+  ctx.strokeStyle="#fff";ctx.lineWidth=px(1.8);
+  ctx.beginPath();
+  ctx.moveTo(handle.x,handle.y-px(6));ctx.lineTo(handle.x,handle.y+px(6));
+  ctx.moveTo(handle.x-px(3.6),handle.y-px(2.4));ctx.lineTo(handle.x,handle.y-px(6));ctx.lineTo(handle.x+px(3.6),handle.y-px(2.4));
+  ctx.moveTo(handle.x-px(3.6),handle.y+px(2.4));ctx.lineTo(handle.x,handle.y+px(6));ctx.lineTo(handle.x+px(3.6),handle.y+px(2.4));
+  ctx.stroke();
 }
 function render(){
-  ctx.clearRect(0,0,W,H);
-  const gradient=ctx.createRadialGradient(W*.5,H*.38,20,W*.5,H*.42,W*.72);gradient.addColorStop(0,"#fff");gradient.addColorStop(1,"#e8eef5");ctx.fillStyle=gradient;ctx.fillRect(0,0,W,H);
-  const cam=camera(),project=projector(cam);drawRoom(project,cam);drawSolids(project,cam);drawHandle(project);
+  ctx.setTransform(1,0,0,1,0,0);
+  const cam=camera(),project=projector(cam);
+  drawBackdrop();
+  drawFloor(project);
+  drawWalls(project,cam);
+  drawShadows(project);
+  drawSolids(project,cam);
+  drawDimensions(project);
+  drawRotateHandle(project);
+  drawHeightHandle(project);
+  syncPanel();
 }
 function pointInPolygon(points,sx,sy){
   let inside=false;
@@ -250,7 +827,7 @@ function hitTest(sx,sy){
     for(const face of boxFaces){
       const points=face.map(index=>project(verts[index]));
       const distance=distanceToPolygon(points,sx,sy);
-      if(distance>HIT_TOLERANCE_PX)continue;
+      if(distance>px(5))continue;
       const faceDepth=points.reduce((sum,point)=>sum+point.depth,0)/points.length;
       if(faceDepth<depth){depth=faceDepth;rank=distance>0?1:0}
     }
@@ -270,30 +847,6 @@ function localFootprint(item,originX,originY,rotationDeg){
     ([x,y])=>[originX+x*cosine-y*sine,originY+x*sine+y*cosine]
   );
 }
-// 旋转会让包络扫出墙体（贴着墙的长柜尤甚）；和拖动一样，平移到最小位移把包络收回房间内。
-function keepInsideRoom(item){
-  const xs=item.footprint.map(point=>point[0]),ys=item.footprint.map(point=>point[1]);
-  const shiftX=clamp(0,-Math.min(...xs),room.width_mm-Math.max(...xs));
-  const shiftY=clamp(0,-Math.min(...ys),room.depth_mm-Math.max(...ys));
-  if(!shiftX&&!shiftY)return;
-  item.placement.origin_x_mm+=shiftX;item.placement.origin_y_mm+=shiftY;
-  item.footprint=item.footprint.map(point=>[point[0]+shiftX,point[1]+shiftY]);
-}
-function reanchorRotation(item,center,rotationDeg){
-  // 墙摆转到原角度就还是墙摆：别因为一点点拖动被吸附回原角，就悄悄脱离墙面。
-  const current=item.placement;
-  if(current.mode==="wall"&&normalizeAngle(rotationDeg)===normalizeAngle(current.rotation_z_deg||0))return;
-  const angle=rotationDeg*Math.PI/180,cosine=Math.cos(angle),sine=Math.sin(angle);
-  const halfWidth=item.width/2,halfDepth=item.depth/2;
-  const originX=center[0]-(halfWidth*cosine-halfDepth*sine);
-  const originY=center[1]-(halfWidth*sine+halfDepth*cosine);
-  const placement=item.placement;
-  // 墙面的旋转由 host_wall 派生，转不动；要旋转就同一次 op 里改成自由摆放。
-  placement.mode="free";placement.host_wall=null;placement.offset_mm=null;
-  placement.origin_x_mm=originX;placement.origin_y_mm=originY;placement.rotation_z_deg=rotationDeg;
-  item.footprint=localFootprint(item,originX,originY,rotationDeg);
-  keepInsideRoom(item);
-}
 // 屏幕角度增大时世界 rotation_z_deg 是增还是减，取决于相机朝向，开机时用一次数值探测定符号。
 function rotationSign(center,height){
   const project=projector(camera()),probe=10*Math.PI/180,radius=Math.max(200,room.width_mm*.1);
@@ -308,89 +861,395 @@ function snapAngle(deg,step){return Math.round(deg/step)*step}
 function normalizeAngle(deg){return ((deg%360)+360)%360}
 function wallSign(wall){return {north:["x",1],east:["y",1],south:["x",-1],west:["y",-1]}[wall]||null}
 function wallNormal(wall){return {north:[0,1],east:[-1,0],south:[0,-1],west:[1,0]}[wall]||null}
-function setStatus(text,isError){status.textContent=text;status.classList.toggle("error",Boolean(isError))}
-const DRAG_THRESHOLD_PX=4;
-const HANDLE_HIT_PX=18;
-const WALL_DETACH_PX=26;
-const HIT_TOLERANCE_PX=5;
+function wallLabel(wall){return {north:"北",east:"东",south:"南",west:"西"}[wall]||wall}
+function openingLabel(kind){return {door:"门",window:"窗"}[kind]||kind}
+function setStatus(text,kind){
+  status.textContent=text;
+  status.classList.toggle("warn",kind==="warn");
+  status.classList.toggle("error",kind==="error");
+}
+function isElevation(){return state.pitch<ELEVATION_MAX_PITCH}
+// 立面视图里屏幕横向对应哪个房间轴（由相机右向量决定），以及正负号。
+function horizontalAxis(){
+  const right=camera().right;
+  const axis=Math.abs(right[0])>=Math.abs(right[1])?0:1;
+  return{axis,sign:right[axis]>=0?1:-1};
+}
 function wallLength(wall){return wall==="north"||wall==="south"?room.width_mm:(wall==="east"||wall==="west"?room.depth_mm:0)}
-function footprintSpan(item,axis){const values=item.footprint.map(point=>axis==="x"?point[0]:point[1]);return Math.max(...values)-Math.min(...values)}
-function clampShift(item,dx,dy){
-  const xs=item.footprint.map(point=>point[0]),ys=item.footprint.map(point=>point[1]);
-  return [
-    clamp(dx,-Math.min(...xs),room.width_mm-Math.max(...xs)),
-    clamp(dy,-Math.min(...ys),room.depth_mm-Math.max(...ys)),
-  ];
+function spanOf(footprint,axis){const values=footprint.map(point=>axis==="x"?point[0]:point[1]);return Math.max(...values)-Math.min(...values)}
+// 落盘取整到整数毫米，所以拖动也在整数毫米上求解：预览 == 落盘值，不会取整后才发现撞上。
+function anchorWallOffset(offset,probe){
+  if(!probe(offset))return offset;
+  for(const step of [1,-1,2,-2])if(!probe(offset+step))return offset+step;
+  return null;
+}
+function anchorFreeCell(x,y,probe){
+  if(!probe(x,y))return[x,y];
+  for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]]){
+    if(!probe(x+dx,y+dy))return[x+dx,y+dy];
+  }
+  return null;
+}
+// 高度：0 到「层高 - 自身高度」之间，且不能和别的东西在高度上撞上。
+function heightProbe(item,footprint){
+  return z=>(z<0||z+item.height>room.height_mm+EPSILON_MM)
+    ?{label:"层高",id:null}
+    :blockerAt(footprint,z,z+item.height,item.id);
+}
+function setItemHeight(item,z){
+  item.placement.origin_z_mm=z;
+  item.z_start=z;item.z_end=z+item.height;
 }
 function applyLocalDrag(item,dx,dy){
   const placement=item.placement;
-  item.footprint=drag.startFootprint.map(point=>[...point]);
   if(placement.mode==="wall"){
     const sign=wallSign(placement.host_wall);
-    if(!sign)return;
-    const along=sign[0]==="x"?dx:dy;
-    const startOffset=drag.startOffset||0;
-    const maxOffset=Math.max(0,wallLength(placement.host_wall)-footprintSpan(item,sign[0]));
-    const nextOffset=clamp(startOffset+along*sign[1],0,maxOffset);
-    const delta=(nextOffset-startOffset)*sign[1];
+    if(!sign)return null;
     const axis=sign[0]==="x"?0:1;
-    placement.offset_mm=nextOffset;
-    item.footprint.forEach(point=>{point[axis]+=delta});
-    return;
+    const maxOffset=Math.max(0,wallLength(placement.host_wall)-spanOf(drag.startFootprint,sign[0]));
+    const at=offset=>drag.startFootprint.map(point=>{
+      const next=[point[0],point[1]];
+      next[axis]+=(offset-drag.startOffset)*sign[1];
+      return next;
+    });
+    const probe=offset=>offset<0||offset>maxOffset
+      ?{label:"墙尽头",id:null}
+      :blockerAt(at(offset),item.z_start,item.z_end,item.id);
+    const start=anchorWallOffset(Math.round(drag.startOffset),probe);
+    if(start===null)return{label:"无处可移",id:null};
+    const along=Math.round(axis===0?dx:dy)*sign[1];
+    const target=clamp(start+along,0,maxOffset);
+    const solved=resolveInteger(start,target,probe);
+    placement.offset_mm=solved.value;
+    item.footprint=at(solved.value);
+    return solved.blocker;
   }
-  const [safeX,safeY]=clampShift(item,dx,dy);
-  placement.origin_x_mm=drag.startOrigin[0]+safeX;
-  placement.origin_y_mm=drag.startOrigin[1]+safeY;
-  item.footprint.forEach(point=>{point[0]+=safeX;point[1]+=safeY});
+  const rotation=placement.rotation_z_deg||0;
+  const at=(x,y)=>localFootprint(item,x,y,rotation);
+  const probe=(x,y)=>blockerAt(at(x,y),item.z_start,item.z_end,item.id);
+  const anchor=anchorFreeCell(Math.round(drag.startOrigin[0]),Math.round(drag.startOrigin[1]),probe);
+  if(!anchor)return{label:"无处可移",id:null};
+  const solvedX=resolveInteger(anchor[0],anchor[0]+Math.round(dx),(x)=>probe(x,anchor[1]));
+  const solvedY=resolveInteger(anchor[1],anchor[1]+Math.round(dy),(y)=>probe(solvedX.value,y));
+  placement.origin_x_mm=solvedX.value;placement.origin_y_mm=solvedY.value;
+  item.footprint=at(solvedX.value,solvedY.value);
+  return solvedX.blocker||solvedY.blocker;
+}
+// 立面视图的拖动：横向走该视图的水平轴，纵向走高度。求解顺序仍是先水平后高度。
+function applyElevationDrag(item,dHoriz,dVert){
+  const placement=item.placement,rotation=placement.rotation_z_deg||0;
+  const baseZ=Math.round(drag.startZ);
+  let blocker=null;
+  if(placement.mode==="wall"){
+    const sign=wallSign(placement.host_wall);
+    const wallAxis=sign?(sign[0]==="x"?0:1):-1;
+    if(sign&&wallAxis===drag.horizontal.axis){
+      const maxOffset=Math.max(0,wallLength(placement.host_wall)-spanOf(drag.startFootprint,sign[0]));
+      const at=offset=>drag.startFootprint.map(point=>{
+        const next=[point[0],point[1]];
+        next[wallAxis]+=(offset-drag.startOffset)*sign[1];
+        return next;
+      });
+      const probe=offset=>offset<0||offset>maxOffset
+        ?{label:"墙尽头",id:null}
+        :heightProbe(item,at(offset))(baseZ);
+      const start=anchorWallOffset(Math.round(drag.startOffset),probe);
+      if(start!==null){
+        const solved=resolveInteger(start,clamp(start+Math.round(dHoriz*drag.horizontal.sign)*sign[1],0,maxOffset),probe);
+        placement.offset_mm=solved.value;
+        item.footprint=at(solved.value);
+        blocker=solved.blocker;
+      }
+    }
+  }else{
+    const at=(x,y)=>localFootprint(item,x,y,rotation);
+    const probe=(x,y)=>heightProbe(item,at(x,y))(baseZ);
+    const anchor=anchorFreeCell(Math.round(drag.startOrigin[0]),Math.round(drag.startOrigin[1]),probe);
+    if(anchor){
+      const want=Math.round(dHoriz*drag.horizontal.sign);
+      const solved=drag.horizontal.axis===0
+        ?resolveInteger(anchor[0],anchor[0]+want,x=>probe(x,anchor[1]))
+        :resolveInteger(anchor[1],anchor[1]+want,y=>probe(anchor[0],y));
+      const nx=drag.horizontal.axis===0?solved.value:anchor[0];
+      const ny=drag.horizontal.axis===1?solved.value:anchor[1];
+      placement.origin_x_mm=nx;placement.origin_y_mm=ny;
+      item.footprint=at(nx,ny);
+      blocker=solved.blocker;
+    }
+  }
+  const zSolved=resolveInteger(baseZ,baseZ+Math.round(dVert),heightProbe(item,item.footprint));
+  setItemHeight(item,zSolved.value);
+  return blocker||zSolved.blocker;
+}
+// 旋转同样先算出候选包络、撞了就整帧不落地（停在上一格），不会穿过去再回弹。
+function applyRotation(item,center,rotationDeg){
+  const current=item.placement;
+  const target=Math.round(normalizeAngle(rotationDeg)*10)/10;
+  // 墙摆转到原角度就还是墙摆：别因为一点点拖动被吸附回原角，就悄悄脱离墙面。
+  if(current.mode==="wall"&&normalizeAngle(target)===normalizeAngle(current.rotation_z_deg||0)){
+    return{applied:false,blocker:null};
+  }
+  const angle=target*Math.PI/180,cosine=Math.cos(angle),sine=Math.sin(angle);
+  const halfWidth=item.width/2,halfDepth=item.depth/2;
+  let originX=Math.round(center[0]-(halfWidth*cosine-halfDepth*sine));
+  let originY=Math.round(center[1]-(halfWidth*sine+halfDepth*cosine));
+  let footprint=localFootprint(item,originX,originY,target);
+  // 旋转会让包络扫出墙体（贴着墙的长柜尤甚）：按最小位移收回房间内，向外取整免得又出界。
+  const xs=footprint.map(point=>point[0]),ys=footprint.map(point=>point[1]);
+  const shiftX=clamp(0,-Math.min(...xs),room.width_mm-Math.max(...xs));
+  const shiftY=clamp(0,-Math.min(...ys),room.depth_mm-Math.max(...ys));
+  if(shiftX||shiftY){
+    originX+=shiftX>0?Math.ceil(shiftX):Math.floor(shiftX);
+    originY+=shiftY>0?Math.ceil(shiftY):Math.floor(shiftY);
+    footprint=localFootprint(item,originX,originY,target);
+  }
+  const blocker=blockerAt(footprint,item.z_start,item.z_end,item.id);
+  if(blocker)return{applied:false,blocker};
+  const placement=item.placement;
+  // 墙面的旋转由 host_wall 派生，转不动；要旋转就同一次 op 里改成自由摆放。
+  placement.mode="free";placement.host_wall=null;placement.offset_mm=null;
+  placement.origin_x_mm=originX;placement.origin_y_mm=originY;placement.rotation_z_deg=target;
+  item.footprint=footprint;
+  return{applied:true,blocker:null};
 }
 // 墙摆只有一个自由度（沿墙 offset）；把家具往房间内拖够远就转成自由摆放，
 // 用当前派生原点当自由原点，位置不跳。
 function detachToFree(activeDrag){
   const placement=activeDrag.item.placement;
   placement.mode="free";placement.host_wall=null;placement.offset_mm=null;
-  placement.origin_x_mm=activeDrag.startOrigin[0];
-  placement.origin_y_mm=activeDrag.startOrigin[1];
+  placement.origin_x_mm=Math.round(activeDrag.startOrigin[0]);
+  placement.origin_y_mm=Math.round(activeDrag.startOrigin[1]);
   placement.rotation_z_deg=placement.rotation_z_deg||0;
-  activeDrag.item.footprint=activeDrag.startFootprint.map(point=>[...point]);
-  setStatus(`${activeDrag.item.label} 已离开墙面，改为自由摆放`);
+  activeDrag.item.footprint=localFootprint(activeDrag.item,placement.origin_x_mm,placement.origin_y_mm,placement.rotation_z_deg);
+  setStatus(`${activeDrag.item.label} 已离开墙面，改为自由摆放`,"warn");
 }
 function selectHint(item){
   return item.placement.mode==="wall"
-    ?`已选中 ${item.label}：沿墙拖动，向外拖可离开墙面，拖圆点可旋转`
-    :`已选中 ${item.label}：拖动可移动，拖圆点可旋转`;
+    ?`已选中 ${item.label}：沿墙拖动，向外拖可离开墙面`
+    :`已选中 ${item.label}：拖动可移动`;
 }
-function handleAt(sx,sy){
-  const handle=state.handle;
+function handleAt(sx,sy,handle){
   if(!handle)return null;
-  if(Math.hypot(handle.x-sx,handle.y-sy)>HANDLE_HIT_PX)return null;
+  if(Math.hypot(handle.x-sx,handle.y-sy)>px(22))return null;
   return scene.items.find(item=>item.id===state.selectedId)||null;
 }
+// 旋转环也整圈可抓：比一个小圆点好点太多。
+function ringAt(sx,sy){
+  const ring=state.rotateRing;
+  if(!ring)return null;
+  const distance=Math.hypot(sx-ring.x,sy-ring.y);
+  if(Math.abs(distance-ring.radius)>px(14))return null;
+  return scene.items.find(item=>item.id===state.selectedId)||null;
+}
+const escapeHtml=value=>String(value).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
+// 侧栏列表只在结构变化时重建。
+let panelSignature=null;
+function syncPanel(){
+  const signature=scene.items.map(item=>`${item.id}:${item.label}:${item.placement.mode}`).join("|")+"#"+state.selectedId;
+  const list=document.getElementById("item-list");
+  if(list&&signature!==panelSignature){
+    panelSignature=signature;
+    list.innerHTML=scene.items.map(item=>`<li><button type="button" class="item-row${item.id===state.selectedId?" active":""}" data-item="${escapeHtml(item.id)}">
+      <span class="dot"></span><span class="name">${escapeHtml(item.label)}</span>
+      <span class="mode">${item.placement.mode==="wall"?"靠墙":"自由"}</span></button></li>`).join("");
+  }
+  syncDetail();
+}
+// 详情面板要显示的数值。单独拆出来，好让它能被直接测（DOM 那层只是把值填进去）。
+function detailValues(item){
+  const gaps=distancesOf(item);
+  const round=n=>Math.round(n);
+  return {
+    mode:item.placement.mode==="wall"?"靠墙":"自由",
+    position:item.placement.mode==="wall"
+      ?`沿${wallLabel(item.placement.host_wall)}墙 ${round(item.placement.offset_mm)} mm`
+      :`X ${round(item.placement.origin_x_mm)} · Y ${round(item.placement.origin_y_mm)} mm`,
+    rotation:round(normalizeAngle(item.placement.rotation_z_deg||0)),
+    front:`前朝${frontCompass(item)}`,
+    height:round(item.z_start),
+    ceiling:round(room.height_mm-item.z_end),
+    gaps:{west:round(gaps.west.gap),east:round(gaps.east.gap),
+      north:round(gaps.north.gap),south:round(gaps.south.gap)},
+    who:{west:gaps.west.label,east:gaps.east.label,
+      north:gaps.north.label,south:gaps.south.label},
+  };
+}
+function detailMarkup(item){
+  const round=n=>Math.round(n);
+  // 输入框一律 step=1：原生上下箭头按 1 走，不会「先吸附到 10 的整数倍」——
+  // 那是 HTML 规范里 type=number 微调按钮的行为（基准 0、step=10 时 192 → 200）。
+  // 粗调用旁边的 − / ＋：净距 10、离地 50、朝向 15，点一下就是正好加这么多。
+  const gapRow=(label,key)=>`<dt>${label}</dt><dd><button type="button" class="step" data-gap-step="${key}" data-delta="-10" aria-label="${label}减 10">−</button><input class="num" type="number" step="1" data-gap="${key}" aria-label="${label}"><button type="button" class="step" data-gap-step="${key}" data-delta="10" aria-label="${label}加 10">＋</button><span class="who" data-who="${key}"></span></dd>`;
+  return `<dl class="detail">
+    <dt>名称</dt><dd>${escapeHtml(item.label)}</dd>
+    <dt>尺寸</dt><dd>${round(item.width)}×${round(item.depth)}×${round(item.height)}</dd>
+    <dt>摆放</dt><dd data-field="mode"></dd>
+    <dt>位置</dt><dd data-field="position"></dd>
+    <dt>朝向</dt><dd><button type="button" class="step" data-rotation-step data-delta="-15" aria-label="逆时针 15°">−</button><input class="num" type="number" step="1" data-rotation data-field="rotation" aria-label="朝向角度"><button type="button" class="step" data-rotation-step data-delta="15" aria-label="顺时针 15°">＋</button><span class="who">°</span><span class="who" data-front></span></dd>
+    <dt>离地</dt><dd><button type="button" class="step" data-height="-50" aria-label="降低 50">−</button><input class="num" type="number" step="1" data-height-input data-field="height" aria-label="离地高度"><button type="button" class="step" data-height="50" aria-label="升高 50">＋</button><span class="who">mm</span></dd>
+    <dt>离顶</dt><dd><span data-field="ceiling"></span> mm</dd>
+    ${gapRow("西距","west")}${gapRow("东距","east")}${gapRow("北距","north")}${gapRow("南距","south")}
+  </dl>
+  <p class="hint-inline">可以直接输入任意毫米值，回车生效。输入框的上下箭头走 1；旁边的 − / ＋ 走整数档（净距 10 · 离地 50 · 朝向 15）。到不了就只挪到能到的地方，并在左下角说明被谁挡住。</p>`;
+}
+// 只在换选中件时才重建 DOM，之后一律就地改值。
+// 早先的做法是「焦点在面板里就整块不刷新」，结果点了 −/＋ 之后数字不跟着动，
+// 改一边的净距另一边也不动——都是同一个毛病。
+let detailItemId;
+function syncDetail(){
+  const detail=document.getElementById("detail");
+  if(!detail)return;
+  const item=scene.items.find(candidate=>candidate.id===state.selectedId);
+  if(!item){
+    if(detailItemId!==null){detailItemId=null;detail.innerHTML='<p class="empty">未选中任何家具</p>'}
+    return;
+  }
+  if(detailItemId!==item.id){
+    detailItemId=item.id;
+    detail.innerHTML=detailMarkup(item);
+  }
+  applyDetailValues(detail,item,false);
+}
+// 就地刷新数值：正在输入的框不动（免得打断打字），其余（含东距/西距这种此消彼长的）
+// 立刻跟着变。force=true 用于一次输入落定之后，把输入框校正成实际达到的值。
+function applyDetailValues(detail,item,force){
+  if(!detail.querySelector)return;
+  const values=detailValues(item);
+  const active=document.activeElement;
+  const set=(selector,value)=>{
+    const element=detail.querySelector(selector);
+    if(!element)return;
+    if(element===active&&!force)return;
+    if(element.tagName==="INPUT")element.value=String(value);
+    else element.textContent=String(value);
+  };
+  set('[data-field="mode"]',values.mode);
+  set('[data-field="position"]',values.position);
+  set('[data-field="rotation"]',values.rotation);
+  set('[data-front]',values.front);
+  set('[data-field="height"]',values.height);
+  set('[data-field="ceiling"]',values.ceiling);
+  for(const key of ["west","east","north","south"]){
+    set(`[data-gap="${key}"]`,values.gaps[key]);
+    set(`[data-who="${key}"]`,values.who[key]);
+  }
+}
+function selectItem(id){
+  state.selectedId=id;state.blocked=null;
+  const item=scene.items.find(candidate=>candidate.id===id);
+  setStatus(item?selectHint(item):"点击一件家具开始");
+  render();
+}
+function nudgeHeight(item,delta){
+  const base=Math.round(item.placement.origin_z_mm||0);
+  const solved=resolveInteger(base,base+delta,heightProbe(item,item.footprint));
+  if(solved.value===base){setStatus(`离地高度已经是 ${base} mm，${delta>0?"再高":"再低"}就被挡住了`,"warn");return}
+  setItemHeight(item,solved.value);
+  render();
+  persist(item,"move").then(()=>{render()});
+}
+// 借用拖动那套求解器：临时装一个 drag 上下文，求解完还原。
+// 手动输入和拖动因此走的是同一条路径，不会出现「输入能到、拖动不能到」。
+function withDragContext(item,run){
+  const saved=drag;
+  drag={item,startOrigin:[item.placement.origin_x_mm||0,item.placement.origin_y_mm||0],
+    startOffset:item.placement.offset_mm||0,startZ:item.placement.origin_z_mm||0,
+    startFootprint:item.footprint.map(point=>[...point])};
+  try{return run()}finally{drag=saved}
+}
+// 手动填某一边的净距：把包络移到「挡它的那面 + 输入值」，照样过碰撞求解，
+// 所以只会停在到得了的地方，不会把家具塞进邻居里。
+function setGap(item,direction,value){
+  const gap=distancesOf(item)[direction];
+  const horizontal=direction==="west"||direction==="east";
+  const sign=(direction==="west"||direction==="north")?1:-1;
+  const delta=Math.round(sign*(value-gap.gap));
+  if(!delta)return;
+  if(item.placement.mode==="wall"){
+    const wsign=wallSign(item.placement.host_wall);
+    const wallAxis=wsign?(wsign[0]==="x"?0:1):-1;
+    if((horizontal?0:1)!==wallAxis){
+      setStatus("靠墙件只能改沿墙方向的距离；要改进深方向请先把它拖离墙面","warn");
+      return;
+    }
+  }
+  const blocker=withDragContext(item,()=>applyLocalDrag(item,horizontal?delta:0,horizontal?0:delta));
+  render();
+  const reached=Math.round(distancesOf(item)[direction].gap);
+  if(blocker&&reached!==Math.round(value)){
+    setStatus(`只挪到 ${reached} mm：被 ${blocker.label} 挡住`,"warn");
+  }
+  persist(item,"move").then(()=>{render()});
+}
+function setRotationValue(item,degrees){
+  const result=applyRotation(item,footprintCenter(item),degrees);
+  render();
+  if(!result.applied){
+    if(result.blocker)setStatus(result.blocker.label==="房间边界"
+      ?"转不过去：包络会扫出房间"
+      :`转不过去：会撞上 ${result.blocker.label}`,"warn");
+    return;
+  }
+  persist(item,"rotate").then(()=>{render()});
+}
+function setHeightValue(item,value){
+  const base=Math.round(item.placement.origin_z_mm||0),target=Math.round(value);
+  const solved=resolveInteger(base,target,heightProbe(item,item.footprint));
+  setItemHeight(item,solved.value);
+  render();
+  if(solved.value===base){
+    if(solved.value!==target)setStatus(`改不了：${solved.blocker?solved.blocker.label+" 挡着":"超出可放范围"}`,"warn");
+    return;
+  }
+  if(solved.value!==target)setStatus(`只到 ${solved.value} mm：${solved.blocker?solved.blocker.label+" 挡住":"超出可放范围"}`,"warn");
+  persist(item,"move").then(()=>{render()});
+}
 let drag=null;
+// 平移视图：右键 / 中键拖，或空白处 Shift+左键拖。只动视图中心，不发任何 op。
+function startPan(event){
+  state.panning=true;state.adjusted=true;
+  state.lastX=event.clientX;state.lastY=event.clientY;
+  canvas.classList.add("panning");
+  canvas.setPointerCapture(event.pointerId);
+}
 canvas.addEventListener("pointerdown",event=>{
-  const [sx,sy]=screenPoint(event),ground=unprojectToGround(sx,sy);
-  const handleItem=handleAt(sx,sy);
-  if(handleItem){
-    const center=footprintCenter(handleItem),height=(handleItem.z_start+handleItem.z_end)/2;
-    const origin=projector(camera())([center[0],center[1],height]);
-    const startAngle=Math.atan2(sy-origin.y,sx-origin.x)*180/Math.PI;
-    drag={kind:"rotate",item:handleItem,center,height,origin,startAngle,lastAngle:startAngle,
-      accumulated:0,moved:false,startScreen:[sx,sy],
-      startRotation:handleItem.placement.rotation_z_deg||0,startMode:handleItem.placement.mode,
-      sign:rotationSign(center,height)};
+  const [sx,sy]=screenPoint(event);
+  // 右键 / 中键一律平移（多数三维软件的习惯），不看下面压着什么。
+  if(event.button===1||event.button===2){startPan(event);return}
+  const heightItem=handleAt(sx,sy,state.heightHandle);
+  if(heightItem){
+    drag={kind:"height",item:heightItem,startScreen:[sx,sy],moved:false,
+      startZ:heightItem.placement.origin_z_mm||0};
     canvas.classList.add("moving");
-    setStatus(`旋转 ${handleItem.label}…`);
+    setStatus(`离地高度 ${Math.round(heightItem.z_start)} mm`);
     canvas.setPointerCapture(event.pointerId);
     return;
   }
+  const rotateItem=ringAt(sx,sy)||handleAt(sx,sy,state.handle);
+  if(rotateItem){
+    const center=footprintCenter(rotateItem),height=(rotateItem.z_start+rotateItem.z_end)/2;
+    const origin=projector(camera())([center[0],center[1],height]);
+    const startAngle=Math.atan2(sy-origin.y,sx-origin.x)*180/Math.PI;
+    drag={kind:"rotate",item:rotateItem,center,height,origin,startAngle,lastAngle:startAngle,
+      accumulated:0,moved:false,startScreen:[sx,sy],
+      startRotation:rotateItem.placement.rotation_z_deg||0,startMode:rotateItem.placement.mode,
+      sign:rotationSign(center,height)};
+    canvas.classList.add("moving");
+    setStatus(`旋转 ${rotateItem.label}…`);
+    canvas.setPointerCapture(event.pointerId);
+    return;
+  }
+  const ground=unprojectToGround(sx,sy);
   const hit=hitTest(sx,sy);
-  if(hit&&ground){
+  if(hit&&(ground||isElevation())){
     const placement=hit.placement;
-    state.selectedId=hit.id;
+    state.selectedId=hit.id;state.blocked=null;
     drag={kind:"move",item:hit,ground,startScreen:[sx,sy],moved:false,
       startOrigin:[placement.origin_x_mm||0,placement.origin_y_mm||0],
-      startOffset:placement.offset_mm,
+      startOffset:placement.offset_mm||0,startZ:placement.origin_z_mm||0,
+      horizontal:horizontalAxis(),elevation:isElevation(),
       startFootprint:hit.footprint.map(point=>[...point])};
-    if(placement.mode==="wall"){
+    if(placement.mode==="wall"&&!drag.elevation){
       const normal=wallNormal(placement.host_wall),project=projector(camera()),center=footprintCenter(hit);
       if(normal){
         const from=project([center[0],center[1],0]);
@@ -405,17 +1264,37 @@ canvas.addEventListener("pointerdown",event=>{
     canvas.setPointerCapture(event.pointerId);
     return;
   }
-  state.selectedId=null;
+  // 空白处 Shift+左键 = 平移；普通左键仍是转视角。家具/手柄优先，所以放在它们之后。
+  if(event.shiftKey){startPan(event);return}
+  state.selectedId=null;state.blocked=null;
   state.orbiting=true;state.lastX=event.clientX;state.lastY=event.clientY;
   canvas.classList.add("orbiting");canvas.setPointerCapture(event.pointerId);
   render();
 });
 canvas.addEventListener("pointermove",event=>{
+  if(state.panning){
+    const dx=event.clientX-state.lastX,dy=event.clientY-state.lastY;
+    state.lastX=event.clientX;state.lastY=event.clientY;
+    panBy(dx,dy);render();
+    return;
+  }
   if(drag){
     const [sx,sy]=screenPoint(event);
     if(!drag.moved){
-      if(Math.hypot(sx-drag.startScreen[0],sy-drag.startScreen[1])<DRAG_THRESHOLD_PX)return;
+      if(Math.hypot(sx-drag.startScreen[0],sy-drag.startScreen[1])<px(4))return;
       drag.moved=true;
+    }
+    if(drag.kind==="height"){
+      const scale=verticalPlaneScale([...footprintCenter(drag.item),(drag.item.z_start+drag.item.z_end)/2]);
+      const wanted=Math.round(-(sy-drag.startScreen[1])*scale/(camera().up[2]||1));
+      const base=Math.round(drag.startZ);
+      const solved=resolveInteger(base,base+wanted,heightProbe(drag.item,drag.item.footprint));
+      setItemHeight(drag.item,solved.value);
+      setStatus(solved.blocker&&solved.value!==base
+        ?`离地高度 ${solved.value} mm（已抵住 ${solved.blocker.label}）`
+        :`离地高度 ${solved.value} mm`);
+      render();
+      return;
     }
     if(drag.kind==="rotate"){
       const angle=Math.atan2(sy-drag.origin.y,sx-drag.origin.x)*180/Math.PI;
@@ -424,20 +1303,40 @@ canvas.addEventListener("pointermove",event=>{
       if(delta<-180)delta+=360;
       drag.accumulated+=delta;drag.lastAngle=angle;
       const next=snapAngle(drag.startRotation+drag.sign*drag.accumulated,event.shiftKey?1:15);
-      reanchorRotation(drag.item,drag.center,next);
-      setStatus(`旋转 ${drag.item.label}：${Math.round(normalizeAngle(next))}°${event.shiftKey?"（精细）":""}`);
+      const result=applyRotation(drag.item,drag.center,next);
+      if(result.applied){
+        state.blocked=null;
+        setStatus(`旋转 ${drag.item.label}：${Math.round(normalizeAngle(drag.item.placement.rotation_z_deg))}°${event.shiftKey?"（精细 1°）":""}`);
+      }else if(result.blocker){
+        state.blocked=result.blocker.id;
+        setStatus(result.blocker.label==="房间边界"
+          ?"转不过去：包络会扫出房间"
+          :`转不过去：会撞上 ${result.blocker.label}`,"warn");
+      }
+      render();
+      return;
+    }
+    if(drag.elevation){
+      const scale=verticalPlaneScale([...footprintCenter(drag.item),(drag.item.z_start+drag.item.z_end)/2]);
+      const blocker=applyElevationDrag(drag.item,(sx-drag.startScreen[0])*scale,-(sy-drag.startScreen[1])*scale);
+      state.blocked=blocker?blocker.id:null;
+      setStatus(blocker
+        ?`已抵住 ${blocker.label}，最多贴到接触`
+        :`${drag.item.label}：离地 ${Math.round(drag.item.z_start)} mm`);
       render();
       return;
     }
     if(drag.item.placement.mode==="wall"&&drag.perpScreen){
       const away=(sx-drag.startScreen[0])*drag.perpScreen.x+(sy-drag.startScreen[1])*drag.perpScreen.y;
-      if(away>WALL_DETACH_PX)detachToFree(drag);
+      if(away>px(26))detachToFree(drag);
     }
     const ground=unprojectToGround(sx,sy);
     if(!ground)return;
     const moveX=ground[0]-drag.ground[0],moveY=ground[1]-drag.ground[1];
-    applyLocalDrag(drag.item,moveX,moveY);
-    setStatus(`拖动 ${drag.item.label}… 位移 ${Math.hypot(moveX,moveY).toFixed(0)}mm`);
+    const blocker=applyLocalDrag(drag.item,moveX,moveY);
+    state.blocked=blocker?blocker.id:null;
+    if(blocker)setStatus(`已抵住 ${blocker.label}，最多贴到接触`,"warn");
+    else setStatus(`拖动 ${drag.item.label}… 位移 ${Math.round(Math.hypot(moveX,moveY))} mm`);
     render();
     return;
   }
@@ -458,11 +1357,13 @@ async function persist(item,kind){
   if(kind==="rotate")op.rotation_z_deg=Math.round(normalizeAngle(placement.rotation_z_deg)*10)/10;
   if(placement.mode==="wall"){op.offset_mm=Math.round(placement.offset_mm)}
   else{op.mode="free";op.origin_x_mm=Math.round(placement.origin_x_mm);op.origin_y_mm=Math.round(placement.origin_y_mm)}
+  // origin_z_mm 是 move 的共享字段，平面移动时顺带带上也不会互相干扰。
+  if(kind!=="rotate")op.origin_z_mm=Math.round(placement.origin_z_mm||0);
   try{
     const response=await fetch(`/api/room-scene/${encodeURIComponent(SCENE_ID)}/edit`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(op)});
     if(!response.ok){
       const detail=await response.json().catch(()=>({}));
-      setStatus("改动被拒绝，已回到原位："+(detail.detail||response.status),true);
+      setStatus("改动被拒绝，已回到原位："+(detail.detail||response.status),"error");
       await reload();
       return false;
     }
@@ -471,19 +1372,25 @@ async function persist(item,kind){
     setStatus(`已保存 ${item.label}`);
     return true;
   }catch(error){
-    setStatus("保存失败："+error,true);
+    setStatus("保存失败："+error,"error");
     await reload();
     return false;
   }
 }
 canvas.addEventListener("pointerup",event=>{
+  if(state.panning){
+    state.panning=false;canvas.classList.remove("panning");
+    canvas.releasePointerCapture(event.pointerId);
+    return;
+  }
   if(drag){
     const item=drag.item,moved=drag.moved,kind=drag.kind;
-    // 吸附回原角度的旋转不产生 op：否则会把墙摆包成 mode=free + offset_mm 的非法 op。
+    // 没实际改动就不产生 op：吸附回原角度的旋转、没动过的高度都不要发。
     const unchanged=kind==="rotate"
-      &&item.placement.rotation_z_deg===drag.startRotation
-      &&item.placement.mode===drag.startMode;
-    drag=null;canvas.classList.remove("moving");
+      ?(item.placement.rotation_z_deg===drag.startRotation&&item.placement.mode===drag.startMode)
+      :kind==="height"?Math.round(item.placement.origin_z_mm||0)===Math.round(drag.startZ)
+      :false;
+    drag=null;state.blocked=null;canvas.classList.remove("moving");
     canvas.releasePointerCapture(event.pointerId);
     if(moved&&!unchanged){persist(item,kind).then(()=>{render()})}
     else{setStatus(selectHint(item));render()}
@@ -491,16 +1398,133 @@ canvas.addEventListener("pointerup",event=>{
   }
   if(state.orbiting){state.orbiting=false;canvas.classList.remove("orbiting");canvas.releasePointerCapture(event.pointerId)}
 });
-canvas.addEventListener("pointercancel",()=>{drag=null;state.orbiting=false;canvas.classList.remove("moving","orbiting")});
-canvas.addEventListener("wheel",event=>{event.preventDefault();state.distance=clamp(state.distance*Math.exp(event.deltaY*.001),diagonal*.72,diagonal*3.4);render()},{passive:false});
-function setView(name){
-  if(name==="reset"||name==="perspective")Object.assign(state,defaults);
-  if(name==="top")Object.assign(state,{yaw:-Math.PI/2,pitch:1.48,distance:diagonal*1.82});
-  document.querySelectorAll("[data-view]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.view===name)));
+canvas.addEventListener("pointercancel",()=>{drag=null;state.blocked=null;state.panning=false;canvas.classList.remove("moving","orbiting","panning")});
+// 右键要用来平移，别弹系统菜单。
+canvas.addEventListener("contextmenu",event=>event.preventDefault());
+canvas.addEventListener("wheel",event=>{event.preventDefault();cancelFrame(viewAnimation);viewAnimation=0;state.adjusted=true;state.distance=clamp(state.distance*Math.exp(event.deltaY*.001),diagonal*.4,diagonal*3.4);render()},{passive:false});
+window.addEventListener("keydown",event=>{
+  if(event.key==="Escape")selectItem(null);
+  const item=scene.items.find(candidate=>candidate.id===state.selectedId);
+  if(!item)return;
+  if(event.key==="PageUp"){event.preventDefault();nudgeHeight(item,50)}
+  if(event.key==="PageDown"){event.preventDefault();nudgeHeight(item,-50)}
+});
+window.addEventListener("resize",()=>{
+  fitCanvas();
+  if(!viewAnimation&&!state.adjusted)state.distance=fitDistance(state.pitch,state.yaw);
   render();
+});
+const nextFrame=typeof requestAnimationFrame==="function"
+  ?requestAnimationFrame
+  :callback=>setTimeout(()=>callback(Date.now()),16);
+const cancelFrame=typeof cancelAnimationFrame==="function"?cancelAnimationFrame:clearTimeout;
+let viewAnimation=0;
+// 切视角做个短过渡：只插值 yaw/pitch/distance 和视图中心，500ms 内跑完就停，
+// 不留常驻动画循环，所以只有切换那一瞬间在重画。系统开了「减少动态效果」就直接跳到位。
+function animateView(goal,duration){
+  cancelFrame(viewAnimation);viewAnimation=0;
+  const reduce=typeof matchMedia==="function"&&matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const from={yaw:state.yaw,pitch:state.pitch,distance:state.distance,
+    centre:[target[0],target[1],target[2]]};
+  const to=goal.target||from.centre;
+  if(reduce||duration<=0){
+    state.yaw=goal.yaw;state.pitch=goal.pitch;state.distance=goal.distance;
+    for(let i=0;i<3;i++)target[i]=to[i];
+    render();return;
+  }
+  let deltaYaw=goal.yaw-from.yaw;
+  while(deltaYaw>Math.PI)deltaYaw-=Math.PI*2;
+  while(deltaYaw<-Math.PI)deltaYaw+=Math.PI*2;
+  const started=Date.now();
+  const ease=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
+  const step=()=>{
+    const t=Math.min(1,(Date.now()-started)/duration),k=ease(t);
+    state.yaw=from.yaw+deltaYaw*k;
+    state.pitch=from.pitch+(goal.pitch-from.pitch)*k;
+    state.distance=from.distance+(goal.distance-from.distance)*k;
+    for(let i=0;i<3;i++)target[i]=from.centre[i]+(to[i]-from.centre[i])*k;
+    render();
+    viewAnimation=t<1?nextFrame(step):0;
+  };
+  viewAnimation=nextFrame(step);
+}
+function setView(name){
+  const key=name==="reset"?"perspective":name;
+  const preset=VIEWS[key];
+  if(!preset)return;
+  state.adjusted=false;
+  document.querySelectorAll("[data-view]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.view===name)));
+  // 取景按房间中心算，然后连中心一起动画回去——平移过的视角也能干净复位。
+  const distance=withHomeCentre(()=>fitDistance(preset.pitch,preset.yaw))*
+    (preset.pitch<ELEVATION_MAX_PITCH?1.04:1);
+  animateView({yaw:preset.yaw,pitch:preset.pitch,distance,target:HOME_TARGET},500);
 }
 document.querySelectorAll("[data-view]").forEach(button=>button.addEventListener("click",()=>setView(button.dataset.view)));
+const dimsButton=document.getElementById("toggle-dims");
+if(dimsButton){
+  dimsButton.addEventListener("click",()=>{
+    state.dims=!state.dims;
+    dimsButton.setAttribute("aria-pressed",String(state.dims));
+    render();
+  });
+}
+const itemList=document.getElementById("item-list");
+if(itemList&&itemList.addEventListener){
+  itemList.addEventListener("click",event=>{
+    const target=event.target;
+    const button=target&&target.closest?target.closest("[data-item]"):null;
+    if(button)selectItem(button.dataset.item);
+  });
+}
+const detailBox=document.getElementById("detail");
+if(detailBox&&detailBox.addEventListener){
+  detailBox.addEventListener("click",event=>{
+    const target=event.target;
+    const button=target&&target.closest?target.closest("button"):null;
+    if(!button)return;
+    const item=scene.items.find(candidate=>candidate.id===state.selectedId);
+    if(!item)return;
+    if(button.dataset.height!==undefined)nudgeHeight(item,Number(button.dataset.height));
+    else if(button.dataset.gapStep)setGap(item,button.dataset.gapStep,
+      distancesOf(item)[button.dataset.gapStep].gap+Number(button.dataset.delta));
+    else if(button.dataset.rotationStep!==undefined)setRotationValue(item,
+      Math.round(normalizeAngle(item.placement.rotation_z_deg||0))+Number(button.dataset.delta));
+    else return;
+    applyDetailValues(detailBox,item,true);
+  });
+  detailBox.addEventListener("change",event=>{
+    const input=event.target;
+    if(!input||!input.dataset)return;
+    const item=scene.items.find(candidate=>candidate.id===state.selectedId);
+    if(!item)return;
+    const value=Number(input.value);
+    if(!Number.isFinite(value))return;
+    if(input.dataset.gap)setGap(item,input.dataset.gap,value);
+    else if(input.dataset.rotation!==undefined)setRotationValue(item,value);
+    else if(input.dataset.heightInput!==undefined)setHeightValue(item,value);
+    else return;
+    // 落定后把输入框校正到实际达到的值（可能因为被挡住而不等于输入）
+    applyDetailValues(detailBox,item,true);
+  });
+}
+const roomMeta=document.getElementById("room-meta");
+if(roomMeta){
+  roomMeta.textContent=[`${Math.round(room.width_mm)} × ${Math.round(room.depth_mm)} × ${Math.round(room.height_mm)} mm`,
+    `${scene.items.length} 件家具`].join(" · ");
+}
+fitCanvas();
+const defaults={yaw:DEFAULT_YAW,pitch:DEFAULT_PITCH,distance:fitDistance(DEFAULT_PITCH,DEFAULT_YAW)};
+const state={...defaults,orbiting:false,panning:false,lastX:0,lastY:0,active:"perspective",selectedId:null,
+  handle:null,heightHandle:null,rotateRing:null,blocked:null,adjusted:false,dims:true};
 render();
+// 深链：#view=front&item=desk 直接打开某个视角并选中某件，方便分享/复现。
+if(typeof location!=="undefined"&&location.hash.length>1){
+  const params=new URLSearchParams(location.hash.slice(1));
+  const view=params.get("view");
+  if(view&&VIEWS[view])setView(view);
+  const wanted=params.get("item");
+  if(wanted&&scene.items.some(candidate=>candidate.id===wanted))selectItem(wanted);
+}
 })();
 </script>
 </body>
