@@ -96,6 +96,15 @@ class CadBridgeTests(unittest.TestCase):
             Path("cabinet.step"),
         )
 
+    def test_generation_env_uses_venv_cadgen_not_checkout_src(self) -> None:
+        module = load_adapter_module()
+        bridge = module.CadBridge(workspace_root=WORKSPACE_ROOT)
+        env = bridge._generation_env(Path("cache"))
+        pythonpath = env.get("PYTHONPATH", "").replace("\\", "/")
+        self.assertNotIn("external/text-to-cad/packages/cadgen/src", pythonpath)
+        self.assertEqual(env.get("CADGEN_DAEMON"), "0")
+        self.assertEqual(env.get("CADGEN_CACHE_DIR"), "cache")
+
     def test_real_default_gen_entrypoint_generates_current_artifacts(self) -> None:
         module = load_adapter_module()
         cad_source_root = WORKSPACE_ROOT / "temp" / "cad-source"

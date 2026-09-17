@@ -26,7 +26,10 @@ class BridgeResult:
 class CadBridge:
     """Run a cadgen model script from the owning workspace.
 
-    Default entry is ``python <source.py> --json`` (text-to-cad 0.5.1).
+    Default entry is ``python <source.py> --json`` (cadgen / text-to-cad
+    0.6.3). Uses the project ``.venv`` interpreter and its installed cadgen
+    wheel. Do not put the text-to-cad checkout on ``PYTHONPATH``: the wheel
+    ships ``_runtime``, the checkout does not.
     ``gen_launcher`` is only a test override that still speaks the old
     ``source --write out --json`` fake-CLI protocol.
     """
@@ -88,14 +91,7 @@ class CadBridge:
 
         resolved_output.parent.mkdir(parents=True, exist_ok=True)
         command = self._build_command(resolved_source, resolved_output, force=force)
-        env = os.environ.copy()
-        env["CADGEN_DAEMON"] = "0"
-        env["CADGEN_CACHE_DIR"] = str(cache_dir)
-        cadgen_src = self._cadgen_src()
-        if cadgen_src is not None:
-            env["PYTHONPATH"] = os.pathsep.join(
-                [str(cadgen_src), env.get("PYTHONPATH", "")]
-            ).rstrip(os.pathsep)
+        env = self._generation_env(cache_dir)
 
         try:
             completed = subprocess.run(
@@ -129,7 +125,7 @@ class CadBridge:
             tree_hash = payload.get("tree")
             if isinstance(tree_hash, str) and tree_hash.strip():
                 view_error = self._export_viewer_view(
-                    tree_hash, viewer_package_path, cache_dir, cadgen_src
+                    tree_hash, viewer_package_path, cache_dir
                 )
                 if view_error:
                     payload_error = payload_error or view_error
@@ -203,6 +199,12 @@ class CadBridge:
             command.append("--force")
         return command
 
+    def _generation_env(self, cache_dir: Path) -> dict[str, str]:
+        env = os.environ.copy()
+        env["CADGEN_DAEMON"] = "0"
+        env["CADGEN_CACHE_DIR"] = str(cache_dir)
+        return env
+
     def _workspace_path(self, path: str | Path) -> Path:
         candidate = Path(path)
         if not candidate.is_absolute():
@@ -224,10 +226,6 @@ class CadBridge:
             return source_path.with_suffix("")
         return source_path.with_suffix(".step")
 
-    def _cadgen_src(self) -> Path | None:
-        candidate = self.external_repo_root / "packages" / "cadgen" / "src"
-        return candidate if candidate.is_dir() else None
-
     def _copy_step_if_needed(self, document: str, output_path: Path) -> None:
         source = Path(document)
         if not source.is_absolute():
@@ -244,16 +242,9 @@ class CadBridge:
         tree_hash: str,
         dest: Path,
         cache_dir: Path,
-        cadgen_src: Path | None,
     ) -> str | None:
         previous = os.environ.get("CADGEN_CACHE_DIR")
         os.environ["CADGEN_CACHE_DIR"] = str(cache_dir)
-        inserted = False
-        if cadgen_src is not None:
-            src = str(cadgen_src)
-            if src not in sys.path:
-                sys.path.insert(0, src)
-                inserted = True
         try:
             from cadgen.store.view import export_view
 
@@ -262,11 +253,6 @@ class CadBridge:
         except Exception as exc:
             return f"cadgen viewer view export failed: {exc}"
         finally:
-            if inserted:
-                try:
-                    sys.path.remove(str(cadgen_src))
-                except ValueError:
-                    pass
             if previous is None:
                 os.environ.pop("CADGEN_CACHE_DIR", None)
             else:

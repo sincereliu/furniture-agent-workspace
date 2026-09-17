@@ -22,7 +22,7 @@ description: 路由本仓库六阶段家具生成主流程与 CAD 执行工具�
 
 搜索范围、阶段地图、以及何时读边界文档，见 [AGENTS.md](../../../AGENTS.md)。新增或搬移 `scripts/` 中的分支、映射、默认值或解析器前，读取 [LLM 与运行时边界](references/llm-runtime-boundary.md) 并做边界审计。无法归入确定性代码类别的逻辑不得进入 `scripts/`。
 
-规划阶段实现由该 Skill 的 `scripts/` 拥有；CAD 与 Orchestrator 在 `domain/skills/cad-generated/scripts/`。不修改 `external/text-to-cad`，不复制 `external/scientific-agent-skills`。
+规划阶段实现由该 Skill 的 `scripts/` 拥有；CAD 与 Orchestrator 在 `domain/skills/cad-generated/scripts/`。不修改 `external/text-to-cad`，不复制 `external/scientific-agent-skills`。本机 `.venv` 对齐 cadgen pin： [开发环境](references/dev-environment.md)。
 
 ## 按需外挂
 

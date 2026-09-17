@@ -34,6 +34,8 @@ FurnitureOrchestrator  |  layout-plan runtime
 
 可复用阶段代码在 `domain/skills/*/scripts/`；Orchestrator、布局 API 和集成测试在 `domain/skills/cad-generated/scripts/`；一次性脚本和派生 CAD 源码在 `temp/`；最终产物在 `generated/`。
 
+从零建 `.venv`、用 uv 对齐 `external/text-to-cad` 的 cadgen pin（fnm 只在改 Viewer / bundle 时需要）：见 [开发环境](.agents/skills/furniture-agent/references/dev-environment.md)。
+
 可选数值依赖：
 
 ```powershell
