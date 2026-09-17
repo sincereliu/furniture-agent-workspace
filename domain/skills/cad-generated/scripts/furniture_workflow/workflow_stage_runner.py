@@ -130,7 +130,7 @@ class StageRunnerMixin:
             raise ValueError(f"stage has no attempt {number}: {requested.value}")
         if not attempt.passed or attempt.output is None:
             raise ValueError("cannot select a failed attempt")
-        if attempt.intent_sha256 != revision.intent_sha256:
+        if attempt.layout_sha256 != revision.layout_sha256:
             raise ValueError("attempt does not match the frozen intent")
         if (
             revision.is_stage_approved(requested)
@@ -237,7 +237,7 @@ class StageRunnerMixin:
             stage_input = panel_stage_input(revision.stage_inputs)
             try:
                 output = plan_panel_stage(
-                    revision.intent,
+                    revision.layout,
                     stage_input.get("parameters", {}),
                 )
             except (TypeError, ValueError) as exc:
@@ -452,7 +452,7 @@ class StageRunnerMixin:
         attempt = StageAttempt(
             number=len(revision.attempts_for(stage)) + 1,
             stage=stage.value,
-            intent_sha256=revision.intent_sha256,
+            layout_sha256=revision.layout_sha256,
             inputs=deepcopy(dict(inputs)),
             output=deepcopy(output) if output is not None else None,
             passed=passed,

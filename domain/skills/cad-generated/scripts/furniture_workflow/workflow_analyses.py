@@ -48,7 +48,7 @@ class AnalysisMixin:
                 values,
             ),
             "panel_optimization": lambda: optimize_panel_design(
-                revision.intent,
+                revision.layout,
                 source_output,
                 values,
             ),
@@ -114,7 +114,7 @@ class AnalysisMixin:
         if not isinstance(selected, Mapping):
             raise ValueError("selected optimization candidate is invalid")
         output = materialize_optimization_candidate(
-            revision.intent,
+            revision.layout,
             selected,
         )
         if selected.get("stage_output_sha256") != _stable_digest(output):

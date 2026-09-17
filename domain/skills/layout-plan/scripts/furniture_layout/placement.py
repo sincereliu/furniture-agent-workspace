@@ -144,6 +144,7 @@ def build_placed_item(
             "floor": clean(placement.origin_z_mm),
             "ceiling": clean(room.height_mm - placement.origin_z_mm - spec.height),
         },
+        furniture_category=spec.furniture_category,
     )
 
 

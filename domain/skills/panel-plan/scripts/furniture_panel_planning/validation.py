@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from furniture_delivery_validation.validation import ValidationReport
-from furniture_design_intent.design_intent import DesignIntent
+from furniture_layout.project_layout import LayoutUnit, ProjectLayout
 
 from .assembly_tree import (
     CABINET_OUTPUT_FIELDS,
@@ -23,11 +23,12 @@ from .validation_cabinet import (
 from .validation_panels import validate_panels
 
 def validate_panel_output(
-    confirmed_intent: DesignIntent,
+    layout: ProjectLayout,
     output: Mapping[str, Any],
 ) -> ValidationReport:
     """Validate the complete construction-and-panels stage checkpoint."""
     report = ValidationReport(stage="panel_plan")
+    units = {unit.id: unit for unit in layout.executable_units()}
     try:
         cabinets = cabinets_from_output(output)
         cabinet_ids = [str(item.get("id", "")) for item in cabinets]
@@ -35,7 +36,17 @@ def validate_panel_output(
             raise ValueError("each cabinet requires an id")
         if len(set(cabinet_ids)) != len(cabinet_ids):
             raise ValueError("cabinet ids must be unique")
-        parsed: list[tuple[str, FurnitureSpec, CabinetStructure, list[PanelPlacement], Mapping[str, Any]]] = []
+        missing = sorted(set(units) - set(cabinet_ids))
+        extra = sorted(set(cabinet_ids) - set(units))
+        if missing:
+            raise ValueError(
+                "panel output is missing executable units: " + ", ".join(missing)
+            )
+        if extra:
+            raise ValueError(
+                "panel output has cabinets not in the layout: " + ", ".join(extra)
+            )
+        parsed: list[tuple[str, FurnitureSpec, CabinetStructure, list[PanelPlacement], Mapping[str, Any], LayoutUnit]] = []
         for cabinet in cabinets:
             unknown = sorted(set(cabinet) - CABINET_OUTPUT_FIELDS)
             if unknown:
@@ -56,6 +67,7 @@ def validate_panel_output(
                     CabinetStructure.from_spec(spec),
                     [PanelPlacement.from_dict(item) for item in raw_panels],
                     cabinet,
+                    units[str(cabinet["id"])],
                 )
             )
     except (TypeError, ValueError, KeyError) as exc:
@@ -63,7 +75,7 @@ def validate_panel_output(
         return report
 
     seen_ids: set[str] = set()
-    for cabinet_id, spec, structure, panels, cabinet in parsed:
+    for cabinet_id, spec, structure, panels, cabinet, unit in parsed:
         report.issues.extend(
             _validate_cabinet_membership(cabinet_id, panels, seen_ids).issues
         )
@@ -71,7 +83,7 @@ def validate_panel_output(
             _validate_assembly_tree(cabinet_id, spec, structure, cabinet, panels).issues
         )
         report.issues.extend(
-            validate_structure(confirmed_intent, spec, structure).issues
+            validate_structure(unit, spec, structure).issues
         )
         report.issues.extend(validate_panels(spec, structure, panels).issues)
         resolution = cabinet.get("back_mount_resolution")

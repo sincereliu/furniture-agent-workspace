@@ -1,6 +1,6 @@
 ---
 name: furniture-agent
-description: 路由本仓库六阶段家具生成主流程、独立房间场景布局与 CAD 执行工具。适用于设计意图、板件、制造/BOM、特征树、CAD/STEP、交付验证，以及按需的功能房间多件包络和房间 CAD。
+description: 路由本仓库六阶段家具生成主流程与 CAD 执行工具。适用于房间布局、板件、制造/BOM、特征树、CAD/STEP、交付验证。
 ---
 
 # 家具智能体
@@ -9,16 +9,12 @@ description: 路由本仓库六阶段家具生成主流程、独立房间场景�
 
 ## 做家具
 
-- `design_intent`：`domain/skills/design-intent/SKILL.md`
+- `layout_plan`：`domain/skills/layout-plan/SKILL.md`
 - `panel_plan`：`domain/skills/panel-plan/SKILL.md`
 - `manufacture_plan`：`domain/skills/manufacture-plan/SKILL.md`
 - `feature_tree_planned`：`domain/skills/feature-tree/SKILL.md`
 - `cad_generated`：`domain/skills/cad-generated/TOOL.md`（`run_next(..., generate_cad=True)`）
 - `delivery_validated`：`domain/skills/delivery-validated/SKILL.md`
-
-独立能力：
-
-- 功能房间多件包络与可选房间 CAD：`domain/skills/layout-plan/SKILL.md`（仅用户要设计房间、摆家具或出房间图时）
 
 确认、重试、冻结见 [交互工具面](../../../domain/skills/cad-generated/references/agent-tool-contract.md)。门、层板、抽屉、踢脚、背板、料厚归 `panel-plan`。
 

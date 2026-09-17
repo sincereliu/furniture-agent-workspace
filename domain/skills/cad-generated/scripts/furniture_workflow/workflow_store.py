@@ -24,8 +24,8 @@ class JsonProjectStore:
     def project_dir(self, project_id: str) -> Path:
         return self.root / project_id
 
-    def intent_path(self, project_id: str, intent_sha256: str) -> Path:
-        return self.project_dir(project_id) / "intents" / f"{intent_sha256}.json"
+    def layout_path(self, project_id: str, layout_sha256: str) -> Path:
+        return self.project_dir(project_id) / "layouts" / f"{layout_sha256}.json"
 
     def panel_path(self, project_id: str, panel_sha256: str) -> Path:
         return self.project_dir(project_id) / "panels" / f"{panel_sha256}.json"
@@ -57,7 +57,7 @@ class JsonProjectStore:
         )
         temporary_path.replace(path)
         for revision in project.revisions:
-            self._write_frozen_intent(project.id, revision)
+            self._write_frozen_layout(project.id, revision)
             self._write_frozen_panel(project.id, revision)
             self._write_attempts(project.id, revision)
         return path
@@ -68,13 +68,13 @@ class JsonProjectStore:
             raise ValueError(f"project not found: {project_id}")
         return Project.from_dict(json.loads(path.read_text(encoding="utf-8")))
 
-    def _write_frozen_intent(self, project_id: str, revision: Revision) -> None:
-        if not revision.intent.confirmed:
+    def _write_frozen_layout(self, project_id: str, revision: Revision) -> None:
+        if not revision.layout.confirmed:
             return
-        path = self.intent_path(project_id, revision.intent_sha256)
+        path = self.layout_path(project_id, revision.layout_sha256)
         if path.is_file():
             return
-        _write_json(path, revision.intent.to_dict())
+        _write_json(path, revision.layout.to_dict())
 
     def _write_frozen_panel(self, project_id: str, revision: Revision) -> None:
         if WorkflowStage.PANELS_PLANNED.value not in revision.approved_stages:
@@ -111,7 +111,7 @@ class JsonProjectStore:
             {
                 "number": attempt.number,
                 "stage": attempt.stage,
-                "intent_sha256": attempt.intent_sha256,
+                "layout_sha256": attempt.layout_sha256,
                 "passed": attempt.passed,
                 "error": attempt.error,
                 "created_at": attempt.created_at,

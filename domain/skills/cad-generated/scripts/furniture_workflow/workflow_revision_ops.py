@@ -6,7 +6,7 @@ from copy import deepcopy
 from dataclasses import asdict
 from typing import Any, Mapping
 
-from furniture_design_intent.design_intent import DesignIntent
+from furniture_layout.project_layout import ProjectLayout
 from furniture_manufacturing.manufacturing_bom import (
     estimate_materials,
     recompute_features,
@@ -52,11 +52,14 @@ def _canonicalize_stage_input(
 
 
 class RevisionOpsMixin:
-    def revise(self, project: Project, intent: DesignIntent) -> Revision:
+    def revise(self, project: Project, layout: ProjectLayout) -> Revision:
         """Start a new revision at stage 1; all parent artifacts become stale."""
-        revision = project.add_revision(intent)
+        revision = project.add_revision(layout)
         self._persist(project)
         return revision
+
+    def revise_layout(self, project: Project, layout: ProjectLayout) -> Revision:
+        return self.revise(project, layout)
 
     def revise_stage_output(
         self,
@@ -75,7 +78,7 @@ class RevisionOpsMixin:
             raise ValueError(f"stage has no output to revise: {changed_stage.value}")
 
         revision = project.add_revision(
-            DesignIntent.from_dict(parent.intent.to_dict()),
+            ProjectLayout.from_dict(parent.layout.to_dict()),
             stage_inputs=deepcopy(parent.stage_inputs),
         )
         revision.stage_outputs = {
@@ -84,8 +87,8 @@ class RevisionOpsMixin:
             if parse_stage(key) in STAGE_SEQUENCE
             and stage_index(parse_stage(key)) < stage_index(changed_stage)
         }
-        revision.stage_outputs[WorkflowStage.DESIGN_INTENT.value] = (
-            revision.intent.to_dict()
+        revision.stage_outputs[WorkflowStage.LAYOUT_PLAN.value] = (
+            revision.layout.to_dict()
         )
         if changed_stage == WorkflowStage.MANUFACTURING_PLANNED:
             # 直接编辑制造输出后，重算派生快照（features/connection_points/materials），
@@ -133,7 +136,7 @@ class RevisionOpsMixin:
             and stage_index(parse_stage(value)) < stage_index(changed_stage)
         ]
         revision.workflow = WorkflowState()
-        if changed_stage != WorkflowStage.DESIGN_INTENT:
+        if changed_stage != WorkflowStage.LAYOUT_PLAN:
             revision.workflow.advance(
                 changed_stage,
                 f"{changed_stage.value} revised; downstream outputs invalidated",
@@ -144,7 +147,7 @@ class RevisionOpsMixin:
             StageAttempt(
                 number=1,
                 stage=changed_stage.value,
-                intent_sha256=revision.intent_sha256,
+                layout_sha256=revision.layout_sha256,
                 inputs=deepcopy(self._stage_input_for(revision, changed_stage)),
                 output=deepcopy(output),
                 passed=True,
@@ -157,7 +160,10 @@ class RevisionOpsMixin:
         return revision
 
     def confirm_intent(self, project: Project) -> Revision:
-        return self.confirm_stage(project, WorkflowStage.DESIGN_INTENT)
+        return self.confirm_stage(project, WorkflowStage.LAYOUT_PLAN)
+
+    def confirm_layout(self, project: Project) -> Revision:
+        return self.confirm_stage(project, WorkflowStage.LAYOUT_PLAN)
 
     def confirm_stage(
         self,
@@ -188,9 +194,9 @@ class RevisionOpsMixin:
             self._persist(project)
             return revision
 
-        if requested == WorkflowStage.DESIGN_INTENT:
-            revision.intent = revision.intent.confirm()
-            revision.stage_outputs[requested.value] = revision.intent.to_dict()
+        if requested == WorkflowStage.LAYOUT_PLAN:
+            revision.layout = revision.layout.confirm()
+            revision.stage_outputs[requested.value] = revision.layout.to_dict()
         if requested == WorkflowStage.PANELS_PLANNED:
             revision.confirmed_panel_sha256 = revision.panel_sha256
 
@@ -198,6 +204,7 @@ class RevisionOpsMixin:
         revision.workflow.record(f"{requested.value} confirmed")
         self._persist(project)
         return revision
+
     def retry_stage(
         self,
         project: Project,
@@ -267,7 +274,7 @@ class RevisionOpsMixin:
             raise ValueError(f"stage has no attempt {number}: {requested.value}")
         if not attempt.passed or attempt.output is None:
             raise ValueError("cannot select a failed attempt")
-        if attempt.intent_sha256 != revision.intent_sha256:
+        if attempt.layout_sha256 != revision.layout_sha256:
             raise ValueError("attempt does not match the frozen intent")
         if (
             revision.is_stage_approved(requested)

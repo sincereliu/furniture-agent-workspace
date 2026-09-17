@@ -8,13 +8,13 @@ from typing import Any
 from furniture_cad.cad_bridge import CadBridge
 from furniture_cad.validation import validate_cad
 from furniture_delivery_validation.validation import ValidationReport
-from furniture_design_intent.design_intent import DesignIntent
-from furniture_design_intent.validation import validate_intent
+from furniture_layout.project_layout import ProjectLayout
+from furniture_layout.validation import validate_project_layout
 from furniture_feature_tree.validation import validate_feature_tree
 from furniture_manufacturing.validation import validate_manufacturing
 from furniture_panel_planning.validation import validate_panel_output
 
-from .input_adapter import intent_from_spec as translate_intent_from_spec
+from .input_adapter import layout_from_spec as translate_layout_from_spec
 from .workflow_analyses import AnalysisMixin
 from .workflow_constants import (
     ANALYSIS_METHOD_SKILLS,
@@ -56,19 +56,19 @@ class FurnitureOrchestrator(
     def create_project(
         self,
         name: str,
-        intent: DesignIntent,
+        layout: ProjectLayout,
         *,
         stage_inputs: dict[str, Any] | None = None,
     ) -> Project:
         project = Project(name=name)
-        project.add_revision(intent, stage_inputs=stage_inputs)
+        project.add_revision(layout, stage_inputs=stage_inputs)
         self._persist(project)
         return project
 
     @staticmethod
-    def intent_from_spec(spec: dict[str, Any]) -> DesignIntent:
-        """Compatibility facade for the design-intent translation API."""
-        return translate_intent_from_spec(spec)
+    def layout_from_spec(spec: dict[str, Any]) -> ProjectLayout:
+        """Compatibility facade for the layout translation API."""
+        return translate_layout_from_spec(spec)
 
     def _persist(self, project: Project) -> None:
         if self.project_store is None:
@@ -83,11 +83,11 @@ class FurnitureOrchestrator(
         project_id: str | None = None,
     ) -> ValidationReport:
         try:
-            if stage == WorkflowStage.DESIGN_INTENT:
-                return validate_intent(revision.intent)
+            if stage == WorkflowStage.LAYOUT_PLAN:
+                return validate_project_layout(revision.layout.to_dict())
             if stage == WorkflowStage.PANELS_PLANNED:
                 return validate_panel_output(
-                    revision.intent,
+                    revision.layout,
                     revision.stage_outputs[stage.value],
                 )
             if stage == WorkflowStage.MANUFACTURING_PLANNED:

@@ -1,4 +1,4 @@
 interface:
   display_name: "房间场景布局"
   short_description: "按房间尺寸摆多件家具包络，校验碰撞，并可生成房间 CAD"
-  default_prompt: "仅在用户要设计功能房间、摆家具或出房间图时使用 $layout-plan。把口述整理成 room + items[]，调用运行时规划；越界或碰撞时停止并改提案。客户确认后再生成房屋与家具包络 CAD。柜体内部结构交给 design-intent 六阶段，不把本技能当作家具生成前置步骤。"
+  default_prompt: "家具项目从 $layout-plan 开始。把客户的家整理成 rooms[]（每间房含家具包络）。柜体写 furniture_category=floor_cabinet 或 wall_cabinet；床沙发只占位。调用运行时规划，越界或碰撞则改提案。确认布局后再进 panel-plan 做柜体结构。"

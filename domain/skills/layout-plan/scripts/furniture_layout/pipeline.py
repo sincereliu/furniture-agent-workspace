@@ -8,6 +8,7 @@ from typing import Any, Mapping, Sequence
 from .cad import cad_from_output
 from .placement import place_items
 from .preview import render_preview
+from .project_layout import ProjectLayout
 from .scene import RoomModel, RoomScene, parse_item_specs
 from .validation import validate_room_scene
 from .viewer import render_viewer
@@ -28,6 +29,12 @@ def plan_room_scene(
         "preview": render_preview(scene),
         "viewer": render_viewer(scene),
     }
+
+
+def plan_project_layout(rooms: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Place every room in a home project and emit the layout checkpoint."""
+    layout = ProjectLayout.from_source({"rooms": list(rooms)})
+    return layout.to_dict()
 
 
 def generate_room_cad(

@@ -7,7 +7,6 @@ from pathlib import Path
 
 
 STAGE_SKILL_NAMES = (
-    "design-intent",
     "layout-plan",
     "panel-plan",
     "manufacture-plan",

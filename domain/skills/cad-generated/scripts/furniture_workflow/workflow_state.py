@@ -13,7 +13,7 @@ def utc_now() -> str:
 
 
 class WorkflowStage(str, Enum):
-    DESIGN_INTENT = "design_intent"
+    LAYOUT_PLAN = "layout_plan"
     PANELS_PLANNED = "panel_plan"
     MANUFACTURING_PLANNED = "manufacture_plan"
     FEATURE_TREE_PLANNED = "feature_tree_planned"
@@ -23,8 +23,8 @@ class WorkflowStage(str, Enum):
 
     # Compatibility aliases for project files and callers created before the
     # staged workflow became explicit.
-    DRAFT_INTENT = DESIGN_INTENT
-    INTENT_CONFIRMED = DESIGN_INTENT
+    DRAFT_INTENT = LAYOUT_PLAN
+    INTENT_CONFIRMED = LAYOUT_PLAN
     PANEL_PLANNED = PANELS_PLANNED
     FEATURE_TREE_VALIDATED = FEATURE_TREE_PLANNED
     ARTIFACTS_GENERATED = CAD_GENERATED
@@ -32,7 +32,7 @@ class WorkflowStage(str, Enum):
 
 
 STAGE_SEQUENCE: tuple[WorkflowStage, ...] = (
-    WorkflowStage.DESIGN_INTENT,
+    WorkflowStage.LAYOUT_PLAN,
     WorkflowStage.PANELS_PLANNED,
     WorkflowStage.MANUFACTURING_PLANNED,
     WorkflowStage.FEATURE_TREE_PLANNED,
@@ -41,8 +41,9 @@ STAGE_SEQUENCE: tuple[WorkflowStage, ...] = (
 )
 
 LEGACY_STAGE_VALUES = {
-    "draft_intent": WorkflowStage.DESIGN_INTENT,
-    "intent_confirmed": WorkflowStage.DESIGN_INTENT,
+    "design_intent": WorkflowStage.LAYOUT_PLAN,
+    "draft_intent": WorkflowStage.LAYOUT_PLAN,
+    "intent_confirmed": WorkflowStage.LAYOUT_PLAN,
     "panel_planned": WorkflowStage.PANELS_PLANNED,
     "panels_planned": WorkflowStage.PANELS_PLANNED,
     "manufacturing_planned": WorkflowStage.MANUFACTURING_PLANNED,
@@ -75,7 +76,7 @@ class WorkflowEvent:
 
 @dataclass
 class WorkflowState:
-    current: WorkflowStage = WorkflowStage.DESIGN_INTENT
+    current: WorkflowStage = WorkflowStage.LAYOUT_PLAN
     history: list[WorkflowEvent] = field(default_factory=list)
 
     def __post_init__(self) -> None:

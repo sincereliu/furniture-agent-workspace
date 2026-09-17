@@ -9,6 +9,7 @@ from typing import Any, Mapping
 
 WALLS = frozenset({"south", "east", "north", "west"})
 PLACEMENT_MODES = frozenset({"wall", "free"})
+EXECUTABLE_CATEGORIES = frozenset({"floor_cabinet", "wall_cabinet"})
 EPSILON = 1e-6
 
 
@@ -302,6 +303,7 @@ class ItemSpec:
     depth: float
     height: float
     placement: PlacementRequest
+    furniture_category: str | None = None
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any], *, index: int = 0) -> "ItemSpec":
@@ -323,6 +325,7 @@ class ItemSpec:
             depth=depth,
             height=height,
             placement=PlacementRequest.from_dict(mapping(data, "placement")),
+            furniture_category=_optional_furniture_category(data, index),
         )
 
 
@@ -337,6 +340,7 @@ class PlacedItem:
     placement: ResolvedPlacement
     footprint: tuple[tuple[float, float], ...]
     clearances_mm: dict[str, float]
+    furniture_category: str | None = None
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any], *, index: int = 0) -> "PlacedItem":
@@ -375,10 +379,11 @@ class PlacedItem:
                     "ceiling",
                 )
             },
+            furniture_category=_optional_furniture_category(data, index),
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "id": self.id,
             "label": self.label,
             "category": self.category,
@@ -389,10 +394,17 @@ class PlacedItem:
             "footprint": [{"x_mm": x, "y_mm": y} for x, y in self.footprint],
             "clearances_mm": dict(self.clearances_mm),
         }
+        if self.furniture_category is not None:
+            payload["furniture_category"] = self.furniture_category
+        return payload
 
     @property
     def z_end(self) -> float:
         return self.placement.origin_z_mm + self.height
+
+    @property
+    def is_executable(self) -> bool:
+        return self.furniture_category in EXECUTABLE_CATEGORIES
 
 
 @dataclass(frozen=True)
@@ -404,9 +416,11 @@ class RoomScene:
     def from_dict(cls, data: Mapping[str, Any]) -> "RoomScene":
         if not isinstance(data, Mapping):
             raise ValueError("scene must be an object")
-        raw_items = data.get("items")
-        if not isinstance(raw_items, list) or not raw_items:
-            raise ValueError("items must be a non-empty list")
+        raw_items = data.get("items", [])
+        if raw_items is None:
+            raw_items = []
+        if not isinstance(raw_items, list):
+            raise ValueError("items must be a list")
         return cls(
             room=RoomModel.from_dict(mapping(data, "room")),
             items=tuple(
@@ -422,8 +436,14 @@ class RoomScene:
         }
 
 
-def parse_item_specs(raw_items: Any) -> tuple[ItemSpec, ...]:
-    if not isinstance(raw_items, list) or not raw_items:
+def parse_item_specs(
+    raw_items: Any, *, allow_empty: bool = False
+) -> tuple[ItemSpec, ...]:
+    if raw_items is None:
+        raw_items = []
+    if not isinstance(raw_items, list):
+        raise ValueError("items must be a list")
+    if not raw_items and not allow_empty:
         raise ValueError("items must be a non-empty list")
     specs = tuple(
         ItemSpec.from_dict(item, index=index)
@@ -435,3 +455,18 @@ def parse_item_specs(raw_items: Any) -> tuple[ItemSpec, ...]:
             raise ValueError(f"duplicate item id: {spec.id}")
         seen.add(spec.id)
     return specs
+
+
+def _optional_furniture_category(
+    data: Mapping[str, Any], index: int
+) -> str | None:
+    value = text(data, "furniture_category")
+    if not value:
+        return None
+    category = value.lower()
+    if category not in EXECUTABLE_CATEGORIES:
+        raise ValueError(
+            f"items[{index}].furniture_category must be one of: "
+            + ", ".join(sorted(EXECUTABLE_CATEGORIES))
+        )
+    return category

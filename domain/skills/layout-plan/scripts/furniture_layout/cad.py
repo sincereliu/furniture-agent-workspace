@@ -70,18 +70,20 @@ def scene_to_cad_tree(scene: RoomScene) -> dict[str, Any]:
             }
         )
     for item in scene.items:
-        features.append(
-            {
-                "id": item.id,
-                "size": {"x": item.width, "y": item.depth, "z": item.height},
-                "position": {
-                    "x": item.placement.origin_x_mm,
-                    "y": item.placement.origin_y_mm,
-                    "z": item.placement.origin_z_mm,
-                },
-                "rotation_z_deg": item.placement.rotation_z_deg,
-            }
-        )
+        feature = {
+            "id": item.id,
+            "label": item.label,
+            "size": {"x": item.width, "y": item.depth, "z": item.height},
+            "position": {
+                "x": item.placement.origin_x_mm,
+                "y": item.placement.origin_y_mm,
+                "z": item.placement.origin_z_mm,
+            },
+            "rotation_z_deg": item.placement.rotation_z_deg,
+        }
+        if item.furniture_category is not None:
+            feature["furniture_category"] = item.furniture_category
+        features.append(feature)
     return {
         "root": {"id": room.id},
         "features": features,

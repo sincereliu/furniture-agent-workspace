@@ -6,7 +6,6 @@ from dataclasses import asdict
 from typing import Any, Mapping
 
 from furniture_delivery_validation.validation import ValidationReport
-from furniture_design_intent.design_intent import DesignIntent
 
 from .assembly_tree import (
     ASSEMBLY_OBJECT_FIELDS,

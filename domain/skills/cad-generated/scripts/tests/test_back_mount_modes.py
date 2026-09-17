@@ -14,7 +14,7 @@ from runtime_paths import bootstrap_runtime_paths
 
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
-from furniture_design_intent.design_intent import DesignIntent, FinishedEnvelope
+from furniture_layout.project_layout import ProjectLayout, single_cabinet_layout
 from furniture_panel_planning.panel_spec import FurnitureSpec
 from panel_fixtures import by_role, cabinet_data, furniture_spec
 from furniture_manufacturing.manufacturing_bom import (
@@ -41,12 +41,14 @@ class BackMountModeTests(unittest.TestCase):
             n_doors=2,
         )
 
-    def _intent(self, spec: FurnitureSpec) -> DesignIntent:
-        return DesignIntent(
+    def _intent(self, spec: FurnitureSpec):
+        return single_cabinet_layout(
             furniture_category=spec.furniture_category,
-            finished_envelope=FinishedEnvelope(spec.width, spec.depth, spec.height),
+            width=spec.width,
+            depth=spec.depth,
+            height=spec.height,
             confirmed=True,
-        )
+        ).executable_units()[0]
 
     def test_all_modes_preserve_the_finished_depth_envelope(self) -> None:
         expected_layouts = {

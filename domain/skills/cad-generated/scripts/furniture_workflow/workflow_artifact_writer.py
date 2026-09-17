@@ -59,7 +59,7 @@ def write_artifacts(
     panel_output: dict[str, Any] | None = None,
 ) -> tuple[Path, Path]:
     if artifact_name:
-        intent_path = artifact_dir / f"{artifact_name}.design-intent.json"
+        intent_path = artifact_dir / f"{artifact_name}.layout-plan.json"
         panel_path = artifact_dir / f"{artifact_name}.panel-plan.json"
         manufacturing_path = artifact_dir / f"{artifact_name}.manufacture-plan.json"
         feature_tree_path = artifact_dir / f"{artifact_name}.feature-tree.json"
@@ -68,7 +68,7 @@ def write_artifacts(
         source_filename = f"{artifact_name}.step.py"
         step_filename = f"{artifact_name}.step"
     else:
-        intent_path = artifact_dir / "design-intent.json"
+        intent_path = artifact_dir / "layout-plan.json"
         panel_path = artifact_dir / "panel-plan.json"
         manufacturing_path = artifact_dir / "manufacture-plan.json"
         feature_tree_path = artifact_dir / "feature-tree.json"
@@ -83,7 +83,7 @@ def write_artifacts(
     step_path = artifact_dir / step_filename
 
     intent_path.write_text(
-        json.dumps(revision.intent.to_dict(), ensure_ascii=False, indent=2),
+        json.dumps(revision.layout.to_dict(), ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
     panels = (
@@ -136,7 +136,7 @@ def write_artifacts(
         drilled_xml_dir,
     )
 
-    revision.manifest.add_file("design_intent", intent_path)
+    revision.manifest.add_file("layout_plan", intent_path)
     revision.manifest.add_file("panel_plan", panel_path)
     revision.manifest.add_file(
         "manufacturing_plan",

@@ -9,7 +9,7 @@ description: 用于 panel_plan 阶段。当用户说“几扇门”“几层板�
 
 ## 核心流程
 
-1. 前置只有已确认并冻结的 `design_intent`；房间场景与本阶段无关。板件规划只读这份冻结意图，不改类别或外包络。
+1. 前置只有已确认并冻结的 `layout_plan`。板件规划只读冻结布局里的可执行 CAD 单元，不改类别或外包络。
 2. 由 LLM 根据完整上下文理解需求、消歧并推荐整份板件方案；未明确值以假设形式展示，不在脚本里做关键词识别、同义词映射或开放方案排序。
 3. 把选定草稿的规范字段写入 `stage_inputs.panels.parameters`。必填字段、可选料档与候选起点见 [提案契约](references/panel-proposal-contract.md)；料厚目录与工艺卡见 [料档与工艺卡](references/sheet-stock-catalog.md)。
 4. 由 `FurnitureSpec.from_intent()` 校验意图确认状态、字段完整性/类型和客观结构冲突，按工艺卡展开省略的料档，首次物化完整规范；无法由当前拓扑表达的混合语义必须继续消歧，不得让运行时丢弃字段。

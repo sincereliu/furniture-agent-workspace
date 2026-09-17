@@ -12,7 +12,7 @@ from copy import deepcopy
 import json
 from typing import Any, Mapping
 
-from furniture_design_intent.design_intent import DesignIntent, HANGING_MODES
+from furniture_layout.project_layout import ProjectLayout
 
 from .agent_tool_schema import (
     TOOL_CONFIRM_STAGE,
@@ -20,7 +20,7 @@ from .agent_tool_schema import (
     TOOL_GET_PROJECT,
     TOOL_NAMES,
     TOOL_RETRY_STAGE,
-    TOOL_REVISE_INTENT,
+    TOOL_REVISE_LAYOUT,
     TOOL_RUN_NEXT,
     TOOL_SELECT_ATTEMPT,
     _CONFIRM_KEYS,
@@ -100,8 +100,8 @@ class FurnitureToolSession:
                 return self._retry_stage(project, payload)
             if tool == TOOL_SELECT_ATTEMPT:
                 return self._select_attempt(project, payload)
-            if tool == TOOL_REVISE_INTENT:
-                return self._revise_intent(project, payload)
+            if tool == TOOL_REVISE_LAYOUT:
+                return self._revise_layout(project, payload)
             raise ToolProtocolError("UNKNOWN_TOOL", f"unknown tool: {tool}")
         except ToolProtocolError as exc:
             return self._error(tool, exc.code, exc.message, project=project)
@@ -111,8 +111,8 @@ class FurnitureToolSession:
     def _create_project(self, payload: dict[str, Any]) -> Project:
         _reject_unknown_keys(payload, _CREATE_KEYS)
         name = _require_string(payload.get("name"), "name")
-        intent = _intent_from_payload(payload)
-        project = self.orchestrator.create_project(name, intent)
+        layout = _layout_from_payload(payload)
+        project = self.orchestrator.create_project(name, layout)
         self._projects[project.id] = project
         return project
 
@@ -213,14 +213,14 @@ class FurnitureToolSession:
         self._remember(project)
         return self._ok(TOOL_SELECT_ATTEMPT, project)
 
-    def _revise_intent(
+    def _revise_layout(
         self, project: Project, payload: dict[str, Any]
     ) -> dict[str, Any]:
         _reject_unknown_keys(payload, _REVISE_KEYS)
-        intent = _intent_from_payload(payload)
-        self.orchestrator.revise(project, intent)
+        layout = _layout_from_payload(payload)
+        self.orchestrator.revise(project, layout)
         self._remember(project)
-        return self._ok(TOOL_REVISE_INTENT, project, progressed=True)
+        return self._ok(TOOL_REVISE_LAYOUT, project, progressed=True)
 
     def _load_project(self, project_id: str) -> Project:
         store = self.orchestrator.project_store
@@ -314,9 +314,9 @@ def project_snapshot(
         ),
         "approved_stages": list(revision.approved_stages),
         "next_stage": next_stage.value if next_stage is not None else None,
-        "intent": deepcopy(revision.intent.to_dict()),
-        "intent_confirmed": bool(revision.intent.confirmed),
-        "intent_sha256": revision.intent_sha256,
+        "layout": deepcopy(revision.layout.to_dict()),
+        "layout_confirmed": bool(revision.layout.confirmed),
+        "layout_sha256": revision.layout_sha256,
         "confirmed_panel_sha256": revision.confirmed_panel_sha256,
         "allowed_tools": allowed_tools(revision),
         "required_tool": required_tool(revision),
@@ -330,7 +330,7 @@ def project_snapshot(
 
 
 def allowed_tools(revision: Revision) -> list[str]:
-    tools = [TOOL_GET_PROJECT, TOOL_REVISE_INTENT]
+    tools = [TOOL_GET_PROJECT, TOOL_REVISE_LAYOUT]
     current = revision.workflow.current
     if current == WorkflowStage.FAILED or current not in STAGE_SEQUENCE:
         return tools
@@ -358,7 +358,7 @@ def allowed_tools(revision: Revision) -> list[str]:
 def required_tool(revision: Revision) -> str | None:
     current = revision.workflow.current
     if current == WorkflowStage.FAILED or current not in STAGE_SEQUENCE:
-        return TOOL_REVISE_INTENT
+        return TOOL_REVISE_LAYOUT
     if not revision.is_stage_approved(current):
         if current.value in revision.stage_outputs:
             return TOOL_CONFIRM_STAGE
@@ -405,12 +405,23 @@ def _latest_validation(
     return None
 
 
-def _intent_from_payload(payload: Mapping[str, Any]) -> DesignIntent:
+def _layout_from_payload(payload: Mapping[str, Any]) -> ProjectLayout:
+    rooms = payload.get("rooms")
+    if rooms is not None:
+        if not isinstance(rooms, list) or not rooms:
+            raise ToolProtocolError(
+                "INVALID_ARGUMENT",
+                "rooms must be a non-empty list",
+            )
+        try:
+            return ProjectLayout.from_source({"rooms": rooms})
+        except (TypeError, ValueError) as exc:
+            raise ToolProtocolError("INVALID_ARGUMENT", str(exc)) from exc
     category = payload.get("furniture_category")
     if not isinstance(category, str) or not category.strip():
         raise ToolProtocolError(
             "INVALID_ARGUMENT",
-            "furniture_category is required",
+            "rooms or furniture_category is required",
         )
     envelope = payload.get("finished_envelope")
     if envelope is None:
@@ -432,23 +443,22 @@ def _intent_from_payload(payload: Mapping[str, Any]) -> DesignIntent:
                 f"{key} conflicts with finished_envelope.{key}",
             )
         envelope_data[key] = payload[key]
-    hanging_mode = payload.get("hanging_mode")
-    if hanging_mode is not None:
-        if not isinstance(hanging_mode, str) or hanging_mode not in HANGING_MODES:
-            allowed = ", ".join(sorted(HANGING_MODES))
-            raise ToolProtocolError(
-                "INVALID_ARGUMENT",
-                f"hanging_mode must be one of: {allowed}",
-            )
-    data: dict[str, Any] = {
-        "furniture_category": category.strip(),
-        "finished_envelope": {
-            key: envelope_data.get(key) for key in _INTENT_FLAT_KEYS
-        },
-        "hanging_mode": hanging_mode,
-        "hanging_height_mm": payload.get("hanging_height_mm"),
-    }
-    return DesignIntent.from_dict(data)
+    from furniture_workflow.input_adapter import layout_from_spec
+
+    try:
+        return layout_from_spec(
+            {
+                "furniture_category": category.strip(),
+                "finished_envelope": {
+                    key: envelope_data.get(key) for key in _INTENT_FLAT_KEYS
+                },
+                "origin_z_mm": payload.get("origin_z_mm"),
+                "hanging_mode": payload.get("hanging_mode"),
+                "hanging_height_mm": payload.get("hanging_height_mm"),
+            }
+        )
+    except (TypeError, ValueError) as exc:
+        raise ToolProtocolError("INVALID_ARGUMENT", str(exc)) from exc
 
 
 def _cad_options(
@@ -529,7 +539,7 @@ def _reject_failed(revision: Revision) -> None:
     if revision.workflow.current == WorkflowStage.FAILED:
         raise ToolProtocolError(
             "FAILED_REVISION",
-            "failed revision must be replaced with furniture_revise_intent",
+            "failed revision must be replaced with furniture_revise_layout",
         )
 
 

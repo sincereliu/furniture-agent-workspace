@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from furniture_design_intent.design_intent import DesignIntent
+from furniture_layout.project_layout import ProjectLayout, single_cabinet_layout
 from furniture_panel_planning.panel_spec import PANEL_SPEC_FIELDS
 
 
@@ -26,6 +26,8 @@ PROTOCOL_FIELDS = frozenset(
         "height",
         "finished_envelope",
         "overall_size",
+        "rooms",
+        "origin_z_mm",
         "hanging_height",
         "hanging_height_mm",
         "mounting_height",
@@ -53,37 +55,45 @@ _ENVELOPE_TARGETS = frozenset(
 _ENVELOPE_PREFIXES = ("finished_envelope.", "overall_size.")
 
 
-def intent_from_spec(spec: Mapping[str, Any]) -> DesignIntent:
-    """Translate only category and finished-envelope values to DesignIntent."""
+def layout_from_spec(spec: Mapping[str, Any]) -> ProjectLayout:
+    """Expand a flat cabinet request into a one-room layout."""
     data = _reject_legacy_protocol_aliases(dict(spec))
+    if isinstance(data.get("rooms"), list):
+        return ProjectLayout.from_source({"rooms": data["rooms"]})
     furniture_category = str(
         _first_present(data, "furniture_category", "furniture_type") or ""
     ).strip().lower()
     size = _first_present(data, "finished_envelope", "overall_size") or {}
+    if size is None:
+        size = {}
     if not isinstance(size, Mapping):
         raise ValueError("finished_envelope must be an object")
+    width = size.get("width_mm", data.get("width"))
+    depth = size.get("depth_mm", data.get("depth"))
+    height = size.get("height_mm", data.get("height"))
+    origin_z = _first_present(
+        data,
+        "origin_z_mm",
+        "hanging_height_mm",
+        "hanging_height",
+        "mounting_height_mm",
+        "mounting_height",
+    )
     hanging_mode = _first_present(data, "hanging_mode", "mount_mode")
     if hanging_mode is not None:
         hanging_mode = str(hanging_mode).strip().lower()
-        if hanging_mode == "free_height":
+        if hanging_mode in {"free_height", "free_hanging_height"}:
             hanging_mode = "free_hanging_height"
-    return DesignIntent.from_dict(
-        {
-            "furniture_category": furniture_category,
-            "finished_envelope": {
-                "width_mm": size.get("width_mm", data.get("width")),
-                "depth_mm": size.get("depth_mm", data.get("depth")),
-                "height_mm": size.get("height_mm", data.get("height")),
-            },
-            "hanging_mode": hanging_mode,
-            "hanging_height_mm": _first_present(
-                data,
-                "hanging_height_mm",
-                "hanging_height",
-                "mounting_height_mm",
-                "mounting_height",
-            ),
-        }
+        elif hanging_mode == "flush_ceiling":
+            origin_z = None
+    if width is None or depth is None or height is None:
+        raise ValueError("width, depth and height are required")
+    return single_cabinet_layout(
+        furniture_category=furniture_category,
+        width=float(width),
+        depth=float(depth),
+        height=float(height),
+        origin_z_mm=None if origin_z is None else float(origin_z),
     )
 
 

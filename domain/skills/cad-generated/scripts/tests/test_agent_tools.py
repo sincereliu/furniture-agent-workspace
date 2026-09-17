@@ -22,7 +22,7 @@ from furniture_workflow.agent_tools import (
     TOOL_GET_PROJECT,
     TOOL_NAMES,
     TOOL_RETRY_STAGE,
-    TOOL_REVISE_INTENT,
+    TOOL_REVISE_LAYOUT,
     TOOL_RUN_NEXT,
     TOOL_SELECT_ATTEMPT,
     FurnitureToolSession,
@@ -83,7 +83,7 @@ class AgentToolSurfaceTests(unittest.TestCase):
     def test_tool_module_does_not_import_planners_or_cad(self) -> None:
         path = SCRIPT_ROOT / "furniture_workflow" / "agent_tools.py"
         modules = imported_modules(path)
-        self.assertIn("furniture_design_intent.design_intent", modules)
+        self.assertIn("furniture_layout.project_layout", modules)
         self.assertTrue(
             any(name.endswith("workflow_orchestrator") for name in modules)
         )
@@ -111,7 +111,7 @@ class AgentToolSurfaceTests(unittest.TestCase):
         self.assertTrue(created["ok"], created)
         project_id = created["project"]["id"]
         self.assertTrue(created["progressed"])
-        self.assertEqual(created["project"]["current_stage"], "design_intent")
+        self.assertEqual(created["project"]["current_stage"], "layout_plan")
         self.assertEqual(created["project"]["required_tool"], TOOL_CONFIRM_STAGE)
         self.assertIn(TOOL_CONFIRM_STAGE, created["project"]["allowed_tools"])
         self.assertNotIn("advanced", created)
@@ -128,10 +128,10 @@ class AgentToolSurfaceTests(unittest.TestCase):
 
         confirmed = self.session.call(
             TOOL_CONFIRM_STAGE,
-            {"project_id": project_id, "stage": "design_intent"},
+            {"project_id": project_id, "stage": "layout_plan"},
         )
         self.assertTrue(confirmed["ok"], confirmed)
-        self.assertTrue(confirmed["project"]["intent_confirmed"])
+        self.assertTrue(confirmed["project"]["layout_confirmed"])
         self.assertEqual(confirmed["project"]["required_tool"], TOOL_RUN_NEXT)
 
         generated = self.session.call(
@@ -164,7 +164,7 @@ class AgentToolSurfaceTests(unittest.TestCase):
                 "stage_input": panel_parameters(n_doors=2),
             },
         )
-        intent_sha = first["project"]["intent_sha256"]
+        intent_sha = first["project"]["layout_sha256"]
         second = self.session.call(
             TOOL_RETRY_STAGE,
             {
@@ -174,7 +174,7 @@ class AgentToolSurfaceTests(unittest.TestCase):
             },
         )
         self.assertTrue(second["ok"], second)
-        self.assertEqual(second["project"]["intent_sha256"], intent_sha)
+        self.assertEqual(second["project"]["layout_sha256"], intent_sha)
         self.assertEqual(len(second["project"]["attempts"]["panel_plan"]), 2)
         self.assertEqual(
             second["project"]["current_view"]["cabinets"][0]["n_doors"],
@@ -205,7 +205,7 @@ class AgentToolSurfaceTests(unittest.TestCase):
             {"project_id": project_id, "stage_input": {"n_doors": 2}},
         )
         self.assertTrue(failed["ok"], failed)
-        self.assertEqual(failed["project"]["current_stage"], "design_intent")
+        self.assertEqual(failed["project"]["current_stage"], "layout_plan")
         self.assertTrue(failed["project"]["current_stage_approved"])
         self.assertFalse(failed["project"]["attempts"]["panel_plan"][0]["passed"])
         self.assertEqual(failed["project"]["required_tool"], TOOL_RETRY_STAGE)
@@ -236,7 +236,7 @@ class AgentToolSurfaceTests(unittest.TestCase):
             {"project_id": project_id, "stage_input": panel_parameters()},
         )
         revised = self.session.call(
-            TOOL_REVISE_INTENT,
+            TOOL_REVISE_LAYOUT,
             {
                 "project_id": project_id,
                 "furniture_category": "wall_cabinet",
@@ -248,10 +248,10 @@ class AgentToolSurfaceTests(unittest.TestCase):
         )
         self.assertTrue(revised["ok"], revised)
         self.assertEqual(revised["project"]["revision_number"], 2)
-        self.assertEqual(revised["project"]["current_stage"], "design_intent")
-        self.assertFalse(revised["project"]["intent_confirmed"])
+        self.assertEqual(revised["project"]["current_stage"], "layout_plan")
+        self.assertFalse(revised["project"]["layout_confirmed"])
         self.assertEqual(
-            revised["project"]["current_view"]["furniture_category"],
+            revised["project"]["current_view"]["cad"]["units"][0]["furniture_category"],
             "wall_cabinet",
         )
         self.assertNotIn("panel_plan", revised["project"]["attempts"])
@@ -491,14 +491,11 @@ class AgentToolSurfaceTests(unittest.TestCase):
 class OrchestratorRunNextStageInputTests(unittest.TestCase):
     def test_run_next_accepts_first_panel_stage_input(self) -> None:
         orchestrator = FurnitureOrchestrator(workspace_root=WORKSPACE_ROOT)
-        from furniture_design_intent.design_intent import DesignIntent, FinishedEnvelope
+        from furniture_layout.project_layout import ProjectLayout, single_cabinet_layout
 
         project = orchestrator.create_project(
             "首次板件输入",
-            DesignIntent(
-                furniture_category="floor_cabinet",
-                finished_envelope=FinishedEnvelope(800, 600, 1000),
-            ),
+            single_cabinet_layout(furniture_category="floor_cabinet", width=800, depth=600, height=1000, confirmed=True),
         )
         orchestrator.confirm_stage(project)
         result = orchestrator.run_next(
@@ -509,15 +506,12 @@ class OrchestratorRunNextStageInputTests(unittest.TestCase):
         self.assertEqual(spec["n_doors"], 1)
 
     def test_run_next_wraps_flat_manufacturing_stage_input(self) -> None:
-        from furniture_design_intent.design_intent import DesignIntent, FinishedEnvelope
+        from furniture_layout.project_layout import ProjectLayout, single_cabinet_layout
 
         orchestrator = FurnitureOrchestrator(workspace_root=WORKSPACE_ROOT)
         project = orchestrator.create_project(
             "扁平制造输入",
-            DesignIntent(
-                furniture_category="floor_cabinet",
-                finished_envelope=FinishedEnvelope(800, 600, 1000),
-            ),
+            single_cabinet_layout(furniture_category="floor_cabinet", width=800, depth=600, height=1000, confirmed=True),
         )
         orchestrator.confirm_stage(project)
         orchestrator.run_next(project, stage_input=panel_parameters(n_doors=1))

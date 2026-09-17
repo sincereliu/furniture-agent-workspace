@@ -13,7 +13,7 @@ from runtime_paths import bootstrap_runtime_paths
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 from furniture_cad.cad_bridge import CadBridge
-from furniture_design_intent.design_intent import DesignIntent, FinishedEnvelope
+from furniture_layout.project_layout import ProjectLayout, single_cabinet_layout
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from furniture_workflow.workflow_store import JsonProjectStore
 
@@ -22,10 +22,11 @@ def first_cabinet_spec(output: dict) -> dict:
     return output["cabinets"][0]["spec"]
 
 
-def cabinet_intent(*, furniture_category: str = "floor_cabinet") -> DesignIntent:
-    return DesignIntent(
+def cabinet_intent(*, furniture_category: str = "floor_cabinet") -> ProjectLayout:
+    origin_z_mm = 2000.0 if furniture_category == "wall_cabinet" else None
+    return single_cabinet_layout(
         furniture_category=furniture_category,
-        finished_envelope=FinishedEnvelope(width_mm=800, depth_mm=600, height_mm=1000),
+        origin_z_mm=origin_z_mm,
     )
 
 

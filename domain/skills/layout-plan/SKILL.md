@@ -1,27 +1,35 @@
 ---
 name: layout-plan
-description: 独立的功能房间多件包络布局。当用户要设计卧室/客厅等房间、说出家具怎么摆、按房间尺寸布家具、或画出房屋与家具包络时触发。不属于家具生成串联阶段，也不生成柜体板件或柜体 STEP。
+description: 用于 layout_plan 阶段，也是家具流水线的入口。当用户要给家里做家具、描述房间和家具怎么摆、或给出柜体外包络时触发。按房间组织家具包络；可执行柜体作为 CAD 单元交给板件阶段。不生成柜体板件或柜体 STEP。
 ---
 
 # 家具布局规划
 
-类型：独立按需步骤
+阶段：`layout_plan`
+
+**本阶段只回答：客户家里有哪些房间、家具外包络怎么摆、哪些件是要做的柜。** 产物是待确认的多房间布局；板件、材料、制造不在此阶段。
 
 ## 工作流
 
-1. 用户要设计功能房间、摆家具或出房间图时运行。房间长宽高不足则追问；不要编造实测尺寸。
-2. 把口述整理成 `room + items[]`。客户没给家具清单或尺寸时，按 [房间场景指南](references/room-scene-guide.md) 提出可见假设，等确认。
-3. 调用 `plan_room_scene(room, items)`。几何、碰撞和 `wall + fill` 净长由代码计算；规则见 [空间布局规则](references/spatial-layout-rules.md)。
-4. 失败则展示冲突并改提案后重跑。成功则展示 SVG/Viewer 并暂停。
-5. 场景可保存为「源」并逐次编辑：`POST /api/room-scene/save` 保存（房间 + 多件包络及其摆放请求），`GET /api/room-scene/{scene_id}` 读取重算，`POST /api/room-scene/{scene_id}/edit` 应用一次编辑。只存源，不存派生结果（摆放坐标、footprint、净距、预览都在读取时重算）；存储独立于主流程，不写 `stage_outputs`。
-6. 编辑是单 op、原子：`move`（按当前 `mode` 二选一——`wall` 用 `host_wall`/`offset_mm`，`free` 用 `origin_x_mm`/`origin_y_mm`，混给即拒、换模式要显式给 `mode`）、`rotate`、`resize`（`width`/`depth`/`height` 任意子集）。重算与校验通过才落盘，失败整体拒绝。`rotate` 只对 `free` 有定义——`wall` 的旋转由 `host_wall` 派生，要转就在同一个 op 里带 `mode: "free"` 和绕中心算出的自由原点。
-7. 可编辑视图 `GET /api/room-scene/{scene_id}/editor`：点包络任意位置选中；拖动改位置，靠墙件沿墙滑动、拖进房间就转成自由摆放，自由件平面移动；橙色手柄或**旋转环**（整圈可抓）调朝向（默认吸附 15°，Shift 精细到 1°），蓝色手柄改**离地高度**（`origin_z_mm`）。视角有透视、俯视和**前/后/左/右四个立面**（切换带 500ms 过渡）；立面视图里上下拖就是改高度。空白处拖拽转视角，**右键 / 中键 / 空白处 Shift+左键拖拽平移视图**（切视角会把视图中心带回房间中心），滚轮缩放。选中件四周画出**到最近邻的四向净距**（找不到邻居才退到墙），并沿自身局部轴标出**本体宽/深/高**，数值和来源也列在右侧栏。**净距、朝向、离地高度都可以在右侧栏直接输入**（输入框 step=1，任意毫米值；旁边的 − / ＋ 走整数档：净距 10 · 离地 50 · 朝向 15），输入与拖动共用同一套碰撞求解，到不了就只挪到能到的地方并说明被谁挡住；改一边净距，另一边会立刻跟着变。拖动与旋转在本地就按 `collision.py` 的同一套规则求解——**正体积相交才算撞、贴边接触放行**，撞上就停在接触处，不会穿过去再回弹；求解在整数毫米上做，预览即落盘值。松手才发一个 op，拒绝时显示原因并回退到服务端状态。空白处拖拽转视角，Esc 取消选中。
-8. 客户确认后再 `generate_room_cad`，画出房屋和家具外包络。不要走 `furniture_run_next(..., generate_cad=True)`。
-9. 某件要做柜体结构时，另开 `design-intent` 六阶段。房间场景不自动开工柜体项目。
+1. 项目是客户全屋家具项目。缺房间长宽高则追问，不要编造实测尺寸。
+2. 把口述整理成 `rooms[]`，每间房含 `items[]`。柜体写规范 `furniture_category`（`floor_cabinet` / `wall_cabinet`）；床、沙发等只给展示 `category`，不进板件。客户没给清单时按 [房间场景指南](references/room-scene-guide.md) 提出可见假设，等确认。
+3. 调用 `plan_project_layout(rooms)`。几何、碰撞和 `wall + fill` 净长由代码计算；规则见 [空间布局规则](references/spatial-layout-rules.md)。可执行柜类目录见 [家具目录](references/intake/catalog.yaml)。
+4. 失败则展示冲突并改提案后重跑。成功则展示房间图并暂停。
+5. `confirm_stage(layout_plan)` 把布局冻成 CAD 单元（盒子几何 + 柜类属性）。之后板件只读这份冻结布局。改房间或改外包络用 `revise_layout()`，不要回头改已冻结布局。
+6. 某件可执行柜要做结构时，确认布局后 `run_next(panel_plan)`。非柜包络留在房间里占位。
+
+可编辑视图与单次编辑 op 见运行时契约；松手才落盘，碰撞失败整单拒绝。
+
+## 本阶段不做什么
+
+- 门、层板、抽屉、板厚、背板、踢脚 → 板件阶段
+- 不要从「靠墙」推断 `wall_cabinet`；靠墙是摆放，上墙才是吊柜
+- 制造（材料/饰面/五金…）→ 制造阶段
+- 柜体 STEP 走 `furniture_run_next(..., generate_cad=True)`；房间包络 CAD 不是柜体 CAD
 
 ## 边界
 
-- 输入只有房间与多件外包络摆放。`category` 是展示名，不进 `DesignIntent`。
-- 门数、层板、抽屉、封边、五金、柜体 STEP 不属于本技能。
-- 结果不写入主流程 `STAGE_SEQUENCE`、`approved_stages` 或家具 CAD 交付清单。
-- 修改摆放时重新运行本技能，不调用 `revise_stage_output()`。
+- 输入是多房间与多件外包络。`category` 是展示名；`furniture_category` 仅可执行柜类，确认后进入 CAD 单元属性。
+- 吊柜离地高度就是摆放的 `origin_z_mm`；贴顶由离地+柜高贴房间净高派生，不再单存 `hanging_mode`。
+- 结果写入 `STAGE_SEQUENCE` 的 `layout_plan`，冻结后板件只读 CAD 单元。
+- 修改布局走 `revise_layout()`，不调用 `revise_stage_output()`。

@@ -4,7 +4,7 @@
 
 ## 当前能力
 
-唯一应用层入口：`domain/skills/cad-generated/scripts/furniture_workflow/workflow_orchestrator.py`。它接受只含类别与成品外包络的已确认 `DesignIntent`。板件/制造字段经 `create_project(..., stage_inputs=)` 或 `run_next`/`retry_stage` 的 `stage_input` 进入所属阶段。字段转换、阶段实现和校验归各 Skill，Orchestrator 只管理生命周期。没有一次性自动确认的批处理入口。
+唯一应用层入口：`domain/skills/cad-generated/scripts/furniture_workflow/workflow_orchestrator.py`。它接受已规划的全屋 `layout_plan`（按房间组织的家具包络 CAD 单元）。板件/制造字段经 `create_project(..., stage_inputs=)` 或 `run_next`/`retry_stage` 的 `stage_input` 进入所属阶段。字段转换、阶段实现和校验归各 Skill，Orchestrator 只管理生命周期。没有一次性自动确认的批处理入口。
 
 - `floor_cabinet`：固定模板，含背板、踢脚板、层板、门板。
 - `wall_cabinet`：固定模板，含背板、层板、门板，无踢脚板。
@@ -16,7 +16,7 @@
 
 每个 Revision 记录：
 
-1. `design_intent`
+1. `layout_plan`
 2. `panel_plan`
 3. `manufacture_plan`
 4. `feature_tree_planned`
@@ -48,11 +48,11 @@ result = orchestrator.run_next(
 
 `run_next()`/`run_until()` 不越过未确认检查点。返回当前输出后等待确认。
 
-- 意图确认：`confirm_stage(project, "design_intent")` 把 `confirmed=true` 的 `DesignIntent` 冻成 `store/<project-id>/intents/<intent-sha256>.json`。之后板件及后续规划只读这份冻结意图。
+- 布局确认：`confirm_stage(project, "layout_plan")` 把确认后的布局冻成 `store/<project-id>/layouts/<layout-sha256>.json`。之后板件只读这份冻结布局里的可执行 CAD 单元。
 - 板件确认：`confirm_stage(project, "panel_plan")` 把已确认板件冻成 `store/<project-id>/panels/<panel-sha256>.json`，并记下 `confirmed_panel_sha256`。有 Store 时制造、板件旁路分析、CAD `panel-plan.json` 和交付分析哈希都按该哈希读冻结文件，文件缺失则失败；无 Store 时读内存中已确认输出。`retry_stage(project, "manufacture_plan")` 不重跑板件。
 - 同一冻结上游再试规划：`retry_stage(project, stage, stage_input=...)`。适用于未确认或需作废下游的 `panel_plan`、`manufacture_plan`、`feature_tree_planned`。失败只记录该次 attempt，不把 Revision 标为 `FAILED`。
 - 选用某次通过的尝试：`select_stage_attempt(project, stage, number)`，再 `confirm_stage()`。
-- 意图变化：`revise(project, new_intent)`，从 `design_intent` 开始，下游尝试作废。
+- 布局变化：`revise(project, new_layout)`，从 `layout_plan` 开始，下游尝试作废。
 - 直接改已有规划结果：`revise_stage_output(project, stage, edited_output)`。
 - 新 Revision 仅复制修改点前的已确认输出；修改阶段和下游重做。旧产物标为 stale，不手改 STEP、GLB、BOM 或源码。
 
@@ -61,7 +61,7 @@ result = orchestrator.run_next(
 ```text
 store/<project-id>/
   project.json
-  intents/<intent-sha256>.json
+  layouts/<layout-sha256>.json
   panels/<panel-sha256>.json
   revisions/<revision-id>/attempts/panel_plan/001/input.json
   revisions/<revision-id>/attempts/panel_plan/001/output.json
@@ -70,7 +70,7 @@ store/<project-id>/
 
 未传入 `project_store` 时只更新内存中的 Revision；交互服务默认使用仓库根目录下已忽略的 `store/`。
 
-`layout-plan` 不在 `STAGE_SEQUENCE` 中。只有明确请求功能房间摆放或房间 CAD 时才单独运行 `/api/plan-room`；其结果不写入 `approved_stages`，也不是板件、柜体 CAD 或交付的前置条件。
+`layout_plan` 是 `STAGE_SEQUENCE` 的第一阶段。确认后写入 `approved_stages`，板件只读冻结布局中的可执行 CAD 单元。房间编辑器仍可经 `/api/room-scene/...` 读写 Project 里的房间草稿。
 
 ## 可执行 JSON
 
@@ -93,7 +93,7 @@ store/<project-id>/
 
 `width/depth/height` 必须在意图确认前明确提供；不再用类别预设替代客户确认的外包络。板件必填字段必须完整提交；料档字段（`board_thickness` / `back_thickness` / `door_thickness` / `drawer_bottom_thickness` / `drawer_back_thickness`）可省略，由车间工艺卡展开（料板 18、卷后背板 9、门与抽屉盒同料板）。代码不按柜型静默补其他默认方案。完整值经确定性准入后才写入 `panel_plan.cabinets[].spec`。
 
-契约为扁平 JSON。规范字段使用 `furniture_category/width/depth/height`；适配器只把外包络字段转成 `DesignIntent`，把板件规范字段路由到 `stage_inputs.panels`，把制造选项（含 `door_hinge_side`、`movable_shelf_connector`、`edge_banding`）和外观路由到 `stage_inputs.manufacturing`。房间场景不进入家具扁平协议。扁平请求不再接受历史 `type`，该字段仅在旧序列化 spec 加载时恢复。历史 `furniture_type`/`overall_size`/`mount_mode`/`mounting_height` 仍可映射到规范名。可选 `constraints` 必须有阶段映射；未分类约束在协议路由时拒绝。扁平示例里的 `door_hinge_side` 是制造选项，不是板件规范字段。
+契约为扁平 JSON。规范字段使用 `furniture_category/width/depth/height` 或 `rooms[]`；适配器把单件快捷写法展开成一间工作室房间 + 一个 CAD 单元，把板件规范字段路由到 `stage_inputs.panels`，把制造选项（含 `door_hinge_side`、`movable_shelf_connector`、`edge_banding`）和外观路由到 `stage_inputs.manufacturing`。扁平请求不再接受历史 `type`，该字段仅在旧序列化 spec 加载时恢复。历史 `furniture_type`/`overall_size`/`mounting_height` 仍可映射到规范名。可选 `constraints` 必须有阶段映射；未分类约束在协议路由时拒绝。扁平示例里的 `door_hinge_side` 是制造选项，不是板件规范字段。
 
 `back_mount` 接受 `groove/insert/cover`，但不进入意图或布局输出。板件阶段不从板厚推断模式；`back_rail_height/groove_depth/groove_clearance` 仅对 `groove` 生效，`back_rail_height=0` 关闭背拉条。
 
@@ -133,7 +133,7 @@ store/<project-id>/
 
 交互确认后的 CAD 写入 `generated/<project-id>/revision-<n>/`（或调用时给出的 `output_root`）：
 
-- `<artifact-name>.design-intent.json`
+- `<artifact-name>.layout-plan.json`
 - `<artifact-name>.panel-plan.json`
 - `<artifact-name>.manufacture-plan.json`
 - `<artifact-name>.feature-tree.json`
@@ -151,9 +151,7 @@ build123d 入口源码以 `<artifact-name>.step.py`（交互模式为 `model.ste
 
 运行时流水线为：
 
-`Agent tools -> FurnitureOrchestrator -> 设计意图 -> 板件 -> 制造/BOM -> 特征树 -> CAD Bridge -> STEP + Viewer 组件包 -> 交付验证`
-
-独立房间场景为：`明确房间请求 -> layout-plan -> 多件坐标/碰撞/SVG/Viewer -> 可选房间包络 CAD`；场景可保存为「源」后重新读取重算，不产生 Revision。
+`Agent tools -> FurnitureOrchestrator -> 房间布局 -> 板件 -> 制造/BOM -> 特征树 -> CAD Bridge -> STEP + Viewer 组件包 -> 交付验证`
 
 Feature Tree v2 支持板件 `box` 和定向 `cut_box`；发射器先建板、再切削、最后装配加工后的板件。
 
@@ -161,8 +159,8 @@ Feature Tree v2 支持板件 `box` 和定向 `cut_box`；发射器先建板、�
 
 ## 运行时板件与 BOM 路径
 
-- `furniture_layout/pipeline.py::plan_room_scene()`：独立计算多件房间定位、碰撞和预览；`generate_room_cad()` 发射房屋与包络 CAD。不进入家具生成串联流程。
-- `furniture_panel_planning/panel_pipeline.py::plan_panel_stage()`：从已确认意图直接首次物化功能数量、结构规格、精确净空、背板方案，并生成实体板件角色、尺寸和位置。
+- `furniture_layout/pipeline.py::plan_project_layout()`：计算多房间定位、碰撞和预览，产出可执行 CAD 单元；`generate_room_cad()` 发射房屋与包络 CAD。
+- `furniture_panel_planning/panel_pipeline.py::plan_panel_stage()`：从已确认布局的可执行单元物化功能数量、结构规格、精确净空、背板方案，并生成实体板件角色、尺寸和位置。
 - `furniture_manufacturing/manufacturing_bom.py::plan_manufacturing()`：材料、封边、五金、BOM、槽；`emit_drilled_holes()` 输出配合孔。
 
 `cabinet_pipeline.py::CabinetPipelineResult` 只是已确认板件+制造结果的快照，供 CAD 写入使用。Orchestrator 按阶段调用各 Skill，不合并检查点。

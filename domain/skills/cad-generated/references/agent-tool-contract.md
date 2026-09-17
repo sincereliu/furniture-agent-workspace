@@ -27,15 +27,15 @@ result = session.call(name, arguments)  # arguments 为对象或 JSON 字符串
 
 | 工具 | 作用 |
 | --- | --- |
-| `furniture_create_project` | 用规范意图字段开工，停在未确认的 `design_intent` |
+| `furniture_create_project` | 用房间布局或单件快捷字段开工，停在未确认的 `layout_plan` |
 | `furniture_get_project` | 读当前 Revision 快照 |
 | `furniture_confirm_stage` | 确认当前检查点；意图/板件确认时冻结 JSON |
 | `furniture_run_next` | 在已确认检查点上生成下一阶段的第一次 attempt |
 | `furniture_retry_stage` | 对同一冻结上游再试 `panel_plan` / `manufacture_plan` / `feature_tree_planned` |
 | `furniture_select_stage_attempt` | 选用某次通过的 attempt，再确认 |
-| `furniture_revise_intent` | 新 Revision，从 `design_intent` 重来 |
+| `furniture_revise_layout` | 新 Revision，从 `layout_plan` 重来 |
 
-不提供：`CadBridge`、特征树发射器、一次性自动确认、压扁检查点的入口。房间场景与房间 CAD 走独立 `layout-plan` HTTP（`/api/plan-room`），不在这组 `furniture_*` 工具里。
+不提供：`CadBridge`、特征树发射器、一次性自动确认、压扁检查点的入口。房间编辑器仍可走 `layout-plan` HTTP，真源是 Project 的 `layout_plan`。
 
 ## 调用规则（代码强制）
 
@@ -43,7 +43,7 @@ result = session.call(name, arguments)  # arguments 为对象或 JSON 字符串
 - 下一阶段已有 attempt 时，必须 `furniture_retry_stage`，否则 `USE_RETRY_STAGE`。
 - 进入 `cad_generated` 必须 `generate_cad=true`；省略 `output_root` 时使用工作区约定路径 `generated`。
 - 未知字段、历史别名（`furniture_type` / `type` / `overall_size`）返回 `UNKNOWN_ARGUMENT`。
-- 失败 Revision 只能 `furniture_revise_intent`。
+- 失败 Revision 只能 `furniture_revise_layout`。
 - 每次成功调用后展示 `project.current_view`，按 `required_tool` / `allowed_tools` 停，不要连跳。`panel_plan` 展示审查清单的 `markdown` 或板件/接触表，不要把冻结 `cabinets[]` 树当确认界面。
 
 ## 调用结果
@@ -58,19 +58,18 @@ result = session.call(name, arguments)  # arguments 为对象或 JSON 字符串
 - `allowed_tools`、`required_tool`、`cad_generation_required`
 - `attempts`（编号、是否通过、错误；不含整份输出）
 - `current_view`（当前阶段给人看的内容；`include_view=false` 可省略）。`panel_plan` 是确认审查清单（净空、板件一行一条、接触去重、`markdown`），不是冻结 `cabinets[]` 树；冻结板件仍在 Store。其他阶段一般就是该阶段结果本身。
-- `intent` 与冻结哈希
+- `layout` 与冻结哈希
 
 `allowed_tools` 是当前合法的 `furniture_*` 工具名，不是方案推荐。`required_tool` 是下一步必须调用的那个工具。
 
 ## 意图与阶段输入
 
-`furniture_create_project` / `furniture_revise_intent` 只接受：
+`furniture_create_project` / `furniture_revise_layout` 只接受：
 
-- `furniture_category`
-- `width_mm` / `depth_mm` / `height_mm` 或 `finished_envelope.{width_mm,depth_mm,height_mm}`
-- 吊柜：`hanging_mode`（`free_hanging_height` / `flush_ceiling`）与自由挂高时的 `hanging_height_mm`
+- `rooms[]`（全屋布局）
+- 或单件快捷：`furniture_category`、`width_mm` / `depth_mm` / `height_mm`（或 `finished_envelope`）、可选 `origin_z_mm`
 
-门、层板、抽屉、料厚、背板、踢脚、五金不得进入意图。它们属于 `stage_input`：
+门、层板、抽屉、料厚、背板、踢脚、五金不得进入布局。它们属于 `stage_input`：
 
 - 第一次板件/制造：`furniture_run_next` 的 `stage_input`
 - 再试：`furniture_retry_stage` 的 `stage_input`

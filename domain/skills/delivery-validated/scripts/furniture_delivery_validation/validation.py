@@ -12,7 +12,7 @@ from typing import Any, Mapping, Sequence
 
 REQUIRED_DELIVERY_KINDS = frozenset(
     {
-        "design_intent",
+        "layout_plan",
         "panel_plan",
         "manufacturing_plan",
         "feature_tree",
@@ -29,7 +29,7 @@ REQUIRED_DELIVERY_KINDS = frozenset(
 )
 
 PRE_DELIVERY_STAGES = (
-    "design_intent",
+    "layout_plan",
     "panel_plan",
     "manufacture_plan",
     "feature_tree_planned",

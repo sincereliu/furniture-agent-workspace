@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from math import isfinite
 from typing import Any, Mapping
 
-from furniture_design_intent.design_intent import DesignIntent, EXECUTABLE_CATEGORIES
+from furniture_layout.project_layout import LayoutUnit
+from furniture_layout.scene import EXECUTABLE_CATEGORIES
 
 
 VALID_BACK_MOUNTS = frozenset({"groove", "insert", "cover"})
@@ -146,14 +147,19 @@ class FurnitureSpec:
         _validate_sheet_stock(self)
 
     @classmethod
-    def from_intent(
+    def from_layout_unit(
         cls,
-        intent: DesignIntent,
+        unit: LayoutUnit,
         options: Mapping[str, Any] | None,
     ) -> "FurnitureSpec":
-        """Admit a proposal against a confirmed finished envelope."""
-        if not isinstance(intent, DesignIntent) or not intent.confirmed:
-            raise ValueError("panel planning requires a confirmed DesignIntent")
+        """Admit a proposal against a confirmed layout CAD unit."""
+        if not isinstance(unit, LayoutUnit):
+            raise ValueError("panel planning requires a layout CAD unit")
+        if unit.furniture_category not in EXECUTABLE_CATEGORIES:
+            raise ValueError(
+                "panel planning requires an executable furniture_category: "
+                + ", ".join(sorted(EXECUTABLE_CATEGORIES))
+            )
         if not isinstance(options, Mapping):
             raise ValueError("panel proposal must be an object")
         values = dict(options)
@@ -166,19 +172,12 @@ class FurnitureSpec:
             raise ValueError(
                 "panel proposal is incomplete; missing: " + ", ".join(missing)
             )
-        dimensions = (
-            intent.finished_envelope.width_mm,
-            intent.finished_envelope.depth_mm,
-            intent.finished_envelope.height_mm,
-        )
-        if any(value is None for value in dimensions):
-            raise ValueError("panel planning requires a confirmed finished envelope")
         return cls.from_dict(
             {
-                "furniture_category": intent.furniture_category,
-                "width": dimensions[0],
-                "depth": dimensions[1],
-                "height": dimensions[2],
+                "furniture_category": unit.furniture_category,
+                "width": unit.width,
+                "depth": unit.depth,
+                "height": unit.height,
                 **values,
             }
         )

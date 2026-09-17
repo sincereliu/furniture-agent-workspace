@@ -24,7 +24,6 @@ SCRIPT_SUFFIXES = {
     ".tsx",
 }
 STAGE_SKILL_NAMES = (
-    "design-intent",
     "layout-plan",
     "panel-plan",
     "manufacture-plan",

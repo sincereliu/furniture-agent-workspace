@@ -11,14 +11,14 @@ import yaml
 WORKSPACE_ROOT = Path(__file__).resolve().parents[5]
 SKILLS_ROOT = WORKSPACE_ROOT / "domain" / "skills"
 
-INTENT_SCRIPTS_ROOT = SKILLS_ROOT / "design-intent" / "scripts"
-if str(INTENT_SCRIPTS_ROOT) not in sys.path:
-    sys.path.insert(0, str(INTENT_SCRIPTS_ROOT))
+LAYOUT_SCRIPTS_ROOT = SKILLS_ROOT / "layout-plan" / "scripts"
+if str(LAYOUT_SCRIPTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(LAYOUT_SCRIPTS_ROOT))
 
-from furniture_design_intent.design_intent import EXECUTABLE_CATEGORIES
+from furniture_layout.scene import EXECUTABLE_CATEGORIES
 
 PLANNING_STAGE_SKILLS = {
-    "design_intent": "design-intent",
+    "layout_plan": "layout-plan",
     "panel_plan": "panel-plan",
     "manufacture_plan": "manufacture-plan",
     "feature_tree_planned": "feature-tree",
@@ -27,13 +27,10 @@ PLANNING_STAGE_SKILLS = {
 CAD_TOOL_HOME = "cad-generated"
 
 STAGE_REFERENCES = {
-    "design-intent": (
-        "references/intent-capture-rules.md",
-        "references/intake/catalog.yaml",
-    ),
     "layout-plan": (
         "references/spatial-layout-rules.md",
         "references/room-scene-guide.md",
+        "references/intake/catalog.yaml",
     ),
     "panel-plan": (
         "references/panel-definition-rules.md",
@@ -62,7 +59,6 @@ STAGE_REFERENCES = {
 }
 
 STAGE_RUNTIME_PACKAGES = {
-    "design-intent": "furniture_design_intent",
     "layout-plan": "furniture_layout",
     "panel-plan": "furniture_panel_planning",
     "manufacture-plan": "furniture_manufacturing",
@@ -124,11 +120,6 @@ class SkillArchitectureTests(unittest.TestCase):
             claimed_stages[claimed_stage] = skill_name
 
         self.assertEqual(claimed_stages, PLANNING_STAGE_SKILLS)
-        layout_skill = (SKILLS_ROOT / "layout-plan" / "SKILL.md").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("独立按需步骤", layout_skill)
-        self.assertNotRegex(layout_skill, re.compile(r"^阶段：`", re.MULTILINE))
 
     def test_cad_generated_is_an_orchestrator_tool_not_an_agent_skill(self) -> None:
         cad_root = SKILLS_ROOT / CAD_TOOL_HOME
@@ -277,7 +268,7 @@ class SkillArchitectureTests(unittest.TestCase):
     ) -> None:
         catalog_path = (
             SKILLS_ROOT
-            / "design-intent"
+            / "layout-plan"
             / "references"
             / "intake"
             / "catalog.yaml"
@@ -307,7 +298,6 @@ class SkillArchitectureTests(unittest.TestCase):
 
     def test_stage_validation_rules_do_not_live_in_the_orchestrator(self) -> None:
         validators = {
-            "design-intent": "furniture_design_intent/validation.py",
             "layout-plan": "furniture_layout/validation.py",
             "panel-plan": "furniture_panel_planning/validation.py",
             "manufacture-plan": "furniture_manufacturing/validation.py",

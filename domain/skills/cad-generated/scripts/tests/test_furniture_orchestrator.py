@@ -21,7 +21,7 @@ bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 from furniture_cad.cad_bridge import CadBridge
 from furniture_delivery_validation.validation import validate_delivery
-from furniture_design_intent.design_intent import DesignIntent, FinishedEnvelope
+from furniture_layout.project_layout import ProjectLayout, single_cabinet_layout
 from furniture_workflow.input_adapter import stage_inputs_from_spec
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from workflow_test_support import confirm_through, confirm_until
@@ -54,13 +54,13 @@ class FurnitureOrchestratorLifecycleTests(unittest.TestCase):
         )
         revision = project.latest
 
-        self.assertEqual(revision.workflow.current, WorkflowStage.DESIGN_INTENT)
+        self.assertEqual(revision.workflow.current, WorkflowStage.LAYOUT_PLAN)
         self.assertEqual(
             set(revision.stage_outputs),
-            {WorkflowStage.DESIGN_INTENT.value},
+            {WorkflowStage.LAYOUT_PLAN.value},
         )
 
-        self.orchestrator.confirm_intent(project)
+        self.orchestrator.confirm_layout(project)
         for expected in STAGE_SEQUENCE[1:4]:
             result = self.orchestrator.run_next(project)
             self.assertEqual(result.revision.workflow.current, expected)
@@ -87,7 +87,7 @@ class FurnitureOrchestratorLifecycleTests(unittest.TestCase):
             cabinet_intent(),
             stage_inputs=stage_inputs_from_spec(panel_parameters()),
         )
-        self.orchestrator.confirm_intent(project)
+        self.orchestrator.confirm_layout(project)
         result = self.orchestrator.run_next(project)
         panel_output = result.revision.stage_outputs[WorkflowStage.PANELS_PLANNED.value]
         self.assertEqual(set(panel_output), {"cabinets"})
@@ -119,7 +119,7 @@ class FurnitureOrchestratorLifecycleTests(unittest.TestCase):
             parent.stage_outputs[WorkflowStage.PANELS_PLANNED.value]
         )
         edited_panels = plan_panel_stage(
-            parent.intent,
+            parent.layout,
             panel_parameters(
                 shelves=[{"shelf_type": "fixed", "gap_below_mm": None}],
                 top_gap_mm=300,
@@ -137,7 +137,7 @@ class FurnitureOrchestratorLifecycleTests(unittest.TestCase):
         self.assertEqual(
             set(revised.stage_outputs),
             {
-                WorkflowStage.DESIGN_INTENT.value,
+                WorkflowStage.LAYOUT_PLAN.value,
                 WorkflowStage.PANELS_PLANNED.value,
             },
         )
@@ -147,7 +147,7 @@ class FurnitureOrchestratorLifecycleTests(unittest.TestCase):
         )
         self.assertEqual(
             revised.approved_stages,
-            [WorkflowStage.DESIGN_INTENT.value],
+            [WorkflowStage.LAYOUT_PLAN.value],
         )
 
         self.orchestrator.confirm_stage(project, WorkflowStage.PANELS_PLANNED)
@@ -204,7 +204,7 @@ class FurnitureOrchestratorLifecycleTests(unittest.TestCase):
                 self.assertEqual(
                     artifact_kinds,
                     {
-                        "design_intent",
+                        "layout_plan",
                         "panel_plan",
                         "manufacturing_plan",
                         "feature_tree",
@@ -284,7 +284,7 @@ class FurnitureOrchestratorLifecycleTests(unittest.TestCase):
                 design_artifact = next(
                     artifact
                     for artifact in result.revision.manifest.artifacts
-                    if artifact.kind == "design_intent"
+                    if artifact.kind == "layout_plan"
                 )
                 Path(design_artifact.path).write_text(
                     '{"tampered": true}',
@@ -376,19 +376,14 @@ class FurnitureOrchestratorLifecycleTests(unittest.TestCase):
 
                 revised = orchestrator.revise(
                     result.project,
-                    DesignIntent(
-                        furniture_category="wall_cabinet",
-                        finished_envelope=FinishedEnvelope(900, 350, 900),
-                        hanging_mode="free_hanging_height",
-                        hanging_height_mm=2000,
-                    ),
+                    single_cabinet_layout(furniture_category="wall_cabinet", width=900, depth=350, height=900, origin_z_mm=2000, confirmed=True),
                 )
 
                 self.assertEqual(revised.parent_revision_id, parent.id)
                 self.assertTrue(all(item.stale for item in parent.manifest.artifacts))
                 self.assertEqual(
                     set(revised.stage_outputs),
-                    {WorkflowStage.DESIGN_INTENT.value},
+                    {WorkflowStage.LAYOUT_PLAN.value},
                 )
         finally:
             shutil.rmtree(source_dir, ignore_errors=True)
@@ -403,7 +398,7 @@ class FurnitureOrchestratorLifecycleTests(unittest.TestCase):
         self.assertIsNone(result.pipeline)
         self.assertEqual(
             result.revision.workflow.current,
-            WorkflowStage.DESIGN_INTENT,
+            WorkflowStage.LAYOUT_PLAN,
         )
         self.assertNotIn(
             WorkflowStage.PANELS_PLANNED.value,
@@ -428,27 +423,15 @@ class FurnitureOrchestratorLifecycleTests(unittest.TestCase):
                 )
             )
 
-    def test_draft_intent_preserves_null_dimensions_and_cannot_confirm(self) -> None:
-        intent = DesignIntent.from_dict(
-            {
-                "furniture_category": "floor_cabinet",
-                "finished_envelope": {
-                    "width_mm": 800,
-                    "depth_mm": None,
-                    "height_mm": 1000,
-                },
-            }
-        )
-        project = self.orchestrator.create_project("未完整柜体", intent)
-
-        self.assertIsNone(
-            project.latest.stage_outputs["design_intent"]["finished_envelope"]["depth_mm"]
-        )
-        revision = self.orchestrator.confirm_intent(project)
-
-        self.assertEqual(revision.workflow.current, WorkflowStage.FAILED)
-        issue_codes = {issue.code for issue in revision.validations[-1].issues}
-        self.assertIn("INVALID_INTENT", issue_codes)
+    def test_missing_item_dimension_fails_before_layout_is_created(self) -> None:
+        with self.assertRaisesRegex(ValueError, "width, depth and height"):
+            self.orchestrator.layout_from_spec(
+                {
+                    "furniture_category": "floor_cabinet",
+                    "width": 800,
+                    "height": 1000,
+                }
+            )
 
 
 if __name__ == "__main__":

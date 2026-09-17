@@ -21,7 +21,7 @@ bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 from furniture_cad.cad_bridge import CadBridge
 from furniture_delivery_validation.validation import validate_delivery
-from furniture_design_intent.design_intent import DesignIntent, FinishedEnvelope
+from furniture_layout.project_layout import ProjectLayout, single_cabinet_layout
 from furniture_workflow.input_adapter import stage_inputs_from_spec
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from workflow_test_support import confirm_through, confirm_until
@@ -44,7 +44,7 @@ class FurnitureOrchestratorAdmissionTests(unittest.TestCase):
             project_store=None,
         )
     def test_runtime_requires_llm_to_normalize_natural_language_type(self) -> None:
-        with self.assertRaisesRegex(ValueError, "executable canonical category"):
+        with self.assertRaisesRegex(ValueError, "furniture_category must be one of"):
             cabinet_intent(furniture_category="地柜").confirm()
 
     def test_unsupported_layout_decision_is_rejected_by_independent_input(self) -> None:
@@ -61,11 +61,11 @@ class FurnitureOrchestratorAdmissionTests(unittest.TestCase):
                 {"structure": {"mystery_joint": "unknown"}}
             ),
         )
-        self.orchestrator.confirm_intent(project)
+        self.orchestrator.confirm_layout(project)
         revision = self.orchestrator.run_next(project).revision
 
-        self.assertEqual(revision.workflow.current, WorkflowStage.DESIGN_INTENT)
-        self.assertTrue(revision.is_stage_approved(WorkflowStage.DESIGN_INTENT))
+        self.assertEqual(revision.workflow.current, WorkflowStage.LAYOUT_PLAN)
+        self.assertTrue(revision.is_stage_approved(WorkflowStage.LAYOUT_PLAN))
         attempt = revision.latest_attempt(WorkflowStage.PANELS_PLANNED)
         self.assertIsNotNone(attempt)
         self.assertFalse(attempt.passed)
@@ -107,7 +107,7 @@ class FurnitureOrchestratorAdmissionTests(unittest.TestCase):
         )
         self.assertEqual(
             result.revision.workflow.current,
-            WorkflowStage.DESIGN_INTENT,
+            WorkflowStage.LAYOUT_PLAN,
         )
         self.assertFalse(
             result.revision.latest_attempt(WorkflowStage.PANELS_PLANNED).passed
@@ -125,7 +125,7 @@ class FurnitureOrchestratorAdmissionTests(unittest.TestCase):
         )
         self.assertEqual(
             result.revision.workflow.current,
-            WorkflowStage.DESIGN_INTENT,
+            WorkflowStage.LAYOUT_PLAN,
         )
         self.assertFalse(
             result.revision.latest_attempt(WorkflowStage.PANELS_PLANNED).passed
@@ -135,20 +135,11 @@ class FurnitureOrchestratorAdmissionTests(unittest.TestCase):
             result.revision.validations[-1].issues[0].message,
         )
 
-    def test_unsupported_family_fails_at_design_intent_confirmation(self) -> None:
-        project = self.orchestrator.create_project(
-            "床", cabinet_intent(furniture_category="bed")
-        )
-        revision = self.orchestrator.confirm_intent(project)
+    def test_unsupported_family_fails_before_layout_is_created(self) -> None:
+        with self.assertRaisesRegex(ValueError, "furniture_category must be one of"):
+            cabinet_intent(furniture_category="bed")
 
-        self.assertEqual(revision.workflow.current, WorkflowStage.FAILED)
-        self.assertFalse(revision.validations[-1].passed)
-        self.assertEqual(
-            revision.validations[-1].issues[0].code,
-            "UNSUPPORTED_FURNITURE_CATEGORY",
-        )
-
-    def test_intent_from_spec_contains_only_category_and_envelope(self) -> None:
+    def test_layout_from_spec_contains_only_category_and_envelope(self) -> None:
         request = {
             "furniture_category": "wall_cabinet",
             "width": 800,
@@ -158,20 +149,14 @@ class FurnitureOrchestratorAdmissionTests(unittest.TestCase):
             "top_gap_mm": 300,
             "back_mount": "cover",
         }
-        intent = self.orchestrator.intent_from_spec(request)
-        self.assertEqual(intent.finished_envelope.width_mm, 800)
-        self.assertEqual(intent.finished_envelope.depth_mm, 350)
-        self.assertEqual(intent.finished_envelope.height_mm, 900)
+        layout = self.orchestrator.layout_from_spec(request)
+        unit = layout.executable_units()[0]
+        self.assertEqual(unit.width, 800)
+        self.assertEqual(unit.depth, 350)
+        self.assertEqual(unit.height, 900)
         self.assertEqual(
-            set(intent.to_dict()),
-            {
-                "furniture_category",
-                "finished_envelope",
-                "hanging_mode",
-                "hanging_height_mm",
-                "confirmed",
-                "schema_version",
-            },
+            set(layout.to_dict()),
+            {"schema_version", "confirmed", "rooms", "cad"},
         )
         inputs = stage_inputs_from_spec(request)
         self.assertEqual(
@@ -198,7 +183,7 @@ class FurnitureOrchestratorAdmissionTests(unittest.TestCase):
 
     def test_flat_requests_reject_legacy_type_field(self) -> None:
         with self.assertRaisesRegex(ValueError, "must use furniture_category"):
-            self.orchestrator.intent_from_spec(
+            self.orchestrator.layout_from_spec(
                 {
                     "type": "wall_cabinet",
                     "width": 800,
@@ -225,7 +210,7 @@ class FurnitureOrchestratorAdmissionTests(unittest.TestCase):
 
         self.assertEqual(
             result.revision.workflow.current,
-            WorkflowStage.DESIGN_INTENT,
+            WorkflowStage.LAYOUT_PLAN,
         )
         self.assertFalse(
             result.revision.latest_attempt(WorkflowStage.PANELS_PLANNED).passed
@@ -235,8 +220,8 @@ class FurnitureOrchestratorAdmissionTests(unittest.TestCase):
             result.revision.validations[-1].issues[0].message,
         )
 
-    def test_design_intent_loads_historical_field_names(self) -> None:
-        intent = DesignIntent.from_dict(
+    def test_layout_from_spec_maps_historical_envelope_names(self) -> None:
+        layout = self.orchestrator.layout_from_spec(
             {
                 "furniture_type": "wall_cabinet",
                 "overall_size": {
@@ -244,95 +229,32 @@ class FurnitureOrchestratorAdmissionTests(unittest.TestCase):
                     "depth_mm": 350,
                     "height_mm": 900,
                 },
-                "mount_mode": "free_height",
                 "mounting_height_mm": 1800,
-                "schema_version": 2,
             }
         )
-        self.assertEqual(intent.furniture_category, "wall_cabinet")
-        self.assertEqual(intent.finished_envelope.height_mm, 900)
-        self.assertEqual(intent.hanging_mode, "free_hanging_height")
-        self.assertEqual(intent.hanging_height_mm, 1800)
-        self.assertEqual(intent.schema_version, 3)
-        self.assertEqual(
-            set(intent.to_dict()),
-            {
-                "furniture_category",
-                "finished_envelope",
-                "hanging_mode",
-                "hanging_height_mm",
-                "confirmed",
-                "schema_version",
-            },
+        unit = layout.executable_units()[0]
+        self.assertEqual(unit.furniture_category, "wall_cabinet")
+        self.assertEqual(unit.height, 900)
+        self.assertEqual(unit.origin_z_mm, 1800)
+
+    def test_wall_cabinet_hanging_is_origin_z(self) -> None:
+        free = single_cabinet_layout(
+            furniture_category="wall_cabinet",
+            width=800,
+            depth=350,
+            height=900,
+            origin_z_mm=1800,
+            confirmed=True,
         )
-
-    def test_design_intent_rejects_new_downstream_fields(self) -> None:
-        with self.assertRaisesRegex(ValueError, "route later decisions"):
-            DesignIntent.from_dict(
-                {
-                    "furniture_category": "floor_cabinet",
-                    "finished_envelope": {
-                        "width_mm": 800,
-                        "depth_mm": 600,
-                        "height_mm": 1000,
-                    },
-                    "structure": {"back_mount": "cover"},
-                }
-            )
-
-    def test_wall_cabinet_intent_requires_hanging_mode_before_confirmation(
-        self,
-    ) -> None:
-        with self.assertRaisesRegex(ValueError, "hanging_mode"):
-            DesignIntent(
-                furniture_category="wall_cabinet",
-                finished_envelope=FinishedEnvelope(800, 350, 900),
-            ).confirm()
-
-        with self.assertRaisesRegex(ValueError, "hanging_height_mm"):
-            DesignIntent(
-                furniture_category="wall_cabinet",
-                finished_envelope=FinishedEnvelope(800, 350, 900),
-                hanging_mode="free_hanging_height",
-            ).confirm()
-
-        free = DesignIntent(
+        self.assertEqual(free.executable_units()[0].origin_z_mm, 1800)
+        flush = single_cabinet_layout(
             furniture_category="wall_cabinet",
-            finished_envelope=FinishedEnvelope(800, 350, 900),
-            hanging_mode="free_hanging_height",
-            hanging_height_mm=1800,
-        ).confirm()
-        self.assertTrue(free.confirmed)
-        self.assertEqual(free.to_dict()["hanging_height_mm"], 1800)
-
-        flush = DesignIntent(
-            furniture_category="wall_cabinet",
-            finished_envelope=FinishedEnvelope(800, 350, 900),
-            hanging_mode="flush_ceiling",
-        ).confirm()
-        self.assertTrue(flush.confirmed)
-        self.assertIsNone(flush.hanging_height_mm)
-
-        floor = DesignIntent(
-            furniture_category="floor_cabinet",
-            finished_envelope=FinishedEnvelope(800, 600, 1000),
-        ).confirm()
-        self.assertTrue(floor.confirmed)
-        self.assertIsNone(floor.to_dict()["hanging_height_mm"])
-
-        with self.assertRaisesRegex(ValueError, "hanging_mode"):
-            DesignIntent(
-                furniture_category="floor_cabinet",
-                finished_envelope=FinishedEnvelope(800, 600, 1000),
-                hanging_mode="free_hanging_height",
-                hanging_height_mm=1800,
-            ).confirm()
-        with self.assertRaisesRegex(ValueError, "hanging_height_mm"):
-            DesignIntent(
-                furniture_category="floor_cabinet",
-                finished_envelope=FinishedEnvelope(800, 600, 1000),
-                hanging_height_mm=1800,
-            ).confirm()
+            width=800,
+            depth=350,
+            height=900,
+            confirmed=True,
+        )
+        self.assertGreater(flush.executable_units()[0].origin_z_mm, 0)
 
     def test_panel_stage_admits_complete_structured_parameters(self) -> None:
         project = self.orchestrator.create_project(
@@ -343,10 +265,10 @@ class FurnitureOrchestratorAdmissionTests(unittest.TestCase):
             ),
         )
 
-        revision = self.orchestrator.confirm_intent(project)
-        self.assertNotIn("structure", revision.stage_outputs["design_intent"])
+        revision = self.orchestrator.confirm_layout(project)
+        self.assertNotIn("structure", revision.stage_outputs["layout_plan"])
         with self.assertRaisesRegex(ValueError, "panel proposal is incomplete"):
-            plan_panel_stage(revision.intent, {})
+            plan_panel_stage(revision.layout, {})
         result = self.orchestrator.run_next(project)
         panel_output = result.revision.stage_outputs["panel_plan"]
         self.assertEqual(first_cabinet_spec(panel_output)["board_thickness"], 18.0)

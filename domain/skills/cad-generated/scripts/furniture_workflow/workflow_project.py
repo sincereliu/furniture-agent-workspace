@@ -10,7 +10,7 @@ from typing import Any
 from uuid import uuid4
 
 from furniture_delivery_validation.validation import ValidationReport
-from furniture_design_intent.design_intent import DesignIntent
+from furniture_layout.project_layout import ProjectLayout, single_cabinet_layout
 
 from .workflow_artifacts import ArtifactManifest
 from .workflow_state import WorkflowStage, WorkflowState, parse_stage, utc_now
@@ -39,7 +39,7 @@ class StageAttempt:
 
     number: int
     stage: str
-    intent_sha256: str
+    layout_sha256: str
     inputs: dict[str, Any] = field(default_factory=dict)
     output: dict[str, Any] | None = None
     passed: bool = False
@@ -50,7 +50,7 @@ class StageAttempt:
         return {
             "number": self.number,
             "stage": self.stage,
-            "intent_sha256": self.intent_sha256,
+            "layout_sha256": self.layout_sha256,
             "inputs": deepcopy(self.inputs),
             "output": deepcopy(self.output),
             "passed": self.passed,
@@ -63,7 +63,7 @@ class StageAttempt:
         return cls(
             number=int(data["number"]),
             stage=_stage_key(str(data["stage"])),
-            intent_sha256=str(data["intent_sha256"]),
+            layout_sha256=str(data.get("layout_sha256") or data["intent_sha256"]),
             inputs=deepcopy(dict(data.get("inputs") or {})),
             output=(
                 deepcopy(data["output"])
@@ -79,7 +79,7 @@ class StageAttempt:
 @dataclass
 class Revision:
     number: int
-    intent: DesignIntent
+    layout: ProjectLayout
     stage_inputs: dict[str, Any] = field(default_factory=dict)
     id: str = field(default_factory=lambda: _id("rev"))
     parent_revision_id: str | None = None
@@ -99,8 +99,8 @@ class Revision:
         if self.manifest is None:
             self.manifest = ArtifactManifest(source_revision_id=self.id)
         self.stage_outputs.setdefault(
-            WorkflowStage.DESIGN_INTENT.value,
-            self.intent.to_dict(),
+            WorkflowStage.LAYOUT_PLAN.value,
+            self.layout.to_dict(),
         )
         if self.feature_tree is not None:
             self.stage_outputs.setdefault(
@@ -134,8 +134,8 @@ class Revision:
         return attempts[-1] if attempts else None
 
     @property
-    def intent_sha256(self) -> str:
-        return _canonical_sha256(self.intent.to_dict())
+    def layout_sha256(self) -> str:
+        return _canonical_sha256(self.layout.to_dict())
 
     @property
     def panel_sha256(self) -> str | None:
@@ -150,10 +150,10 @@ class Revision:
             "number": self.number,
             "parent_revision_id": self.parent_revision_id,
             "created_at": self.created_at,
-            "intent_sha256": self.intent_sha256,
+            "layout_sha256": self.layout_sha256,
             "panel_sha256": self.panel_sha256,
             "confirmed_panel_sha256": self.confirmed_panel_sha256,
-            "intent": self.intent.to_dict(),
+            "layout": self.layout.to_dict(),
             "stage_inputs": self.stage_inputs,
             "workflow": self.workflow.to_dict(),
             "validations": [report.to_dict() for report in self.validations],
@@ -171,10 +171,21 @@ class Revision:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Revision":
-        raw_intent = dict(data["intent"])
+        raw_layout = data.get("layout")
+        raw_intent = data.get("intent")
+        if isinstance(raw_layout, dict):
+            layout = ProjectLayout.from_dict(raw_layout)
+        elif isinstance(raw_intent, dict):
+            layout = _layout_from_legacy_intent(raw_intent)
+        else:
+            raise ValueError("revision requires layout")
         stage_inputs = data.get("stage_inputs")
         if not isinstance(stage_inputs, dict):
-            stage_inputs = _legacy_stage_inputs(raw_intent)
+            stage_inputs = (
+                _legacy_stage_inputs(dict(raw_intent))
+                if isinstance(raw_intent, dict)
+                else {}
+            )
         else:
             stage_inputs = deepcopy(stage_inputs)
         stage_outputs = _remap_stage_keys(deepcopy(dict(data.get("stage_outputs", {}))))
@@ -188,7 +199,7 @@ class Revision:
             number=int(data["number"]),
             parent_revision_id=data.get("parent_revision_id"),
             created_at=str(data["created_at"]),
-            intent=DesignIntent.from_dict(raw_intent),
+            layout=layout,
             stage_inputs=stage_inputs,
             workflow=WorkflowState.from_dict(data["workflow"]),
             validations=validations,
@@ -249,7 +260,7 @@ class Project:
 
     def add_revision(
         self,
-        intent: DesignIntent,
+        layout: ProjectLayout,
         stage_inputs: dict[str, Any] | None = None,
     ) -> Revision:
         parent = self.revisions[-1] if self.revisions else None
@@ -257,7 +268,7 @@ class Project:
             parent.manifest.mark_stale()
         revision = Revision(
             number=len(self.revisions) + 1,
-            intent=intent,
+            layout=layout,
             stage_inputs=dict(stage_inputs or {}),
             parent_revision_id=parent.id if parent else None,
         )
@@ -280,6 +291,28 @@ class Project:
             created_at=str(data["created_at"]),
             revisions=[Revision.from_dict(item) for item in data.get("revisions", [])],
         )
+
+
+def _layout_from_legacy_intent(raw_intent: dict[str, Any]) -> ProjectLayout:
+    """Rebuild a studio-room layout from a persisted DesignIntent payload."""
+    envelope = raw_intent.get("finished_envelope") or {}
+    if not isinstance(envelope, dict):
+        envelope = {}
+    category = str(raw_intent.get("furniture_category") or "floor_cabinet")
+    hanging_mode = raw_intent.get("hanging_mode")
+    hanging_height = raw_intent.get("hanging_height_mm")
+    origin_z_mm = None
+    if category == "wall_cabinet" and hanging_mode != "flush_ceiling":
+        origin_z_mm = hanging_height
+    layout = single_cabinet_layout(
+        furniture_category=category,
+        width=float(envelope.get("width_mm") or 800),
+        depth=float(envelope.get("depth_mm") or 600),
+        height=float(envelope.get("height_mm") or 1000),
+        origin_z_mm=None if origin_z_mm is None else float(origin_z_mm),
+        confirmed=bool(raw_intent.get("confirmed")),
+    )
+    return layout
 
 
 def _legacy_stage_inputs(raw_intent: dict[str, Any]) -> dict[str, Any]:

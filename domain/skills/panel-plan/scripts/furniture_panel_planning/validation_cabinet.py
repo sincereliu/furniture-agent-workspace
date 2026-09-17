@@ -6,7 +6,7 @@ from dataclasses import asdict
 from typing import Any, Mapping
 
 from furniture_delivery_validation.validation import ValidationReport
-from furniture_design_intent.design_intent import DesignIntent
+from furniture_layout.project_layout import LayoutUnit
 
 from .assembly_tree import (
     ASSEMBLY_OBJECT_FIELDS,
@@ -520,17 +520,17 @@ def _validate_zones(
 
 
 def validate_structure(
-    confirmed_intent: DesignIntent,
+    unit: LayoutUnit,
     spec: FurnitureSpec,
     structure: CabinetStructure,
 ) -> ValidationReport:
-    """Validate exact geometry against the confirmed finished envelope."""
+    """Validate exact geometry against the confirmed layout CAD unit."""
     report = ValidationReport(stage="panel_plan")
     confirmed = (
-        confirmed_intent.furniture_category,
-        confirmed_intent.finished_envelope.width_mm,
-        confirmed_intent.finished_envelope.depth_mm,
-        confirmed_intent.finished_envelope.height_mm,
+        unit.furniture_category,
+        unit.width,
+        unit.depth,
+        unit.height,
     )
     if (
         spec.furniture_category,
@@ -539,8 +539,8 @@ def validate_structure(
         spec.height,
     ) != confirmed:
         report.add_error(
-            "PANEL_SPEC_INTENT_MISMATCH",
-            "panel construction must preserve the confirmed finished envelope",
+            "PANEL_SPEC_LAYOUT_MISMATCH",
+            "panel construction must preserve the confirmed layout envelope",
         )
 
     for name in ("board_thickness", "back_thickness", "door_thickness"):

@@ -14,7 +14,7 @@ from runtime_paths import bootstrap_runtime_paths
 
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
-from furniture_design_intent.design_intent import DesignIntent, FinishedEnvelope
+from furniture_layout.project_layout import ProjectLayout, single_cabinet_layout
 from furniture_panel_planning.assembly_tree import flatten_panels_for_handoff
 from furniture_panel_planning.cabinet_identity import panel_role
 from furniture_panel_planning.construction_geometry import (
@@ -37,7 +37,7 @@ from furniture_panel_planning.panel_spec import (
 )
 from furniture_panel_planning.structure_planning import CabinetStructure
 from furniture_workflow.input_adapter import MANUFACTURING_SPEC_FIELDS
-from panel_fixtures import by_role, furniture_spec, panel_parameters
+from panel_fixtures import by_role, furniture_spec, layout_unit, panel_parameters
 
 
 class PanelRuleContractTests(unittest.TestCase):
@@ -67,15 +67,11 @@ class PanelRuleContractTests(unittest.TestCase):
             toe_kick_support_clear_spacing(764.0, 1, 18.0),
             373.0,
         )
-        intent = DesignIntent(
-            furniture_category="floor_cabinet",
-            finished_envelope=FinishedEnvelope(800, 600, 1000),
-            confirmed=True,
-        )
+        layout = single_cabinet_layout(furniture_category="floor_cabinet", width=800, depth=600, height=1000, confirmed=True)
         params = panel_parameters()
         params["toe_kick_support_count"] = None
         with self.assertRaisesRegex(ValueError, "toe_kick_support_count"):
-            FurnitureSpec.from_intent(intent, params)
+            FurnitureSpec.from_layout_unit(layout.executable_units()[0], params)
 
     def test_drawer_dimension_chain_matches_reference_sample(self) -> None:
         spec = furniture_spec(
@@ -182,15 +178,11 @@ class PanelRuleContractTests(unittest.TestCase):
         self.assertTrue(all(panel.id.startswith("cab_a__") for panel in first))
         self.assertIn("left_side_panel", {panel.role for panel in first})
 
-        intent = DesignIntent(
-            furniture_category="floor_cabinet",
-            finished_envelope=FinishedEnvelope(800, 600, 1000),
-            confirmed=True,
-        )
+        layout = single_cabinet_layout(furniture_category="floor_cabinet", width=800, depth=600, height=1000, confirmed=True)
         output = plan_panel_cabinets(
             (
-                (intent, {**panel_parameters(), "cabinet_id": "cab_a"}),
-                (intent, {**panel_parameters(), "cabinet_id": "cab_b"}),
+                (layout.executable_units()[0], {**panel_parameters(), "cabinet_id": "cab_a"}),
+                (layout_unit("cab_b"), {**panel_parameters(), "cabinet_id": "cab_b"}),
             )
         )
         self.assertEqual(set(output), {"cabinets"})
@@ -248,35 +240,27 @@ class PanelRuleContractTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             CabinetStructure.from_dict(structure_payload)
 
-        intent = DesignIntent(
-            furniture_category="floor_cabinet",
-            finished_envelope=FinishedEnvelope(800, 600, 1000),
-            confirmed=True,
-        )
+        layout = single_cabinet_layout(furniture_category="floor_cabinet", width=800, depth=600, height=1000, confirmed=True)
         params = panel_parameters()
         params["door_margin"] = params.pop("front_face_margin")
         with self.assertRaisesRegex(ValueError, "does not support"):
-            FurnitureSpec.from_intent(intent, params)
+            FurnitureSpec.from_layout_unit(layout.executable_units()[0], params)
         params = panel_parameters()
         params["back_mount"] = "auto"
         with self.assertRaisesRegex(ValueError, "back_mount"):
-            FurnitureSpec.from_intent(intent, params)
+            FurnitureSpec.from_layout_unit(layout.executable_units()[0], params)
         params = panel_parameters()
         params["shelves"] = [{"shelf_type": "fixed", "gap_below_mm": "auto"}]
         params["top_gap_mm"] = 100.0
         with self.assertRaises(ValueError):
-            FurnitureSpec.from_intent(intent, params)
+            FurnitureSpec.from_layout_unit(layout.executable_units()[0], params)
 
     def test_sheet_stock_process_card_expands_omitted_fields(self) -> None:
-        intent = DesignIntent(
-            furniture_category="floor_cabinet",
-            finished_envelope=FinishedEnvelope(800, 600, 1000),
-            confirmed=True,
-        )
+        layout = single_cabinet_layout(furniture_category="floor_cabinet", width=800, depth=600, height=1000, confirmed=True)
         params = panel_parameters()
         for name in PANEL_STOCK_FIELDS:
             params.pop(name)
-        spec = FurnitureSpec.from_intent(intent, params)
+        spec = FurnitureSpec.from_layout_unit(layout.executable_units()[0], params)
         self.assertEqual(spec.board_thickness, 18.0)
         self.assertEqual(spec.back_thickness, 9.0)
         self.assertEqual(spec.door_thickness, 18.0)
@@ -325,14 +309,10 @@ class PanelRuleContractTests(unittest.TestCase):
             furniture_spec(board_thickness=16)
         with self.assertRaisesRegex(ValueError, "back_thickness must be 9"):
             furniture_spec(back_thickness=18)
-        intent = DesignIntent(
-            furniture_category="floor_cabinet",
-            finished_envelope=FinishedEnvelope(800, 600, 1000),
-            confirmed=True,
-        )
+        layout = single_cabinet_layout(furniture_category="floor_cabinet", width=800, depth=600, height=1000, confirmed=True)
         params = panel_parameters(board_thickness=22, drawer_bottom_thickness=18)
         with self.assertRaisesRegex(ValueError, "drawer_bottom_thickness must equal"):
-            FurnitureSpec.from_intent(intent, params)
+            FurnitureSpec.from_layout_unit(layout.executable_units()[0], params)
 
     def test_proposal_contract_complete_fields_match_runtime(self) -> None:
         contract = (
@@ -354,12 +334,8 @@ class PanelRuleContractTests(unittest.TestCase):
         self.assertTrue(listed.isdisjoint(MANUFACTURING_SPEC_FIELDS))
 
     def test_panel_output_is_only_cabinets(self) -> None:
-        intent = DesignIntent(
-            furniture_category="floor_cabinet",
-            finished_envelope=FinishedEnvelope(800, 600, 1000),
-            confirmed=True,
-        )
-        output = plan_panel_stage(intent, panel_parameters())
+        layout = single_cabinet_layout(furniture_category="floor_cabinet", width=800, depth=600, height=1000, confirmed=True)
+        output = plan_panel_stage(layout, panel_parameters())
         self.assertEqual(set(output), {"cabinets"})
         cabinet = output["cabinets"][0]
         self.assertEqual(
@@ -403,12 +379,8 @@ class PanelRuleContractTests(unittest.TestCase):
         self.assertEqual(len(legacy_panels), len(panels))
 
     def test_assembly_tree_keeps_integrated_toe_kick_on_carcass(self) -> None:
-        intent = DesignIntent(
-            furniture_category="floor_cabinet",
-            finished_envelope=FinishedEnvelope(800, 600, 1000),
-            confirmed=True,
-        )
-        output = plan_panel_stage(intent, panel_parameters(n_doors=2))
+        layout = single_cabinet_layout(furniture_category="floor_cabinet", width=800, depth=600, height=1000, confirmed=True)
+        output = plan_panel_stage(layout, panel_parameters(n_doors=2))
         cabinet = output["cabinets"][0]
         assemblies = cabinet["assemblies"]
         carcass_roles = {item["role"] for item in assemblies["carcass"]["panels"]}
@@ -426,15 +398,11 @@ class PanelRuleContractTests(unittest.TestCase):
         )
 
     def test_assembly_tree_nests_drawer_boxes(self) -> None:
-        intent = DesignIntent(
-            furniture_category="floor_cabinet",
-            finished_envelope=FinishedEnvelope(800, 600, 1000),
-            confirmed=True,
-        )
+        layout = single_cabinet_layout(furniture_category="floor_cabinet", width=800, depth=600, height=1000, confirmed=True)
         params = panel_parameters(n_doors=0, drawer_count=3)
         params["shelves"] = []
         params["top_gap_mm"] = 0
-        output = plan_panel_stage(intent, params)
+        output = plan_panel_stage(layout, params)
         cabinet = output["cabinets"][0]
         drawers = cabinet["assemblies"]["drawers"]
         self.assertEqual(len(drawers), 3)
@@ -475,12 +443,8 @@ class PanelRuleContractTests(unittest.TestCase):
         )
 
     def test_contact_output_uses_bearing_and_end_ids(self) -> None:
-        intent = DesignIntent(
-            furniture_category="floor_cabinet",
-            finished_envelope=FinishedEnvelope(800, 600, 1000),
-            confirmed=True,
-        )
-        output = plan_panel_stage(intent, panel_parameters())
+        layout = single_cabinet_layout(furniture_category="floor_cabinet", width=800, depth=600, height=1000, confirmed=True)
+        output = plan_panel_stage(layout, panel_parameters())
         cabinet = output["cabinets"][0]
         self.assertNotIn("panels", cabinet)
         carcass = cabinet["assemblies"]["carcass"]
@@ -527,12 +491,8 @@ class PanelRuleContractTests(unittest.TestCase):
             )
 
     def test_panel_review_lists_each_panel_and_contact_once(self) -> None:
-        intent = DesignIntent(
-            furniture_category="floor_cabinet",
-            finished_envelope=FinishedEnvelope(800, 600, 1000),
-            confirmed=True,
-        )
-        output = plan_panel_stage(intent, panel_parameters(n_doors=2))
+        layout = single_cabinet_layout(furniture_category="floor_cabinet", width=800, depth=600, height=1000, confirmed=True)
+        output = plan_panel_stage(layout, panel_parameters(n_doors=2))
         spec, structure, panels = require_primary_handoff(output)
         review = panel_review_from_output(output)
         self.assertEqual(set(review), {"cabinets", "markdown"})

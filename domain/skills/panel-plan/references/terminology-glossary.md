@@ -12,7 +12,7 @@
 
 | 概念 | 规范名 | 单位/类型 | 说明 |
 | --- | --- | --- | --- |
-| 家具类别 | `furniture_category` | 枚举 | 来自已确认 `DesignIntent`；本阶段不接受 `furniture_type` 或 `type`。 |
+| 家具类别 | `furniture_category` | 枚举 | 来自已确认 `layout_plan` 的可执行 CAD 单元；本阶段不接受 `furniture_type` 或 `type`。 |
 | 成品外包络宽 | `finished_envelope.width_mm` | mm | 意图阶段规范表达。序列化 `FurnitureSpec` 对应字段是 `width`。 |
 | 成品外包络深 | `finished_envelope.depth_mm` | mm | 意图阶段规范表达。序列化 `FurnitureSpec` 对应字段是 `depth`。 |
 | 成品外包络高 | `finished_envelope.height_mm` | mm | 意图阶段规范表达。序列化 `FurnitureSpec` 对应字段是 `height`。 |

@@ -1,4 +1,4 @@
-"""Validation owned by independent room-scene layout."""
+"""Validation owned by the layout_plan stage."""
 
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ from .placement import (
     resolve_placement,
 )
 from .preview import render_preview
+from .project_layout import ProjectLayout
 from .scene import (
     EPSILON,
     ItemSpec,
@@ -55,6 +56,9 @@ def validate_room_scene(output: Mapping[str, Any]) -> ValidationReport:
             continue
         _validate_derived_item(item, expected, report, path)
         _validate_item_fit(scene, item, report, path)
+
+    if not scene.items:
+        return report
 
     raw_preview = output.get("preview")
     if not isinstance(raw_preview, Mapping):
@@ -225,6 +229,7 @@ def _validate_item_placement(
         width=item.width,
         depth=item.depth,
         height=item.height,
+        furniture_category=item.furniture_category,
         placement=PlacementRequest(
             mode=expected_placement.mode,
             host_wall=expected_placement.host_wall,
@@ -342,3 +347,32 @@ def _points_close(
 
 def _all_finite(*values: float) -> bool:
     return all(isfinite(value) for value in values)
+
+
+def validate_project_layout(output: Mapping[str, Any]) -> ValidationReport:
+    report = ValidationReport(stage="layout_plan")
+    try:
+        layout = ProjectLayout.from_dict(output)
+    except (KeyError, TypeError, ValueError) as exc:
+        report.add_error("INVALID_PROJECT_LAYOUT", str(exc), "rooms")
+        return report
+    for message in layout.validate():
+        report.add_error("INVALID_PROJECT_LAYOUT", message, "rooms")
+    raw_rooms = output.get("rooms")
+    if not isinstance(raw_rooms, list):
+        return report
+    for index, raw in enumerate(raw_rooms):
+        if not isinstance(raw, Mapping):
+            report.add_error(
+                "INVALID_PROJECT_LAYOUT",
+                f"rooms[{index}] must be an object",
+                f"rooms[{index}]",
+            )
+            continue
+        room_report = validate_room_scene(raw)
+        for issue in room_report.issues:
+            path = f"rooms[{index}]"
+            if issue.path:
+                path = f"{path}.{issue.path}"
+            report.add_error(issue.code, issue.message, path)
+    return report

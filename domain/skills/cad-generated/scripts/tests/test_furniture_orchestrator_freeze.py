@@ -21,7 +21,7 @@ bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 from furniture_cad.cad_bridge import CadBridge
 from furniture_delivery_validation.validation import validate_delivery
-from furniture_design_intent.design_intent import DesignIntent, FinishedEnvelope
+from furniture_layout.project_layout import ProjectLayout, single_cabinet_layout
 from furniture_workflow.input_adapter import stage_inputs_from_spec
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from workflow_test_support import confirm_through, confirm_until
@@ -77,16 +77,19 @@ class FurnitureOrchestratorFreezeTests(unittest.TestCase):
                 cabinet_intent(),
                 stage_inputs=stage_inputs_from_spec(panel_parameters(n_doors=2)),
             )
-            orchestrator.confirm_intent(project)
-            frozen_path = store.intent_path(
+            orchestrator.confirm_layout(project)
+            frozen_path = store.layout_path(
                 project.id,
-                project.latest.intent_sha256,
+                project.latest.layout_sha256,
             )
             self.assertTrue(frozen_path.is_file())
             frozen = json.loads(frozen_path.read_text(encoding="utf-8"))
             self.assertTrue(frozen["confirmed"])
-            self.assertEqual(frozen["furniture_category"], "floor_cabinet")
-            intent_sha = project.latest.intent_sha256
+            self.assertEqual(
+                frozen["cad"]["units"][0]["furniture_category"],
+                "floor_cabinet",
+            )
+            intent_sha = project.latest.layout_sha256
 
             first = orchestrator.run_next(project)
             self.assertEqual(
@@ -101,7 +104,7 @@ class FurnitureOrchestratorFreezeTests(unittest.TestCase):
                 stage_input={"parameters": panel_parameters(n_doors=1)},
             )
             self.assertEqual(second.revision.id, first.revision.id)
-            self.assertEqual(second.revision.intent_sha256, intent_sha)
+            self.assertEqual(second.revision.layout_sha256, intent_sha)
             self.assertEqual(len(second.revision.attempts_for("panel_plan")), 2)
             self.assertEqual(
                 first_cabinet_spec(second.revision.stage_outputs["panel_plan"])[
@@ -146,7 +149,7 @@ class FurnitureOrchestratorFreezeTests(unittest.TestCase):
                 cabinet_intent(),
                 stage_inputs=stage_inputs_from_spec(panel_parameters()),
             )
-            orchestrator.confirm_intent(project)
+            orchestrator.confirm_layout(project)
             orchestrator.run_next(project)
             orchestrator.confirm_stage(project, WorkflowStage.PANELS_PLANNED)
 
@@ -268,9 +271,9 @@ class FurnitureOrchestratorFreezeTests(unittest.TestCase):
                 {"structure": {"mystery_joint": "unknown"}}
             ),
         )
-        self.orchestrator.confirm_intent(project)
+        self.orchestrator.confirm_layout(project)
         failed = self.orchestrator.run_next(project).revision
-        self.assertEqual(failed.workflow.current, WorkflowStage.DESIGN_INTENT)
+        self.assertEqual(failed.workflow.current, WorkflowStage.LAYOUT_PLAN)
         self.assertFalse(failed.latest_attempt("panel_plan").passed)
 
         recovered = self.orchestrator.retry_stage(
@@ -289,17 +292,14 @@ class FurnitureOrchestratorFreezeTests(unittest.TestCase):
             cabinet_intent(),
             stage_inputs=stage_inputs_from_spec(panel_parameters()),
         )
-        self.orchestrator.confirm_intent(project)
+        self.orchestrator.confirm_layout(project)
         self.orchestrator.run_next(project)
         parent = project.latest
         self.assertTrue(parent.attempts_for("panel_plan"))
 
         revised = self.orchestrator.revise(
             project,
-            DesignIntent(
-                furniture_category="floor_cabinet",
-                finished_envelope=FinishedEnvelope(900, 600, 1000),
-            ),
+            single_cabinet_layout(furniture_category="floor_cabinet", width=900, depth=600, height=1000, confirmed=True),
         )
         self.assertEqual(revised.parent_revision_id, parent.id)
         self.assertEqual(revised.attempts_for("panel_plan"), [])
@@ -319,7 +319,7 @@ class FurnitureOrchestratorFreezeTests(unittest.TestCase):
             cabinet_intent(),
             stage_inputs=stage_inputs_from_spec(panel_parameters()),
         )
-        self.orchestrator.confirm_intent(project)
+        self.orchestrator.confirm_layout(project)
         self.orchestrator.run_next(project)
         data = project.to_dict()
         revision_data = data["revisions"][0]

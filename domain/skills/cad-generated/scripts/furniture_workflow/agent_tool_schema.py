@@ -5,10 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from furniture_design_intent.design_intent import (
-    EXECUTABLE_CATEGORIES,
-    HANGING_MODES,
-)
+from furniture_layout.scene import EXECUTABLE_CATEGORIES
 
 from .workflow_constants import RETRYABLE_STAGES
 from .workflow_state import STAGE_SEQUENCE
@@ -19,7 +16,7 @@ TOOL_CONFIRM_STAGE = "furniture_confirm_stage"
 TOOL_RUN_NEXT = "furniture_run_next"
 TOOL_RETRY_STAGE = "furniture_retry_stage"
 TOOL_SELECT_ATTEMPT = "furniture_select_stage_attempt"
-TOOL_REVISE_INTENT = "furniture_revise_intent"
+TOOL_REVISE_LAYOUT = "furniture_revise_layout"
 
 TOOL_NAMES = (
     TOOL_CREATE_PROJECT,
@@ -28,7 +25,7 @@ TOOL_NAMES = (
     TOOL_RUN_NEXT,
     TOOL_RETRY_STAGE,
     TOOL_SELECT_ATTEMPT,
-    TOOL_REVISE_INTENT,
+    TOOL_REVISE_LAYOUT,
 )
 
 _STAGE_VALUES = tuple(stage.value for stage in STAGE_SEQUENCE)
@@ -37,8 +34,10 @@ _INTENT_FLAT_KEYS = ("width_mm", "depth_mm", "height_mm")
 _CREATE_KEYS = frozenset(
     {
         "name",
+        "rooms",
         "furniture_category",
         "finished_envelope",
+        "origin_z_mm",
         "hanging_mode",
         "hanging_height_mm",
         *_INTENT_FLAT_KEYS,
@@ -108,10 +107,11 @@ _OPENAI_TOOLS: list[dict[str, Any]] = [
         "function": {
             "name": TOOL_CREATE_PROJECT,
             "description": (
-                "Start a furniture project at design_intent. Accepts only "
-                f"canonical category ({_EXECUTABLE_TEXT} are executable) and "
-                "finished envelope in mm. Do not send doors, shelves, thickness, "
-                "hardware, room, or CAD fields. After create, confirm the intent "
+                "Start a home furniture project at layout_plan. Prefer rooms[] "
+                "(each room has dimensions and furniture envelopes). A single "
+                f"cabinet shortcut still accepts furniture_category "
+                f"({_EXECUTABLE_TEXT}) plus envelope in mm. Do not send doors, "
+                "shelves, thickness, or hardware. After create, confirm layout "
                 "before generating later stages. Serial stages: "
                 f"{_STAGE_LIST_TEXT}."
             ),
@@ -123,12 +123,15 @@ _OPENAI_TOOLS: list[dict[str, Any]] = [
                         "type": "string",
                         "description": "Human-readable project name.",
                     },
+                    "rooms": {
+                        "type": "array",
+                        "description": "Rooms in the home project, each with items[].",
+                    },
                     "furniture_category": {
                         "type": "string",
                         "description": (
-                            "Canonical category. Executable values: "
-                            f"{_EXECUTABLE_TEXT}. Other values stay a draft "
-                            "and cannot be confirmed."
+                            "Single-cabinet shortcut. Executable values: "
+                            f"{_EXECUTABLE_TEXT}."
                         ),
                     },
                     "width_mm": {"type": ["number", "null"]},
@@ -143,20 +146,14 @@ _OPENAI_TOOLS: list[dict[str, Any]] = [
                             "height_mm": {"type": ["number", "null"]},
                         },
                     },
-                    "hanging_mode": {
-                        "type": "string",
-                        "enum": sorted(HANGING_MODES),
-                        "description": "Required for wall_cabinet; omit for floor_cabinet.",
-                    },
-                    "hanging_height_mm": {
+                    "origin_z_mm": {
                         "type": ["number", "null"],
-                        "description": (
-                            "Bottom-edge height from floor; required when "
-                            "hanging_mode is free_hanging_height."
-                        ),
+                        "description": "Bottom-edge height from floor for the shortcut cabinet.",
                     },
+                    "hanging_mode": {"type": "string"},
+                    "hanging_height_mm": {"type": ["number", "null"]},
                 },
-                "required": ["name", "furniture_category"],
+                "required": ["name"],
             },
         },
     },
@@ -190,7 +187,7 @@ _OPENAI_TOOLS: list[dict[str, Any]] = [
             "name": TOOL_CONFIRM_STAGE,
             "description": (
                 "Confirm the current checkpoint after the user accepts it. "
-                "Freezes design_intent or panel_plan JSON when those stages "
+                "Freezes layout_plan or panel_plan JSON when those stages "
                 "are confirmed. Cannot skip ahead. Optional stage must equal "
                 "the current stage."
             ),
@@ -308,17 +305,18 @@ _OPENAI_TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
-            "name": TOOL_REVISE_INTENT,
+            "name": TOOL_REVISE_LAYOUT,
             "description": (
-                "Replace design intent and start a new revision at design_intent. "
-                "Downstream attempts become stale. Use this for category or "
-                "envelope changes, not for retrying panels or manufacturing."
+                "Replace the home layout and start a new revision at layout_plan. "
+                "Downstream attempts become stale. Use this for room or envelope "
+                "changes, not for retrying panels or manufacturing."
             ),
             "parameters": {
                 "type": "object",
                 "additionalProperties": False,
                 "properties": {
                     "project_id": {"type": "string"},
+                    "rooms": {"type": "array"},
                     "furniture_category": {"type": "string"},
                     "width_mm": {"type": ["number", "null"]},
                     "depth_mm": {"type": ["number", "null"]},
@@ -332,13 +330,11 @@ _OPENAI_TOOLS: list[dict[str, Any]] = [
                             "height_mm": {"type": ["number", "null"]},
                         },
                     },
-                    "hanging_mode": {
-                        "type": "string",
-                        "enum": sorted(HANGING_MODES),
-                    },
+                    "origin_z_mm": {"type": ["number", "null"]},
+                    "hanging_mode": {"type": "string"},
                     "hanging_height_mm": {"type": ["number", "null"]},
                 },
-                "required": ["project_id", "furniture_category"],
+                "required": ["project_id"],
             },
         },
     },

@@ -33,10 +33,10 @@ def confirm_through(
     generate_cad: bool = False,
     force: bool = False,
 ) -> OrchestrationResult:
-    intent = orchestrator.intent_from_spec(spec)
+    layout = orchestrator.layout_from_spec(spec)
     project = orchestrator.create_project(
         name,
-        intent,
+        layout,
         stage_inputs=stage_inputs_from_spec(spec),
     )
     return confirm_until(

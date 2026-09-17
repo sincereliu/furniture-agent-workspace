@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from furniture_layout.project_layout import LayoutUnit, ProjectLayout, single_cabinet_layout
 from furniture_panel_planning.cabinet_identity import index_by_role
 from furniture_panel_planning.panel_spec import FurnitureSpec
 
@@ -88,6 +89,47 @@ def cabinet_data(furniture_category: str = "floor_cabinet", **overrides: Any) ->
     values.update(overrides)
     _bind_inherited_stock(values, overrides)
     return values
+
+
+def layout_unit(
+    cabinet_id: str = "cabinet_1",
+    *,
+    furniture_category: str = "floor_cabinet",
+    width: float = 800,
+    depth: float = 600,
+    height: float = 1000,
+    origin_z_mm: float = 0.0,
+) -> LayoutUnit:
+    return LayoutUnit(
+        id=cabinet_id,
+        room_id="room",
+        furniture_category=furniture_category,
+        width=width,
+        depth=depth,
+        height=height,
+        origin_x_mm=0.0,
+        origin_y_mm=0.0,
+        origin_z_mm=origin_z_mm,
+        rotation_z_deg=0.0,
+    )
+
+
+def confirmed_layout(
+    *,
+    furniture_category: str = "floor_cabinet",
+    width: float = 800,
+    depth: float = 600,
+    height: float = 1000,
+    origin_z_mm: float | None = None,
+) -> ProjectLayout:
+    return single_cabinet_layout(
+        furniture_category=furniture_category,
+        width=width,
+        depth=depth,
+        height=height,
+        origin_z_mm=origin_z_mm,
+        confirmed=True,
+    )
 
 
 def furniture_spec(

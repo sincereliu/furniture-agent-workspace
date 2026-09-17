@@ -9,7 +9,7 @@ import json
 from math import isfinite
 from typing import Any, Mapping
 
-from furniture_design_intent.design_intent import DesignIntent
+from furniture_layout.project_layout import ProjectLayout
 
 from .cabinet_identity import require_primary_handoff
 from .panel_pipeline import plan_panel_stage
@@ -182,7 +182,7 @@ def _select_front(
 
 
 def optimize_panel_design(
-    intent: DesignIntent,
+    layout: ProjectLayout,
     panel_output: Mapping[str, Any],
     config: Mapping[str, Any],
 ) -> dict[str, Any]:
@@ -232,7 +232,7 @@ def optimize_panel_design(
                 if inherited not in changes:
                     options.pop(inherited, None)
         try:
-            output = plan_panel_stage(intent, options)
+            output = plan_panel_stage(layout, options)
             spec, _, _ = require_primary_handoff(output)
             metrics = _metrics(output)
         except (KeyError, TypeError, ValueError) as exc:
@@ -290,10 +290,10 @@ def optimize_panel_design(
 
 
 def materialize_optimization_candidate(
-    intent: DesignIntent,
+    layout: ProjectLayout,
     candidate: Mapping[str, Any],
 ) -> dict[str, Any]:
     parameters = candidate.get("resolved_parameters")
     if not isinstance(parameters, Mapping):
         raise ValueError("candidate requires resolved_parameters")
-    return plan_panel_stage(intent, parameters)
+    return plan_panel_stage(layout, parameters)
