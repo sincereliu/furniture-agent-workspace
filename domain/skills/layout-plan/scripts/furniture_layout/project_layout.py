@@ -178,6 +178,13 @@ class ProjectLayout:
         errors = layout.validate()
         if errors:
             raise ValueError("; ".join(errors))
+        # The project tool and the pure planner both enter through from_source.
+        # Reject invalid geometry before it becomes a draft revision.
+        from .validation import validate_project_layout
+
+        report = validate_project_layout(layout.to_dict())
+        if not report.passed:
+            raise ValueError("; ".join(issue.message for issue in report.issues))
         return layout
 
 

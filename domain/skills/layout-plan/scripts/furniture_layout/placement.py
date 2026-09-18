@@ -163,6 +163,8 @@ def place_items(room: RoomModel, specs: Sequence[ItemSpec]) -> tuple[PlacedItem,
 
 
 def _place_fixed(room: RoomModel, spec: ItemSpec) -> PlacedItem:
+    if spec.width is None:
+        raise ValueError(f"item {spec.id!r} requires width without fill")
     placement = resolve_placement(room, spec.placement)
     return build_placed_item(spec, room, placement, width=spec.width)
 

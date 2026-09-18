@@ -15,7 +15,7 @@
 | 衣柜 | `wardrobe` | 沿墙铺满时用 `fill` | 靠长墙或避开门的墙 |
 | 梳妆台 | `dresser` | 1000×450×750 | 靠窗或靠空墙 |
 
-衣柜要铺满一面墙时：`mode=wall`，`fill=true`，不要把猜测的柜宽当最终宽度。
+衣柜要铺满一面墙时：`mode=wall`，`fill=true`，提供深度和高度，可省略 `width`，由代码计算实宽。若衣柜要进入板件阶段，还要写 `furniture_category=floor_cabinet`（落地）或 `wall_cabinet`（上墙）。
 
 ## 客厅（示例）
 

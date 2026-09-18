@@ -17,8 +17,9 @@ from runtime_paths import bootstrap_runtime_paths
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 from furniture_layout.cad import write_room_cad_source
-from furniture_layout.pipeline import generate_room_cad, plan_room_scene
+from furniture_layout.pipeline import generate_room_cad, plan_project_layout, plan_room_scene
 from furniture_layout.preview import _build_projector
+from furniture_layout.project_layout import ProjectLayout
 from furniture_layout.scene import RoomScene
 from furniture_layout.validation import validate_room_scene
 from furniture_workflow.workflow_state import STAGE_SEQUENCE, WorkflowStage
@@ -226,6 +227,46 @@ class RoomSceneLayoutTests(unittest.TestCase):
         self.assertTrue(result["cad"]["source_path"].endswith("model.step.py"))
         self.assertTrue(result["cad"]["step_path"].endswith("room.step"))
         self.assertIn("cad", result)
+
+
+class ProjectLayoutAdmissionTests(unittest.TestCase):
+    def test_fill_width_is_derived_when_omitted(self) -> None:
+        items = bedroom_items()
+        del items[1]["width"]
+        output = plan_project_layout([{**bedroom_room(), "items": items}])
+        wardrobe = next(
+            item for item in output["rooms"][0]["items"]
+            if item["id"] == "wardrobe"
+        )
+        self.assertEqual(wardrobe["width"], 2000)
+
+    def test_fixed_item_still_requires_width(self) -> None:
+        item = {"id": "fixed", "category": "wardrobe", "depth": 600,
+                "height": 2400,
+                "placement": {"mode": "wall", "host_wall": "north"}}
+        with self.assertRaisesRegex(ValueError, "missing numeric field: width"):
+            plan_project_layout([{**bedroom_room(), "items": [item]}])
+
+    def test_overlapping_items_are_rejected_before_project_creation(self) -> None:
+        items = [
+            {"id": item_id, "category": "wardrobe", "width": 2000,
+             "depth": 600, "height": 2400,
+             "placement": {"mode": "wall", "host_wall": "north",
+                           "offset_mm": offset}}
+            for item_id, offset in (("left", 0), ("right", 1000))
+        ]
+        rooms = [{**bedroom_room(), "items": items}]
+        with self.assertRaisesRegex(ValueError, "collides with item"):
+            plan_project_layout(rooms)
+        with self.assertRaisesRegex(ValueError, "collides with item"):
+            ProjectLayout.from_source({"rooms": rooms})
+
+    def test_out_of_room_item_is_rejected_before_project_creation(self) -> None:
+        items = [{"id": "oversized", "category": "wardrobe", "width": 5000,
+                  "depth": 600, "height": 2400,
+                  "placement": {"mode": "wall", "host_wall": "north"}}]
+        with self.assertRaisesRegex(ValueError, "inside the room"):
+            plan_project_layout([{**bedroom_room(), "items": items}])
 
 
 if __name__ == "__main__":

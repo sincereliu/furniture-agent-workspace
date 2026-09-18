@@ -299,7 +299,7 @@ class ItemSpec:
     id: str
     label: str
     category: str
-    width: float
+    width: float | None
     depth: float
     height: float
     placement: PlacementRequest
@@ -310,10 +310,15 @@ class ItemSpec:
         if not isinstance(data, Mapping):
             raise ValueError(f"items[{index}] must be an object")
         item_id = text(data, "id") or f"item_{index + 1}"
-        width = number(data, "width", "width_mm")
+        placement = PlacementRequest.from_dict(mapping(data, "placement"))
+        width = optional_number(data, "width", "width_mm")
         depth = number(data, "depth", "depth_mm")
         height = number(data, "height", "height_mm")
-        require_positive(width, depth, height)
+        if width is None and not placement.fill:
+            raise ValueError("missing numeric field: width")
+        require_positive(depth, height)
+        if width is not None:
+            require_positive(width)
         category = text(data, "category")
         if not category:
             raise ValueError(f"items[{index}].category is required")
@@ -324,7 +329,7 @@ class ItemSpec:
             width=width,
             depth=depth,
             height=height,
-            placement=PlacementRequest.from_dict(mapping(data, "placement")),
+            placement=placement,
             furniture_category=_optional_furniture_category(data, index),
         )
 

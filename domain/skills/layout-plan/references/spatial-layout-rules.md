@@ -16,7 +16,7 @@
 必须提供：
 
 - `room`：`id`、`width_mm`/`depth_mm`/`height_mm`（矩形），可选 `name`、`openings[]`、`obstacles[]`。
-- `items[]`：每件 `id`、`category`、`width`/`depth`/`height`、`placement`。缺一则失败，不猜默认卧室，不猜默认家具。
+- `items[]`：每件 `id`、`category`、`depth`/`height`、`placement`；固定宽度的件还要给 `width`，`fill=true` 可省略 `width`。不猜默认卧室，不猜默认家具。
 
 沿墙偏移按房间边界顺时针：
 
@@ -28,7 +28,7 @@
 `placement.mode=wall` 使用 `host_wall + offset_mm + origin_z_mm`，可选 `fill`。背面贴墙、正面朝向室内。墙摆的原点与 `rotation_z_deg` 都由 `host_wall` 派生，不接受自由坐标，也转不动——要旋转或要离开墙面，就改成 `mode=free`。  
 `placement.mode=free` 使用 `origin_x_mm/origin_y_mm/origin_z_mm + rotation_z_deg`。
 
-`fill=true` 仅用于 `mode=wall`。代码用该墙净长（扣除与该件高度相交的门窗、贴墙障碍、已摆家具）写入沿墙 `width` 和 `offset_mm`。未给 `offset_mm` 时取最长空段；给了则从该偏移铺到该空段终点。客户同时给了 width 与 fill 时，以墙净长为准。
+`fill=true` 仅用于 `mode=wall`。无需提供 `width`；代码用该墙净长（扣除与该件高度相交的门窗、贴墙障碍、已摆家具）写入沿墙 `width` 和 `offset_mm`。未给 `offset_mm` 时取最长空段；给了则从该偏移铺到该空段终点。客户同时给了 width 与 fill 时，以墙净长为准。
 
 ## 拒绝条件
 
@@ -36,17 +36,15 @@
 - 与障碍物或另一件家具正体积相交
 - 沿宿主墙遮挡垂直范围相交的门窗
 
-边界接触不视为碰撞——可编辑视图的拖动也按同一条规则求解，撞上就停在接触处（JS 侧镜像的判定在 `editor.py`，改这里要同步改它）。缺房间尺寸、缺 `items`、fill 没有空段，均失败。
+边界接触不视为碰撞——可编辑视图的拖动也按同一条规则求解，撞上就停在接触处（JS 侧镜像的判定在 `editor.py`，改这里要同步改它）。项目布局在创建待确认 Revision 前校验；缺房间尺寸或 fill 没有空段均失败。独立房间场景接口还要求非空 `items[]`。
 
 ## 输出
 
-- `room`：标准化房间、门窗、障碍物
-- `items[]`：已解析 placement、footprint、六向净距；fill 后的 width 为沿墙实宽
-- `preview`：透视 SVG，房间透明，家具为不透明包络
-- `viewer`：自包含互动 HTML
-- `cad`：仅请求生成时出现，含 cadgen 源码、STEP、Viewer 路径
+- 项目布局：`rooms[]` 中每间房含标准化 `room`、已解析的 `items[]`，有家具时还含 `preview`（透视 SVG）和 `viewer`（互动 HTML）；顶层 `cad.units` 是可执行柜体包络，不是 STEP。
+- 独立房间场景：直接返回 `room`、`items[]`、`preview`、`viewer`；请求生成房间 CAD 时另有 `cad`，含源码、STEP 和 Viewer 路径。
+- `items[]` 中有 placement、footprint 和六向净距；fill 后的 width 为沿墙实宽。
 
-预览、Viewer、CAD 必须由当前房间和全部包络实时重建。
+预览、Viewer 和房间 CAD 必须由当前房间和全部包络重建。
 
 ## 房间 CAD
 
@@ -61,4 +59,4 @@ STEP：`generated/layout/<id>/room.step`
 
 - 不定义板件、封边、钻孔、五金、特征树或柜体 STEP。
 - 房间坐标不混入板件尺寸。
-- 结果不写入 `STAGE_SEQUENCE`、`approved_stages` 或家具 CAD 交付清单。
+- 项目布局写入 `stage_outputs["layout_plan"]`；`layout_plan` 是 `STAGE_SEQUENCE` 的首阶段，确认后进入 `approved_stages`，可执行柜体作为下游 CAD 单元。独立房间场景的预览和房间 CAD 不进入项目阶段输出或家具 CAD 交付清单。
