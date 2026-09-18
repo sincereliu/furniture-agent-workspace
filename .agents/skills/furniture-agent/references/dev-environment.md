@@ -5,7 +5,7 @@
 版本钉在子模块 Skill 上，不要在本仓库 `pyproject.toml` 再写一份：
 
 - 子模块：`external/text-to-cad/VERSION`
-- Python pin：`external/text-to-cad/skills/cad/requirements.txt`（当前 `cadgen[snapshot]==0.6.3`）
+- Python pin：`external/text-to-cad/skills/cad/requirements.txt`（里面的 `cadgen[snapshot]==…` 由子模块 `VERSION` 决定，本仓库不再复写版本号）
 - cadgen 要求 Python `>=3.11`；本仓库用 **Python 3.12** + **uv** 管解释器与 `.venv`，**fnm** 管 Node。
 
 Node 不是 CAD 运行时依赖。`cadgen viewer`、STEP 生成、snapshot 都走轮子里的 `_runtime`。只有要在 checkout 里改 cadgen / Viewer 源码并自己 bundle 时才需要 Node。
@@ -54,7 +54,7 @@ print('runtime', (root / '_runtime').is_dir())
 - `file` 在 `.venv\Lib\site-packages\cadgen\` 下，**不在** `external\text-to-cad\`
 - `runtime` 为 `True`
 
-子模块升级后（例如 0.6.3 → 更新的 pin），删掉旧 `.venv` 按「从零建」重来，或至少重跑 `uv pip install -r external/text-to-cad/skills/cad/requirements.txt`。cadgen 的 freshness gate **不跟踪 cadgen 版本**，升级后清一次缓存，避免旧 tree 被当成 current：
+子模块升级后（pin 变了），删掉旧 `.venv` 按「从零建」重来，或至少重跑 `uv pip install -r external/text-to-cad/skills/cad/requirements.txt`。cadgen 的 freshness gate **不跟踪 cadgen 版本**，升级后清一次缓存，避免旧 tree 被当成 current：
 
 ```powershell
 Remove-Item -Recurse -Force "$env:USERPROFILE\.cache\cadgen" -ErrorAction SilentlyContinue

@@ -26,8 +26,9 @@ class BridgeResult:
 class CadBridge:
     """Run a cadgen model script from the owning workspace.
 
-    Default entry is ``python <source.py> --json`` (cadgen / text-to-cad
-    0.6.3). Uses the project ``.venv`` interpreter and its installed cadgen
+    Default entry is ``python <source.py> --json``, against whatever cadgen
+    version the ``external/text-to-cad`` submodule pins in its ``VERSION``.
+    Uses the project ``.venv`` interpreter and its installed cadgen
     wheel. Do not put the text-to-cad checkout on ``PYTHONPATH``: the wheel
     ships ``_runtime``, the checkout does not.
     ``gen_launcher`` is only a test override that still speaks the old
