@@ -109,7 +109,12 @@ class RoomSceneRequest(BaseModel):
     room: RoomRequest
     items: list[SceneItemRequest] = Field(..., min_length=1)
     generate_cad: bool = False
-    artifact_id: str | None = None
+    artifact_id: str | None = Field(
+        default=None,
+        description=(
+            "房间 CAD 产物标识；显式提供时仅允许英文字母、数字、'-' 和 '_'"
+        ),
+    )
 
 
 class RoomSceneResponse(BaseModel):

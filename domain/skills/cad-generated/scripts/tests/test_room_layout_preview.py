@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from math import hypot
 import json
+import re
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 SCRIPT_ROOT = Path(__file__).resolve().parents[1]
@@ -16,7 +18,11 @@ from runtime_paths import bootstrap_runtime_paths
 
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
-from furniture_layout.cad import write_room_cad_source
+from furniture_layout.cad import (
+    _path_within,
+    room_cad_artifact_name,
+    write_room_cad_source,
+)
 from furniture_layout.pipeline import generate_room_cad, plan_project_layout, plan_room_scene
 from furniture_layout.preview import _build_projector
 from furniture_layout.project_layout import ProjectLayout
@@ -80,6 +86,49 @@ def bedroom_items() -> list[dict]:
 
 
 class RoomSceneLayoutTests(unittest.TestCase):
+    def test_explicit_room_cad_artifact_id_must_be_safe(self) -> None:
+        self.assertEqual(
+            room_cad_artifact_name(
+                artifact_id="bedroom-v1",
+                room_id="ignored-room-id",
+            ),
+            "bedroom-v1",
+        )
+        for artifact_id in (
+            "",
+            "../escape",
+            r"..\escape",
+            "/absolute",
+            r"C:\absolute",
+            "bad name",
+            "中文",
+        ):
+            with self.subTest(artifact_id=artifact_id):
+                with self.assertRaisesRegex(ValueError, "artifact_id"):
+                    room_cad_artifact_name(
+                        artifact_id=artifact_id,
+                        room_id="bedroom",
+                    )
+
+    def test_room_id_fallback_is_stable_and_safe(self) -> None:
+        self.assertEqual(
+            room_cad_artifact_name(artifact_id=None, room_id="bedroom"),
+            "bedroom",
+        )
+        first = room_cad_artifact_name(artifact_id=None, room_id="主卧/套房")
+        repeated = room_cad_artifact_name(artifact_id=None, room_id="主卧/套房")
+        other = room_cad_artifact_name(artifact_id=None, room_id="儿童房")
+        self.assertEqual(first, repeated)
+        self.assertNotEqual(first, other)
+        self.assertRegex(first, re.compile(r"^room-[0-9a-f]{16}$"))
+
+    def test_generated_path_guard_rejects_parent_escape(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory) / "allowed"
+            with self.assertRaisesRegex(ValueError, "escapes"):
+                _path_within(root, "..", "escape", "room.step")
+            self.assertFalse(root.exists())
+
     def test_preview_projection_makes_near_geometry_larger(self) -> None:
         project = _build_projector(4200, 3600, 2800)
         near_bottom = project((4200, 0, 0))
@@ -227,6 +276,67 @@ class RoomSceneLayoutTests(unittest.TestCase):
         self.assertTrue(result["cad"]["source_path"].endswith("model.step.py"))
         self.assertTrue(result["cad"]["step_path"].endswith("room.step"))
         self.assertIn("cad", result)
+
+    def test_generate_room_cad_rejects_unsafe_id_before_side_effects(self) -> None:
+        output = plan_room_scene(bedroom_room(), bedroom_items())
+        bridge = mock.Mock()
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            workspace = Path(temporary_directory)
+            with self.assertRaisesRegex(ValueError, "artifact_id"):
+                generate_room_cad(
+                    output,
+                    workspace_root=workspace,
+                    output_root="generated",
+                    cad_bridge=bridge,
+                    artifact_id="../../escape",
+                )
+            self.assertFalse((workspace / "temp").exists())
+            self.assertFalse((workspace / "generated").exists())
+        bridge.generate_from_source.assert_not_called()
+
+    def test_generate_room_cad_contains_paths_and_hashes_unsafe_room_id(self) -> None:
+        room = bedroom_room()
+        room["id"] = "主卧/套房"
+        output = plan_room_scene(room, bedroom_items())
+
+        class RecordingBridge:
+            def __init__(self):
+                self.calls = []
+
+            def generate_from_source(self, source_path, step_path, force=False):
+                self.calls.append((Path(source_path), Path(step_path), force))
+                return type(
+                    "BridgeResult",
+                    (),
+                    {
+                        "status": "ok",
+                        "message": "ok",
+                        "step_path": str(step_path),
+                        "topology_path": "topology.json",
+                        "viewer_package_path": "viewer",
+                    },
+                )()
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            workspace = Path(temporary_directory)
+            bridge = RecordingBridge()
+            result = generate_room_cad(
+                output,
+                workspace_root=workspace,
+                output_root="generated",
+                cad_bridge=bridge,
+            )
+            source_path, step_path, _ = bridge.calls[0]
+            source_root = (workspace / "temp" / "cad-source").resolve()
+            step_root = (workspace / "generated" / "layout").resolve()
+            self.assertTrue(source_path.resolve().is_relative_to(source_root))
+            self.assertTrue(step_path.resolve().is_relative_to(step_root))
+            artifact_name = step_path.parent.name
+            self.assertRegex(artifact_name, re.compile(r"^room-[0-9a-f]{16}$"))
+            self.assertEqual(
+                Path(result["cad"]["step_path"]).parent.name,
+                artifact_name,
+            )
 
 
 class ProjectLayoutAdmissionTests(unittest.TestCase):

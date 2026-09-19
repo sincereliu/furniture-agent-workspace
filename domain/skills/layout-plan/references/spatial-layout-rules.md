@@ -50,8 +50,10 @@
 
 房屋：地面薄板 + 四面墙薄板（墙厚 100 mm）。门窗为墙上 `cut_box`。障碍物与每件家具为外包络盒，带原点与 `rotation_z_deg`。房间不做成封闭实心体。
 
-源码：`temp/cad-source/layout-<id>/model.step.py`  
-STEP：`generated/layout/<id>/room.step`
+- 源码：`temp/cad-source/layout-<artifact-name>/model.step.py`
+- STEP：`generated/layout/<artifact-name>/room.step`
+
+显式 `artifact_id` 仅允许英文字母、数字、`-` 和 `_`；非法值在创建目录或写文件前失败。未提供时，安全的房间 `id` 原样作为 `artifact-name`，否则由房间 `id` 的 SHA-256 生成稳定的 `room-<16 位十六进制>` 名称。所有源码和 STEP 路径在写入前都必须确认仍位于各自的输出根目录内。
 
 这不是家具主流程的 `cad_generated`。不要调用 `furniture_run_next(..., generate_cad=True)`，也不要直调 `CadBridge`。
 

@@ -2,15 +2,47 @@
 
 from __future__ import annotations
 
+from hashlib import sha256
 import json
 import pprint
 from pathlib import Path
+import re
 from typing import Any, Mapping
 
 from .scene import RoomOpening, RoomScene
 
 
 WALL_THICKNESS_MM = 100.0
+SAFE_ARTIFACT_ID = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def room_cad_artifact_name(
+    *,
+    artifact_id: str | None,
+    room_id: str,
+) -> str:
+    """Return a safe directory name for generated room CAD artifacts."""
+    if artifact_id is not None:
+        if not isinstance(artifact_id, str) or not SAFE_ARTIFACT_ID.fullmatch(
+            artifact_id
+        ):
+            raise ValueError(
+                "artifact_id may contain only letters, digits, '-' and '_'"
+            )
+        return artifact_id
+    if SAFE_ARTIFACT_ID.fullmatch(room_id):
+        return room_id
+    digest = sha256(room_id.encode("utf-8")).hexdigest()[:16]
+    return f"room-{digest}"
+
+
+def _path_within(root: Path, *parts: str) -> Path:
+    """Resolve a generated path and reject any escape from its owned root."""
+    resolved_root = root.resolve(strict=False)
+    resolved_path = resolved_root.joinpath(*parts).resolve(strict=False)
+    if not resolved_path.is_relative_to(resolved_root):
+        raise ValueError(f"generated path escapes its output root: {resolved_path}")
+    return resolved_path
 
 
 def scene_to_cad_tree(scene: RoomScene) -> dict[str, Any]:
@@ -172,9 +204,23 @@ def generate_room_cad(
     output = Path(output_root)
     if not output.is_absolute():
         output = workspace / output
-    name = artifact_id or scene.room.id or "room"
-    source_path = workspace / "temp" / "cad-source" / f"layout-{name}" / "model.step.py"
-    step_path = output / "layout" / name / "room.step"
+    name = room_cad_artifact_name(
+        artifact_id=artifact_id,
+        room_id=scene.room.id,
+    )
+    source_root = _path_within(workspace, "temp", "cad-source")
+    source_path = _path_within(
+        source_root,
+        f"layout-{name}",
+        "model.step.py",
+    )
+    output_root_resolved = output.resolve(strict=False)
+    layout_root = _path_within(output_root_resolved, "layout")
+    step_path = _path_within(
+        layout_root,
+        name,
+        "room.step",
+    )
     write_room_cad_source(scene, source_path, step_path=step_path)
     bridge = cad_bridge
     if bridge is None:

@@ -91,6 +91,42 @@ class RoomSceneApiTests(unittest.TestCase):
         result = asyncio.run(server.list_room_scenes())
         self.assertEqual(result["scene_ids"], ["a", "b"])
 
+    def test_room_cad_api_rejects_unsafe_artifact_id(self) -> None:
+        saved = save_request()
+        request = server.RoomSceneRequest(
+            room=saved.room,
+            items=saved.items,
+            artifact_id="../../escape",
+        )
+        with self.assertRaises(HTTPException) as ctx:
+            asyncio.run(server.plan_room_cad(request))
+        self.assertEqual(ctx.exception.status_code, 422)
+        self.assertIn("artifact_id", str(ctx.exception.detail))
+        self.assertFalse(self.root.exists())
+
+    def test_room_cad_api_keeps_normal_artifact_id(self) -> None:
+        saved = save_request()
+        request = server.RoomSceneRequest(
+            room=saved.room,
+            items=saved.items,
+            artifact_id="bedroom-v1",
+        )
+
+        def fake_generate(output, **kwargs):
+            self.assertEqual(kwargs["artifact_id"], "bedroom-v1")
+            return {
+                **output,
+                "cad": {
+                    "status": "ok",
+                    "source_path": "source.py",
+                    "step_path": "room.step",
+                },
+            }
+
+        with mock.patch.object(server, "generate_room_cad", side_effect=fake_generate):
+            response = asyncio.run(server.plan_room_cad(request))
+        self.assertEqual(response.cad["status"], "ok")
+
 
 if __name__ == "__main__":
     unittest.main()
