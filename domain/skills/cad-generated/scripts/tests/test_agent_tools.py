@@ -16,6 +16,7 @@ from runtime_paths import bootstrap_runtime_paths
 
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
+from furniture_workflow import agent_tools
 from furniture_workflow.agent_tools import (
     TOOL_CONFIRM_STAGE,
     TOOL_CREATE_PROJECT,
@@ -58,6 +59,27 @@ class AgentToolSurfaceTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
+
+    def test_public_protocol_exports_exist(self) -> None:
+        """Every name in __all__ must be defined; stale exports break import *."""
+        source = (SCRIPT_ROOT / "furniture_workflow" / "agent_tools.py").read_text(
+            encoding="utf-8"
+        )
+        tree = ast.parse(source)
+        exported: list[str] = []
+        for node in tree.body:
+            if isinstance(node, ast.Assign) and any(
+                isinstance(target, ast.Name) and target.id == "__all__"
+                for target in node.targets
+            ):
+                exported = [str(value) for value in ast.literal_eval(node.value)]
+        self.assertTrue(exported)
+        for name in exported:
+            with self.subTest(export=name):
+                self.assertIsNotNone(
+                    getattr(agent_tools, name, None),
+                    f"__all__ lists {name}, but agent_tools does not define it",
+                )
 
     def test_openai_tools_are_the_interactive_protocol_only(self) -> None:
         tools = openai_tools()
@@ -263,6 +285,69 @@ class AgentToolSurfaceTests(unittest.TestCase):
         self.assertEqual(refused["error"]["code"], "CAD_REQUIRES_GENERATE_CAD")
         self.assertEqual(refused["project"]["current_stage"], "feature_tree_planned")
         self.assertTrue(refused["project"]["cad_generation_required"])
+
+    def test_size_only_shortcut_fit_uses_placeholder_room(self) -> None:
+        created = self.session.call(
+            TOOL_CREATE_PROJECT,
+            {
+                "name": "单件快捷",
+                "furniture_category": "floor_cabinet",
+                "width_mm": 800,
+                "depth_mm": 600,
+                "height_mm": 2000,
+            },
+        )
+        self.assertTrue(created["ok"], created)
+
+    def test_size_only_shortcut_asks_for_real_room_dimensions(self) -> None:
+        """越界时点名占位房间并改问房间尺寸，不把虚构房间当作 caller 的输入。"""
+        created = self.session.call(
+            TOOL_CREATE_PROJECT,
+            {
+                "name": "放不进占位房间",
+                "furniture_category": "floor_cabinet",
+                "width_mm": 800,
+                "depth_mm": 600,
+                "height_mm": 5000,
+            },
+        )
+        self.assertFalse(created["ok"])
+        self.assertEqual(created["error"]["code"], "ROOM_DIMENSIONS_REQUIRED")
+        self.assertIsNone(created["project"])
+        self.assertIn("rooms[]", created["error"]["message"])
+
+        explicit_rooms = self.session.call(
+            TOOL_CREATE_PROJECT,
+            {
+                "name": "带真实房间",
+                "rooms": [
+                    {
+                        "id": "room_a",
+                        "name": "客厅",
+                        "width_mm": 4000,
+                        "depth_mm": 3000,
+                        "height_mm": 5200,
+                        "items": [
+                            {
+                                "id": "cabinet_1",
+                                "category": "柜体",
+                                "furniture_category": "floor_cabinet",
+                                "width": 800,
+                                "depth": 600,
+                                "height": 5000,
+                                "placement": {
+                                    "mode": "wall",
+                                    "host_wall": "north",
+                                    "offset_mm": 0,
+                                    "origin_z_mm": 0,
+                                },
+                            }
+                        ],
+                    }
+                ],
+            },
+        )
+        self.assertTrue(explicit_rooms["ok"], explicit_rooms)
 
     def test_unknown_fields_and_legacy_aliases_are_rejected(self) -> None:
         alias = self.session.call(

@@ -1,4 +1,4 @@
-"""Expose the seven stage-owned runtime packages to CLI, API, and tests."""
+"""Expose the six stage-owned runtime packages to CLI, API, and tests."""
 
 from __future__ import annotations
 

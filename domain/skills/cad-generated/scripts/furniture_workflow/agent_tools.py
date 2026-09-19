@@ -12,7 +12,12 @@ from copy import deepcopy
 import json
 from typing import Any, Mapping
 
-from furniture_layout.project_layout import ProjectLayout
+from furniture_layout.project_layout import (
+    DEFAULT_STUDIO_DEPTH_MM,
+    DEFAULT_STUDIO_HEIGHT_MM,
+    DEFAULT_STUDIO_WIDTH_MM,
+    ProjectLayout,
+)
 
 from .agent_tool_schema import (
     TOOL_CONFIRM_STAGE,
@@ -458,7 +463,26 @@ def _layout_from_payload(payload: Mapping[str, Any]) -> ProjectLayout:
             }
         )
     except (TypeError, ValueError) as exc:
-        raise ToolProtocolError("INVALID_ARGUMENT", str(exc)) from exc
+        _raise_layout_shortcut_error(str(exc))
+
+
+def _raise_layout_shortcut_error(message: str) -> None:
+    """Stop and ask for real room dimensions when the placeholder room rejects the cabinet.
+
+    The shortcut validates against ``single_cabinet_layout``'s placeholder studio
+    room. When the cabinet cannot fit that placeholder, the only useful next step
+    is a real room; reporting the raw geometry error would name a room the caller
+    never supplied.
+    """
+    if "inside the room" not in message:
+        raise ToolProtocolError("INVALID_ARGUMENT", message)
+    raise ToolProtocolError(
+        "ROOM_DIMENSIONS_REQUIRED",
+        "cabinet does not fit the placeholder room used by the size-only shortcut "
+        f"({DEFAULT_STUDIO_WIDTH_MM:g}x{DEFAULT_STUDIO_DEPTH_MM:g}"
+        f"x{DEFAULT_STUDIO_HEIGHT_MM:g} mm); provide rooms[] with the real room "
+        "dimensions",
+    )
 
 
 def _cad_options(
@@ -623,7 +647,7 @@ __all__ = [
     "TOOL_GET_PROJECT",
     "TOOL_NAMES",
     "TOOL_RETRY_STAGE",
-    "TOOL_REVISE_INTENT",
+    "TOOL_REVISE_LAYOUT",
     "TOOL_RUN_NEXT",
     "TOOL_SELECT_ATTEMPT",
     "ToolProtocolError",

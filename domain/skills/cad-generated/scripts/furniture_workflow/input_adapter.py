@@ -218,11 +218,6 @@ def _envelope_target_is_explicit(data: Mapping[str, Any], target: str) -> bool:
     ) or (flat_name is not None and data.get(flat_name) is not None)
 
 
-def layout_stage_input(stage_inputs: Mapping[str, Any]) -> dict[str, Any]:
-    value = stage_inputs.get("layout", {})
-    return dict(value) if isinstance(value, Mapping) else {}
-
-
 def panel_stage_input(stage_inputs: Mapping[str, Any]) -> dict[str, Any]:
     value = stage_inputs.get("panels", {})
     return dict(value) if isinstance(value, Mapping) else {}
