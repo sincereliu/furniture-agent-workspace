@@ -14,8 +14,8 @@ bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 from furniture_layout.collision import polygons_overlap, scene_collisions
 from furniture_layout.pipeline import plan_room_scene
-from furniture_layout.placement import ranges_overlap
-from furniture_layout.scene import RoomScene
+from furniture_layout.placement import place_items, ranges_overlap
+from furniture_layout.scene import RoomModel, RoomScene, parse_item_specs
 
 
 ROOM = {
@@ -30,6 +30,13 @@ ROOM = {
 def _scene(items: list[dict], room: dict | None = None) -> RoomScene:
     planned = plan_room_scene(room or ROOM, items)
     return RoomScene.from_dict({"room": planned["room"], "items": planned["items"]})
+
+
+def _placed_scene(items: list[dict], room: dict | None = None) -> RoomScene:
+    """Place without planner admission, so collision reports can be inspected."""
+    room_model = RoomModel.from_dict(room or ROOM)
+    placed = place_items(room_model, parse_item_specs(items))
+    return RoomScene(room=room_model, items=placed)
 
 
 def _box(x: float, y: float, width: float = 1000.0, depth: float = 500.0):
@@ -76,15 +83,17 @@ class SceneContactTests(unittest.TestCase):
         self.assertEqual(scene_collisions(scene), {})
 
     def test_items_overlapping_by_one_millimetre_are_reported(self) -> None:
-        scene = _scene([
+        items = [
             {"id": "a", "label": "A", "category": "desk", "width": 1000, "depth": 500,
              "height": 750, "placement": {"mode": "free", "origin_x_mm": 0, "origin_y_mm": 0}},
             {"id": "b", "label": "B", "category": "desk", "width": 1000, "depth": 500,
              "height": 750, "placement": {"mode": "free", "origin_x_mm": 999, "origin_y_mm": 0}},
-        ])
-        report = scene_collisions(scene)
+        ]
+        report = scene_collisions(_placed_scene(items))
         self.assertIn("item:b", report["a"])
         self.assertIn("item:a", report["b"])
+        with self.assertRaisesRegex(ValueError, "collides with item"):
+            plan_room_scene(ROOM, items)
 
     def test_items_touching_at_the_room_edge_are_accepted(self) -> None:
         scene = _scene([
@@ -113,12 +122,15 @@ class SceneContactTests(unittest.TestCase):
             {"id": "window", "kind": "window", "wall": "north", "offset_mm": 1000,
              "width_mm": 500, "sill_height_mm": 900, "height_mm": 1200},
         ]
-        scene = _scene([
+        items = [
             {"id": "wardrobe", "label": "衣柜", "category": "wardrobe", "width": 1001,
              "depth": 600, "height": 2000,
              "placement": {"mode": "wall", "host_wall": "north", "offset_mm": 0}},
-        ], room)
+        ]
+        scene = _placed_scene(items, room)
         self.assertIn("opening:window", scene_collisions(scene)["wardrobe"])
+        with self.assertRaisesRegex(ValueError, "blocks window"):
+            plan_room_scene(room, items)
 
 
 if __name__ == "__main__":

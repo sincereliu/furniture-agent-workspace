@@ -10,19 +10,28 @@ from .placement import place_items
 from .preview import render_preview
 from .project_layout import ProjectLayout
 from .scene import RoomModel, RoomScene, parse_item_specs
-from .validation import validate_room_scene
+from .validation import raise_unless_admitted, validate_room_scene
 from .viewer import render_viewer
+
+
+def _plan_scene(
+    room: Mapping[str, Any],
+    items: Sequence[Mapping[str, Any]],
+) -> RoomScene:
+    room_model = RoomModel.from_dict(room)
+    specs = parse_item_specs(items)
+    placed = place_items(room_model, specs)
+    scene = RoomScene(room=room_model, items=placed)
+    raise_unless_admitted(scene)
+    return scene
 
 
 def plan_room_scene(
     room: Mapping[str, Any],
     items: Sequence[Mapping[str, Any]],
 ) -> dict[str, Any]:
-    """Place every item, then emit preview and viewer for the scene."""
-    room_model = RoomModel.from_dict(room)
-    specs = parse_item_specs(items)
-    placed = place_items(room_model, specs)
-    scene = RoomScene(room=room_model, items=placed)
+    """Place every item, admit collisions, then emit preview and viewer."""
+    scene = _plan_scene(room, items)
     return {
         "room": scene.room.to_dict(),
         "items": [item.to_dict() for item in scene.items],

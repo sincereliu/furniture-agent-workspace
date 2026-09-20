@@ -211,12 +211,8 @@ class RoomSceneLayoutTests(unittest.TestCase):
                 },
             },
         ]
-        output = plan_room_scene(bedroom_room(), items)
-        report = validate_room_scene(output)
-        self.assertFalse(report.passed)
-        self.assertTrue(
-            any(issue.code == "FURNITURE_ITEM_COLLISION" for issue in report.issues)
-        )
+        with self.assertRaisesRegex(ValueError, "collides with item"):
+            plan_room_scene(bedroom_room(), items)
 
     def test_cad_source_contains_room_and_item_transforms(self) -> None:
         output = plan_room_scene(bedroom_room(), bedroom_items())
@@ -370,6 +366,8 @@ class ProjectLayoutAdmissionTests(unittest.TestCase):
             plan_project_layout(rooms)
         with self.assertRaisesRegex(ValueError, "collides with item"):
             ProjectLayout.from_source({"rooms": rooms})
+        with self.assertRaisesRegex(ValueError, "collides with item"):
+            plan_room_scene(bedroom_room(), items)
 
     def test_out_of_room_item_is_rejected_before_project_creation(self) -> None:
         items = [{"id": "oversized", "category": "wardrobe", "width": 5000,

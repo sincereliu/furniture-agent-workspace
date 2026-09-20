@@ -1,1 +1,1 @@
-"""Independent room-scene layout runtime."""
+"""把家具摆放意图换成房间坐标，并在落盘前做碰撞准入。"""

@@ -33,14 +33,12 @@ from .scene import (
 from .viewer import render_viewer
 
 
-def validate_room_scene(output: Mapping[str, Any]) -> ValidationReport:
-    report = ValidationReport(stage="layout_plan")
-    try:
-        scene = RoomScene.from_dict(output)
-    except (KeyError, TypeError, ValueError) as exc:
-        report.add_error("INVALID_ROOM_SCENE", str(exc), "items")
-        return report
+def admit_scene(scene: RoomScene) -> ValidationReport:
+    """Admit placed geometry: schema, derived footprint, and collisions.
 
+    Preview and viewer byte-equality belong on frozen checkpoints, not here.
+    """
+    report = ValidationReport(stage="layout_plan")
     _validate_room(scene.room, report)
     if any(issue.code == "INVALID_ROOM_DIMENSION" for issue in report.issues):
         return report
@@ -56,7 +54,24 @@ def validate_room_scene(output: Mapping[str, Any]) -> ValidationReport:
             continue
         _validate_derived_item(item, expected, report, path)
         _validate_item_fit(scene, item, report, path)
+    return report
 
+
+def raise_unless_admitted(scene: RoomScene) -> None:
+    report = admit_scene(scene)
+    if not report.passed:
+        raise ValueError("; ".join(issue.message for issue in report.issues))
+
+
+def validate_room_scene(output: Mapping[str, Any]) -> ValidationReport:
+    report = ValidationReport(stage="layout_plan")
+    try:
+        scene = RoomScene.from_dict(output)
+    except (KeyError, TypeError, ValueError) as exc:
+        report.add_error("INVALID_ROOM_SCENE", str(exc), "items")
+        return report
+
+    report = admit_scene(scene)
     if not scene.items:
         return report
 

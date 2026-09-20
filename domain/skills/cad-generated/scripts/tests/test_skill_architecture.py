@@ -31,6 +31,7 @@ STAGE_REFERENCES = {
         "references/spatial-layout-rules.md",
         "references/room-scene-guide.md",
         "references/intake/catalog.yaml",
+        "references/runtime-map.md",
     ),
     "panel-plan": (
         "references/panel-definition-rules.md",
