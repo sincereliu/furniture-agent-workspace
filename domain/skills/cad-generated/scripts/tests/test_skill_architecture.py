@@ -12,10 +12,13 @@ WORKSPACE_ROOT = Path(__file__).resolve().parents[5]
 SKILLS_ROOT = WORKSPACE_ROOT / "domain" / "skills"
 
 LAYOUT_SCRIPTS_ROOT = SKILLS_ROOT / "layout-plan" / "scripts"
-if str(LAYOUT_SCRIPTS_ROOT) not in sys.path:
-    sys.path.insert(0, str(LAYOUT_SCRIPTS_ROOT))
+PANEL_SCRIPTS_ROOT = SKILLS_ROOT / "panel-plan" / "scripts"
+for _scripts_root in (LAYOUT_SCRIPTS_ROOT, PANEL_SCRIPTS_ROOT):
+    if str(_scripts_root) not in sys.path:
+        sys.path.insert(0, str(_scripts_root))
 
 from furniture_layout.scene import EXECUTABLE_CATEGORIES
+from furniture_panel_planning.cabinet_envelope import CABINET_CATEGORIES
 
 PLANNING_STAGE_SKILLS = {
     "layout_plan": "layout-plan",
@@ -285,6 +288,20 @@ class SkillArchitectureTests(unittest.TestCase):
             set(EXECUTABLE_CATEGORIES),
             "catalog.yaml `executable: true` families must match EXECUTABLE_CATEGORIES",
         )
+        self.assertEqual(
+            set(EXECUTABLE_CATEGORIES),
+            set(CABINET_CATEGORIES),
+            "layout executable categories must match panel-plan cabinet envelopes",
+        )
+        topology_root = (
+            SKILLS_ROOT / "panel-plan" / "references" / "cabinet-topologies"
+        )
+        topology_names = {path.stem for path in topology_root.glob("*.yaml")}
+        self.assertEqual(
+            topology_names,
+            set(CABINET_CATEGORIES),
+            "panel topologies must match CABINET_CATEGORIES",
+        )
 
     def test_each_stage_skill_owns_its_runtime_package(self) -> None:
         for skill_name, package_name in STAGE_RUNTIME_PACKAGES.items():
@@ -369,6 +386,11 @@ class SkillArchitectureTests(unittest.TestCase):
             / "scripts"
             / "furniture_panel_planning"
         )
+        panel_source = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in panel_package.glob("*.py")
+        )
+        self.assertNotIn("furniture_layout", panel_source)
         manufacturing_package = (
             SKILLS_ROOT
             / "manufacture-plan"

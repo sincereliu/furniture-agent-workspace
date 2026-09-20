@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from furniture_delivery_validation.validation import ValidationReport
-from furniture_layout.project_layout import LayoutUnit, ProjectLayout
 
 from .assembly_tree import (
     CABINET_OUTPUT_FIELDS,
     flatten_panels_for_handoff,
 )
+from .cabinet_envelope import CabinetEnvelope
 from .cabinet_identity import cabinets_from_output
 from .panel_models import PanelPlacement
 from .panel_spec import FurnitureSpec, resolve_back_mount
@@ -23,12 +23,19 @@ from .validation_cabinet import (
 from .validation_panels import validate_panels
 
 def validate_panel_output(
-    layout: ProjectLayout,
+    envelopes: Sequence[CabinetEnvelope | Mapping[str, Any]],
     output: Mapping[str, Any],
 ) -> ValidationReport:
     """Validate the complete construction-and-panels stage checkpoint."""
     report = ValidationReport(stage="panel_plan")
-    units = {unit.id: unit for unit in layout.executable_units()}
+    try:
+        units = {
+            unit.id: unit
+            for unit in (CabinetEnvelope.from_mapping(item) for item in envelopes)
+        }
+    except (TypeError, ValueError) as exc:
+        report.add_error("INVALID_PANEL_STAGE_OUTPUT", str(exc))
+        return report
     try:
         cabinets = cabinets_from_output(output)
         cabinet_ids = [str(item.get("id", "")) for item in cabinets]
@@ -44,9 +51,10 @@ def validate_panel_output(
             )
         if extra:
             raise ValueError(
-                "panel output has cabinets not in the layout: " + ", ".join(extra)
+                "panel output has cabinets not in the admitted envelopes: "
+                + ", ".join(extra)
             )
-        parsed: list[tuple[str, FurnitureSpec, CabinetStructure, list[PanelPlacement], Mapping[str, Any], LayoutUnit]] = []
+        parsed: list[tuple[str, FurnitureSpec, CabinetStructure, list[PanelPlacement], Mapping[str, Any], CabinetEnvelope]] = []
         for cabinet in cabinets:
             unknown = sorted(set(cabinet) - CABINET_OUTPUT_FIELDS)
             if unknown:

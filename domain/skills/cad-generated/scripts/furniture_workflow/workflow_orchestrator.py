@@ -14,7 +14,10 @@ from furniture_feature_tree.validation import validate_feature_tree
 from furniture_manufacturing.validation import validate_manufacturing
 from furniture_panel_planning.validation import validate_panel_output
 
-from .input_adapter import layout_from_spec as translate_layout_from_spec
+from .input_adapter import (
+    layout_from_spec as translate_layout_from_spec,
+    panel_envelopes_from_layout,
+)
 from .workflow_analyses import AnalysisMixin
 from .workflow_constants import (
     ANALYSIS_METHOD_SKILLS,
@@ -87,7 +90,7 @@ class FurnitureOrchestrator(
                 return validate_project_layout(revision.layout.to_dict())
             if stage == WorkflowStage.PANELS_PLANNED:
                 return validate_panel_output(
-                    revision.layout,
+                    panel_envelopes_from_layout(revision.layout),
                     revision.stage_outputs[stage.value],
                 )
             if stage == WorkflowStage.MANUFACTURING_PLANNED:

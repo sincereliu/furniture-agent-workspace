@@ -6,8 +6,7 @@ from dataclasses import dataclass
 from math import isfinite
 from typing import Any, Mapping
 
-from furniture_layout.project_layout import LayoutUnit
-from furniture_layout.scene import EXECUTABLE_CATEGORIES
+from .cabinet_envelope import CABINET_CATEGORIES, CabinetEnvelope
 
 
 VALID_BACK_MOUNTS = frozenset({"groove", "insert", "cover"})
@@ -119,7 +118,7 @@ class FurnitureSpec:
     drawer_back_clearance: float
 
     def __post_init__(self) -> None:
-        if self.furniture_category not in EXECUTABLE_CATEGORIES:
+        if self.furniture_category not in CABINET_CATEGORIES:
             raise ValueError(
                 f"furniture_category must be an executable canonical category: "
                 f"{self.furniture_category}"
@@ -147,19 +146,13 @@ class FurnitureSpec:
         _validate_sheet_stock(self)
 
     @classmethod
-    def from_layout_unit(
+    def from_envelope(
         cls,
-        unit: LayoutUnit,
+        envelope: CabinetEnvelope | Mapping[str, Any],
         options: Mapping[str, Any] | None,
     ) -> "FurnitureSpec":
-        """Admit a proposal against a confirmed layout CAD unit."""
-        if not isinstance(unit, LayoutUnit):
-            raise ValueError("panel planning requires a layout CAD unit")
-        if unit.furniture_category not in EXECUTABLE_CATEGORIES:
-            raise ValueError(
-                "panel planning requires an executable furniture_category: "
-                + ", ".join(sorted(EXECUTABLE_CATEGORIES))
-            )
+        """Admit a proposal against a cabinet envelope snapshot."""
+        unit = CabinetEnvelope.from_mapping(envelope)
         if not isinstance(options, Mapping):
             raise ValueError("panel proposal must be an object")
         values = dict(options)

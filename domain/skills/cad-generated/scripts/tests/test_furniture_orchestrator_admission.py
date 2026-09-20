@@ -22,7 +22,10 @@ bootstrap_runtime_paths(WORKSPACE_ROOT)
 from furniture_cad.cad_bridge import CadBridge
 from furniture_delivery_validation.validation import validate_delivery
 from furniture_layout.project_layout import ProjectLayout, single_cabinet_layout
-from furniture_workflow.input_adapter import stage_inputs_from_spec
+from furniture_workflow.input_adapter import (
+    panel_envelopes_from_layout,
+    stage_inputs_from_spec,
+)
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from workflow_test_support import confirm_through, confirm_until
 from furniture_workflow.workflow_project import Project
@@ -268,7 +271,7 @@ class FurnitureOrchestratorAdmissionTests(unittest.TestCase):
         revision = self.orchestrator.confirm_layout(project)
         self.assertNotIn("structure", revision.stage_outputs["layout_plan"])
         with self.assertRaisesRegex(ValueError, "panel proposal is incomplete"):
-            plan_panel_stage(revision.layout, {})
+            plan_panel_stage(panel_envelopes_from_layout(revision.layout), {})
         result = self.orchestrator.run_next(project)
         panel_output = result.revision.stage_outputs["panel_plan"]
         self.assertEqual(first_cabinet_spec(panel_output)["board_thickness"], 18.0)

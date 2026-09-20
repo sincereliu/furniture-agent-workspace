@@ -7,10 +7,9 @@ from hashlib import sha256
 from itertools import product
 import json
 from math import isfinite
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
-from furniture_layout.project_layout import ProjectLayout
-
+from .cabinet_envelope import CabinetEnvelope
 from .cabinet_identity import require_primary_handoff
 from .panel_pipeline import plan_panel_stage
 from .panel_spec import PANEL_PARAMETER_FIELDS
@@ -182,7 +181,7 @@ def _select_front(
 
 
 def optimize_panel_design(
-    layout: ProjectLayout,
+    envelopes: Sequence[CabinetEnvelope | Mapping[str, Any]],
     panel_output: Mapping[str, Any],
     config: Mapping[str, Any],
 ) -> dict[str, Any]:
@@ -232,7 +231,7 @@ def optimize_panel_design(
                 if inherited not in changes:
                     options.pop(inherited, None)
         try:
-            output = plan_panel_stage(layout, options)
+            output = plan_panel_stage(envelopes, options)
             spec, _, _ = require_primary_handoff(output)
             metrics = _metrics(output)
         except (KeyError, TypeError, ValueError) as exc:
@@ -290,10 +289,10 @@ def optimize_panel_design(
 
 
 def materialize_optimization_candidate(
-    layout: ProjectLayout,
+    envelopes: Sequence[CabinetEnvelope | Mapping[str, Any]],
     candidate: Mapping[str, Any],
 ) -> dict[str, Any]:
     parameters = candidate.get("resolved_parameters")
     if not isinstance(parameters, Mapping):
         raise ValueError("candidate requires resolved_parameters")
-    return plan_panel_stage(layout, parameters)
+    return plan_panel_stage(envelopes, parameters)

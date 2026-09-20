@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from furniture_layout.project_layout import ProjectLayout, single_cabinet_layout
+from furniture_panel_planning.cabinet_envelope import CabinetEnvelope
 from furniture_panel_planning.panel_spec import PANEL_SPEC_FIELDS
 
 
@@ -216,6 +217,20 @@ def _envelope_target_is_explicit(data: Mapping[str, Any], target: str) -> bool:
         isinstance(size, Mapping)
         and size.get(field) is not None
     ) or (flat_name is not None and data.get(flat_name) is not None)
+
+
+def panel_envelopes_from_layout(layout: ProjectLayout) -> tuple[CabinetEnvelope, ...]:
+    """Project a confirmed layout onto the panel-plan envelope contract.
+
+    Rooms, placement, origin, and rotation stay in layout-plan. Panel-plan
+    only receives cabinet id, category, and finished width/depth/height.
+    """
+    if not isinstance(layout, ProjectLayout) or not layout.confirmed:
+        raise ValueError("panel planning requires a confirmed project layout")
+    units = layout.executable_units()
+    if not units:
+        raise ValueError("panel planning requires at least one executable cabinet unit")
+    return tuple(CabinetEnvelope.from_mapping(unit.to_dict()) for unit in units)
 
 
 def panel_stage_input(stage_inputs: Mapping[str, Any]) -> dict[str, Any]:

@@ -5,9 +5,8 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any, Mapping, Sequence
 
-from furniture_layout.project_layout import LayoutUnit, ProjectLayout
-
 from .assembly_tree import build_cabinet_tree
+from .cabinet_envelope import CabinetEnvelope
 from .cabinet_identity import DEFAULT_CABINET_ID, admit_cabinet_id
 from .panel_planning import plan_panels
 from .panel_spec import FurnitureSpec
@@ -15,15 +14,15 @@ from .structure_planning import CabinetStructure
 
 
 def plan_panel_stage(
-    layout: ProjectLayout,
+    envelopes: Sequence[CabinetEnvelope | Mapping[str, Any]],
     options: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """Plan every executable unit in a confirmed layout."""
-    if not isinstance(layout, ProjectLayout) or not layout.confirmed:
-        raise ValueError("panel planning requires a confirmed project layout")
-    units = layout.executable_units()
+    """Plan every admitted cabinet envelope."""
+    if isinstance(envelopes, (str, bytes)) or not isinstance(envelopes, Sequence):
+        raise ValueError("panel planning requires a list of cabinet envelopes")
+    units = tuple(CabinetEnvelope.from_mapping(item) for item in envelopes)
     if not units:
-        raise ValueError("panel planning requires at least one executable cabinet unit")
+        raise ValueError("panel planning requires at least one cabinet envelope")
     if not isinstance(options, Mapping):
         raise ValueError("panel proposal must be an object")
     values = dict(options)
@@ -39,11 +38,11 @@ def plan_panel_stage(
 
 
 def plan_panel_cabinets(
-    requests: Sequence[tuple[LayoutUnit, Mapping[str, Any]]],
+    requests: Sequence[tuple[CabinetEnvelope | Mapping[str, Any], Mapping[str, Any]]],
 ) -> dict[str, Any]:
     """Plan one or more cabinet instances with unique parent ids.
 
-    Each request is (layout CAD unit, panel parameters). Optional
+    Each request is (cabinet envelope, panel parameters). Optional
     ``cabinet_id`` is identity, not a construction field, and is popped
     before spec admission. Duplicate ids are rejected.
     """
@@ -51,11 +50,12 @@ def plan_panel_cabinets(
         raise ValueError("panel planning requires at least one cabinet request")
     cabinets: list[dict[str, Any]] = []
     seen: set[str] = set()
-    for index, (unit, options) in enumerate(requests, start=1):
+    for index, (raw_envelope, options) in enumerate(requests, start=1):
         if not isinstance(options, Mapping):
             raise ValueError("panel proposal must be an object")
+        unit = CabinetEnvelope.from_mapping(raw_envelope)
         values = dict(options)
-        fallback = unit.id if getattr(unit, "id", None) else (
+        fallback = unit.id if unit.id else (
             DEFAULT_CABINET_ID if index == 1 else f"cabinet_{index}"
         )
         cabinet_id = admit_cabinet_id(values.pop("cabinet_id", None), fallback=fallback)
@@ -63,7 +63,7 @@ def plan_panel_cabinets(
             raise ValueError(f"duplicate cabinet_id: {cabinet_id}")
         seen.add(cabinet_id)
         requested_back_mount = values.get("back_mount")
-        spec = FurnitureSpec.from_layout_unit(unit, values)
+        spec = FurnitureSpec.from_envelope(unit, values)
         structure = CabinetStructure.from_spec(spec)
         panels = plan_panels(spec, structure, cabinet_id=cabinet_id)
         assemblies, interior = build_cabinet_tree(

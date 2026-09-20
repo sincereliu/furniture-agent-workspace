@@ -14,6 +14,7 @@ from furniture_panel_planning.design_optimization import (
 )
 from furniture_panel_planning.quantitative_audit import audit_panel_quantities
 
+from .input_adapter import panel_envelopes_from_layout
 from .workflow_constants import (
     ANALYSIS_METHOD_SKILLS,
     ANALYSIS_STAGE_OWNERS,
@@ -48,7 +49,7 @@ class AnalysisMixin:
                 values,
             ),
             "panel_optimization": lambda: optimize_panel_design(
-                revision.layout,
+                panel_envelopes_from_layout(revision.layout),
                 source_output,
                 values,
             ),
@@ -114,7 +115,7 @@ class AnalysisMixin:
         if not isinstance(selected, Mapping):
             raise ValueError("selected optimization candidate is invalid")
         output = materialize_optimization_candidate(
-            revision.layout,
+            panel_envelopes_from_layout(revision.layout),
             selected,
         )
         if selected.get("stage_output_sha256") != _stable_digest(output):

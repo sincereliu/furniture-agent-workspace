@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from furniture_layout.project_layout import LayoutUnit, ProjectLayout, single_cabinet_layout
+from furniture_layout.project_layout import ProjectLayout, single_cabinet_layout
+from furniture_panel_planning.cabinet_envelope import CabinetEnvelope
 from furniture_panel_planning.cabinet_identity import index_by_role
 from furniture_panel_planning.panel_spec import FurnitureSpec
 
@@ -91,26 +92,20 @@ def cabinet_data(furniture_category: str = "floor_cabinet", **overrides: Any) ->
     return values
 
 
-def layout_unit(
+def cabinet_envelope(
     cabinet_id: str = "cabinet_1",
     *,
     furniture_category: str = "floor_cabinet",
     width: float = 800,
     depth: float = 600,
     height: float = 1000,
-    origin_z_mm: float = 0.0,
-) -> LayoutUnit:
-    return LayoutUnit(
+) -> CabinetEnvelope:
+    return CabinetEnvelope(
         id=cabinet_id,
-        room_id="room",
         furniture_category=furniture_category,
         width=width,
         depth=depth,
         height=height,
-        origin_x_mm=0.0,
-        origin_y_mm=0.0,
-        origin_z_mm=origin_z_mm,
-        rotation_z_deg=0.0,
     )
 
 

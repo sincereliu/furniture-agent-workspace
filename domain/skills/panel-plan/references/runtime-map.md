@@ -4,9 +4,9 @@
 
 ## 入口
 
-- `panel_pipeline.py::plan_panel_stage()`：交互主流程入口，一意图一台柜。
+- `panel_pipeline.py::plan_panel_stage()`：交互主流程入口，只收柜体外包络（`id` / `furniture_category` / `width` / `depth` / `height`），一意图一台柜。
 - `plan_panel_cabinets()`：多柜组合。
-- Orchestrator 从 `revision.stage_inputs.panels.parameters` 取提案。首次生成先写入该对象再 `run_next()`，或 `retry_stage("panel_plan", stage_input={"parameters": ...})`。
+- Orchestrator 把已确认布局的 CAD 单元投影成外包络（丢掉房间、摆放、原点、转角），再从 `revision.stage_inputs.panels.parameters` 取提案。首次生成先写入该对象再 `run_next()`，或 `retry_stage("panel_plan", stage_input={"parameters": ...})`。
 
 ## 交接
 
@@ -27,6 +27,7 @@
 
 | 模块 | 职责 | 边界理由 |
 | --- | --- | --- |
+| `cabinet_envelope.py` | 板件阶段拥有的柜体外包络；忽略 CAD 单元上的布局专用字段 | schema / structured_protocol |
 | `panel_spec.py` | schema、完整性、客观冲突、`back_mount` 准入、料档目录与工艺卡展开 | schema / validation / structured_protocol |
 | `structure_planning.py` | 精确净空与柜体区域 | calculation |
 | `panel_rules.py` | 踢脚支撑数量、背拉条数量与净距 | calculation |

@@ -22,7 +22,10 @@ bootstrap_runtime_paths(WORKSPACE_ROOT)
 from furniture_cad.cad_bridge import CadBridge
 from furniture_delivery_validation.validation import validate_delivery
 from furniture_layout.project_layout import ProjectLayout, single_cabinet_layout
-from furniture_workflow.input_adapter import stage_inputs_from_spec
+from furniture_workflow.input_adapter import (
+    panel_envelopes_from_layout,
+    stage_inputs_from_spec,
+)
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from workflow_test_support import confirm_through, confirm_until
 from furniture_workflow.workflow_project import Project
@@ -119,7 +122,7 @@ class FurnitureOrchestratorLifecycleTests(unittest.TestCase):
             parent.stage_outputs[WorkflowStage.PANELS_PLANNED.value]
         )
         edited_panels = plan_panel_stage(
-            parent.layout,
+            panel_envelopes_from_layout(parent.layout),
             panel_parameters(
                 shelves=[{"shelf_type": "fixed", "gap_below_mm": None}],
                 top_gap_mm=300,

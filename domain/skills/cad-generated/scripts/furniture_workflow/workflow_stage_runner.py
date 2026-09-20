@@ -17,6 +17,7 @@ from furniture_panel_planning.panel_pipeline import plan_panel_stage
 
 from .input_adapter import (
     manufacturing_stage_input,
+    panel_envelopes_from_layout,
     panel_stage_input,
 )
 from .workflow_artifact_writer import prepare_artifact_dir, write_artifacts
@@ -148,7 +149,7 @@ class StageRunnerMixin:
             stage_input = panel_stage_input(revision.stage_inputs)
             try:
                 output = plan_panel_stage(
-                    revision.layout,
+                    panel_envelopes_from_layout(revision.layout),
                     stage_input.get("parameters", {}),
                 )
             except (TypeError, ValueError) as exc:
