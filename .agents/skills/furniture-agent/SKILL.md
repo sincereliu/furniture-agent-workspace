@@ -16,7 +16,7 @@ description: 路由本仓库六阶段家具生成主流程与 CAD 执行工具�
 - `cad_generated`：`domain/skills/cad-generated/TOOL.md`（`run_next(..., generate_cad=True)`）
 - `delivery_validated`：`domain/skills/delivery-validated/SKILL.md`
 
-确认、重试、冻结见 [交互工具面](../../../domain/skills/cad-generated/references/agent-tool-contract.md)。门、层板、抽屉、踢脚、背板、料厚归 `panel-plan`。
+确认、重试、冻结见 [交互工具面](../../../domain/skills/cad-generated/references/agent-tool-contract.md)。柜门、层板、抽屉、踢脚、背板、料厚归 `panel-plan`。房间门窗归 `layout-plan` 的 `openings[]`。
 
 ## 改代码
 

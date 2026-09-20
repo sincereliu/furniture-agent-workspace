@@ -40,11 +40,11 @@ from .structure_planning import CabinetStructure
 
 def validate_panels(
     spec: FurnitureSpec,
-    layout: CabinetStructure,
+    structure: CabinetStructure,
     panels: list[PanelPlacement],
 ) -> ValidationReport:
     report = ValidationReport(stage="panel_plan")
-    if not isinstance(layout, CabinetStructure):
+    if not isinstance(structure, CabinetStructure):
         raise TypeError(
             "validate_panels requires CabinetStructure; independent room layout is not a valid panel input"
         )
@@ -65,16 +65,16 @@ def validate_panels(
         "bottom_panel",
     }
     report.issues.extend(
-        _validate_carcass_panels(layout, panel_by_role, carcass_roles).issues
+        _validate_carcass_panels(structure, panel_by_role, carcass_roles).issues
     )
     report.issues.extend(
-        _validate_back_panel(spec, layout, panel_by_role, carcass_roles).issues
+        _validate_back_panel(spec, structure, panel_by_role, carcass_roles).issues
     )
-    report.issues.extend(_validate_toe_kick_panels(spec, layout, panels).issues)
-    report.issues.extend(_validate_back_rails(spec, layout, panels).issues)
-    report.issues.extend(_validate_depth_aligned_panels(spec, layout, panels).issues)
-    report.issues.extend(_validate_shelf_panels(spec, layout, panels).issues)
-    drawer_report = _validate_drawer_panels(spec, layout, panels)
+    report.issues.extend(_validate_toe_kick_panels(spec, structure, panels).issues)
+    report.issues.extend(_validate_back_rails(spec, structure, panels).issues)
+    report.issues.extend(_validate_depth_aligned_panels(spec, structure, panels).issues)
+    report.issues.extend(_validate_shelf_panels(spec, structure, panels).issues)
+    drawer_report = _validate_drawer_panels(spec, structure, panels)
     report.issues.extend(drawer_report.issues)
     return report
 
@@ -180,7 +180,7 @@ def _validate_panel_basics(
 
 
 def _validate_carcass_panels(
-    layout: CabinetStructure,
+    structure: CabinetStructure,
     panel_by_role: Mapping[str, PanelPlacement],
     carcass_roles: set[str],
 ) -> ValidationReport:
@@ -195,8 +195,8 @@ def _validate_carcass_panels(
             )
             continue
         if (
-            abs(panel.pos_y - layout.carcass_y_start) > 1e-6
-            or abs(panel.pos_y + panel.size_y - layout.carcass_y_end) > 1e-6
+            abs(panel.pos_y - structure.carcass_y_start) > 1e-6
+            or abs(panel.pos_y + panel.size_y - structure.carcass_y_end) > 1e-6
         ):
             report.add_error(
                 "CARCASS_DEPTH_MISMATCH",
@@ -208,7 +208,7 @@ def _validate_carcass_panels(
 
 def _validate_back_panel(
     spec: FurnitureSpec,
-    layout: CabinetStructure,
+    structure: CabinetStructure,
     panel_by_role: Mapping[str, PanelPlacement],
     carcass_roles: set[str],
 ) -> ValidationReport:
@@ -221,32 +221,32 @@ def _validate_back_panel(
             "back_panel",
         )
         return report
-    if layout.back_mount == "groove":
+    if structure.back_mount == "groove":
         expected_back = (
-            layout.internal_x_start - spec.groove_depth,
-            layout.back_plane_y,
-            layout.internal_z_start - spec.groove_depth,
-            layout.internal_width + 2 * spec.groove_depth,
+            structure.internal_x_start - spec.groove_depth,
+            structure.back_plane_y,
+            structure.internal_z_start - spec.groove_depth,
+            structure.internal_width + 2 * spec.groove_depth,
             spec.back_thickness,
-            layout.internal_height + 2 * spec.groove_depth,
+            structure.internal_height + 2 * spec.groove_depth,
         )
-    elif layout.back_mount == "insert":
+    elif structure.back_mount == "insert":
         expected_back = (
-            layout.internal_x_start,
-            layout.back_plane_y,
-            layout.internal_z_start,
-            layout.internal_width,
+            structure.internal_x_start,
+            structure.back_plane_y,
+            structure.internal_z_start,
+            structure.internal_width,
             spec.back_thickness,
-            layout.internal_height,
+            structure.internal_height,
         )
     else:
         expected_back = (
             0.0,
             0.0,
             0.0,
-            layout.width,
+            structure.width,
             spec.back_thickness,
-            layout.height,
+            structure.height,
         )
     actual_back = (
         back.pos_x,
@@ -265,7 +265,7 @@ def _validate_back_panel(
             "back panel geometry does not match the confirmed mount mode",
             "back_panel",
         )
-    if layout.back_mount == "cover":
+    if structure.back_mount == "cover":
         back_front_y = back.pos_y + back.size_y
         if any(
             panel_by_role[role].pos_y < back_front_y - 1e-6
@@ -282,7 +282,7 @@ def _validate_back_panel(
 
 def _validate_toe_kick_panels(
     spec: FurnitureSpec,
-    layout: CabinetStructure,
+    structure: CabinetStructure,
     panels: list[PanelPlacement],
 ) -> ValidationReport:
     report = ValidationReport(stage="panel_plan")
@@ -292,7 +292,7 @@ def _validate_toe_kick_panels(
         if item.role.startswith("toe_kick_support_")
     ]
     expected_support_count = (
-        spec.toe_kick_support_count if layout.toe_kick_height > 0 else 0
+        spec.toe_kick_support_count if structure.toe_kick_height > 0 else 0
     )
     if expected_support_count < 0:
         report.add_error(
@@ -307,7 +307,7 @@ def _validate_toe_kick_panels(
             "toe_kick_support_count",
         )
     if expected_support_count > 0 and toe_kick_support_clear_spacing(
-        layout.internal_width,
+        structure.internal_width,
         expected_support_count,
         spec.board_thickness,
     ) <= 0:
@@ -320,14 +320,14 @@ def _validate_toe_kick_panels(
         report,
         "TOE_KICK_SUPPORT_GEOMETRY_MISMATCH",
         {item.role: item for item in support_panels},
-        toe_kick_support_boxes(spec, layout),
+        toe_kick_support_boxes(spec, structure),
     )
     return report
 
 
 def _validate_back_rails(
     spec: FurnitureSpec,
-    layout: CabinetStructure,
+    structure: CabinetStructure,
     panels: list[PanelPlacement],
 ) -> ValidationReport:
     report = ValidationReport(stage="panel_plan")
@@ -335,8 +335,8 @@ def _validate_back_rails(
         item for item in panels if item.panel_type == "back_rail"
     ]
     expected_rail_count = resolve_back_rail_count(
-        layout.back_mount,
-        layout.internal_height,
+        structure.back_mount,
+        structure.internal_height,
         spec.back_rail_height,
     )
     if spec.back_rail_height < 0:
@@ -352,7 +352,7 @@ def _validate_back_rails(
             "back_rail",
         )
     if expected_rail_count > 0 and back_rail_clear_spacing(
-        layout.internal_height,
+        structure.internal_height,
         expected_rail_count,
         spec.back_rail_height,
     ) <= 0:
@@ -365,21 +365,21 @@ def _validate_back_rails(
         report,
         "BACK_RAIL_GEOMETRY_MISMATCH",
         {item.role: item for item in rail_panels},
-        back_rail_boxes(spec, layout),
+        back_rail_boxes(spec, structure),
     )
     return report
 
 
 def _validate_depth_aligned_panels(
     spec: FurnitureSpec,
-    layout: CabinetStructure,
+    structure: CabinetStructure,
     panels: list[PanelPlacement],
 ) -> ValidationReport:
     report = ValidationReport(stage="panel_plan")
     for item in panels:
         if item.panel_type in ("fixed_shelf", "movable_shelf") and (
-            abs(item.pos_y - layout.internal_y_start) > 1e-6
-            or abs(item.pos_y + item.size_y - layout.internal_y_end) > 1e-6
+            abs(item.pos_y - structure.internal_y_start) > 1e-6
+            or abs(item.pos_y + item.size_y - structure.internal_y_end) > 1e-6
         ):
             report.add_error(
                 "INTERNAL_DEPTH_MISMATCH",
@@ -399,7 +399,7 @@ def _validate_depth_aligned_panels(
 
 def _validate_shelf_panels(
     spec: FurnitureSpec,
-    layout: CabinetStructure,
+    structure: CabinetStructure,
     panels: list[PanelPlacement],
 ) -> ValidationReport:
     report = ValidationReport(stage="panel_plan")
@@ -411,7 +411,7 @@ def _validate_shelf_panels(
         if item.panel_type in ("fixed_shelf", "movable_shelf")
     ]
     try:
-        expected = shelf_panel_boxes(spec, layout)
+        expected = shelf_panel_boxes(spec, structure)
     except ValueError as exc:
         report.add_error("INVALID_SHELF_GAPS", str(exc), "shelves")
         return report
@@ -432,7 +432,7 @@ def _validate_shelf_panels(
 
 def _validate_drawer_panels(
     spec: FurnitureSpec,
-    layout: CabinetStructure,
+    structure: CabinetStructure,
     panels: list[PanelPlacement],
 ) -> ValidationReport:
     report = ValidationReport(stage="panel_plan")
@@ -456,7 +456,7 @@ def _validate_drawer_panels(
         )
 
     try:
-        expected = drawer_panel_boxes(spec, layout)
+        expected = drawer_panel_boxes(spec, structure)
     except ValueError as exc:
         report.add_error("INVALID_DRAWER_GEOMETRY", str(exc), "drawer_count")
         return report

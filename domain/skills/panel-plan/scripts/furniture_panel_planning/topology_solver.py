@@ -58,16 +58,16 @@ def _resolve_semantic_face(face_name: str, frame: CabinetFrame) -> str:
 
 def solve_panel_placements(
     spec: FurnitureSpec,
-    layout: CabinetStructure,
+    structure: CabinetStructure,
     cabinet_id: str = DEFAULT_CABINET_ID,
 ) -> list[PanelPlacement]:
-    """Compute all panel placements from topology + spec + layout.
+    """Compute all panel placements from topology + spec + structure.
 
     Parameters
     ----------
     spec : FurnitureSpec
         Normalized cabinet dimensions and parameter choices.
-    layout : CabinetStructure
+    structure : CabinetStructure
         Panel-stage construction geometry and exact clear regions.
     cabinet_id : str
         Owning cabinet instance. Panel ids are qualified onto this parent.
@@ -90,11 +90,11 @@ def solve_panel_placements(
             continue
 
         if side_def.get("type") == "back_panel":
-            placements.extend(_back_panel_variants(spec, layout, side_name, side_def, face_dir, frame))
+            placements.extend(_back_panel_variants(spec, structure, side_name, side_def, face_dir, frame))
             continue
 
         # Standard enclosure panel
-        panel = _build_enclosure_panel(spec, layout, side_name, face_dir)
+        panel = _build_enclosure_panel(spec, structure, side_name, face_dir)
         placements.append(panel)
 
     # ── Doors ─────────────────────────────────────────────────────
@@ -103,12 +103,12 @@ def solve_panel_placements(
     if front_side.get("type") == "opening" and spec.drawer_count <= 0:
         for subtype in front_side.get("subtypes", []):
             if subtype == "doors":
-                placements.extend(_door_panels(spec, layout, frame))
+                placements.extend(_door_panels(spec, structure, frame))
 
     # ── Base (toe kick) ───────────────────────────────────────────
     base_def = topology.get("base", {})
-    if base_def.get("type") == "toe_kick" and layout.toe_kick_height > 0:
-        placements.extend(_toe_kick_panels(spec, layout, base_def, frame))
+    if base_def.get("type") == "toe_kick" and structure.toe_kick_height > 0:
+        placements.extend(_toe_kick_panels(spec, structure, base_def, frame))
 
     # ── Internal shelves / drawers ────────────────────────────────
     internals = topology.get("internals", {})
@@ -116,10 +116,10 @@ def solve_panel_placements(
         # 整高抽屉区：抽屉占满内部净高，不生成固定层板
         drawers_def = internals.get("drawers", {})
         if drawers_def.get("type") == "full_height":
-            placements.extend(_drawer_panels(spec, layout, drawers_def, frame))
+            placements.extend(_drawer_panels(spec, structure, drawers_def, frame))
     else:
         if spec.shelves:
-            placements.extend(_shelves_from_spec(spec, layout, frame))
+            placements.extend(_shelves_from_spec(spec, structure, frame))
 
     bind_panels_to_cabinet(placements, cabinet_id)
 
@@ -140,7 +140,7 @@ def solve_panel_placements(
 
 def _build_enclosure_panel(
     spec: FurnitureSpec,
-    layout: CabinetStructure,
+    structure: CabinetStructure,
     side_name: str,
     face_dir: str,
 ) -> PanelPlacement:
@@ -154,30 +154,30 @@ def _build_enclosure_panel(
         # Side panel (left or right) — broad face is Y-Z plane
         if sign > 0:
             # Right face: panel sits at x=width-board
-            px = layout.width - board
+            px = structure.width - board
             inner = "-x"    # inner face points left (toward cabinet center)
         else:
             # Left face: panel sits at x=0
             px = 0.0
             inner = "+x"    # inner face points right
-        sx, sy, sz = board, layout.side_depth, layout.height
-        py = layout.carcass_y_start
+        sx, sy, sz = board, structure.side_depth, structure.height
+        py = structure.carcass_y_start
         pz = 0.0
         name_map = {"left_side": "左侧板", "right_side": "右侧板"}
         ptype = "side"
 
     elif axis == "z":
         # Horizontal panel (top or bottom) — broad face is X-Y plane
-        sx = layout.internal_width
-        sy = layout.side_depth
+        sx = structure.internal_width
+        sy = structure.side_depth
         sz = board
-        px = layout.internal_x_start
-        py = layout.carcass_y_start
+        px = structure.internal_x_start
+        py = structure.carcass_y_start
         if sign > 0:
-            pz = layout.height - board  # top
+            pz = structure.height - board  # top
             inner = "-z"
         else:
-            pz = layout.toe_kick_height  # bottom
+            pz = structure.toe_kick_height  # bottom
             inner = "+z"
         name_map = {"top": "顶板", "bottom": "底板"}
         ptype = "top" if sign > 0 else "bottom"
@@ -206,7 +206,7 @@ def _build_enclosure_panel(
 
 def _back_panel_variants(
     spec: FurnitureSpec,
-    layout: CabinetStructure,
+    structure: CabinetStructure,
     side_name: str,
     side_def: dict[str, Any],
     face_dir: str,
@@ -214,8 +214,8 @@ def _back_panel_variants(
 ) -> list[PanelPlacement]:
     """Generate back panel and optional back rails for the selected mount mode."""
     board = spec.board_thickness
-    back_mount = layout.back_mount
-    back_y = layout.back_plane_y
+    back_mount = structure.back_mount
+    back_y = structure.back_plane_y
     # 背板: 外表面=柜体背面, 内表面指向柜内=柜体前面
     outer = face_dir          # frame.back
     inner = negate_axis(outer)  # frame.front
@@ -224,20 +224,20 @@ def _back_panel_variants(
 
     if back_mount == "groove":
         groove_d = spec.groove_depth
-        bw = layout.internal_width + 2 * groove_d
-        bh = layout.internal_height + 2 * groove_d
+        bw = structure.internal_width + 2 * groove_d
+        bh = structure.internal_height + 2 * groove_d
         result.append(PanelPlacement(
             id="back_panel", name="背板", panel_type="back",
             size_x=bw, size_y=spec.back_thickness, size_z=bh,
-            pos_x=layout.internal_x_start - groove_d,
+            pos_x=structure.internal_x_start - groove_d,
             pos_y=back_y,
-            pos_z=layout.internal_z_start - groove_d,
+            pos_z=structure.internal_z_start - groove_d,
             material_role="back",
             depends_on=["left_side_panel", "right_side_panel", "top_panel", "bottom_panel"],
             inner_face=inner, outer_face=outer,
             note=f"四边入槽{groove_d:.0f}mm的成品背板",
         ))
-        for box in back_rail_boxes(spec, layout):
+        for box in back_rail_boxes(spec, structure):
             index = box.panel_id.rsplit("_", 1)[-1]
             result.append(PanelPlacement(
                 id=box.panel_id, name=f"背拉条{index}",
@@ -253,8 +253,8 @@ def _back_panel_variants(
     elif back_mount == "insert":
         result.append(PanelPlacement(
             id="back_panel", name="背板", panel_type="back",
-            size_x=layout.internal_width, size_y=spec.back_thickness, size_z=layout.internal_height,
-            pos_x=layout.internal_x_start, pos_y=back_y, pos_z=layout.internal_z_start,
+            size_x=structure.internal_width, size_y=spec.back_thickness, size_z=structure.internal_height,
+            pos_x=structure.internal_x_start, pos_y=back_y, pos_z=structure.internal_z_start,
             material_role="back",
             depends_on=["left_side_panel", "right_side_panel", "top_panel", "bottom_panel"],
             inner_face=inner, outer_face=outer,
@@ -264,7 +264,7 @@ def _back_panel_variants(
     else:  # cover
         result.append(PanelPlacement(
             id="back_panel", name="背板", panel_type="back",
-            size_x=layout.width, size_y=spec.back_thickness, size_z=layout.height,
+            size_x=structure.width, size_y=spec.back_thickness, size_z=structure.height,
             pos_x=0.0, pos_y=0.0, pos_z=0.0,
             material_role="back",
             depends_on=["left_side_panel", "right_side_panel", "top_panel", "bottom_panel"],
@@ -277,18 +277,18 @@ def _back_panel_variants(
 
 def _door_panels(
     spec: FurnitureSpec,
-    layout: CabinetStructure,
+    structure: CabinetStructure,
     frame: CabinetFrame,
 ) -> list[PanelPlacement]:
     """Generate door panels on the front face of the cabinet."""
-    count = layout.n_doors
+    count = structure.n_doors
     if count not in {1, 2}:
         return []
 
     margin = spec.front_face_margin
-    dw = (layout.width - margin * 2 * count) / count
-    dh = layout.height - layout.toe_kick_height - margin * 2
-    dy = layout.carcass_y_end + spec.front_gap
+    dw = (structure.width - margin * 2 * count) / count
+    dh = structure.height - structure.toe_kick_height - margin * 2
+    dy = structure.carcass_y_end + spec.front_gap
     inner = frame.back
     outer = frame.front
 
@@ -296,15 +296,15 @@ def _door_panels(
     for index in range(count):
         if count == 1:
             pid, pname = "single_door", "门板"
-            x = layout.width / 2 - dw / 2
+            x = structure.width / 2 - dw / 2
         else:
             pid = "left_door" if index == 0 else "right_door"
             pname = "左门板" if index == 0 else "右门板"
-            x = margin if index == 0 else layout.width - margin - dw
+            x = margin if index == 0 else structure.width - margin - dw
         panels.append(PanelPlacement(
             id=pid, name=pname, panel_type="door",
             size_x=dw, size_y=spec.door_thickness, size_z=dh,
-            pos_x=x, pos_y=dy, pos_z=layout.toe_kick_height + margin,
+            pos_x=x, pos_y=dy, pos_z=structure.toe_kick_height + margin,
             material_role="door",
             depends_on=["left_side_panel", "right_side_panel"],
             inner_face=inner, outer_face=outer,
@@ -315,34 +315,34 @@ def _door_panels(
 
 def _toe_kick_panels(
     spec: FurnitureSpec,
-    layout: CabinetStructure,
+    structure: CabinetStructure,
     base_def: dict[str, Any],
     frame: CabinetFrame,
 ) -> list[PanelPlacement]:
     """Generate toe kick panels (front and rear kickboards + optional supports)."""
     board = spec.board_thickness
-    kw = layout.internal_width
-    x = layout.internal_x_start
+    kw = structure.internal_width
+    x = structure.internal_x_start
 
     # Toe kick panels — outer faces outward, inner faces toward cabinet interior
     rear = PanelPlacement(
         id="toe_kick_back", name="后踢脚板", panel_type="toe_kick",
-        size_x=kw, size_y=board, size_z=layout.toe_kick_height,
-        pos_x=x, pos_y=layout.toe_kick_rear_y,
+        size_x=kw, size_y=board, size_z=structure.toe_kick_height,
+        pos_x=x, pos_y=structure.toe_kick_rear_y,
         material_role="carcass",
         depends_on=["left_side_panel", "right_side_panel"],
         inner_face=frame.front, outer_face=frame.back,
     )
     front = PanelPlacement(
         id="toe_kick_front", name="前踢脚板", panel_type="toe_kick",
-        size_x=kw, size_y=board, size_z=layout.toe_kick_height,
-        pos_x=x, pos_y=layout.toe_kick_front_y - board,
+        size_x=kw, size_y=board, size_z=structure.toe_kick_height,
+        pos_x=x, pos_y=structure.toe_kick_front_y - board,
         material_role="carcass",
         depends_on=["left_side_panel", "right_side_panel"],
         inner_face=frame.back, outer_face=frame.front,
     )
     panels = [rear, front]
-    for box in toe_kick_support_boxes(spec, layout):
+    for box in toe_kick_support_boxes(spec, structure):
         index = box.panel_id.rsplit("_", 1)[-1]
         panels.append(PanelPlacement(
             id=box.panel_id, name=f"踢脚支撑{index}",
@@ -358,14 +358,14 @@ def _toe_kick_panels(
 
 def _shelves_from_spec(
     spec: FurnitureSpec,
-    layout: CabinetStructure,
+    structure: CabinetStructure,
     frame: CabinetFrame,
 ) -> list[PanelPlacement]:
     """按 spec.shelves（从上到下）生成固定/活动层板。"""
     inner = frame.bottom
     outer = frame.top
     panels: list[PanelPlacement] = []
-    for box in shelf_panel_boxes(spec, layout):
+    for box in shelf_panel_boxes(spec, structure):
         if box.shelf_type == "fixed":
             panel_type = "fixed_shelf"
             name = f"层板({box.center_z:.0f}mm)"
@@ -388,7 +388,7 @@ def _shelves_from_spec(
 
 def _drawer_panels(
     spec: FurnitureSpec,
-    layout: CabinetStructure,
+    structure: CabinetStructure,
     drawers_def: dict[str, Any],
     frame: CabinetFrame,
 ) -> list[PanelPlacement]:
@@ -411,7 +411,7 @@ def _drawer_panels(
         ),
     }
     panels: list[PanelPlacement] = []
-    for box in drawer_panel_boxes(spec, layout):
+    for box in drawer_panel_boxes(spec, structure):
         role_key = box.panel_id.rsplit("_z", 1)[0]
         panel_type, label, inner, outer = roles[role_key]
         z_label = box.panel_id.rsplit("_", 1)[-1][1:]

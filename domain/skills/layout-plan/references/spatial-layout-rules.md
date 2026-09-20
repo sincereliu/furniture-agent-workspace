@@ -17,7 +17,7 @@
 
 必须提供：
 
-- `room`：`id`、`width_mm`/`depth_mm`/`height_mm`（矩形），可选 `name`、`openings[]`、`obstacles[]`。
+- `room`：`id`、`width_mm`/`depth_mm`/`height_mm`（矩形），可选 `name`、`openings[]`、`obstacles[]`。`openings[]` 是墙上的房间门洞/窗洞（`kind=door|window`），用来挡柜、扣 fill 空段；不是柜门 `n_doors`。
 - `items[]`：每件 `id`、`category`、`depth`/`height`、`placement`；固定宽度的件还要给 `width`，`fill=true` 可省略 `width`。不猜默认卧室，不猜默认家具。
 
 沿墙偏移按房间边界顺时针：

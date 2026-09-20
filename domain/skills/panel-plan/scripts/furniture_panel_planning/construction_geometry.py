@@ -41,7 +41,7 @@ class PanelBox:
 
 def drawer_panel_boxes(
     spec: FurnitureSpec,
-    layout: CabinetStructure,
+    structure: CabinetStructure,
 ) -> list[PanelBox]:
     """Return the admitted full-height drawer dimension chain.
 
@@ -57,21 +57,21 @@ def drawer_panel_boxes(
     bottom_t = spec.drawer_bottom_thickness
     back_t = spec.drawer_back_thickness
     back_clear = spec.drawer_back_clearance
-    iw = layout.internal_width
-    internal_depth = layout.internal_y_end - layout.internal_y_start
-    band_h = layout.internal_height / count
+    iw = structure.internal_width
+    internal_depth = structure.internal_y_end - structure.internal_y_start
+    band_h = structure.internal_height / count
     front_h = band_h - layer_gap
     front_w = iw - 2 * spec.front_face_margin
     box_w = iw - 2 * slide_gap
     box_d = internal_depth - board - back_clear
-    box_back_y = layout.internal_y_start + back_clear
+    box_back_y = structure.internal_y_start + back_clear
     bottom_size_y = box_d - board
     if min(front_h, front_w, box_w, box_d, bottom_size_y) <= 0:
         raise ValueError("admitted drawer parameters leave non-positive geometry")
 
     boxes: list[PanelBox] = []
     for index in range(count):
-        front_z = layout.internal_z_start + index * band_h + (
+        front_z = structure.internal_z_start + index * band_h + (
             layer_gap if index > 0 else 0.0
         )
         overlap = board if index == 0 else 0.0
@@ -85,8 +85,8 @@ def drawer_panel_boxes(
                     size_x=front_w,
                     size_y=board,
                     size_z=front_h,
-                    pos_x=layout.internal_x_start + spec.front_face_margin,
-                    pos_y=layout.carcass_y_end - board,
+                    pos_x=structure.internal_x_start + spec.front_face_margin,
+                    pos_y=structure.carcass_y_end - board,
                     pos_z=front_z,
                 ),
                 PanelBox(
@@ -94,7 +94,7 @@ def drawer_panel_boxes(
                     size_x=board,
                     size_y=box_d,
                     size_z=box_h,
-                    pos_x=layout.internal_x_start + slide_gap,
+                    pos_x=structure.internal_x_start + slide_gap,
                     pos_y=box_back_y,
                     pos_z=box_z,
                 ),
@@ -103,7 +103,7 @@ def drawer_panel_boxes(
                     size_x=board,
                     size_y=box_d,
                     size_z=box_h,
-                    pos_x=layout.internal_x_end - board - slide_gap,
+                    pos_x=structure.internal_x_end - board - slide_gap,
                     pos_y=box_back_y,
                     pos_z=box_z,
                 ),
@@ -112,7 +112,7 @@ def drawer_panel_boxes(
                     size_x=box_w - 2 * board,
                     size_y=back_t,
                     size_z=box_h - 2 * board,
-                    pos_x=layout.internal_x_start + slide_gap + board,
+                    pos_x=structure.internal_x_start + slide_gap + board,
                     pos_y=box_back_y,
                     pos_z=box_z,
                 ),
@@ -121,7 +121,7 @@ def drawer_panel_boxes(
                     size_x=box_w - 2 * board,
                     size_y=bottom_size_y,
                     size_z=bottom_t,
-                    pos_x=layout.internal_x_start + slide_gap + board,
+                    pos_x=structure.internal_x_start + slide_gap + board,
                     pos_y=box_back_y + board,
                     pos_z=box_z,
                 ),
@@ -132,15 +132,15 @@ def drawer_panel_boxes(
 
 def shelf_panel_boxes(
     spec: FurnitureSpec,
-    layout: CabinetStructure,
+    structure: CabinetStructure,
 ) -> list[PanelBox]:
     """Return shelf envelopes from the admitted list, top to bottom."""
     if not spec.shelves:
         return []
-    gaps = resolve_shelf_gaps(spec, layout.internal_height)
+    gaps = resolve_shelf_gaps(spec, structure.internal_height)
     board = spec.board_thickness
-    depth = layout.internal_y_end - layout.internal_y_start
-    top_z = layout.internal_z_end - spec.top_gap_mm
+    depth = structure.internal_y_end - structure.internal_y_start
+    top_z = structure.internal_z_end - spec.top_gap_mm
     boxes: list[PanelBox] = []
     for shelf, gap in zip(spec.shelves, gaps):
         bottom_z = top_z - board
@@ -152,11 +152,11 @@ def shelf_panel_boxes(
         boxes.append(
             PanelBox(
                 panel_id=panel_id,
-                size_x=layout.internal_width,
+                size_x=structure.internal_width,
                 size_y=depth,
                 size_z=board,
-                pos_x=layout.internal_x_start,
-                pos_y=layout.internal_y_start,
+                pos_x=structure.internal_x_start,
+                pos_y=structure.internal_y_start,
                 pos_z=bottom_z,
                 shelf_type=shelf.shelf_type,
                 center_z=center_z,
@@ -168,26 +168,26 @@ def shelf_panel_boxes(
 
 def toe_kick_support_boxes(
     spec: FurnitureSpec,
-    layout: CabinetStructure,
+    structure: CabinetStructure,
 ) -> list[PanelBox]:
     """Return equally spaced toe-kick supports, or an empty list."""
-    if layout.toe_kick_height <= 0:
+    if structure.toe_kick_height <= 0:
         return []
     count = spec.toe_kick_support_count
     if count <= 0:
         return []
     board = spec.board_thickness
-    width = layout.internal_width
-    origin_x = layout.internal_x_start
-    pos_y = layout.toe_kick_rear_y + board
-    size_y = layout.toe_kick_front_y - board - pos_y
+    width = structure.internal_width
+    origin_x = structure.internal_x_start
+    pos_y = structure.toe_kick_rear_y + board
+    size_y = structure.toe_kick_front_y - board - pos_y
     gap = toe_kick_support_clear_spacing(width, count, board)
     return [
         PanelBox(
             panel_id=f"toe_kick_support_{index + 1}",
             size_x=board,
             size_y=size_y,
-            size_z=layout.toe_kick_height,
+            size_z=structure.toe_kick_height,
             pos_x=origin_x + gap + index * (board + gap),
             pos_y=pos_y,
             pos_z=0.0,
@@ -198,28 +198,28 @@ def toe_kick_support_boxes(
 
 def back_rail_boxes(
     spec: FurnitureSpec,
-    layout: CabinetStructure,
+    structure: CabinetStructure,
 ) -> list[PanelBox]:
     """Return grooved-back rail envelopes, or an empty list."""
     rail_h = spec.back_rail_height
     count = resolve_back_rail_count(
-        layout.back_mount,
-        layout.internal_height,
+        structure.back_mount,
+        structure.internal_height,
         rail_h,
     )
     if rail_h <= 0 or count <= 0:
         return []
     board = spec.board_thickness
-    step = back_rail_clear_spacing(layout.internal_height, count, rail_h)
+    step = back_rail_clear_spacing(structure.internal_height, count, rail_h)
     return [
         PanelBox(
             panel_id=f"back_rail_{index + 1}",
-            size_x=layout.internal_width,
+            size_x=structure.internal_width,
             size_y=board,
             size_z=rail_h,
-            pos_x=layout.internal_x_start,
-            pos_y=layout.carcass_y_start,
-            pos_z=layout.internal_z_start + step + index * (rail_h + step),
+            pos_x=structure.internal_x_start,
+            pos_y=structure.carcass_y_start,
+            pos_z=structure.internal_z_start + step + index * (rail_h + step),
         )
         for index in range(count)
     ]

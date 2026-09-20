@@ -9,7 +9,6 @@ from furniture_panel_planning.cabinet_envelope import CabinetEnvelope
 from furniture_panel_planning.panel_spec import PANEL_SPEC_FIELDS
 
 
-PANEL_CONFIGURATION_FIELDS = frozenset({"n_doors"})
 MANUFACTURING_SPEC_FIELDS = frozenset(
     {
         "options",
@@ -42,7 +41,6 @@ PROTOCOL_FIELDS = frozenset(
         "manufacturing",
         "constraints",
         "constraint_mappings",
-        *PANEL_CONFIGURATION_FIELDS,
         *PANEL_SPEC_FIELDS,
         *MANUFACTURING_SPEC_FIELDS,
     }
@@ -99,7 +97,7 @@ def layout_from_spec(spec: Mapping[str, Any]) -> ProjectLayout:
 
 
 def stage_inputs_from_spec(spec: Mapping[str, Any]) -> dict[str, Any]:
-    """Preserve downstream requests without treating them as confirmed intent."""
+    """Route panel/manufacturing fields; nested layout cannot carry construction."""
     data = _reject_legacy_protocol_aliases(dict(spec))
     unknown = sorted(set(data) - PROTOCOL_FIELDS)
     if unknown:
@@ -114,15 +112,12 @@ def stage_inputs_from_spec(spec: Mapping[str, Any]) -> dict[str, Any]:
     if not isinstance(raw_manufacturing, Mapping):
         raise ValueError("manufacturing must be an object")
 
-    unknown_layout = sorted(set(raw_layout) - PANEL_CONFIGURATION_FIELDS)
-    if unknown_layout:
+    if raw_layout:
         raise ValueError(
-            "layout input only accepts panel counts: " + ", ".join(unknown_layout)
+            "layout input does not accept panel construction: "
+            + ", ".join(sorted(raw_layout))
         )
     panel_parameters = dict(raw_structure)
-    for key in PANEL_CONFIGURATION_FIELDS:
-        if key in raw_layout:
-            panel_parameters[key] = raw_layout[key]
     manufacturing_parameters = dict(raw_manufacturing)
 
     for key in PANEL_SPEC_FIELDS:
@@ -172,13 +167,7 @@ def _route_constraints(data: Mapping[str, Any], output: dict[str, Any]) -> None:
                 raise ValueError(f"constraint target is not explicit: {target}")
             envelope.append(record)
         elif target.startswith("layout."):
-            field = target.split(".", 1)[1]
-            if field in PANEL_CONFIGURATION_FIELDS:
-                if field not in output["panels"].get("parameters", {}):
-                    raise ValueError(f"constraint target is not explicit: {target}")
-                output["panels"].setdefault("constraints", []).append(record)
-            else:
-                raise ValueError(f"constraint target has no owning stage: {target}")
+            raise ValueError(f"constraint target has no owning stage: {target}")
         elif target.startswith(("structure.", "panels.")):
             field = target.split(".", 1)[1]
             if field not in output["panels"].get("parameters", {}):

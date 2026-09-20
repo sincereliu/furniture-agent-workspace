@@ -51,9 +51,31 @@ class FurnitureOrchestratorAdmissionTests(unittest.TestCase):
             cabinet_intent(furniture_category="地柜").confirm()
 
     def test_unsupported_layout_decision_is_rejected_by_independent_input(self) -> None:
-        with self.assertRaisesRegex(ValueError, "layout input only accepts"):
+        with self.assertRaisesRegex(ValueError, "layout input does not accept"):
             stage_inputs_from_spec(
                 {"layout": {"unsupported_layout_option": 2}}
+            )
+
+    def test_nested_layout_rejects_panel_construction_fields(self) -> None:
+        for payload in (
+            {"layout": {"n_doors": 2}},
+            {"layout": {"shelves": []}},
+            {"layout": {"back_mount": "groove"}},
+        ):
+            with self.subTest(payload=payload):
+                with self.assertRaisesRegex(
+                    ValueError, "layout input does not accept panel construction"
+                ):
+                    stage_inputs_from_spec(payload)
+
+    def test_layout_constraint_cannot_target_panel_fields(self) -> None:
+        with self.assertRaisesRegex(ValueError, "has no owning stage"):
+            stage_inputs_from_spec(
+                {
+                    "n_doors": 2,
+                    "constraints": ["要两扇门"],
+                    "constraint_mappings": {"要两扇门": "layout.n_doors"},
+                }
             )
 
     def test_unsupported_structure_decision_fails_at_panel_stage(self) -> None:
@@ -148,6 +170,7 @@ class FurnitureOrchestratorAdmissionTests(unittest.TestCase):
             "width": 800,
             "depth": 350,
             "height": 900,
+            "n_doors": 2,
             "shelves": [{"shelf_type": "fixed", "gap_below_mm": None}],
             "top_gap_mm": 300,
             "back_mount": "cover",
@@ -162,6 +185,8 @@ class FurnitureOrchestratorAdmissionTests(unittest.TestCase):
             {"schema_version", "confirmed", "rooms", "cad"},
         )
         inputs = stage_inputs_from_spec(request)
+        self.assertEqual(inputs["layout"], {})
+        self.assertEqual(inputs["panels"]["parameters"]["n_doors"], 2)
         self.assertEqual(
             inputs["panels"]["parameters"]["shelves"],
             [{"shelf_type": "fixed", "gap_below_mm": None}],

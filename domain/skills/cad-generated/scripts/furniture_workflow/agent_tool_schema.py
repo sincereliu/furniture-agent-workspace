@@ -110,9 +110,10 @@ _OPENAI_TOOLS: list[dict[str, Any]] = [
                 "Start a home furniture project at layout_plan. Prefer rooms[] "
                 "(each room has dimensions and furniture envelopes). A single "
                 f"cabinet shortcut still accepts furniture_category "
-                f"({_EXECUTABLE_TEXT}) plus envelope in mm. Do not send doors, "
-                "shelves, thickness, or hardware. After create, confirm layout "
-                "before generating later stages. Serial stages: "
+                f"({_EXECUTABLE_TEXT}) plus envelope in mm. Room doors/windows "
+                "belong in rooms[].openings[] (kind=door|window). Do not send "
+                "cabinet n_doors, shelves, thickness, or hardware. After create, "
+                "confirm layout before generating later stages. Serial stages: "
                 f"{_STAGE_LIST_TEXT}."
             ),
             "parameters": {
@@ -125,7 +126,10 @@ _OPENAI_TOOLS: list[dict[str, Any]] = [
                     },
                     "rooms": {
                         "type": "array",
-                        "description": "Rooms in the home project, each with items[].",
+                        "description": (
+                            "Rooms in the home project, each with items[] and "
+                            "optional openings[] for room doors and windows."
+                        ),
                     },
                     "furniture_category": {
                         "type": "string",

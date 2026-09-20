@@ -69,7 +69,9 @@ result = session.call(name, arguments)  # arguments 为对象或 JSON 字符串
 - `rooms[]`（全屋布局）
 - 或单件快捷：`furniture_category`、`width_mm` / `depth_mm` / `height_mm`（或 `finished_envelope`）、可选 `origin_z_mm`
 
-门、层板、抽屉、料厚、背板、踢脚、五金不得进入布局。它们属于 `stage_input`：
+柜门（`n_doors`）、层板、抽屉、料厚、背板、踢脚、五金不得进入布局，它们属于 `stage_input`。房间门窗写在 `rooms[].openings[]`（`kind=door|window`），这是 layout 输入，不是柜门。
+
+板件/制造构造走：
 
 - 第一次板件/制造：`furniture_run_next` 的 `stage_input`
 - 再试：`furniture_retry_stage` 的 `stage_input`

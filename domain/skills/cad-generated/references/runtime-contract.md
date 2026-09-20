@@ -6,9 +6,7 @@
 
 唯一应用层入口：`domain/skills/cad-generated/scripts/furniture_workflow/workflow_orchestrator.py`。它接受已规划的全屋 `layout_plan`（按房间组织的家具包络 CAD 单元）。板件/制造字段经 `create_project(..., stage_inputs=)` 或 `run_next`/`retry_stage` 的 `stage_input` 进入所属阶段。字段转换、阶段实现和校验归各 Skill，Orchestrator 只管理生命周期。没有一次性自动确认的批处理入口。
 
-- `floor_cabinet`：固定模板，含背板、踢脚板、层板、门板。
-- `wall_cabinet`：固定模板，含背板、层板、门板，无踢脚板。
-- 均支持显式 `groove/insert/cover`。
+- `floor_cabinet` / `wall_cabinet`：layout 只确认柜类、外包络和房间门窗（`openings[]`）。柜门、层板、槽背板/背板安装、踢脚在 `panel_plan` 才准入。
 
 它们不是任意家具配置器。承诺变体前检查板件拓扑模板；其他类别未实现前只做意图/建模方案。
 
