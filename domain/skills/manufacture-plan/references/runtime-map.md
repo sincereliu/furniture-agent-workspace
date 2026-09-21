@@ -58,6 +58,30 @@
 
 未落地与待议需求见 [backlog](backlog.md)，日常改孔位/BOM 不必读。
 
+## 改 X 去哪改
+
+跨阶段定位表：想改某个制造相关结果，从这张表找到拥有它的文件。表中 `domain/` 开头的路径由 `tests/test_skill_architecture.py` 断言存在，改文件名或搬目录必须同步改这里。
+
+| 想改什么 | 去哪改 |
+|---|---|
+| 门宽 / 门高 | `domain/skills/panel-plan/scripts/furniture_panel_planning/topology_solver.py`（`_door_panels` 的 `dw`/`dh` 公式） |
+| 铰链侧（左/右） | 同上，`_door_panels` 写 `door_hinge_side`；单门改走 `stage_inputs.manufacturing` 的 `door_hinge_side` |
+| 铰链数量（按门高分档） | `domain/skills/manufacture-plan/scripts/furniture_manufacturing/hardware_rules.yaml`（`hinge_drilling.count_by_door_height`） |
+| 杯孔直径 / 深度 | 同上（`hinge_drilling.cup_by_variant_group`） |
+| 杯孔到门边距离 | 同上（`hinge_drilling.position.edge_offset_mm`） |
+| 铰链钻孔几何 | `domain/skills/manufacture-plan/scripts/furniture_manufacturing/connectors/hinge.py` |
+| 三合一孔位与类型 | `domain/skills/manufacture-plan/scripts/furniture_manufacturing/connectors/trinity.py` |
+| 钻孔方向语义 | `domain/skills/manufacture-plan/references/coordinate-naming.md` |
+| 背板槽尺寸与四种目标槽 | `domain/skills/manufacture-plan/scripts/furniture_manufacturing/connectors/back_mount.py` |
+| 封边皮宽度与颜色派生 | `domain/skills/manufacture-plan/scripts/furniture_manufacturing/manufacturing_edge_banding.py` |
+| 材质目录键 | `domain/skills/manufacture-plan/scripts/furniture_manufacturing/materials_catalog.yaml` |
+| 封边皮目录键 | `domain/skills/manufacture-plan/scripts/furniture_manufacturing/edge_banding_catalog.py` |
+| 六面钻机床轴映射 | `domain/skills/manufacture-plan/scripts/furniture_manufacturing/devices/six_side_drill_guigui.yaml` |
+| 六面钻 XML 输出 | `domain/skills/manufacture-plan/scripts/furniture_manufacturing/export_six_side_drill.py` |
+| 料厚（板/背板/门/抽屉） | `domain/skills/panel-plan/scripts/furniture_panel_planning/panel_spec.py`（`thickness_for_material_role`） |
+
+门厚、门缝、铰链缝、料档等**输入参数**归板件阶段提案契约，见 [板件提案契约](../../panel-plan/references/panel-proposal-contract.md)；本表只回答「结果由哪个文件算出来」。
+
 ## 相关契约
 
 - 坐标命名约定：`references/coordinate-naming.md`

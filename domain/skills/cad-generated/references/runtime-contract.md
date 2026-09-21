@@ -99,9 +99,23 @@ store/<project-id>/
 
 ## API 契约
 
-`server.py` 只提供独立房间场景：`POST /api/plan-room`、`/api/plan-room/preview`、`/api/plan-room/viewer`、`/api/plan-room/cad`。请求体为 `room + items[]`。
+`server.py` 只提供独立房间场景。请求体为 `room + items[]`；除 `GET` 外都是 JSON body。完整端点：
 
-场景状态（供交互编辑）：`POST /api/room-scene/save` 保存场景的**源**（房间定义 + 多件包络及其摆放请求），`GET /api/room-scene/{scene_id}` 读取源并重算摆放/预览/Viewer，`GET /api/room-scenes` 列出已保存场景，`POST /api/room-scene/{scene_id}/edit` 应用**一次**编辑。只存源、**不存派生结果**（摆放坐标、footprint、净距、预览都在读取时重算）；存储独立于家具主流程，不写 `stage_outputs`。
+| 方法 | 路径 | 作用 |
+| --- | --- | --- |
+| POST | `/api/plan-room` | 规划摆放，返回房间、包络、预览与 Viewer |
+| POST | `/api/plan-room/preview` | 同上，只返回 SVG |
+| POST | `/api/plan-room/viewer` | 同上，只返回 Viewer HTML |
+| POST | `/api/plan-room/cad` | 同上，并追加房间包络 CAD |
+| POST | `/api/room-scene/save` | 保存场景**源**，返回 `scene_id` |
+| GET | `/api/room-scene/{scene_id}` | 读源并重算摆放/预览/Viewer |
+| GET | `/api/room-scenes` | 列出已保存的 `scene_ids` |
+| POST | `/api/room-scene/{scene_id}/edit` | 应用**一次**编辑 op |
+| GET | `/api/room-scene/{scene_id}/editor` | 可编辑视图（自包含 HTML） |
+
+另有 `GET /health` 与 `GET /`（Swagger 入口），不是场景契约的一部分。缺场景返回 404，参数或校验不通过返回 422。
+
+上表后五个端点组成场景状态（供交互编辑）：只存源（房间定义 + 多件包络及其摆放请求），**不存派生结果**——摆放坐标、footprint、净距、预览都在读取时重算；存储独立于家具主流程，不写 `stage_outputs`。
 
 编辑是**单 op、原子**：`move`（按当前 `mode` 二选一——`wall` 收 `host_wall`/`offset_mm`，`free` 收 `origin_x_mm`/`origin_y_mm`；**混给即拒**，换模式必须显式给 `mode` 并给出目标模式的坐标）、`rotate`（`rotation_z_deg`）、`resize`（`width`/`depth`/`height` 任意子集，至少一个）。每个 op 只接受自己的字段，白名单外即拒；**重算与校验通过才落盘**，失败整体拒绝，不留半成品。批量 op 留待多选拖动或场景级操作出现时再加。
 

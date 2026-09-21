@@ -360,6 +360,57 @@ class SkillArchitectureTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertNotIn("furniture_workflow", delivery_validation)
 
+    def test_test_entry_point_is_discoverable(self) -> None:
+        runner = (
+            SKILLS_ROOT
+            / "cad-generated"
+            / "scripts"
+            / "run_tests.py"
+        )
+        self.assertTrue(runner.is_file(), runner)
+
+        dev_environment = (
+            WORKSPACE_ROOT
+            / ".agents"
+            / "skills"
+            / "furniture-agent"
+            / "references"
+            / "dev-environment.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("domain\\skills\\cad-generated\\scripts\\run_tests.py", dev_environment)
+        self.assertIn("bootstrap_runtime_paths", runner.read_text(encoding="utf-8"))
+
+        # The root stays free of a code tree; the runner lives in the stage.
+        self.assertFalse((WORKSPACE_ROOT / "tests").exists())
+        self.assertFalse((WORKSPACE_ROOT / "scripts").exists())
+
+    def test_manufacture_path_table_points_at_live_files(self) -> None:
+        """The manufacture-plan locator table must not rot into dead paths."""
+        runtime_map = (
+            SKILLS_ROOT
+            / "manufacture-plan"
+            / "references"
+            / "runtime-map.md"
+        ).read_text(encoding="utf-8")
+
+        section = runtime_map.split("## 改 X 去哪改", 1)
+        self.assertEqual(len(section), 2, "runtime-map.md must keep 改 X 去哪改")
+        table = section[1].split("## ", 1)[0]
+
+        # Split on single backticks: a stray backtick otherwise lets a match
+        # run across several cells of one table row.
+        spans = table.split("`")[1::2]
+        referenced = {
+            span
+            for span in spans
+            if span.startswith("domain/")
+            and "/" in span
+            and re.search(r"\.\w+$", span)
+        }
+        self.assertTrue(referenced, "locator table must reference real files")
+        for relative in sorted(referenced):
+            self.assertTrue((WORKSPACE_ROOT / relative).is_file(), relative)
+
     def test_layout_does_not_own_panel_or_manufacturing_runtime(self) -> None:
         layout_package = (
             SKILLS_ROOT

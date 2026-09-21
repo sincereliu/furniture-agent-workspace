@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -98,6 +99,31 @@ class ApiEntrypointTests(unittest.TestCase):
     def test_plan_room_rejects_missing_room_size(self) -> None:
         with self.assertRaises(ValidationError):
             server.RoomRequest(id="bedroom", name="卧室", depth_mm=3600, height_mm=2800)
+
+    def test_runtime_contract_documents_every_api_path(self) -> None:
+        """Every served API path is documented; no documented path is stale."""
+        contract = (
+            WORKSPACE_ROOT
+            / "domain"
+            / "skills"
+            / "cad-generated"
+            / "references"
+            / "runtime-contract.md"
+        ).read_text(encoding="utf-8")
+        documented = set(
+            re.findall(r"`(/api/[^`.]+)`", contract)
+        )
+
+        served = set(server.app.openapi()["paths"])
+        # Liveness and the Swagger entry are served but are not scene contract.
+        non_contract = {"/health", "/"}
+        self.assertEqual(
+            documented | non_contract,
+            served,
+            "runtime-contract.md must list every served path: "
+            f"missing from contract {sorted(served - non_contract - documented)}, "
+            f"stale in contract {sorted(documented - served)}",
+        )
 
 
 if __name__ == "__main__":
