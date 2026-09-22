@@ -153,6 +153,21 @@ class ProjectPreviewTests(unittest.TestCase):
         self.assertNotIn("__SCENE_JSON__", html)
         self.assertNotIn("__POLL_URL__", html)
 
+    def test_preview_shows_room_axes_and_cursor_coordinates(self) -> None:
+        """房间坐标要看得见：原点三轴（带总宽/总深/总高）+ 光标读数 + 右栏坐标行。"""
+        project = self.orchestrator.create_project("家", home_layout(bed_offset_mm=200))
+        html = asyncio.run(server.project_preview(project.id)).body.decode("utf-8")
+        self.assertIn('id="coord"', html)
+        self.assertIn("function drawOriginAxes(project)", html)
+        self.assertIn("O (0,0,0)", html)
+        self.assertIn("X 东 · 总宽", html)
+        self.assertIn("Y 南 · 总深", html)
+        self.assertIn("Z 上 · 总高", html)
+        self.assertIn('data-field="coord"', html)
+        self.assertIn("unprojectToGround(sx,sy)", html)
+        # 右向量必须是 cross(up, forward)：反过来会让整幅画面左右镜像，前视把东墙画到左边。
+        self.assertIn("cross([0,0,1],forward)", html)
+
     def test_revise_layout_changes_version_and_reread_position(self) -> None:
         project = self.orchestrator.create_project("家", home_layout(bed_offset_mm=200))
         before = asyncio.run(server.project_layout(project.id))

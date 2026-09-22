@@ -108,3 +108,4 @@ rooms:
 - 全屋项目和独立房间两条出口、各文件做什么：[运行时映射](references/runtime-map.md)
 - 客户没给清单时的待确认假设：[房间场景指南](references/room-scene-guide.md)
 - 可执行柜类：[可执行柜类](references/intake/catalog.yaml)
+- 未落地需求与待议项（门洞编辑、view/editor 互跳、代码是否共用等）：[backlog](references/backlog.md)，日常实现不必读

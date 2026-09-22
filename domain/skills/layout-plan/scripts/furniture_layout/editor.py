@@ -71,12 +71,14 @@ _EDITOR_TIPS = (
     "橙点或旋转环拖了调朝向（Shift 1°）· 蓝点调离地高度<br>"
     "前/后/左/右视里上下拖 = 改高度<br>"
     "右侧的距离 / 朝向 / 离地可输入，也可用 − / ＋ 走整数档<br>"
-    "空白处拖拽转视角 · 右键/中键/Shift+左键拖拽平移 · 滚轮缩放 · Esc 取消选中"
+    "空白处拖拽转视角 · 右键/中键/Shift+左键拖拽平移 · 滚轮缩放 · Esc 取消选中<br>"
+  "双击画面吸到最近的正视图，再双击回到自由视角"
 )
 
 _PREVIEW_TIPS = (
     "只读预览，位置由对话更新。<br>"
     "空白处拖拽转视角 · 右键/中键/Shift+左键拖拽平移 · 滚轮缩放<br>"
+  "双击画面吸到最近的正视图，再双击回到自由视角<br>"
     "有多间房时在上方切换，默认第一间<br>"
     "退出会停掉后台预览服务，然后再关闭这个标签页"
 )
@@ -149,6 +151,8 @@ def render_editor(scene_id: str, scene: RoomScene) -> dict[str, object]:
             "dimension_readout",
             "item_size_readout",
             "view_elevation",
+            "orthographic_view_select",
+            "double_click_snap",
             "drag_orbit",
             "drag_pan",
             "wheel_zoom",
@@ -161,7 +165,8 @@ def render_editor(scene_id: str, scene: RoomScene) -> dict[str, object]:
             "每件的正面用绿色描边标出（约定：局部 +Y 为正面），选中件还有指向正面的箭头；"
             "选中件四周显示到最近邻的净距，并沿自身局部轴标出宽/深/高；"
             "净距、朝向、离地高度都能在右侧直接输入；"
-            "视角可选透视/俯视/前/后/左/右（切换带过渡），"
+            "视角从下拉里选正视图（俯视/仰视/前/后/左/右），「复位」回默认视角，"
+            "双击画面吸到最近的正视图、再双击回到自由视角；"
             "空白处拖动转视角、右键或 Shift+左键拖动平移、滚轮缩放"
         ),
         "html": html,
@@ -223,6 +228,8 @@ body{margin:0;background:linear-gradient(180deg,#f7f9fc 0,#eef1f6 100%);padding:
 #shutdown-preview:hover{background:#fef2f2;color:#b91c1c}
 .room-switch:not([hidden]){display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:var(--muted)}
 .room-switch select{border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);font:inherit;font-weight:600;padding:6px 8px}
+.view-switch{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:var(--muted)}
+.view-switch select{border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);font:inherit;font-weight:600;padding:6px 8px}
 body.readonly .detail input.num,body.readonly .detail .step{pointer-events:none;opacity:.72}
 .workspace{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:14px;min-height:0}
 .stage{position:relative;height:100%;min-height:340px;border-radius:16px;overflow:hidden;background:var(--canvas);border:1px solid var(--line);box-shadow:0 1px 2px rgba(15,23,42,.05),0 18px 40px -26px rgba(15,23,42,.42)}
@@ -231,6 +238,8 @@ canvas.orbiting{cursor:grabbing}
 canvas.moving{cursor:move}
 canvas.panning{cursor:grabbing}
 .toast{position:absolute;left:14px;bottom:14px;max-width:calc(100% - 28px);padding:8px 12px;border-radius:10px;background:rgba(255,255,255,.94);border:1px solid var(--line-strong);font-size:12.5px;color:#334155;box-shadow:0 4px 14px -6px rgba(15,23,42,.28);backdrop-filter:blur(8px);transition:border-color .12s,color .12s}
+/* 光标坐标读数：贴着右下角，只读，不吃指针事件（免得挡住画布的拖拽命中）。 */
+.coord{position:absolute;right:14px;bottom:14px;max-width:calc(100% - 28px);padding:8px 12px;border-radius:10px;background:rgba(255,255,255,.94);border:1px solid var(--line-strong);font-size:12.5px;color:#334155;box-shadow:0 4px 14px -6px rgba(15,23,42,.28);backdrop-filter:blur(8px);font-variant-numeric:tabular-nums;pointer-events:none}
 .toast.warn{color:var(--amber-ink);border-color:#fcd34d;background:rgba(255,251,235,.96)}
 .toast.error{color:#b91c1c;border-color:#fecaca;background:rgba(254,242,242,.96)}
 .sidebar{display:flex;flex-direction:column;gap:12px;min-height:0;overflow:auto}
@@ -267,6 +276,7 @@ canvas.panning{cursor:grabbing}
 .chip.front{background:#047857}
 .chip.obstacle{background:#e79a9a}
 .chip.opening{background:#7dd3fc}
+.chip.axes{background:#0f172a}
 .tips{margin:11px 0 0;padding-top:10px;border-top:1px dashed var(--line);font-size:11.5px;line-height:1.7;color:#94a3b8}
 .hint-inline{margin:8px 0 0;font-size:11.5px;color:#94a3b8;line-height:1.6}
 @media (max-width:980px){.workspace{grid-template-columns:minmax(0,1fr)}.stage{min-height:420px}.app{height:auto}}
@@ -283,13 +293,18 @@ canvas.panning{cursor:grabbing}
       <select id="room-switch" aria-label="房间"></select>
     </label>
     <nav class="toolbar" aria-label="视角选择">
-      <button type="button" data-view="perspective" aria-pressed="true">透视</button>
-      <button type="button" data-view="top" aria-pressed="false">俯视</button>
-      <button type="button" data-view="front" aria-pressed="false">前视</button>
-      <button type="button" data-view="back" aria-pressed="false">后视</button>
-      <button type="button" data-view="left" aria-pressed="false">左视</button>
-      <button type="button" data-view="right" aria-pressed="false">右视</button>
-      <button type="button" data-view="reset" aria-pressed="false">复位</button>
+      <label class="view-switch">
+        <select id="view-select" aria-label="正视图">
+          <option value="free" disabled>自由视角</option>
+          <option value="top">俯视</option>
+          <option value="bottom">仰视</option>
+          <option value="front">前视</option>
+          <option value="back">后视</option>
+          <option value="left">左视</option>
+          <option value="right">右视</option>
+        </select>
+      </label>
+      <button type="button" data-view="default_view" aria-pressed="true">复位</button>
       <button type="button" id="toggle-dims" aria-pressed="true">标注</button>
       __SHUTDOWN_BUTTON__
     </nav>
@@ -298,6 +313,7 @@ canvas.panning{cursor:grabbing}
     <section class="stage">
       <canvas id="scene" width="960" height="600" aria-label="房间与家具外形尺寸；点选家具后可拖动移动、拖橙点旋转、拖蓝点改离地高度"></canvas>
       <div class="toast" id="status">点击一件家具开始</div>
+      <div class="coord" id="coord" hidden></div>
     </section>
     <aside class="sidebar">
       <section class="card">
@@ -319,6 +335,7 @@ canvas.panning{cursor:grabbing}
           <li><i class="chip front"></i>正面（绿边）</li>
           <li><i class="chip obstacle"></i>障碍物</li>
           <li><i class="chip opening"></i>门窗</li>
+          <li><i class="chip axes"></i>房间原点与 X/Y/Z 轴（X 东 · Y 南 · Z 上）</li>
         </ul>
         <p class="tips">__TIPS__</p>
       </section>
@@ -365,16 +382,24 @@ function bindRoom(){
     document.title=heading.textContent;
   }
 }
-const DEFAULT_YAW=-Math.PI/4,DEFAULT_PITCH=.95;
+// 默认视角：正南偏东 15°（yaw=75°）看向北偏西，北墙几乎正对、仍留一点纵深；俯仰 0.35 rad（≈20°）。
+const DEFAULT_YAW=Math.PI*5/12,DEFAULT_PITCH=.35;
 // 立面视图把相机放到水平（pitch 0）并从四个方向看；前视=站在南边往北看，依此类推。
+// 正视图预设：四个立面（pitch 0）+ 俯视/仰视（对称的 ±1.48，避开正好 90° 的退化）。
+// default_view 是「复位」回到的那一眼，不是"正交/透视"之分——这张画布永远是透视投影。
 const VIEWS={
-  perspective:{yaw:DEFAULT_YAW,pitch:DEFAULT_PITCH},
-  top:{yaw:-Math.PI/2,pitch:1.48},
+  default_view:{yaw:DEFAULT_YAW,pitch:DEFAULT_PITCH},
+  top:{yaw:Math.PI/2,pitch:1.48},
+  bottom:{yaw:Math.PI/2,pitch:-1.48},
   front:{yaw:Math.PI/2,pitch:0},
   back:{yaw:-Math.PI/2,pitch:0},
   right:{yaw:0,pitch:0},
   left:{yaw:Math.PI,pitch:0},
 };
+const ORTHO_VIEWS=["top","bottom","front","back","left","right"];
+const isOrthoView=name=>ORTHO_VIEWS.includes(name);
+// 旧链接（书签、聊天记录里的 #view=perspective）继续能用。
+const VIEW_ALIASES={perspective:"default_view"};
 // 相机几乎与地面齐平时，地面射线求交会退化（交点跑到几万毫米外），
 // 所以这个角度以下改成在竖直平面里拖：横向 = 该视图的水平轴，纵向 = 高度。
 const ELEVATION_MAX_PITCH=.12;
@@ -402,7 +427,10 @@ function camera(distance,pitch,yaw){
   const d=distance===undefined?state.distance:distance;
   const cp=Math.cos(p),sp=Math.sin(p),cy=Math.cos(y),sy=Math.sin(y);
   const position=[target[0]+d*cp*cy,target[1]+d*cp*sy,target[2]+d*sp];
-  const forward=norm(sub(target,position)),right=norm(cross(forward,[0,0,1])),up=norm(cross(right,forward));
+  // 房间坐标系是 X 东 / Y 南 / Z 上（左手系），叉乘顺序必须和它配套：右向量要取
+  // cross(up, forward)。写成 cross(forward, up) 得到的是「左」向量，整幅画面会左右镜像——
+  // 前视（站在南边往北看）会把东墙画到左边，和真实方位正好相反。
+  const forward=norm(sub(target,position)),right=norm(cross([0,0,1],forward)),up=norm(cross(forward,right));
   return{position,forward,right,up};
 }
 function projector(cam){
@@ -916,6 +944,65 @@ function drawHeightHandle(project){
   ctx.moveTo(handle.x-px(3.6),handle.y+px(2.4));ctx.lineTo(handle.x,handle.y+px(6));ctx.lineTo(handle.x+px(3.6),handle.y+px(2.4));
   ctx.stroke();
 }
+/* ---------- 房间原点与 X/Y/Z 轴：轴长就是房间的总宽 / 总深 / 总高 ---------- */
+// 原点在西北角地面（与空间布局规则的坐标约定一致）。三根轴画在房间外侧一点，箭头指向
+// +X（东）、+Y（南）、+Z（上），轴上直接标出房间总宽 / 总深 / 总高。正对着相机被压成
+// 一点、或者跑到相机后面的那根就不画。画在标注层，和净距线一样盖在家具上面。
+function drawOriginAxes(project){
+  const origin=project([0,0,0]);
+  if(!(origin.depth>0))return;
+  const gap=Math.max(120,Math.min(room.width_mm,room.depth_mm)*.04);
+  const centre=project([room.width_mm/2,room.depth_mm/2,0]);
+  const arms=[
+    {from:[0,-gap,0],tip:[room.width_mm,-gap,0],witness:[[0,0,0],[0,-gap,0]],color:"#dc2626",
+      label:`X 东 · 总宽 ${Math.round(room.width_mm)}`},
+    {from:[-gap,0,0],tip:[-gap,room.depth_mm,0],witness:[[0,0,0],[-gap,0,0]],color:"#047857",
+      label:`Y 南 · 总深 ${Math.round(room.depth_mm)}`},
+    {from:[-gap,-gap,0],tip:[-gap,-gap,room.height_mm],color:"#2563eb",
+      label:`Z 上 · 总高 ${Math.round(room.height_mm)}`},
+  ];
+  ctx.save();
+  ctx.font=`700 ${Math.round(px(12))}px "Microsoft YaHei",system-ui,sans-serif`;
+  ctx.textAlign="center";ctx.textBaseline="middle";
+  for(const arm of arms){
+    const a=project(arm.from),b=project(arm.tip);
+    if(!(a.depth>0)||!(b.depth>0))continue;
+    // 正对相机时这根轴会压成一个点，标出来只是糊一坨，索性不画。
+    if(Math.hypot(b.x-a.x,b.y-a.y)<px(26))continue;
+    if(arm.witness){
+      const [w0,w1]=arm.witness.map(project);
+      ctx.save();ctx.setLineDash([px(4),px(4)]);ctx.strokeStyle=arm.color;ctx.lineWidth=px(1);
+      ctx.beginPath();ctx.moveTo(w0.x,w0.y);ctx.lineTo(w1.x,w1.y);ctx.stroke();ctx.restore();
+    }
+    const angle=Math.atan2(b.y-a.y,b.x-a.x);
+    ctx.strokeStyle=arm.color;ctx.lineWidth=px(1.8);ctx.lineCap="round";
+    ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+    const head=px(10);
+    ctx.beginPath();
+    ctx.moveTo(b.x,b.y);
+    ctx.lineTo(b.x-head*Math.cos(angle-.42),b.y-head*Math.sin(angle-.42));
+    ctx.lineTo(b.x-head*Math.cos(angle+.42),b.y-head*Math.sin(angle+.42));
+    ctx.closePath();ctx.fillStyle=arm.color;ctx.fill();
+    // 标签朝房间外侧让开，免得压在家具上。
+    const mx=(a.x+b.x)/2,my=(a.y+b.y)/2;
+    let ox=mx-centre.x,oy=my-centre.y;
+    const length=Math.hypot(ox,oy)||1;
+    ox=mx+ox/length*px(15);oy=my+oy/length*px(15);
+    ctx.lineWidth=px(3.5);ctx.strokeStyle="rgba(255,255,255,.92)";
+    ctx.strokeText(arm.label,ox,oy);
+    ctx.fillStyle=arm.color;ctx.fillText(arm.label,ox,oy);
+  }
+  ctx.beginPath();ctx.arc(origin.x,origin.y,px(3.4),0,Math.PI*2);ctx.fillStyle="#0f172a";ctx.fill();
+  // 原点字样也往房间外面让开：房间这一侧常常压着家具的名字。
+  let rx=origin.x-centre.x,ry=origin.y-centre.y;
+  const radius=Math.hypot(rx,ry)||1;
+  rx=origin.x+rx/radius*px(16);ry=origin.y+ry/radius*px(16);
+  ctx.font=`700 ${Math.round(px(11))}px "Microsoft YaHei",system-ui,sans-serif`;
+  ctx.lineWidth=px(3.5);ctx.strokeStyle="rgba(255,255,255,.92)";
+  ctx.strokeText("O (0,0,0)",rx,ry);
+  ctx.fillStyle="#0f172a";ctx.fillText("O (0,0,0)",rx,ry);
+  ctx.restore();
+}
 function render(){
   ctx.setTransform(1,0,0,1,0,0);
   const cam=camera(),project=projector(cam);
@@ -925,6 +1012,7 @@ function render(){
   drawShadows(project);
   drawSolids(project,cam);
   drawDimensions(project);
+  drawOriginAxes(project);
   drawRotateHandle(project);
   drawHeightHandle(project);
   syncPanel();
@@ -1193,6 +1281,14 @@ function syncPanel(){
   syncDetail();
 }
 // 详情面板要显示的数值。单独拆出来，好让它能被直接测（DOM 那层只是把值填进去）。
+// 坐标行：房间原点在西北角地面，X 向东、Y 向南。给这件家具占地的范围，
+// 以及最靠西、最靠北那两条边到墙的距离——报数字改布局时两种说法都用得上。
+function coordText(item){
+  const xs=item.footprint.map(point=>point[0]),ys=item.footprint.map(point=>point[1]);
+  const x0=Math.round(Math.min(...xs)),x1=Math.round(Math.max(...xs));
+  const y0=Math.round(Math.min(...ys)),y1=Math.round(Math.max(...ys));
+  return `X ${x0}~${x1} · Y ${y0}~${y1} mm（距西墙 ${x0} · 距北墙 ${y0}）`;
+}
 function detailValues(item){
   const gaps=distancesOf(item);
   const round=n=>Math.round(n);
@@ -1205,6 +1301,7 @@ function detailValues(item){
     front:`前朝${frontCompass(item)}`,
     height:round(item.z_start),
     ceiling:round(room.height_mm-item.z_end),
+    coord:coordText(item),
     gaps:{west:round(gaps.west.gap),east:round(gaps.east.gap),
       north:round(gaps.north.gap),south:round(gaps.south.gap)},
     who:{west:gaps.west.label,east:gaps.east.label,
@@ -1222,6 +1319,7 @@ function detailMarkup(item){
     <dt>尺寸</dt><dd>${round(item.width)}×${round(item.depth)}×${round(item.height)}</dd>
     <dt>摆放</dt><dd data-field="mode"></dd>
     <dt>位置</dt><dd data-field="position"></dd>
+    <dt>坐标</dt><dd data-field="coord"></dd>
     <dt>朝向</dt><dd><button type="button" class="step" data-rotation-step data-delta="-15" aria-label="逆时针 15°">−</button><input class="num" type="number" step="1" data-rotation data-field="rotation" aria-label="朝向角度"><button type="button" class="step" data-rotation-step data-delta="15" aria-label="顺时针 15°">＋</button><span class="who">°</span><span class="who" data-front></span></dd>
     <dt>离地</dt><dd><button type="button" class="step" data-height="-50" aria-label="降低 50">−</button><input class="num" type="number" step="1" data-height-input data-field="height" aria-label="离地高度"><button type="button" class="step" data-height="50" aria-label="升高 50">＋</button><span class="who">mm</span></dd>
     <dt>离顶</dt><dd><span data-field="ceiling"></span> mm</dd>
@@ -1262,6 +1360,7 @@ function applyDetailValues(detail,item,force){
   };
   set('[data-field="mode"]',values.mode);
   set('[data-field="position"]',values.position);
+  set('[data-field="coord"]',values.coord);
   set('[data-field="rotation"]',values.rotation);
   set('[data-front]',values.front);
   set('[data-field="height"]',values.height);
@@ -1489,7 +1588,11 @@ canvas.addEventListener("pointermove",event=>{
   }
   if(!state.orbiting)return;
   const dx=event.clientX-state.lastX,dy=event.clientY-state.lastY;state.lastX=event.clientX;state.lastY=event.clientY;
-  state.yaw-=dx*.008;state.pitch=clamp(state.pitch+dy*.006,-1.42,1.48);render();
+  // 转视角要跟手：往右拖，靠近自己的那一边就跟着往右走，和拖动家具是同一个心智模型。
+  // 相机右向量改成真实方位之后，这里的符号必须一起翻——否则整个房间会朝反方向转。
+  // 下限放到 -1.48，仰视才落得下去。
+  state.yaw+=dx*.008;state.pitch=clamp(state.pitch+dy*.006,-1.48,1.48);
+  state.viewMoved=true;render();
 });
 async function reload(){
   try{
@@ -1544,7 +1647,32 @@ canvas.addEventListener("pointerup",event=>{
     else{setStatus(selectHint(item));render()}
     return;
   }
-  if(state.orbiting){state.orbiting=false;canvas.classList.remove("orbiting");canvas.releasePointerCapture(event.pointerId)}
+  if(state.orbiting){
+    state.orbiting=false;canvas.classList.remove("orbiting");canvas.releasePointerCapture(event.pointerId);
+    // 真的转过视角就不再站在任何正视图上了；平移/缩放不算（方向没变）。
+    if(state.viewMoved){state.viewMoved=false;state.active="free";syncViewControls()}
+  }
+});
+// 光标落点的房间坐标。原点在西北角地面、X 向东、Y 向南。
+// 相机贴地（立面视图）时地面射线求交会退化，交点能跑到几万毫米外；拖动那边同样躲开这个角度，
+// 这里就把读数藏起来，宁可不显示也不显示假坐标。指到房间很远以外也一样藏。
+function updateCoordReadout(event){
+  const box=document.getElementById("coord");
+  if(!box)return;
+  const [sx,sy]=screenPoint(event);
+  const margin=Math.max(room.width_mm,room.depth_mm);
+  const ground=isElevation()?null:unprojectToGround(sx,sy);
+  if(!ground){box.hidden=true;return}
+  const x=Math.round(ground[0]),y=Math.round(ground[1]);
+  if(x<-margin||y<-margin||x>room.width_mm+margin||y>room.depth_mm+margin){box.hidden=true;return}
+  const outside=x<0||y<0||x>room.width_mm||y>room.depth_mm;
+  box.hidden=false;
+  box.textContent=`X ${x} · Y ${y} · Z 0 mm　距西墙 ${x} · 距北墙 ${y}${outside?"（房间外）":""}`;
+}
+canvas.addEventListener("pointermove",updateCoordReadout);
+canvas.addEventListener("pointerleave",()=>{
+  const box=document.getElementById("coord");
+  if(box)box.hidden=true;
 });
 canvas.addEventListener("pointercancel",()=>{drag=null;state.blocked=null;state.panning=false;canvas.classList.remove("moving","orbiting","panning")});
 // 右键要用来平移，别弹系统菜单。
@@ -1596,18 +1724,76 @@ function animateView(goal,duration){
   };
   viewAnimation=nextFrame(step);
 }
-function setView(name){
-  const key=name==="reset"?"perspective":name;
-  const preset=VIEWS[key];
-  if(!preset)return;
+// 视角标识：下拉回答「在哪个正视图」，透视按钮回答「在不在默认透视位」。
+// 转过角度之后既不是正视也不是默认位，下拉就显示「自由视角」——不能还挂着上一个正视图。
+function syncViewControls(){
+  const select=document.getElementById("view-select");
+  if(select)select.value=isOrthoView(state.active)?state.active:"free";
+  const button=document.querySelector('[data-view="default_view"]');
+  if(button)button.setAttribute("aria-pressed",String(state.active==="default_view"));
+}
+function nearAngle(gap){
+  return Math.abs(((gap+Math.PI)%(2*Math.PI)+2*Math.PI)%(2*Math.PI)-Math.PI);
+}
+// 双击时吸到最近的正视图：先看俯仰够不够陡（够陡就是俯视/仰视），否则按方位角取最近的立面。
+function nearestOrthoView(){
+  const threshold=.35;
+  if(state.pitch>threshold)return"top";
+  if(state.pitch<-threshold)return"bottom";
+  let best="front",bestGap=Infinity;
+  for(const name of ["front","back","left","right"]){
+    const gap=nearAngle(state.yaw-VIEWS[name].yaw);
+    if(gap<bestGap){bestGap=gap;best=name}
+  }
+  return best;
+}
+function updateActiveAfterRestore(){
+  state.active=(Math.abs(state.yaw-VIEWS.default_view.yaw)<1e-3&&
+    Math.abs(state.pitch-VIEWS.default_view.pitch)<1e-3)?"default_view":"free";
+}
+// 回到「进正视图之前那一眼」的相机；没记过就回默认透视。
+function restoreFreeView(){
+  const remembered=state.freeView;
+  if(!remembered){setView("default_view");return}
   state.adjusted=false;
-  document.querySelectorAll("[data-view]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.view===name)));
+  animateView({
+    yaw:remembered.yaw,pitch:remembered.pitch,distance:remembered.distance,
+    target:[...remembered.target],
+  },500);
+  // animateView 会把相机挪回去，动画结束后才谈得上判断落在哪个标识上。
+  window.setTimeout(()=>{updateActiveAfterRestore();syncViewControls()},520);
+}
+function setView(name){
+  const preset=VIEWS[name];
+  if(!preset)return;
+  // 从自由/透视切进正视图时，先把当前这一眼记下来，双击时回到它。
+  if(isOrthoView(name)&&!isOrthoView(state.active)){
+    state.freeView={yaw:state.yaw,pitch:state.pitch,distance:state.distance,target:[...target]};
+  }
+  state.adjusted=false;
+  state.active=name;
   // 取景按房间中心算，然后连中心一起动画回去——平移过的视角也能干净复位。
   const distance=withHomeCentre(()=>fitDistance(preset.pitch,preset.yaw))*
     (preset.pitch<ELEVATION_MAX_PITCH?1.04:1);
   animateView({yaw:preset.yaw,pitch:preset.pitch,distance,target:HOME_TARGET},500);
+  syncViewControls();
 }
 document.querySelectorAll("[data-view]").forEach(button=>button.addEventListener("click",()=>setView(button.dataset.view)));
+const viewSelect=document.getElementById("view-select");
+if(viewSelect){
+  viewSelect.addEventListener("change",()=>{
+    const name=viewSelect.value;
+    if(!VIEWS[name]){syncViewControls();return}
+    setView(name);
+  });
+}
+// 双击：自由/透视 → 吸到最近的正视图；已经在正视图上 → 回到进它之前那一眼。
+canvas.addEventListener("dblclick",()=>{
+  if(isOrthoView(state.active)){restoreFreeView();return}
+  const nearest=nearestOrthoView();
+  state.freeView={yaw:state.yaw,pitch:state.pitch,distance:state.distance,target:[...target]};
+  setView(nearest);
+});
 const dimsButton=document.getElementById("toggle-dims");
 if(dimsButton){
   dimsButton.addEventListener("click",()=>{
@@ -1658,14 +1844,18 @@ if(detailBox&&detailBox.addEventListener){
 bindRoom();
 fitCanvas();
 const defaults={yaw:DEFAULT_YAW,pitch:DEFAULT_PITCH,distance:fitDistance(DEFAULT_PITCH,DEFAULT_YAW)};
-const state={...defaults,orbiting:false,panning:false,lastX:0,lastY:0,active:"perspective",selectedId:null,
+const state={...defaults,orbiting:false,panning:false,lastX:0,lastY:0,active:"default_view",selectedId:null,
+  freeView:null,viewMoved:false,
   handle:null,heightHandle:null,rotateRing:null,blocked:null,adjusted:false,dims:true};
 render();
+// 一进来就把视角标识摆对：默认是透视位，下拉显示「自由视角」、透视按钮高亮。
+syncViewControls();
 // 深链：#view=front&item=desk 直接打开某个视角并选中某件，方便分享/复现。
 if(typeof location!=="undefined"&&location.hash.length>1){
   const params=new URLSearchParams(location.hash.slice(1));
   const view=params.get("view");
-  if(view&&VIEWS[view])setView(view);
+  const target=view?(VIEW_ALIASES[view]||view):null;
+  if(target&&VIEWS[target])setView(target);
   const wanted=params.get("item");
   if(wanted&&scene.items.some(candidate=>candidate.id===wanted))selectItem(wanted);
 }
@@ -1696,8 +1886,8 @@ function showRoom(index,keepCamera){
     state.adjusted=false;
     state.yaw=DEFAULT_YAW;state.pitch=DEFAULT_PITCH;
     state.distance=fitDistance(DEFAULT_PITCH,DEFAULT_YAW);
-    state.active="perspective";
-    document.querySelectorAll("[data-view]").forEach(button=>button.setAttribute("aria-pressed",String(button.dataset.view==="perspective")));
+    state.active="default_view";
+    syncViewControls();
   }
   if(state.selectedId&&!scene.items.some(item=>item.id===state.selectedId)){
     state.selectedId=null;state.blocked=null;

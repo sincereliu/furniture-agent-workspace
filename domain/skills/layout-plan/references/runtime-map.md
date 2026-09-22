@@ -42,9 +42,11 @@
 | `placement_check.py` | 越界、外形干涉、遮挡门窗洞口 | calculation |
 | `validation.py` | `admit_scene`（规划）；dict 上再核预览（冻结） | validation |
 | `preview.py` / `viewer.py` | SVG 与只读轨道视图 | calculation |
-| `editor.py` | 可编辑 HTML，以及项目只读预览（复用同一画布，不发 edit op）；JS 摆放检查必须与 `placement_check.py` 同步 | calculation |
+| `editor.py` | 可编辑 HTML，以及项目只读预览（复用同一画布，不发 edit op）；原点三轴与光标坐标读数也长在这张画布上；JS 摆放检查必须与 `placement_check.py` 同步 | calculation |
 | `scene_edit.py` | 源上的一次原子 op，本身不算几何 | schema |
 | `scene_store.py` | 独立场景只存源，读取时重算 | side_effect |
 | `cad.py` | 房间包络树与房间 STEP，不是 `furniture_cad` | side_effect |
 
 编辑器拖动是服务端规则的本地预览，松手后后端再 place + 准入。改 `placement_check.py` 必须同步改 `editor.py` 里的 JS。
+
+未落地与待议需求见 [backlog](backlog.md)，日常改摆放/编辑器不必读。

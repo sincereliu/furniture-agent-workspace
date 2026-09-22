@@ -94,6 +94,13 @@ class RoomSceneEditorTests(unittest.TestCase):
             self.assertNotIn(placeholder, html)
         self.assertNotIn('id="shutdown-preview"', html)
 
+    def test_editor_also_carries_room_axes_and_coordinate_readout(self) -> None:
+        """坐标层长在共用画布上，可编辑页同样要有。"""
+        html = str(render_editor("demo", _scene())["html"])
+        self.assertIn('id="coord"', html)
+        self.assertIn("function drawOriginAxes(project)", html)
+        self.assertIn('data-field="coord"', html)
+
     def test_editor_declares_move_and_rotate_controls(self) -> None:
         result = render_editor("demo", _scene())
         controls = result["controls"]
@@ -114,11 +121,33 @@ class RoomSceneEditorTests(unittest.TestCase):
 
     def test_editor_offers_orthographic_views(self) -> None:
         html = str(render_editor("demo", _scene())["html"])
-        for view in ("perspective", "top", "front", "back", "left", "right"):
-            self.assertIn(f'data-view="{view}"', html)
-        # 立面视图必须落在 pitch 0，编辑器据此切换成竖直平面拖动
+        # 六个正视图收进一个下拉；透视单独一个按钮（复位与它重复，已删掉）。
+        for view in ("top", "bottom", "front", "back", "left", "right"):
+            self.assertIn(f'<option value="{view}"', html)
+        self.assertIn('id="view-select"', html)
+        # 回默认视角的那个按钮叫「复位」；内部预设名是 default_view（视角名 ≠ 动作名）。
+        self.assertIn('data-view="default_view" aria-pressed="true">复位</button>', html)
+        # 旧的 #view=perspective 链接仍然能用。
+        self.assertIn('VIEW_ALIASES={perspective:"default_view"}', html)
+        self.assertNotIn('data-view="reset"', html)
+        # 默认视角：正南偏东 15°、俯仰压低。
+        self.assertIn("const DEFAULT_YAW=Math.PI*5/12,DEFAULT_PITCH=.35", html)
+        # 立面视图必须落在 pitch 0，编辑器据此切换成竖直平面拖动；俯视/仰视对称。
         self.assertIn("front:{yaw:Math.PI/2,pitch:0}", html)
         self.assertIn("left:{yaw:Math.PI,pitch:0}", html)
+        self.assertIn("bottom:{yaw:Math.PI/2,pitch:-1.48}", html)
+
+    def test_editor_snaps_orthographic_view_on_double_click(self) -> None:
+        result = render_editor("demo", _scene())
+        html = str(result["html"])
+        self.assertIn('canvas.addEventListener("dblclick"', html)
+        self.assertIn("function nearestOrthoView()", html)
+        self.assertIn("state.freeView={yaw:state.yaw", html)
+        self.assertIn("syncViewControls()", html)
+        # 转过视角之后标识要变成「自由视角」，不能还挂着上一个正视图。
+        self.assertIn('state.active="free"', html)
+        self.assertIn("orthographic_view_select", result["controls"])
+        self.assertIn("double_click_snap", result["controls"])
 
 
 class RoomSceneEditorApiTests(unittest.TestCase):
