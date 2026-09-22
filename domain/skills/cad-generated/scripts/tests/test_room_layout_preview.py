@@ -369,6 +369,149 @@ class ProjectLayoutAdmissionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "interferes with item"):
             plan_room_scene(bedroom_room(), items)
 
+    def test_customer_opt_out_keeps_envelope_and_drops_the_unit(self) -> None:
+        room = {
+            "id": "study",
+            "width_mm": 4000,
+            "depth_mm": 3600,
+            "height_mm": 2800,
+            "items": [
+                {
+                    "id": "bookcase",
+                    "category": "bookcase",
+                    "furniture_category": "floor_cabinet",
+                    "manufacture": False,
+                    "width": 900,
+                    "depth": 350,
+                    "height": 2100,
+                    "placement": {
+                        "mode": "wall",
+                        "host_wall": "north",
+                        "offset_mm": 0,
+                    },
+                },
+                {
+                    "id": "wardrobe",
+                    "category": "wardrobe",
+                    "furniture_category": "floor_cabinet",
+                    "width": 1800,
+                    "depth": 600,
+                    "height": 2400,
+                    "placement": {
+                        "mode": "wall",
+                        "host_wall": "south",
+                        "offset_mm": 0,
+                    },
+                },
+            ],
+        }
+        output = plan_project_layout([room])
+        items = {item["id"]: item for item in output["rooms"][0]["items"]}
+        self.assertFalse(items["bookcase"]["manufacture"])
+        self.assertNotIn("manufacture", items["wardrobe"])
+        self.assertEqual([unit["id"] for unit in output["cad"]["units"]], ["wardrobe"])
+        restored = ProjectLayout.from_dict(output)
+        self.assertEqual(
+            [unit.id for unit in restored.executable_units()],
+            ["wardrobe"],
+        )
+        self.assertFalse(restored.rooms[0].items[0].manufacture)
+
+    def test_category_name_does_not_skip_manufacturing(self) -> None:
+        output = plan_project_layout(
+            [
+                {
+                    "id": "living",
+                    "width_mm": 5000,
+                    "depth_mm": 4000,
+                    "height_mm": 2800,
+                    "items": [
+                        {
+                            "id": "sofa",
+                            "category": "sofa",
+                            "furniture_category": "floor_cabinet",
+                            "width": 2100,
+                            "depth": 900,
+                            "height": 850,
+                            "placement": {
+                                "mode": "wall",
+                                "host_wall": "north",
+                                "offset_mm": 0,
+                            },
+                        }
+                    ],
+                }
+            ]
+        )
+        item = output["rooms"][0]["items"][0]
+        self.assertNotIn("manufacture", item)
+        self.assertEqual([unit["id"] for unit in output["cad"]["units"]], ["sofa"])
+
+    def test_opted_out_envelope_still_blocks_other_furniture(self) -> None:
+        room = {
+            "id": "study",
+            "width_mm": 4000,
+            "depth_mm": 3600,
+            "height_mm": 2800,
+            "items": [
+                {
+                    "id": "bookcase",
+                    "category": "bookcase",
+                    "furniture_category": "floor_cabinet",
+                    "manufacture": False,
+                    "width": 2000,
+                    "depth": 400,
+                    "height": 2100,
+                    "placement": {
+                        "mode": "wall",
+                        "host_wall": "north",
+                        "offset_mm": 0,
+                    },
+                },
+                {
+                    "id": "wardrobe",
+                    "category": "wardrobe",
+                    "furniture_category": "floor_cabinet",
+                    "width": 2000,
+                    "depth": 600,
+                    "height": 2400,
+                    "placement": {
+                        "mode": "wall",
+                        "host_wall": "north",
+                        "offset_mm": 1000,
+                    },
+                },
+            ],
+        }
+        with self.assertRaisesRegex(ValueError, "interferes with item"):
+            plan_project_layout([room])
+
+    def test_manufacture_must_be_boolean(self) -> None:
+        room = {
+            "id": "study",
+            "width_mm": 4000,
+            "depth_mm": 3600,
+            "height_mm": 2800,
+            "items": [
+                {
+                    "id": "bookcase",
+                    "category": "bookcase",
+                    "furniture_category": "floor_cabinet",
+                    "manufacture": "false",
+                    "width": 900,
+                    "depth": 350,
+                    "height": 2100,
+                    "placement": {
+                        "mode": "wall",
+                        "host_wall": "north",
+                        "offset_mm": 0,
+                    },
+                }
+            ],
+        }
+        with self.assertRaisesRegex(ValueError, "manufacture must be a boolean"):
+            plan_project_layout([room])
+
     def test_out_of_room_item_is_rejected_before_project_creation(self) -> None:
         items = [{"id": "oversized", "category": "wardrobe", "width": 5000,
                   "depth": 600, "height": 2400,

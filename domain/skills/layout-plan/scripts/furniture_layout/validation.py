@@ -245,6 +245,7 @@ def _validate_item_placement(
         depth=item.depth,
         height=item.height,
         furniture_category=item.furniture_category,
+        manufacture=item.manufacture,
         placement=PlacementRequest(
             mode=expected_placement.mode,
             host_wall=expected_placement.host_wall,

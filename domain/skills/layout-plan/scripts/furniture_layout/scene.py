@@ -304,6 +304,7 @@ class ItemSpec:
     height: float
     placement: PlacementRequest
     furniture_category: str | None = None
+    manufacture: bool = True
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any], *, index: int = 0) -> "ItemSpec":
@@ -331,6 +332,7 @@ class ItemSpec:
             height=height,
             placement=placement,
             furniture_category=_optional_furniture_category(data, index),
+            manufacture=_manufacture_flag(data, index),
         )
 
 
@@ -346,6 +348,7 @@ class PlacedItem:
     footprint: tuple[tuple[float, float], ...]
     clearances_mm: dict[str, float]
     furniture_category: str | None = None
+    manufacture: bool = True
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any], *, index: int = 0) -> "PlacedItem":
@@ -385,6 +388,7 @@ class PlacedItem:
                 )
             },
             furniture_category=_optional_furniture_category(data, index),
+            manufacture=_manufacture_flag(data, index),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -401,6 +405,8 @@ class PlacedItem:
         }
         if self.furniture_category is not None:
             payload["furniture_category"] = self.furniture_category
+        if not self.manufacture:
+            payload["manufacture"] = False
         return payload
 
     @property
@@ -409,7 +415,7 @@ class PlacedItem:
 
     @property
     def is_executable(self) -> bool:
-        return self.furniture_category in EXECUTABLE_CATEGORIES
+        return self.manufacture and self.furniture_category in EXECUTABLE_CATEGORIES
 
 
 @dataclass(frozen=True)
@@ -460,6 +466,19 @@ def parse_item_specs(
             raise ValueError(f"duplicate item id: {spec.id}")
         seen.add(spec.id)
     return specs
+
+
+def _manufacture_flag(data: Mapping[str, Any], index: int) -> bool:
+    """True unless the caller already set manufacture to false.
+
+    Absence means the piece is to be manufactured. Category names are not read.
+    """
+    if "manufacture" not in data or data["manufacture"] is None:
+        return True
+    value = data["manufacture"]
+    if not isinstance(value, bool):
+        raise ValueError(f"items[{index}].manufacture must be a boolean")
+    return value
 
 
 def _optional_furniture_category(

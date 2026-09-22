@@ -1,6 +1,6 @@
 # 分类轴 = 柜类家具的落位/安装方式：落地 → floor_cabinet，上墙 → wall_cabinet。
-# 与功能、外观、所在房间无关。床、沙发等非柜件可以出现在房间里，但不带
-# furniture_category，不进板件。
+# 与功能、外观、所在房间无关。客户点名不制造的件留在房间里摆放，不进板件；
+# 那条规则在布局 Skill，不由种类名决定。
 #
 # `executable: true` 是代码准入契约：必须与
 # furniture_layout.scene.EXECUTABLE_CATEGORIES 一致，

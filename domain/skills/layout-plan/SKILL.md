@@ -15,8 +15,9 @@ description: 用于 layout_plan 阶段，也是家具流水线的入口。当用
 
 每件家具是一个盒子，写在这间房的 `items[]` 里：
 
-- `category`：给人看的种类，例如 `bed`、`sofa`、`wardrobe`。床和沙发只占位置。
-- `furniture_category`：只有要做成柜的件才写。允许的值只有 `floor_cabinet`（落地柜）和 `wall_cabinet`（吊在墙上的柜）。靠墙摆的床、沙发、落地柜仍然不写 `wall_cabinet`。
+- `category`：给人看的种类，例如 `bed`、`sofa`、`wardrobe`、`bookcase`。种类不决定这件做不做。
+- `furniture_category`：要做成柜的件都写。允许的值只有 `floor_cabinet`（落地柜）和 `wall_cabinet`（吊在墙上的柜）。靠墙摆仍然不写 `wall_cabinet`。
+- `manufacture`：只有客户点名某一件不需要制造时写 `false`。这件的包络仍留下，用来和要制造的家具一起摆。没写就是要制造。不制造只来自客户对这一件的点名，不来自种类。
 - 这间房墙上的门和窗写在 `openings[]`，`kind` 为 `door` 或 `window`。摆盒子时要躲开它们。
 
 每件怎么摆，写在它的 `placement` 里，三选一。换算公式在 [空间布局规则](references/spatial-layout-rules.md)：
@@ -27,7 +28,7 @@ description: 用于 layout_plan 阶段，也是家具流水线的入口。当用
 
 吊柜离地写 `placement.origin_z_mm`。客户没点名有哪些家具时，按 [房间场景指南](references/room-scene-guide.md) 列出假设，等客户点头再调用工具。
 
-最小例子：一间卧室，一张床占位，一个要做的衣柜沿西墙铺满。
+最小例子：一间卧室，一个要做的书柜靠北墙，一个要做的衣柜沿西墙铺满。
 
 ```yaml
 rooms:
@@ -43,11 +44,12 @@ rooms:
         width_mm: 900
         height_mm: 2100
     items:
-      - id: bed
-        category: bed
-        width: 1800
-        depth: 2000
-        height: 450
+      - id: bookcase
+        category: bookcase
+        furniture_category: floor_cabinet
+        width: 1200
+        depth: 400
+        height: 2100
         placement:
           mode: wall
           host_wall: north
@@ -63,6 +65,22 @@ rooms:
           fill: true
 ```
 
+客户说房间里已经有一件、不用做时，给那一件加上 `manufacture: false`。下面这只书柜仍占位置，确认后不进板件：
+
+```yaml
+- id: bookcase
+  category: bookcase
+  furniture_category: floor_cabinet
+  manufacture: false
+  width: 900
+  depth: 350
+  height: 2100
+  placement:
+    mode: wall
+    host_wall: east
+    offset_mm: 200
+```
+
 只有一件柜、还没有房间时，可以不写 `rooms[]`，只给 `furniture_category`、宽深高，以及可选的离地 `origin_z_mm`。这是开工捷径。有房间就用上面的 `rooms[]`。
 
 ## 一步一步做什么
@@ -74,9 +92,9 @@ rooms:
 3. **调用 `furniture_create_project`。** 传入项目 `name` 和 `rooms`。代码先把摆法换成毫米坐标，再检查三件事：盒子出不出房间、盒子互相干涉不干涉、遮不遮挡这间房的门窗洞口。三件都过了才建出项目。
 4. **失败就改了再调。** 把返回的冲突告诉客户，改那一件的位置或尺寸，再调用一次。代码不会自己换一面墙重排。
 5. **成功就停。** 把 `project.current_view`（各房间的图）给客户看，记下 `project.id`。不要接着做柜体内部。
-6. **客户认这版摆放，再确认。** 调用 `furniture_confirm_stage(project_id, stage="layout_plan")`。确认后，每件带 `furniture_category` 的柜子冻成下游只读的盒子：宽、深、高，加上这个柜类。之后做板件只读这批盒子。
+6. **客户认这版摆放，再确认。** 调用 `furniture_confirm_stage(project_id, stage="layout_plan")`。确认后，客户没有点名不制造、并且带 `furniture_category` 的柜子冻成下游只读的盒子：宽、深、高，加上这个柜类。`manufacture: false` 的包络留在房间里，不在这批盒子中。之后做板件只读这批盒子。
 7. **客户要改房间或盒子。** 调用 `furniture_revise_layout(project_id, rooms)`，传入改过的 `rooms`。这是另起一版布局。
-8. **客户要做某一件柜的内部。** 第 6 步已经确认之后，调用 `furniture_run_next(project_id, stage_input=...)` 进入板件阶段。`stage_input` 按板件阶段准备。床和沙发留在房间图里。工具参数见 [交互工具面](../cad-generated/references/agent-tool-contract.md)。
+8. **客户要做某一件柜的内部。** 第 6 步已经确认之后，调用 `furniture_run_next(project_id, stage_input=...)` 进入板件阶段。`stage_input` 按板件阶段准备。客户点名不制造的包络留在房间图里。工具参数见 [交互工具面](../cad-generated/references/agent-tool-contract.md)。
 
 ## 本阶段不做什么
 

@@ -27,7 +27,7 @@
 
 独立房间 HTTP（`cad-generated/scripts/server.py`）只服务场景编辑与房间包络 CAD，不进入 `STAGE_SEQUENCE`。柜体 STEP 仍走确认布局后的 `furniture_run_next(..., generate_cad=True)`。
 
-下游板件只读已确认的 `LayoutUnit`（`furniture_category` 为 `floor_cabinet` / `wall_cabinet`）。房间 STEP 不是柜体 CAD。
+下游板件只读已确认的 `LayoutUnit`（`furniture_category` 为 `floor_cabinet` / `wall_cabinet`，且该件不是 `manufacture: false`）。客户点名不制造的包络留在房间里，不是 `LayoutUnit`。房间 STEP 不是柜体 CAD。
 
 冻结/确认时 `validate_project_layout` / `validate_room_scene` 再核 preview/viewer 是否由当前几何重建。规划准入不画 SVG。
 
