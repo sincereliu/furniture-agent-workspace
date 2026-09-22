@@ -44,11 +44,6 @@ class PanelRecord:
         """Restore serialized panel joints at the manufacturing boundary."""
 
         from furniture_manufacturing.confirmed_panels import Contact
-        from furniture_manufacturing.panel_ids import (
-            DEFAULT_CABINET_ID,
-            panel_cabinet_id,
-            panel_role,
-        )
 
         values = dict(data)
         raw_joints = values.get("joints", [])
@@ -58,12 +53,6 @@ class PanelRecord:
             item if isinstance(item, Contact) else Contact.from_dict(item)
             for item in raw_joints
         ]
-
-        label = str(values.get("label", ""))
-        if not values.get("role"):
-            values["role"] = panel_role(label)
-        if not values.get("parent_id"):
-            values["parent_id"] = panel_cabinet_id(label) or DEFAULT_CABINET_ID
         return cls(**values)
 
     @property
@@ -84,9 +73,8 @@ class PanelRecord:
 
         parts = []
         for edge, spec in self.edge_banding.items():
-            if isinstance(spec, str):
-                parts.append(f"{edge}:{spec}")
-                continue
+            if not isinstance(spec, Mapping):
+                raise ValueError("edge banding spec must be an object")
             material = material_name(spec.get("material", "")) or spec.get("material", "")
             thickness_mm = spec.get("thickness_mm", 0.0)
             width_mm = spec.get("width_mm", 0.0)

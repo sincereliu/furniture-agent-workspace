@@ -47,8 +47,8 @@ panel-plan 失效、从面板重跑——面板其实没变，白跑且修订语
   `plan_manufacturing` 盖章到 `PanelRecord`；有活动层板却未提供时运行时拒绝。改它只
   重跑 manufacturing 及下游。
 - ✅ `connection`（连不连 on/off）：**已迁出板件类型**。接触几何留在 panel-plan，
-  接触记录不含 `connection`。制造读入时丢掉历史字段，按面板类型重解析
-  （`default_joint_connection`），写在自己的 `Contact.connection` 上。
+  接触记录不含 `connection`。制造只抄几何字段，按面板类型重解析
+  （`default_joint_connection`），写在自己的 `Contact.connection` 上。已保存的制造接触必须带这个字段。
 - ✅ `door_hinge_side`（铰链侧）：**已迁移**。单门为制造输入（`requested_options`，
   `left`/`right`），双门由制造按门板 X 位置派生；panel-plan 不再携带。
 - `back_mount`（groove/insert/cover）**留在** panel-plan：它改变背板尺寸与柜体深度

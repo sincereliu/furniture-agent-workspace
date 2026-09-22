@@ -24,7 +24,6 @@ _JOINT_FIELDS = frozenset(
         "end_size_z",
     }
 )
-_LEGACY_IGNORED_FIELDS = frozenset({"connection"})
 
 
 @dataclass(frozen=True)
@@ -44,16 +43,10 @@ class PanelJoint:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PanelJoint":
-        """Restore one serialized contact. Unknown keys are rejected.
-
-        Old frozen contacts may still carry ``connection``. That flag is
-        dropped here; it is not a panel-stage decision.
-        """
+        """Restore one serialized contact. Unknown keys are rejected."""
         if not isinstance(data, Mapping):
             raise ValueError("panel joint must be an object")
         values = dict(data)
-        for name in _LEGACY_IGNORED_FIELDS:
-            values.pop(name, None)
         unknown = sorted(set(values) - _JOINT_FIELDS)
         if unknown:
             raise ValueError("panel joint does not support: " + ", ".join(unknown))

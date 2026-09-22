@@ -70,11 +70,7 @@ class Contact:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "Contact":
-        """Restore a manufacturing contact.
-
-        A saved record from before ``connection`` was stored is treated as
-        ``on``, matching the previous placeholder on old payloads.
-        """
+        """Restore a manufacturing contact. ``connection`` is required."""
         if not isinstance(data, Mapping):
             raise ValueError("manufacturing contact must be an object")
         values = dict(data)
@@ -83,12 +79,14 @@ class Contact:
             raise ValueError(
                 "manufacturing contact does not support: " + ", ".join(unknown)
             )
-        missing = [name for name in _CONTACT_FIELDS if name not in values]
+        missing = [
+            name for name in (*_CONTACT_FIELDS, "connection") if name not in values
+        ]
         if missing:
             raise ValueError(
                 "manufacturing contact is missing: " + ", ".join(missing)
             )
-        connection = values.get("connection", "on")
+        connection = values["connection"]
         if connection not in {"on", "off"}:
             raise ValueError("connection must be 'on' or 'off'")
         return _contact_from_values(values, connection)
@@ -234,9 +232,6 @@ def contact_from_panel(source: Any) -> Contact:
     """Copy contact geometry. A historical connection flag is discarded."""
     values = _read_fields(source, _CONTACT_FIELDS)
     missing = [name for name in _CONTACT_FIELDS if name not in values]
-    if "end_size_z" in missing:
-        values["end_size_z"] = 0.0
-        missing.remove("end_size_z")
     if missing:
         raise ValueError("confirmed contact is missing: " + ", ".join(missing))
     return _contact_from_values(values, "")

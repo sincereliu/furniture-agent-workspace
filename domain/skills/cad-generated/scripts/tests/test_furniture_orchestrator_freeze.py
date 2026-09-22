@@ -305,12 +305,11 @@ class FurnitureOrchestratorFreezeTests(unittest.TestCase):
         self.assertEqual(revised.attempts_for("panel_plan"), [])
         self.assertNotIn("panel_plan", revised.stage_outputs)
 
-    def test_legacy_panel_and_manufacture_stage_names_are_canonicalized(self) -> None:
-        self.assertEqual(parse_stage("panels_planned"), WorkflowStage.PANELS_PLANNED)
-        self.assertEqual(
-            parse_stage("manufacturing_planned"),
-            WorkflowStage.MANUFACTURING_PLANNED,
-        )
+    def test_old_stage_names_are_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            parse_stage("panels_planned")
+        with self.assertRaises(ValueError):
+            parse_stage("manufacturing_planned")
         self.assertEqual(WorkflowStage.PANELS_PLANNED.value, "panel_plan")
         self.assertEqual(WorkflowStage.MANUFACTURING_PLANNED.value, "manufacture_plan")
 
@@ -325,17 +324,8 @@ class FurnitureOrchestratorFreezeTests(unittest.TestCase):
         revision_data = data["revisions"][0]
         outputs = revision_data["stage_outputs"]
         outputs["panels_planned"] = outputs.pop("panel_plan")
-        revision_data["approved_stages"].append("panels_planned")
-        revision_data["stage_attempts"]["panels_planned"] = (
-            revision_data["stage_attempts"].pop("panel_plan")
-        )
-        loaded = Project.from_dict(data).latest
-        self.assertIn("panel_plan", loaded.stage_outputs)
-        self.assertNotIn("panels_planned", loaded.stage_outputs)
-        self.assertIn("panel_plan", loaded.approved_stages)
-        self.assertNotIn("panels_planned", loaded.approved_stages)
-        self.assertIn("panel_plan", loaded.stage_attempts)
-        self.assertTrue(loaded.attempts_for("panels_planned"))
+        with self.assertRaises(ValueError):
+            Project.from_dict(data)
 
 
 if __name__ == "__main__":

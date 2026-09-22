@@ -80,22 +80,22 @@ class JointConnectionMigrationTests(unittest.TestCase):
         self.assertTrue(top_joints)
         self.assertTrue(all(j.connection == "on" for j in top_joints))
 
-    def test_panel_joint_drops_legacy_connection(self) -> None:
+    def test_panel_joint_rejects_connection(self) -> None:
         from furniture_panel_planning.joint_topology import PanelJoint
 
-        joint = PanelJoint.from_dict(
-            {
-                "bearing_id": "a",
-                "end_id": "b",
-                "face": "+x",
-                "edge_axis": "x",
-                "edge_sign": 1,
-                "end_z": 9,
-                "end_size_z": 18,
-                "connection": "off",
-            }
-        )
-        self.assertFalse(hasattr(joint, "connection"))
+        with self.assertRaisesRegex(ValueError, "connection"):
+            PanelJoint.from_dict(
+                {
+                    "bearing_id": "a",
+                    "end_id": "b",
+                    "face": "+x",
+                    "edge_axis": "x",
+                    "edge_sign": 1,
+                    "end_z": 9,
+                    "end_size_z": 18,
+                    "connection": "off",
+                }
+            )
 
     def test_incoming_connection_flag_is_ignored(self) -> None:
         spec = furniture_spec(

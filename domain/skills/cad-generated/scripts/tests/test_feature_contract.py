@@ -103,14 +103,29 @@ class FeatureContractTests(unittest.TestCase):
 
     def test_edge_banding_fits_feature_losslessly(self) -> None:
         """封边字典必须无损装进 EdgeBandFeature。"""
-        features = from_edge_banding("left_side_panel", {"四边": "ABS 1.0mm同色"})
+        features = from_edge_banding(
+            "left_side_panel",
+            {
+                "四边": {
+                    "material": "abs",
+                    "thickness_mm": 1.0,
+                    "width_mm": 18.0,
+                    "color": "white",
+                }
+            },
+        )
         self.assertEqual(len(features), 1)
         feature = features[0]
         self.assertIsInstance(feature, EdgeBandFeature)
         self.assertIsInstance(feature, Feature)
         self.assertEqual(feature.panel_label, "left_side_panel")
         self.assertEqual(feature.edges, "四边")
-        self.assertEqual(feature.material, "ABS 1.0mm同色")
+        self.assertEqual(feature.material, "abs")
+        self.assertEqual(feature.thickness_mm, 1.0)
+        self.assertEqual(feature.width_mm, 18.0)
+        self.assertEqual(feature.color, "white")
+        with self.assertRaisesRegex(ValueError, "must be an object"):
+            from_edge_banding("left_side_panel", {"四边": "ABS 1.0mm同色"})
 
         # 空字典（入槽背板不封边）→ 空列表
         self.assertEqual(from_edge_banding("back_panel", {}), [])
@@ -124,7 +139,10 @@ class FeatureContractTests(unittest.TestCase):
                 size_x=1, size_y=1, size_z=1, pos_x=0, pos_y=0, pos_z=0,
             )
         )
-        edge = from_edge_banding("p", {"四边": "ABS"})[0]
+        edge = from_edge_banding(
+            "p",
+            {"四边": {"material": "abs", "thickness_mm": 1.0, "width_mm": 18.0, "color": ""}},
+        )[0]
 
         self.assertIsInstance(hole, HoleFeature)
         self.assertNotIsInstance(hole, GrooveFeature)
@@ -161,7 +179,17 @@ class FeatureContractTests(unittest.TestCase):
                     pos_x=1, pos_y=2, pos_z=3,
                 )
             ),
-            from_edge_banding("p", {"四边": "ABS 1.0mm同色"})[0],
+            from_edge_banding(
+                "p",
+                {
+                    "四边": {
+                        "material": "abs",
+                        "thickness_mm": 1.0,
+                        "width_mm": 18.0,
+                        "color": "white",
+                    }
+                },
+            )[0],
         ]
         for feature in samples:
             self.assertEqual(feature_from_dict(asdict(feature)), feature)

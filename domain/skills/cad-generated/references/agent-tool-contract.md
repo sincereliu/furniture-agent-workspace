@@ -42,7 +42,7 @@ result = session.call(name, arguments)  # arguments 为对象或 JSON 字符串
 - 未确认当前阶段时，`furniture_run_next` 返回 `STAGE_NOT_CONFIRMED`。
 - 下一阶段已有 attempt 时，必须 `furniture_retry_stage`，否则 `USE_RETRY_STAGE`。
 - 进入 `cad_generated` 必须 `generate_cad=true`；省略 `output_root` 时使用工作区约定路径 `generated`。
-- 未知字段、历史别名（`furniture_type` / `type` / `overall_size`）返回 `UNKNOWN_ARGUMENT`。
+- 未知字段、历史别名（`furniture_type` / `type` / `overall_size` / `mounting_height` / `mounting_height_mm` / `hanging_height` / `mount_mode`）返回 `UNKNOWN_ARGUMENT`。
 - 失败 Revision 只能 `furniture_revise_layout`。
 - 每次成功调用后展示 `project.current_view`，按 `required_tool` / `allowed_tools` 停，不要连跳。`panel_plan` 展示审查清单的 `markdown` 或板件/接触表，不要把冻结 `cabinets[]` 树当确认界面。
 

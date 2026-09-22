@@ -1,7 +1,7 @@
 """导出孔位预览的 GLB/STEP 文件。
 
 STEP 文件用 Assembly 分组建模，支持在 Viewer 中独立开关板件和各类孔位。
-GLB 文件为向后兼容保留，含板件+孔位的 Compound 合并体。
+GLB 文件把板件和孔位标记合成一个 Compound。
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ def export_drilled_holes_glb(
     *,
     marker_thickness: float = 2.0,
 ) -> Path:
-    """导出板件 + 孔位标记到单个 GLB（向后兼容）。"""
+    """导出板件 + 孔位标记到单个 GLB。"""
     output_path = Path(output_path).resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     geometry = _build_geometry(drilled_holes, marker_thickness)

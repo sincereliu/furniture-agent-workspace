@@ -20,20 +20,14 @@ MANUFACTURING_SPEC_FIELDS = frozenset(
 PROTOCOL_FIELDS = frozenset(
     {
         "furniture_category",
-        "furniture_type",
         "width",
         "depth",
         "height",
         "finished_envelope",
-        "overall_size",
         "rooms",
         "origin_z_mm",
-        "hanging_height",
         "hanging_height_mm",
-        "mounting_height",
-        "mounting_height_mm",
         "hanging_mode",
-        "mount_mode",
         "purpose",
         "layout",
         "appearance",
@@ -45,13 +39,17 @@ PROTOCOL_FIELDS = frozenset(
         *MANUFACTURING_SPEC_FIELDS,
     }
 )
-_ENVELOPE_TARGETS = frozenset(
-    {
-        "furniture_category",
-        "furniture_type",
-    }
-)
-_ENVELOPE_PREFIXES = ("finished_envelope.", "overall_size.")
+_ENVELOPE_TARGETS = frozenset({"furniture_category"})
+_ENVELOPE_PREFIXES = ("finished_envelope.",)
+_LEGACY_PROTOCOL_ALIASES = {
+    "type": "furniture_category",
+    "furniture_type": "furniture_category",
+    "overall_size": "finished_envelope",
+    "hanging_height": "hanging_height_mm",
+    "mounting_height": "origin_z_mm",
+    "mounting_height_mm": "origin_z_mm",
+    "mount_mode": "hanging_mode",
+}
 
 
 def layout_from_spec(spec: Mapping[str, Any]) -> ProjectLayout:
@@ -59,32 +57,17 @@ def layout_from_spec(spec: Mapping[str, Any]) -> ProjectLayout:
     data = _reject_legacy_protocol_aliases(dict(spec))
     if isinstance(data.get("rooms"), list):
         return ProjectLayout.from_source({"rooms": data["rooms"]})
-    furniture_category = str(
-        _first_present(data, "furniture_category", "furniture_type") or ""
-    ).strip().lower()
-    size = _first_present(data, "finished_envelope", "overall_size") or {}
-    if size is None:
-        size = {}
+    furniture_category = str(data.get("furniture_category") or "").strip().lower()
+    size = data.get("finished_envelope") or {}
     if not isinstance(size, Mapping):
         raise ValueError("finished_envelope must be an object")
     width = size.get("width_mm", data.get("width"))
     depth = size.get("depth_mm", data.get("depth"))
     height = size.get("height_mm", data.get("height"))
-    origin_z = _first_present(
-        data,
-        "origin_z_mm",
-        "hanging_height_mm",
-        "hanging_height",
-        "mounting_height_mm",
-        "mounting_height",
-    )
-    hanging_mode = _first_present(data, "hanging_mode", "mount_mode")
-    if hanging_mode is not None:
-        hanging_mode = str(hanging_mode).strip().lower()
-        if hanging_mode in {"free_height", "free_hanging_height"}:
-            hanging_mode = "free_hanging_height"
-        elif hanging_mode == "flush_ceiling":
-            origin_z = None
+    origin_z = _first_present(data, "origin_z_mm", "hanging_height_mm")
+    hanging_mode = data.get("hanging_mode")
+    if hanging_mode is not None and str(hanging_mode).strip().lower() == "flush_ceiling":
+        origin_z = None
     if width is None or depth is None or height is None:
         raise ValueError("width, depth and height are required")
     return single_cabinet_layout(
@@ -194,9 +177,9 @@ def _route_constraints(data: Mapping[str, Any], output: dict[str, Any]) -> None:
 
 def _envelope_target_is_explicit(data: Mapping[str, Any], target: str) -> bool:
     if target in _ENVELOPE_TARGETS:
-        return bool(_first_present(data, "furniture_category", "furniture_type"))
+        return bool(str(data.get("furniture_category") or "").strip())
     field = target.split(".", 1)[1]
-    size = _first_present(data, "finished_envelope", "overall_size") or {}
+    size = data.get("finished_envelope") or {}
     flat_name = {
         "width_mm": "width",
         "depth_mm": "depth",
@@ -240,9 +223,13 @@ def _first_present(data: Mapping[str, Any], *keys: str) -> Any:
 
 
 def _reject_legacy_protocol_aliases(data: dict[str, Any]) -> dict[str, Any]:
-    """Reject historical flat-request aliases now that canonical names are required."""
-    if "type" in data:
-        raise ValueError(
-            "flat requests must use furniture_category; type is no longer accepted"
-        )
-    return data
+    """Reject historical flat-request names. Canonical fields stay on the protocol."""
+    found = [name for name in sorted(_LEGACY_PROTOCOL_ALIASES) if name in data]
+    if not found:
+        return data
+    details = ", ".join(
+        f"{name} (use {_LEGACY_PROTOCOL_ALIASES[name]})" for name in found
+    )
+    raise ValueError(
+        "flat requests must use canonical names; no longer accepted: " + details
+    )

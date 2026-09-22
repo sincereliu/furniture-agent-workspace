@@ -107,18 +107,12 @@ def require_primary_handoff(
     cabinet_id = cabinet.get("id") or DEFAULT_CABINET_ID
     if not isinstance(spec, Mapping):
         raise ValueError(f"{cabinet_id} requires spec")
-    if "interior" in cabinet:
-        structure = asdict(CabinetStructure.from_spec(FurnitureSpec.from_dict(spec)))
-    else:
-        structure = cabinet.get("structure")
-        if not isinstance(structure, Mapping):
-            raise ValueError(f"{cabinet_id} requires interior")
-    if "assemblies" in cabinet:
-        panels = flatten_panels_for_handoff(cabinet)
-    else:
-        panels = cabinet.get("panels")
-        if not isinstance(panels, list):
-            raise ValueError(f"{cabinet_id} requires assemblies")
+    if "interior" not in cabinet:
+        raise ValueError(f"{cabinet_id} requires interior")
+    structure = asdict(CabinetStructure.from_spec(FurnitureSpec.from_dict(spec)))
+    if "assemblies" not in cabinet:
+        raise ValueError(f"{cabinet_id} requires assemblies")
+    panels = flatten_panels_for_handoff(cabinet)
     return spec, structure, panels
 
 

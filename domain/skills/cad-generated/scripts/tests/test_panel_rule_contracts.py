@@ -384,18 +384,19 @@ class PanelRuleContractTests(unittest.TestCase):
                     "panels": panels,
                 }
             )
-        legacy = {
-            "cabinets": [
+        with self.assertRaisesRegex(ValueError, "requires interior"):
+            require_primary_handoff(
                 {
-                    "id": "cabinet_1",
-                    "spec": spec,
-                    "structure": structure,
-                    "panels": panels,
+                    "cabinets": [
+                        {
+                            "id": "cabinet_1",
+                            "spec": spec,
+                            "structure": structure,
+                            "panels": panels,
+                        }
+                    ]
                 }
-            ]
-        }
-        _, _, legacy_panels = require_primary_handoff(legacy)
-        self.assertEqual(len(legacy_panels), len(panels))
+            )
 
     def test_assembly_tree_keeps_integrated_toe_kick_on_carcass(self) -> None:
         output = plan_panel_stage((cabinet_envelope(),), panel_parameters(n_doors=2))

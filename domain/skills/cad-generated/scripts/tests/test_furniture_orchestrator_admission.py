@@ -210,24 +210,49 @@ class FurnitureOrchestratorAdmissionTests(unittest.TestCase):
         )
 
     def test_flat_requests_reject_legacy_type_field(self) -> None:
-        with self.assertRaisesRegex(ValueError, "must use furniture_category"):
-            self.orchestrator.layout_from_spec(
-                {
-                    "type": "wall_cabinet",
-                    "width": 800,
-                    "depth": 350,
-                    "height": 900,
-                }
-            )
-        with self.assertRaisesRegex(ValueError, "must use furniture_category"):
-            stage_inputs_from_spec(
-                {
-                    "type": "wall_cabinet",
-                    "width": 800,
-                    "depth": 350,
-                    "height": 900,
-                }
-            )
+        for alias in (
+            {"type": "wall_cabinet"},
+            {"furniture_type": "wall_cabinet"},
+            {"overall_size": {"width_mm": 800, "depth_mm": 350, "height_mm": 900}},
+            {"mounting_height_mm": 1800},
+            {"mounting_height": 1800},
+            {"hanging_height": 1800},
+            {"mount_mode": "flush_ceiling"},
+        ):
+            payload = {
+                "furniture_category": "wall_cabinet",
+                "width": 800,
+                "depth": 350,
+                "height": 900,
+                **alias,
+            }
+            with self.assertRaisesRegex(ValueError, "no longer accepted"):
+                self.orchestrator.layout_from_spec(payload)
+            with self.assertRaisesRegex(ValueError, "no longer accepted"):
+                stage_inputs_from_spec(payload)
+
+    def test_layout_from_spec_keeps_canonical_hanging_fields(self) -> None:
+        layout = self.orchestrator.layout_from_spec(
+            {
+                "furniture_category": "wall_cabinet",
+                "width": 800,
+                "depth": 350,
+                "height": 900,
+                "hanging_height_mm": 1800,
+            }
+        )
+        self.assertEqual(layout.executable_units()[0].origin_z_mm, 1800)
+        flush = self.orchestrator.layout_from_spec(
+            {
+                "furniture_category": "wall_cabinet",
+                "width": 800,
+                "depth": 350,
+                "height": 900,
+                "hanging_height_mm": 1800,
+                "hanging_mode": "flush_ceiling",
+            }
+        )
+        self.assertEqual(flush.executable_units()[0].origin_z_mm, 2300)
 
     def test_three_door_request_fails_at_panel_admission(self) -> None:
         result = confirm_through(self.orchestrator, 
@@ -247,23 +272,6 @@ class FurnitureOrchestratorAdmissionTests(unittest.TestCase):
             "at most 2 doors",
             result.revision.validations[-1].issues[0].message,
         )
-
-    def test_layout_from_spec_maps_historical_envelope_names(self) -> None:
-        layout = self.orchestrator.layout_from_spec(
-            {
-                "furniture_type": "wall_cabinet",
-                "overall_size": {
-                    "width_mm": 800,
-                    "depth_mm": 350,
-                    "height_mm": 900,
-                },
-                "mounting_height_mm": 1800,
-            }
-        )
-        unit = layout.executable_units()[0]
-        self.assertEqual(unit.furniture_category, "wall_cabinet")
-        self.assertEqual(unit.height, 900)
-        self.assertEqual(unit.origin_z_mm, 1800)
 
     def test_wall_cabinet_hanging_is_origin_z(self) -> None:
         free = single_cabinet_layout(

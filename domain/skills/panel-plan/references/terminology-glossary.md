@@ -80,7 +80,7 @@
 - `movable_shelf_connector`、`door_hinge_side`：制造阶段输入，不是板件 spec 字段。
 - `back_mount=auto`、`gap_below_mm="auto"`：不再接受；背板必须写 `groove`/`insert`/`cover`，计算层只写 `null`。
 - `toe_kick_support_count=null`：不再接受；必须写非负整数。
-- `connection`：接触上的连不连。旧冻结接触里出现时丢掉，不在本阶段保存。
+- `connection`：接触上的连不连。本阶段接触不接受该字段。
 - `female_id`、`male_id`：用 `bearing_id`/`end_id`。
 - `male_z`、`male_size_z`：用 `end_z`/`end_size_z`。
 - `door_hinge_gap`：用 `front_gap`。

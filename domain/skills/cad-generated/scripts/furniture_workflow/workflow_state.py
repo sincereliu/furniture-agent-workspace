@@ -21,15 +21,6 @@ class WorkflowStage(str, Enum):
     DELIVERY_VALIDATED = "delivery_validated"
     FAILED = "failed"
 
-    # Compatibility aliases for project files and callers created before the
-    # staged workflow became explicit.
-    DRAFT_INTENT = LAYOUT_PLAN
-    INTENT_CONFIRMED = LAYOUT_PLAN
-    PANEL_PLANNED = PANELS_PLANNED
-    FEATURE_TREE_VALIDATED = FEATURE_TREE_PLANNED
-    ARTIFACTS_GENERATED = CAD_GENERATED
-    ARTIFACTS_VERIFIED = DELIVERY_VALIDATED
-
 
 STAGE_SEQUENCE: tuple[WorkflowStage, ...] = (
     WorkflowStage.LAYOUT_PLAN,
@@ -40,24 +31,9 @@ STAGE_SEQUENCE: tuple[WorkflowStage, ...] = (
     WorkflowStage.DELIVERY_VALIDATED,
 )
 
-LEGACY_STAGE_VALUES = {
-    "design_intent": WorkflowStage.LAYOUT_PLAN,
-    "draft_intent": WorkflowStage.LAYOUT_PLAN,
-    "intent_confirmed": WorkflowStage.LAYOUT_PLAN,
-    "panel_planned": WorkflowStage.PANELS_PLANNED,
-    "panels_planned": WorkflowStage.PANELS_PLANNED,
-    "manufacturing_planned": WorkflowStage.MANUFACTURING_PLANNED,
-    "feature_tree_validated": WorkflowStage.FEATURE_TREE_PLANNED,
-    "artifacts_generated": WorkflowStage.CAD_GENERATED,
-    "artifacts_verified": WorkflowStage.DELIVERY_VALIDATED,
-}
-
-
 def parse_stage(value: str | WorkflowStage) -> WorkflowStage:
     if isinstance(value, WorkflowStage):
         return value
-    if value in LEGACY_STAGE_VALUES:
-        return LEGACY_STAGE_VALUES[value]
     return WorkflowStage(value)
 
 

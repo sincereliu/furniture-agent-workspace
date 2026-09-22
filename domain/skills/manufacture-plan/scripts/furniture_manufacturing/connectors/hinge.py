@@ -52,7 +52,7 @@ class HingeConnector(Connector):
         cup_depth = float(hole.get("depth_mm", 13))
         # 杯孔中心距门边 = 边距 + 杯孔半径
         cup_center_from_edge = edge_offset + cup_diameter / 2
-        inner = panel.inner_face or "+y"  # default for backward compat
+        inner = panel.inner_face
 
         # 铰链侧：优先使用显式字段，否则根据 X 位置推断
         hinge_side = panel.door_hinge_side
@@ -100,7 +100,7 @@ class HingeConnector(Connector):
         孔位先在面板局部坐标定义（局部为唯一真源），
         再由 to_global 派生世界坐标（当前轴对齐：仅平移）。
         """
-        inner = panel.inner_face or "+y"
+        inner = panel.inner_face
         face_axis = inner[1] if len(inner) >= 2 else "y"
 
         # 孔中心落在 inner_face 上：该轴局部坐标 = 面位置(0 或该轴尺寸)

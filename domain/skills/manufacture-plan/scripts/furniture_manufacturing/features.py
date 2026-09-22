@@ -141,32 +141,24 @@ def from_edge_banding(
     """把一块板的封边字典无损装进 EdgeBandFeature 列表。
 
     edge_banding 形如 {"四边": {"material": "abs", "thickness_mm": 1.0,
-    "width_mm": 18.0, "color": "white"}}；旧格式值可为字符串（整体当 material）。
+    "width_mm": 18.0, "color": "white"}}。值必须是对象。
     空字典返回空列表（入槽背板等不封边）。
     """
     features = []
     for edges, spec in edge_banding.items():
-        if isinstance(spec, str):
-            features.append(
-                EdgeBandFeature(
-                    kind="edge",
-                    panel_label=panel_label,
-                    edges=edges,
-                    material=spec,
-                )
+        if not isinstance(spec, Mapping):
+            raise ValueError("edge banding spec must be an object")
+        features.append(
+            EdgeBandFeature(
+                kind="edge",
+                panel_label=panel_label,
+                edges=edges,
+                material=spec.get("material", ""),
+                thickness_mm=float(spec.get("thickness_mm", 0.0)),
+                width_mm=float(spec.get("width_mm", 0.0)),
+                color=spec.get("color", ""),
             )
-        else:
-            features.append(
-                EdgeBandFeature(
-                    kind="edge",
-                    panel_label=panel_label,
-                    edges=edges,
-                    material=spec.get("material", ""),
-                    thickness_mm=float(spec.get("thickness_mm", 0.0)),
-                    width_mm=float(spec.get("width_mm", 0.0)),
-                    color=spec.get("color", ""),
-                )
-            )
+        )
     return features
 
 

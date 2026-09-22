@@ -10,7 +10,7 @@ from typing import Any
 from uuid import uuid4
 
 from furniture_delivery_validation.validation import ValidationReport
-from furniture_layout.project_layout import ProjectLayout, single_cabinet_layout
+from furniture_layout.project_layout import ProjectLayout
 
 from .workflow_artifacts import ArtifactManifest
 from .workflow_state import WorkflowStage, WorkflowState, parse_stage, utc_now
@@ -63,7 +63,7 @@ class StageAttempt:
         return cls(
             number=int(data["number"]),
             stage=_stage_key(str(data["stage"])),
-            layout_sha256=str(data.get("layout_sha256") or data["intent_sha256"]),
+            layout_sha256=str(data["layout_sha256"]),
             inputs=deepcopy(dict(data.get("inputs") or {})),
             output=(
                 deepcopy(data["output"])
@@ -172,20 +172,12 @@ class Revision:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Revision":
         raw_layout = data.get("layout")
-        raw_intent = data.get("intent")
-        if isinstance(raw_layout, dict):
-            layout = ProjectLayout.from_dict(raw_layout)
-        elif isinstance(raw_intent, dict):
-            layout = _layout_from_legacy_intent(raw_intent)
-        else:
+        if not isinstance(raw_layout, dict):
             raise ValueError("revision requires layout")
+        layout = ProjectLayout.from_dict(raw_layout)
         stage_inputs = data.get("stage_inputs")
         if not isinstance(stage_inputs, dict):
-            stage_inputs = (
-                _legacy_stage_inputs(dict(raw_intent))
-                if isinstance(raw_intent, dict)
-                else {}
-            )
+            stage_inputs = {}
         else:
             stage_inputs = deepcopy(stage_inputs)
         stage_outputs = _remap_stage_keys(deepcopy(dict(data.get("stage_outputs", {}))))
@@ -291,77 +283,3 @@ class Project:
             created_at=str(data["created_at"]),
             revisions=[Revision.from_dict(item) for item in data.get("revisions", [])],
         )
-
-
-def _layout_from_legacy_intent(raw_intent: dict[str, Any]) -> ProjectLayout:
-    """Rebuild a studio-room layout from a persisted DesignIntent payload."""
-    envelope = raw_intent.get("finished_envelope") or {}
-    if not isinstance(envelope, dict):
-        envelope = {}
-    category = str(raw_intent.get("furniture_category") or "floor_cabinet")
-    hanging_mode = raw_intent.get("hanging_mode")
-    hanging_height = raw_intent.get("hanging_height_mm")
-    origin_z_mm = None
-    if category == "wall_cabinet" and hanging_mode != "flush_ceiling":
-        origin_z_mm = hanging_height
-    layout = single_cabinet_layout(
-        furniture_category=category,
-        width=float(envelope.get("width_mm") or 800),
-        depth=float(envelope.get("depth_mm") or 600),
-        height=float(envelope.get("height_mm") or 1000),
-        origin_z_mm=None if origin_z_mm is None else float(origin_z_mm),
-        confirmed=bool(raw_intent.get("confirmed")),
-    )
-    return layout
-
-
-def _legacy_stage_inputs(raw_intent: dict[str, Any]) -> dict[str, Any]:
-    """Move schema-v1 downstream fields out of DesignIntent when loading.
-
-    Delete this whole compatibility path once schema-v1 persisted projects are no
-    longer supported.
-    """
-    layout = dict(raw_intent.get("layout", {}))
-    structure = dict(raw_intent.get("structure", {}))
-    manufacturing_keys = {
-        "options",
-    }
-    manufacturing = {
-        key: structure.pop(key)
-        for key in list(structure)
-        if key in manufacturing_keys
-    }
-    for key in ("n_doors", "door_count"):
-        if key in layout:
-            structure[key] = layout.pop(key)
-    result: dict[str, Any] = {
-        "layout": {},
-        "panels": {"parameters": structure},
-        "manufacturing": {
-            "parameters": manufacturing,
-            "appearance": dict(raw_intent.get("appearance", {})),
-        },
-    }
-    purpose = str(raw_intent.get("purpose", "")).strip()
-    if purpose:
-        result["layout"]["purpose"] = purpose
-    if layout:
-        result["layout"]["legacy_parameters"] = layout
-    constraints = list(raw_intent.get("constraints", []))
-    mappings = dict(raw_intent.get("constraint_mappings", {}))
-    for constraint in constraints:
-        target = str(mappings.get(constraint, "informational"))
-        record = {"text": constraint, "target": target}
-        if target.startswith("layout."):
-            field = target.split(".", 1)[1]
-            if field in {"n_doors", "door_count"}:
-                result["panels"].setdefault("constraints", []).append(record)
-            else:
-                result.setdefault("informational_constraints", []).append(constraint)
-        elif target.startswith("structure."):
-            result["panels"].setdefault("constraints", []).append(record)
-        elif target == "informational":
-            result.setdefault("informational_constraints", []).append(constraint)
-        else:
-            result.setdefault("envelope_constraints", []).append(record)
-    return result

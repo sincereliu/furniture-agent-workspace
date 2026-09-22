@@ -213,7 +213,7 @@ def _normalize_appearance(
     """校验并规范化 appearance 选型（按 material_role）。
 
     严格准入，不做静默默认：
-    - 空 appearance 表示不物化（返回空 dict，向后兼容旧调用）；
+    - 空 appearance 表示不物化（返回空 dict）；
     - 角色键只能是 carcass/door/back；
     - 每个实际出现的 material_role 必须有对应选型，缺则报错；
     - 无对应板件的角色键报错（选型集合须与实际板件一致）；
@@ -614,8 +614,8 @@ def estimate_materials(panels: List[PanelRecord]) -> List[MaterialRecord]:
                 surface_by_key.get(panel.surface, 0.0) + panel.area_m2
             )
         for edges, spec in panel.edge_banding.items():
-            if isinstance(spec, str):
-                continue  # 旧格式：无法结构化计量，跳过
+            if not isinstance(spec, Mapping):
+                raise ValueError("edge banding spec must be an object")
             if edges != "四边":
                 continue
             perimeter_m = (
