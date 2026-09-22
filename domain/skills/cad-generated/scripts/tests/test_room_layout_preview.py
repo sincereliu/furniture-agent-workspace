@@ -211,7 +211,7 @@ class RoomSceneLayoutTests(unittest.TestCase):
                 },
             },
         ]
-        with self.assertRaisesRegex(ValueError, "collides with item"):
+        with self.assertRaisesRegex(ValueError, "interferes with item"):
             plan_room_scene(bedroom_room(), items)
 
     def test_cad_source_contains_room_and_item_transforms(self) -> None:
@@ -362,11 +362,11 @@ class ProjectLayoutAdmissionTests(unittest.TestCase):
             for item_id, offset in (("left", 0), ("right", 1000))
         ]
         rooms = [{**bedroom_room(), "items": items}]
-        with self.assertRaisesRegex(ValueError, "collides with item"):
+        with self.assertRaisesRegex(ValueError, "interferes with item"):
             plan_project_layout(rooms)
-        with self.assertRaisesRegex(ValueError, "collides with item"):
+        with self.assertRaisesRegex(ValueError, "interferes with item"):
             ProjectLayout.from_source({"rooms": rooms})
-        with self.assertRaisesRegex(ValueError, "collides with item"):
+        with self.assertRaisesRegex(ValueError, "interferes with item"):
             plan_room_scene(bedroom_room(), items)
 
     def test_out_of_room_item_is_rejected_before_project_creation(self) -> None:

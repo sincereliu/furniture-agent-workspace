@@ -13,8 +13,9 @@
 选中件的四向净距（到最近的家具/障碍物/墙）直接画在图上：先找同一高度带、垂直
 方向有重叠的最近邻，找不到才退到墙。
 
-拖动与旋转**本地就按服务端的碰撞规则求解**（见 collision.py：SAT 正体积相交，
-贴边接触放行），撞上就停在接触处，不会先穿过再回弹。求解在**整数毫米**上进行，
+拖动与旋转**本地就按服务端的摆放检查求解**（见 placement_check.py：底面正面积
+重叠且高度重叠才算干涉，贴边接触放行；另查越界和遮挡门窗洞口）。过不去就停在
+接触处，不会先穿过再回弹。求解在**整数毫米**上进行，
 和服务端落盘取整口径一致，预览即落盘值。
 
 拖动期间只做本地预览，松手才发**一个** edit op，由后端重算并校验——失败会显示
@@ -83,11 +84,11 @@ def render_editor(scene_id: str, scene: RoomScene) -> dict[str, object]:
             "drag_orbit",
             "drag_pan",
             "wheel_zoom",
-            "collision_stop",
+            "placement_stop",
         ],
         "alt_text": (
             f"{scene.room.name}的可编辑包络视图；点击家具包络任意位置可选中，"
-            "拖动改位置（撞到别的家具或障碍物会停在接触处），"
+            "拖动改位置（与别的家具或障碍物干涉、越出房间或遮挡门窗洞口时停在接触处），"
             "拖橙点或旋转环改朝向、拖蓝点改离地高度；"
             "每件的正面用绿色描边标出（约定：局部 +Y 为正面），选中件还有指向正面的箭头；"
             "选中件四周显示到最近邻的净距，并沿自身局部轴标出宽/深/高；"
@@ -217,7 +218,7 @@ canvas.panning{cursor:grabbing}
           <li><i class="chip obstacle"></i>障碍物</li>
           <li><i class="chip opening"></i>门窗</li>
         </ul>
-        <p class="tips">拖动撞到别的东西会停在接触处<br>选中件：紫线是四向净距，灰线是本体宽/深/高<br>橙点或旋转环拖了调朝向（Shift 1°）· 蓝点调离地高度<br>前/后/左/右视里上下拖 = 改高度<br>右侧的距离 / 朝向 / 离地可输入，也可用 − / ＋ 走整数档<br>空白处拖拽转视角 · 右键/中键/Shift+左键拖拽平移 · 滚轮缩放 · Esc 取消选中</p>
+        <p class="tips">拖动时干涉、越界或遮挡门窗洞口会停在接触处<br>选中件：紫线是四向净距，灰线是本体宽/深/高<br>橙点或旋转环拖了调朝向（Shift 1°）· 蓝点调离地高度<br>前/后/左/右视里上下拖 = 改高度<br>右侧的距离 / 朝向 / 离地可输入，也可用 − / ＋ 走整数档<br>空白处拖拽转视角 · 右键/中键/Shift+左键拖拽平移 · 滚轮缩放 · Esc 取消选中</p>
       </section>
     </aside>
   </div>
@@ -322,11 +323,11 @@ function withHomeCentre(run){
   try{return run()}finally{target[0]=saved[0];target[1]=saved[1];target[2]=saved[2]}
 }
 
-/* ---------- 碰撞：与 collision.py / placement.py 逐条对应 ---------- */
+/* ---------- 摆放检查：与 placement_check.py / placement.py 逐条对应 ---------- */
 const EPSILON_MM=1e-6;
 // ranges_overlap
 function rangesOverlap(a0,a1,b0,b1){return Math.min(a1,b1)>Math.max(a0,b0)+EPSILON_MM}
-// polygons_overlap：SAT，正面积相交才算撞，贴边接触放行。
+// polygons_overlap：SAT，底面正面积重叠，贴边接触放行。干涉还要再加上高度重叠。
 function polygonsOverlap(first,second){
   for(const polygon of [first,second]){
     for(let index=0;index<polygon.length;index++){
@@ -349,21 +350,23 @@ function spanOnWall(wall,footprint){
   if(wall==="west"&&Math.min(...xs)<=EPSILON_MM)return[room.depth_mm-Math.max(...ys),room.depth_mm-Math.min(...ys)];
   return null;
 }
-// item_outside_room + obstacle_collisions + item_collisions + opening_collisions。
-// 返回撞上的东西（用来提示和描边），没撞返回 null。
+// item_outside_room + obstacle_interferences + item_interferences + blocked_openings。
+// 返回挡住这次移动的对象（用来提示和描边），放得下则返回 null。reason 决定状态栏用词。
 function blockerAt(footprint,zStart,zEnd,ignoreId){
   const xs=footprint.map(point=>point[0]),ys=footprint.map(point=>point[1]);
   if(Math.min(...xs)<-EPSILON_MM||Math.max(...xs)>room.width_mm+EPSILON_MM
-    ||Math.min(...ys)<-EPSILON_MM||Math.max(...ys)>room.depth_mm+EPSILON_MM)return{label:"房间边界",id:null};
+    ||Math.min(...ys)<-EPSILON_MM||Math.max(...ys)>room.depth_mm+EPSILON_MM){
+    return{label:"房间边界",id:null,reason:"outside_room"};
+  }
   for(const obstacle of scene.obstacles){
     if(rangesOverlap(zStart,zEnd,obstacle.z_start,obstacle.z_end)&&polygonsOverlap(footprint,obstacle.footprint)){
-      return{label:obstacle.label||"障碍物",id:null};
+      return{label:obstacle.label||"障碍物",id:null,reason:"interference"};
     }
   }
   for(const other of scene.items){
     if(other.id===ignoreId)continue;
     if(rangesOverlap(zStart,zEnd,other.z_start,other.z_end)&&polygonsOverlap(footprint,other.footprint)){
-      return{label:other.label,id:other.id};
+      return{label:other.label,id:other.id,reason:"interference"};
     }
   }
   for(const opening of scene.openings){
@@ -371,12 +374,23 @@ function blockerAt(footprint,zStart,zEnd,ignoreId){
     if(!span)continue;
     if(rangesOverlap(span[0],span[1],opening.offset_mm,opening.offset_mm+opening.width_mm)
       &&rangesOverlap(zStart,zEnd,opening.sill_height_mm,opening.sill_height_mm+opening.height_mm)){
-      return{label:"门窗",id:null};
+      return{label:"门窗",id:null,reason:"blocked_opening"};
     }
   }
   return null;
 }
-// 从 from（必须可用）朝 to 走，二分找最远的可用整数位置：撞上就停在接触处。
+function placementStop(blocker){
+  if(!blocker)return "超出可放范围";
+  if(blocker.reason==="outside_room")return "会越出房间";
+  if(blocker.reason==="blocked_opening")return "会遮挡门窗洞口";
+  return `会与 ${blocker.label} 干涉`;
+}
+function contactStop(blocker){
+  if(blocker.reason==="outside_room")return "已停在房间边界";
+  if(blocker.reason==="blocked_opening")return "再过去会遮挡门窗洞口";
+  return `已与 ${blocker.label} 贴到接触，再过去会干涉`;
+}
+// 从 from（必须可用）朝 to 走，二分找最远的可用整数位置：过不去就停在接触处。
 function resolveInteger(from,to,probe){
   const startBlocker=probe(from);
   if(startBlocker)return{value:from,blocker:startBlocker};
@@ -877,7 +891,7 @@ function horizontalAxis(){
 }
 function wallLength(wall){return wall==="north"||wall==="south"?room.width_mm:(wall==="east"||wall==="west"?room.depth_mm:0)}
 function spanOf(footprint,axis){const values=footprint.map(point=>axis==="x"?point[0]:point[1]);return Math.max(...values)-Math.min(...values)}
-// 落盘取整到整数毫米，所以拖动也在整数毫米上求解：预览 == 落盘值，不会取整后才发现撞上。
+// 落盘取整到整数毫米，所以拖动也在整数毫米上求解：预览 == 落盘值。
 function anchorWallOffset(offset,probe){
   if(!probe(offset))return offset;
   for(const step of [1,-1,2,-2])if(!probe(offset+step))return offset+step;
@@ -890,10 +904,10 @@ function anchorFreeCell(x,y,probe){
   }
   return null;
 }
-// 高度：0 到「层高 - 自身高度」之间，且不能和别的东西在高度上撞上。
+// 高度：0 到「层高 - 自身高度」之间，且不能和其他外包络干涉。
 function heightProbe(item,footprint){
   return z=>(z<0||z+item.height>room.height_mm+EPSILON_MM)
-    ?{label:"层高",id:null}
+    ?{label:"层高",id:null,reason:"outside_room"}
     :blockerAt(footprint,z,z+item.height,item.id);
 }
 function setItemHeight(item,z){
@@ -981,7 +995,7 @@ function applyElevationDrag(item,dHoriz,dVert){
   setItemHeight(item,zSolved.value);
   return blocker||zSolved.blocker;
 }
-// 旋转同样先算出候选包络、撞了就整帧不落地（停在上一格），不会穿过去再回弹。
+// 旋转同样先算出候选包络，过不去就整帧不落地（停在上一格），不会穿过去再回弹。
 function applyRotation(item,center,rotationDeg){
   const current=item.placement;
   const target=Math.round(normalizeAngle(rotationDeg)*10)/10;
@@ -1090,7 +1104,7 @@ function detailMarkup(item){
     <dt>离顶</dt><dd><span data-field="ceiling"></span> mm</dd>
     ${gapRow("西距","west")}${gapRow("东距","east")}${gapRow("北距","north")}${gapRow("南距","south")}
   </dl>
-  <p class="hint-inline">可以直接输入任意毫米值，回车生效。输入框的上下箭头走 1；旁边的 − / ＋ 走整数档（净距 10 · 离地 50 · 朝向 15）。到不了就只挪到能到的地方，并在左下角说明被谁挡住。</p>`;
+  <p class="hint-inline">可以直接输入任意毫米值，回车生效。输入框的上下箭头走 1；旁边的 − / ＋ 走整数档（净距 10 · 离地 50 · 朝向 15）。到不了就只挪到能到的地方，并在左下角说明是越界、干涉还是遮挡门窗洞口。</p>`;
 }
 // 只在换选中件时才重建 DOM，之后一律就地改值。
 // 早先的做法是「焦点在面板里就整块不刷新」，结果点了 −/＋ 之后数字不跟着动，
@@ -1143,7 +1157,7 @@ function selectItem(id){
 function nudgeHeight(item,delta){
   const base=Math.round(item.placement.origin_z_mm||0);
   const solved=resolveInteger(base,base+delta,heightProbe(item,item.footprint));
-  if(solved.value===base){setStatus(`离地高度已经是 ${base} mm，${delta>0?"再高":"再低"}就被挡住了`,"warn");return}
+  if(solved.value===base){setStatus(`离地高度已经是 ${base} mm，${delta>0?"再高":"再低"}${placementStop(solved.blocker)}`,"warn");return}
   setItemHeight(item,solved.value);
   render();
   persist(item,"move").then(()=>{render()});
@@ -1157,7 +1171,7 @@ function withDragContext(item,run){
     startFootprint:item.footprint.map(point=>[...point])};
   try{return run()}finally{drag=saved}
 }
-// 手动填某一边的净距：把包络移到「挡它的那面 + 输入值」，照样过碰撞求解，
+// 手动填某一边的净距：把包络移到「相邻那面 + 输入值」，照样过摆放检查，
 // 所以只会停在到得了的地方，不会把家具塞进邻居里。
 function setGap(item,direction,value){
   const gap=distancesOf(item)[direction];
@@ -1177,7 +1191,7 @@ function setGap(item,direction,value){
   render();
   const reached=Math.round(distancesOf(item)[direction].gap);
   if(blocker&&reached!==Math.round(value)){
-    setStatus(`只挪到 ${reached} mm：被 ${blocker.label} 挡住`,"warn");
+    setStatus(`只挪到 ${reached} mm：${placementStop(blocker)}`,"warn");
   }
   persist(item,"move").then(()=>{render()});
 }
@@ -1185,9 +1199,7 @@ function setRotationValue(item,degrees){
   const result=applyRotation(item,footprintCenter(item),degrees);
   render();
   if(!result.applied){
-    if(result.blocker)setStatus(result.blocker.label==="房间边界"
-      ?"转不过去：包络会扫出房间"
-      :`转不过去：会撞上 ${result.blocker.label}`,"warn");
+    if(result.blocker)setStatus(`转不过去：${placementStop(result.blocker)}`,"warn");
     return;
   }
   persist(item,"rotate").then(()=>{render()});
@@ -1198,10 +1210,10 @@ function setHeightValue(item,value){
   setItemHeight(item,solved.value);
   render();
   if(solved.value===base){
-    if(solved.value!==target)setStatus(`改不了：${solved.blocker?solved.blocker.label+" 挡着":"超出可放范围"}`,"warn");
+    if(solved.value!==target)setStatus(`改不了：${placementStop(solved.blocker)}`,"warn");
     return;
   }
-  if(solved.value!==target)setStatus(`只到 ${solved.value} mm：${solved.blocker?solved.blocker.label+" 挡住":"超出可放范围"}`,"warn");
+  if(solved.value!==target)setStatus(`只到 ${solved.value} mm：${placementStop(solved.blocker)}`,"warn");
   persist(item,"move").then(()=>{render()});
 }
 let drag=null;
@@ -1309,9 +1321,7 @@ canvas.addEventListener("pointermove",event=>{
         setStatus(`旋转 ${drag.item.label}：${Math.round(normalizeAngle(drag.item.placement.rotation_z_deg))}°${event.shiftKey?"（精细 1°）":""}`);
       }else if(result.blocker){
         state.blocked=result.blocker.id;
-        setStatus(result.blocker.label==="房间边界"
-          ?"转不过去：包络会扫出房间"
-          :`转不过去：会撞上 ${result.blocker.label}`,"warn");
+        setStatus(`转不过去：${placementStop(result.blocker)}`,"warn");
       }
       render();
       return;
@@ -1321,7 +1331,7 @@ canvas.addEventListener("pointermove",event=>{
       const blocker=applyElevationDrag(drag.item,(sx-drag.startScreen[0])*scale,-(sy-drag.startScreen[1])*scale);
       state.blocked=blocker?blocker.id:null;
       setStatus(blocker
-        ?`已抵住 ${blocker.label}，最多贴到接触`
+        ?contactStop(blocker)
         :`${drag.item.label}：离地 ${Math.round(drag.item.z_start)} mm`);
       render();
       return;
@@ -1335,7 +1345,7 @@ canvas.addEventListener("pointermove",event=>{
     const moveX=ground[0]-drag.ground[0],moveY=ground[1]-drag.ground[1];
     const blocker=applyLocalDrag(drag.item,moveX,moveY);
     state.blocked=blocker?blocker.id:null;
-    if(blocker)setStatus(`已抵住 ${blocker.label}，最多贴到接触`,"warn");
+    if(blocker)setStatus(contactStop(blocker),"warn");
     else setStatus(`拖动 ${drag.item.label}… 位移 ${Math.round(Math.hypot(moveX,moveY))} mm`);
     render();
     return;

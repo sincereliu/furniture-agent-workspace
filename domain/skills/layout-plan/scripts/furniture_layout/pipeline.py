@@ -30,7 +30,7 @@ def plan_room_scene(
     room: Mapping[str, Any],
     items: Sequence[Mapping[str, Any]],
 ) -> dict[str, Any]:
-    """Place every item, admit collisions, then emit preview and viewer."""
+    """Place every item, admit the placement, then emit preview and viewer."""
     scene = _plan_scene(room, items)
     return {
         "room": scene.room.to_dict(),

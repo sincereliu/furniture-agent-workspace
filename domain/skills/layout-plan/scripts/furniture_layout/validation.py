@@ -7,11 +7,11 @@ from typing import Any, Mapping
 
 from furniture_delivery_validation.validation import ValidationReport
 
-from .collision import (
-    item_collisions,
+from .placement_check import (
+    blocked_openings,
+    item_interferences,
     item_outside_room,
-    obstacle_collisions,
-    opening_collisions,
+    obstacle_interferences,
 )
 from .placement import (
     build_placed_item,
@@ -34,7 +34,7 @@ from .viewer import render_viewer
 
 
 def admit_scene(scene: RoomScene) -> ValidationReport:
-    """Admit placed geometry: schema, derived footprint, and collisions.
+    """Admit placed geometry: schema, derived footprint, and placement checks.
 
     Preview and viewer byte-equality belong on frozen checkpoints, not here.
     """
@@ -310,24 +310,24 @@ def _validate_item_fit(
             f"item {item.id!r} envelope must remain inside the room",
             f"{path}.placement",
         )
-    for obstacle in obstacle_collisions(scene.room, item):
+    for obstacle in obstacle_interferences(scene.room, item):
         report.add_error(
-            "FURNITURE_OBSTACLE_COLLISION",
-            f"item {item.id!r} collides with obstacle: {obstacle.id}",
+            "FURNITURE_OBSTACLE_INTERFERENCE",
+            f"item {item.id!r} interferes with obstacle: {obstacle.id}",
             "room.obstacles",
         )
-    for opening in opening_collisions(scene.room, item):
+    for opening in blocked_openings(scene.room, item):
         report.add_error(
-            "FURNITURE_OPENING_COLLISION",
+            "FURNITURE_OPENING_BLOCKED",
             f"item {item.id!r} blocks {opening.kind}: {opening.id}",
             "room.openings",
         )
-    for other in item_collisions(item, scene.items):
+    for other in item_interferences(item, scene.items):
         if item.id > other.id:
             continue
         report.add_error(
-            "FURNITURE_ITEM_COLLISION",
-            f"item {item.id!r} collides with item {other.id!r}",
+            "FURNITURE_ITEM_INTERFERENCE",
+            f"item {item.id!r} interferes with item {other.id!r}",
             "items",
         )
 

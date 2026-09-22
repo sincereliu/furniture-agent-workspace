@@ -12,15 +12,15 @@ from runtime_paths import bootstrap_runtime_paths
 
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
-from furniture_layout.collision import polygons_overlap, scene_collisions
 from furniture_layout.pipeline import plan_room_scene
 from furniture_layout.placement import place_items, ranges_overlap
+from furniture_layout.placement_check import placement_issues, polygons_overlap
 from furniture_layout.scene import RoomModel, RoomScene, parse_item_specs
 
 
 ROOM = {
     "id": "room",
-    "name": "碰撞",
+    "name": "摆放检查",
     "width_mm": 3000,
     "depth_mm": 2000,
     "height_mm": 2400,
@@ -33,7 +33,7 @@ def _scene(items: list[dict], room: dict | None = None) -> RoomScene:
 
 
 def _placed_scene(items: list[dict], room: dict | None = None) -> RoomScene:
-    """Place without planner admission, so collision reports can be inspected."""
+    """Place without planner admission, so placement issues can be inspected."""
     room_model = RoomModel.from_dict(room or ROOM)
     placed = place_items(room_model, parse_item_specs(items))
     return RoomScene(room=room_model, items=placed)
@@ -44,7 +44,7 @@ def _box(x: float, y: float, width: float = 1000.0, depth: float = 500.0):
 
 
 class ContactIsAllowedTests(unittest.TestCase):
-    """「最多接触」：正体积相交才算撞。编辑器里的 JS 判定与这里逐条对应。"""
+    """贴边放行：底面正面积重叠再加高度重叠才算干涉。编辑器里的 JS 判定与这里逐条对应。"""
 
     def test_shared_edge_is_not_an_overlap(self) -> None:
         self.assertFalse(polygons_overlap(_box(0, 0), _box(1000, 0)))
@@ -80,7 +80,7 @@ class SceneContactTests(unittest.TestCase):
             {"id": "b", "label": "B", "category": "desk", "width": 1000, "depth": 500,
              "height": 750, "placement": {"mode": "free", "origin_x_mm": 1000, "origin_y_mm": 0}},
         ])
-        self.assertEqual(scene_collisions(scene), {})
+        self.assertEqual(placement_issues(scene), {})
 
     def test_items_overlapping_by_one_millimetre_are_reported(self) -> None:
         items = [
@@ -89,10 +89,10 @@ class SceneContactTests(unittest.TestCase):
             {"id": "b", "label": "B", "category": "desk", "width": 1000, "depth": 500,
              "height": 750, "placement": {"mode": "free", "origin_x_mm": 999, "origin_y_mm": 0}},
         ]
-        report = scene_collisions(_placed_scene(items))
+        report = placement_issues(_placed_scene(items))
         self.assertIn("item:b", report["a"])
         self.assertIn("item:a", report["b"])
-        with self.assertRaisesRegex(ValueError, "collides with item"):
+        with self.assertRaisesRegex(ValueError, "interferes with item"):
             plan_room_scene(ROOM, items)
 
     def test_items_touching_at_the_room_edge_are_accepted(self) -> None:
@@ -100,7 +100,7 @@ class SceneContactTests(unittest.TestCase):
             {"id": "a", "label": "A", "category": "desk", "width": 3000, "depth": 500,
              "height": 750, "placement": {"mode": "free", "origin_x_mm": 0, "origin_y_mm": 0}},
         ])
-        self.assertEqual(scene_collisions(scene), {})
+        self.assertEqual(placement_issues(scene), {})
 
     def test_wall_item_touching_an_opening_edge_is_accepted(self) -> None:
         room = dict(ROOM)
@@ -114,7 +114,7 @@ class SceneContactTests(unittest.TestCase):
              "placement": {"mode": "wall", "host_wall": "north", "offset_mm": 0}},
         ], room)
         # 0..1000 is flush with the window span starting at 1000
-        self.assertEqual(scene_collisions(scene), {})
+        self.assertEqual(placement_issues(scene), {})
 
     def test_wall_item_overlapping_an_opening_is_reported(self) -> None:
         room = dict(ROOM)
@@ -128,7 +128,7 @@ class SceneContactTests(unittest.TestCase):
              "placement": {"mode": "wall", "host_wall": "north", "offset_mm": 0}},
         ]
         scene = _placed_scene(items, room)
-        self.assertIn("opening:window", scene_collisions(scene)["wardrobe"])
+        self.assertIn("opening:window", placement_issues(scene)["wardrobe"])
         with self.assertRaisesRegex(ValueError, "blocks window"):
             plan_room_scene(room, items)
 

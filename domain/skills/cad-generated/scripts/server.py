@@ -42,7 +42,7 @@ app = FastAPI(
     title="Furniture Agent — 房间场景布局",
     version=API_VERSION,
     description=(
-        "独立房间场景 API：多件包络摆放、碰撞检查、SVG 预览、互动 Viewer 与房间 CAD。"
+        "独立房间场景 API：多件包络摆放、摆放检查、SVG 预览、互动 Viewer 与房间 CAD。"
         "家具生成走交互工具面，不提供一次性拆单批处理。"
     ),
 )

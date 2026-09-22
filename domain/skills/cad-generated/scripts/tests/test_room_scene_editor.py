@@ -92,7 +92,7 @@ class RoomSceneEditorTests(unittest.TestCase):
         self.assertIn("view_transition", controls)
         self.assertIn("dimension_readout", controls)
         self.assertIn("view_elevation", controls)
-        self.assertIn("collision_stop", controls)
+        self.assertIn("placement_stop", controls)
         self.assertIn("旋转", str(result["alt_text"]))
         self.assertIn("接触", str(result["alt_text"]))
         self.assertIn("离地高度", str(result["alt_text"]))

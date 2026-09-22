@@ -1,4 +1,9 @@
-"""Geometric collisions for a multi-item room scene."""
+"""Placement checks for a multi-item room scene.
+
+Three separate questions: the envelope is outside the room, two envelopes
+interfere (positive volume; edge contact is allowed), or an envelope blocks
+an opening. ``polygons_overlap`` only tests plan-view area.
+"""
 
 from __future__ import annotations
 
@@ -20,7 +25,7 @@ def item_outside_room(room: RoomModel, item: PlacedItem) -> bool:
     )
 
 
-def obstacle_collisions(
+def obstacle_interferences(
     room: RoomModel,
     item: PlacedItem,
 ) -> tuple[RoomObstacle, ...]:
@@ -36,7 +41,7 @@ def obstacle_collisions(
     return tuple(hits)
 
 
-def opening_collisions(
+def blocked_openings(
     room: RoomModel,
     item: PlacedItem,
 ) -> tuple[RoomOpening, ...]:
@@ -60,7 +65,7 @@ def opening_collisions(
     return tuple(hits)
 
 
-def item_collisions(
+def item_interferences(
     item: PlacedItem,
     others: Iterable[PlacedItem],
 ) -> tuple[PlacedItem, ...]:
@@ -78,18 +83,18 @@ def item_collisions(
     return tuple(hits)
 
 
-def scene_collisions(scene: RoomScene) -> dict[str, tuple[str, ...]]:
-    """Return item-id -> collision descriptions for every failing item."""
+def placement_issues(scene: RoomScene) -> dict[str, tuple[str, ...]]:
+    """Return item-id -> issue labels for every item that fails placement."""
     report: dict[str, tuple[str, ...]] = {}
     for item in scene.items:
         labels: list[str] = []
         if item_outside_room(scene.room, item):
             labels.append("outside_room")
-        for obstacle in obstacle_collisions(scene.room, item):
+        for obstacle in obstacle_interferences(scene.room, item):
             labels.append(f"obstacle:{obstacle.id}")
-        for opening in opening_collisions(scene.room, item):
+        for opening in blocked_openings(scene.room, item):
             labels.append(f"opening:{opening.id}")
-        for other in item_collisions(item, scene.items):
+        for other in item_interferences(item, scene.items):
             labels.append(f"item:{other.id}")
         if labels:
             report[item.id] = tuple(labels)

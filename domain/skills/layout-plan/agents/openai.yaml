@@ -1,4 +1,4 @@
 interface:
   display_name: "房间场景布局"
-  short_description: "全屋项目按房间摆家具包络并校验碰撞；独立房间场景可编辑并生成房间 CAD"
-  default_prompt: "家具项目从 $layout-plan 开始。把客户的家整理成 rooms[]（每间房含家具包络）。柜体写 furniture_category=floor_cabinet 或 wall_cabinet；床沙发只占位。调用运行时规划，越界或碰撞则改提案。确认布局后再进 panel-plan 做柜体结构。"
+  short_description: "全屋项目按房间摆家具包络并做摆放检查；独立房间场景可编辑并生成房间 CAD"
+  default_prompt: "家具项目从 $layout-plan 开始。把客户的家整理成 rooms[]（每间房含家具包络）。柜体写 furniture_category=floor_cabinet 或 wall_cabinet；床沙发只占位。调用运行时规划，越界、干涉或遮挡门窗洞口则改提案。确认布局后再进 panel-plan 做柜体结构。"
