@@ -16,7 +16,7 @@ BOM、校验、导出、设备路线都是它们的派生或标注。
 
 | 层 | 回答的问题 | 归属 |
 |----|-----------|------|
-| 设计层 | 谁和谁接触（装配关系）、背板模式 | design-intent / panel-plan |
+| 设计层 | 谁和谁接触（装配关系）、背板模式 | panel-plan |
 | 工艺层 | 连不连、铰链侧、具体用哪种五金（含活动层板连接件）、连在哪、打什么孔、买多少 | manufacture-plan |
 | 物理层 | 真做出来 | 工厂（仓库之外，只出机器文件） |
 
@@ -31,10 +31,10 @@ BOM、校验、导出、设备路线都是它们的派生或标注。
 五金选型只影响孔位和 BOM，不改变面板尺寸/拓扑。若它放在 panel-plan，改五金会让
 panel-plan 失效、从面板重跑——面板其实没变，白跑且修订语义错误（记录说「板件变了」）。
 
-| 选型放哪 | 改五金后的重跑范围 | 对不对 |
+| 选型放哪 | 改五金后的重跑范围 | 结果 |
 |---------|-------------------|--------|
-| panel-plan（现状） | panel-plan + manufacturing + feature-tree + CAD + delivery | ❌ 面板没变却全重跑 |
-| manufacture-plan（应然） | manufacturing + feature-tree + CAD + delivery | ✅ 面板不动 |
+| panel-plan | panel-plan + manufacturing + feature-tree + CAD + delivery | 面板没变，重跑过宽 |
+| manufacture-plan | manufacturing + feature-tree + CAD + delivery | 面板不动，重跑止于制造 |
 
 判据一句话：**只影响制造的东西就放制造阶段，让爆炸半径止于制造；只有真正改变面板
 结构的东西才放 panel-plan。** 也可表述为「改变面板几何 vs 只改变加工/五金」——

@@ -7,20 +7,18 @@
 ## 架构
 
 ```text
-Agent tools (furniture_*) / FastAPI layout
+家具项目从 layout-plan 进入：房间、家具包络、摆放检查
             |
             v
-FurnitureOrchestrator  |  layout-plan runtime
+确认布局 -> 板件 -> 制造/BOM -> 特征树 -> CAD -> 交付验证
             |
-            +-- 布局/外包络 -> 板件 -> 制造/BOM -> 特征树
             +-- 按需科学分析 -> stage_analyses（不改阶段检查点）
             +-- CadBridge -> external/text-to-cad
-            +-- 验证、Project/Revision、产物清单
 
-独立 layout-plan -> 房间摆放 / 碰撞检查 / SVG / Viewer
+同一套摆放内核另有独立房间场景（HTTP）。它不进入阶段检查点。
 ```
 
-家具生成入口是 `domain/skills/cad-generated/scripts/furniture_workflow/`。各阶段规则与实现在 `domain/skills/`。房间摆放是独立能力，不是主流程前置。交互协议见 `domain/skills/cad-generated/references/agent-tool-contract.md`。
+家具生成走 `furniture_*` 工具，编排在 `domain/skills/cad-generated/scripts/furniture_workflow/`。各阶段规则与实现在 `domain/skills/`。全屋布局确认后，下游只读冻成的柜体外包络。交互协议见 `domain/skills/cad-generated/references/agent-tool-contract.md`。
 
 ## 入口
 

@@ -7,23 +7,50 @@ description: 用于 panel_plan 阶段。当用户说“几扇门”“几层板�
 
 阶段：`panel_plan`
 
-## 核心流程
+**这一阶段只回答一件事：已确认的柜体外包络里面，门、层板、抽屉、背板、踢脚和料厚怎么落成板。** 交出去的是一版还没确认的板件。房间怎么摆、材料五金、柜体模型都不在这里做。
 
-1. 前置只有已确认并冻结的 `layout_plan`。板件规划只读 CAD 单元外包络（`furniture_category` 与宽深高），不读房间、摆放或离地字段，也不改类别或外包络。
-2. 由 LLM 根据完整上下文理解需求、消歧并推荐整份板件方案；未明确值以假设形式展示，不在脚本里做关键词识别、同义词映射或开放方案排序。
-3. 把选定草稿的规范字段写入 `stage_inputs.panels.parameters`。必填字段、可选料档与候选起点见 [提案契约](references/panel-proposal-contract.md)；料厚目录与工艺卡见 [料档与工艺卡](references/sheet-stock-catalog.md)。
-4. 由 `FurnitureSpec.from_intent()` 校验意图确认状态、字段完整性/类型和客观结构冲突，按工艺卡展开省略的料档，首次物化完整规范；无法由当前拓扑表达的混合语义必须继续消歧，不得让运行时丢弃字段。
-5. 依据 [背板结构规则](references/back-construction-rules.md)、[板件定义规则](references/panel-definition-rules.md)、[抽屉尺寸链](references/drawer-dimension-chain.md) 和 `references/cabinet-topologies/` 生成柜体实例及其 `spec/interior/back_mount_resolution/assemblies`；当背板模式需要时，同时物化背拉条并纳入同一阶段校验。
-6. 运行时统一校验柜体身份、子装配归属、结构规格、精确净空、板件标识/尺寸/位置/依赖和背板几何。每次规划是一次 attempt：展示后暂停。用户要另一版时调用 `retry_stage("panel_plan")`（可带新的 `stage_inputs.panels`），不要 `revise()` 意图；某次通过的尝试用 `select_stage_attempt()` 选用后再确认。尝试失败只记录该次，冻结意图仍在。`confirm_stage(panel_plan)` 把当前候选冻成 `store/<project-id>/panels/<sha256>.json`；制造只读这份冻结文件，重试制造不会重跑板件。未确认不得进入后续阶段。
+## 人要交什么
 
-## 提案与展示
+前置只有已确认并冻结的 `layout_plan`。这里只读 CAD 单元外包络：`furniture_category`，以及宽、深、高。不读房间、摆放或离地，也不改类别或外包络。
 
-- 提案必须覆盖契约中的必填字段。用户没说的构造值按 [提案契约](references/panel-proposal-contract.md) 的候选起点写成具体值并标成假设，一次确认。料档可省略，按 [料档与工艺卡](references/sheet-stock-catalog.md) 展开，不进假设清单。
-- 停问清单与 `null` 口径只在提案契约。
-- 展示给用户：一份假设清单；代码准入后展示工具快照 `current_view` 的确认审查清单（柜体、背板安装、内部净空、板件一行一条、接触去重），不要展开完整 `cabinets` 树。清单由运行时从检查点派生，见 [运行时映射](references/runtime-map.md)。
-- 按当前任务读对应 reference，不要一次加载全部规则。
+整份板件方案写入 `stage_inputs.panels.parameters`。必填字段、可选料档和候选起点见 [提案契约](references/panel-proposal-contract.md)。料厚目录与工艺卡见 [料档与工艺卡](references/sheet-stock-catalog.md)。
+
+- 提案要盖住契约里的必填字段。客户没说的构造值，按提案契约的候选起点写成具体值，标成假设，一次确认。
+- 料档可以省略，按工艺卡展开，不进假设清单。
+- 停问清单和 `null` 口径只在提案契约。
+- 当前拓扑表达不了的混合语义继续问清楚。运行时不得丢字段。
+
+## 一步一步做什么
+
+按编号往下做。第 6 步是客户要另一版时的回头路。第 7 步是确认。
+
+1. **确认布局已经冻结。** 没有已确认的 `layout_plan` 就停。不要回布局里改外包络。
+2. **把客户的话收成整份板件方案。** 这一步只整理，还不调用工具。没说清的构造值写成假设给客户看。不要在脚本里做关键词识别、同义词映射或开放方案排序。
+3. **写入参数并调用 `furniture_run_next`。** `FurnitureSpec.from_intent()` 校验意图已经确认、字段完整和类型、以及客观结构冲突，并按工艺卡展开省略的料档，首次物化完整规范。
+4. **代码生成柜体。** 依据 [背板结构规则](references/back-construction-rules.md)、[板件定义规则](references/panel-definition-rules.md)、[抽屉尺寸链](references/drawer-dimension-chain.md) 和 `references/cabinet-topologies/` 生成柜体实例及其 `spec` / `interior` / `back_mount_resolution` / `assemblies`。背板模式需要背拉条时，同一阶段把背拉条物化并纳入校验。运行时统一校验柜体身份、子装配归属、结构规格、精确净空、板件标识、尺寸、位置、依赖和背板几何。
+5. **展示后停。** 先给客户一份假设清单。代码准入后，展示工具快照 `current_view` 的确认审查清单：柜体、背板安装、内部净空、板件一行一条、接触去重。不要展开完整 `cabinets` 树。清单由运行时从检查点派生，见 [运行时映射](references/runtime-map.md)。每次规划是一次 attempt。
+6. **客户要另一版。** 调用 `retry_stage("panel_plan")`，可带新的 `stage_inputs.panels`。不要 `revise()` 意图。失败只记录该次，冻结意图仍在。客户选定某次通过的尝试后，用 `select_stage_attempt()` 选用，再确认。
+7. **客户认这版板件，再确认。** `confirm_stage(panel_plan)` 把当前候选冻成 `store/<project-id>/panels/<sha256>.json`。制造只读这份冻结文件，重试制造不会重跑板件。未确认不得进入后续阶段。直接改已经生成的板件结果用 `revise_stage_output()`。
+
+按当前任务读对应 reference，不要一次加载全部规则。
+
+## 本阶段不做什么
+
+- 房间、摆放、门窗洞口：布局阶段。
+- 材料、封边、五金、孔，以及「连不连」：制造阶段。这里只产出尺寸、位置和承面–端面接触。口径见 [术语规范表](references/terminology-glossary.md)。连不连见 [连接与接触默认规则](../manufacture-plan/references/connection-contact-defaults.md)。
+- 特征树和柜体模型：后面的阶段。
+- 代码按自然语言、柜型或内置 profile 选方案。料档省略只由工艺卡展开。
+
+## 旁路分析
+
+- `panel_unit_audit` 和 `panel_optimization` 只读取已确认冻结板件。有 Store 时按 `confirmed_panel_sha256` 读文件，写入 `stage_analyses.panel_plan`。
+- 它们不改写 `panel_plan` 的事实输出，不替代结构化准入，也不是制造或 CAD 的直接输入。
+- 客户明确选中优化候选之后，才用 `revise_stage_output()` 物化新的板件结果。
+- 触发哪份外挂见 [板件旁路分析](references/panel-side-analyses.md)。
 
 ## 参考导航
+
+运行时在 `scripts/furniture_panel_planning/`。对象树、入口和下游读法见 [运行时映射](references/runtime-map.md)。
 
 - 规范术语和单位口径： [术语规范表](references/terminology-glossary.md)
 - 提案字段、显式值要求和 LLM 候选起点： [提案契约](references/panel-proposal-contract.md)
@@ -33,18 +60,5 @@ description: 用于 panel_plan 阶段。当用户说“几扇门”“几层板�
 - 层板列表、计算层与固定/活动层板物化： [层板规则](references/shelf-planning-rules.md)
 - 踢脚区、支撑数量公式和净距： [踢脚规则](references/toe-kick-rules.md)
 - 抽屉区尺寸链、适用条件和限制： [抽屉尺寸链](references/drawer-dimension-chain.md)
-- 模块职责与入口： [运行时映射](references/runtime-map.md)
 - 柜型拓扑骨架： `references/cabinet-topologies/`（围合面、有无踢脚、整高抽屉区类型；门/层板/抽屉几何由求解器执行，不能只加 YAML 就支持新柜型）
 - 单位审计和优化等旁路证据： [板件旁路分析](references/panel-side-analyses.md)
-
-## 旁路分析
-
-- `panel_unit_audit` 和 `panel_optimization` 只读取已确认冻结板件（有 Store 时按 `confirmed_panel_sha256` 读文件），写入 `stage_analyses.panel_plan`。
-- 它们不自动改写 `panel_plan` 事实输出，不替代结构化准入，也不构成制造或 CAD 的直接输入。
-- 只有用户明确选中优化候选后，才可用 `revise_stage_output()` 物化新的板件结果。
-
-## 边界
-
-- 运行时在 `scripts/furniture_panel_planning/`；对象树、入口和下游读法见 [运行时映射](references/runtime-map.md)。代码不得按自然语言、柜型或内置 profile 选择方案。料档省略由工艺卡展开，见 [料档与工艺卡](references/sheet-stock-catalog.md)。
-- 本阶段只产出尺寸、位置和承面–端面接触。口径见 [术语规范表](references/terminology-glossary.md)。「连不连」见制造 [连接与接触默认规则](../manufacture-plan/references/connection-contact-defaults.md)。
-- 同一冻结意图上再试一版用 `retry_stage()`；直接改已生成的板件结果用 `revise_stage_output()`。
