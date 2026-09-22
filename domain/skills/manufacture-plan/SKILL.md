@@ -18,9 +18,9 @@ description: 用于 manufacture_plan 阶段。当用户说"用什么五金""三�
 由 LLM 根据完整上下文理解制造需求，提出整份策略草案，并把未明确的假设逐项列出给用户确认。策略覆盖：
 
 - 材料：类别、等级、厚度、纹理、可见面、饰面。材质选型按角色（柜体/门板/背板）引用 `materials_catalog.yaml` 的 `substrate` / `surface` 键，经 `appearance` 输入，由代码查表准入。材料厚度来自已确认的 `panel_plan`，不在这里另写一套。
-- 封边：封哪些边、封边皮材质和厚度。选型 `{material, thickness}` 经 `requested_options.edge_banding` 输入（默认 ABS 1.0mm），由代码查表准入。封边宽度（等于板厚）和颜色（同色取 surface 的颜色段）由代码派生。
+- 封边：封哪些边、封边条材质和厚度。选型 `{material, thickness}` 经 `requested_options.edge_banding` 输入（默认 ABS 1.0mm），由代码查表准入。封边宽度（等于板厚）和颜色（同色取 surface 的颜色段）由代码派生。
 - 连接：螺钉、木榫、偏心件（三合一/二合一）、槽/企口、胶合。接触默认连不连见 [连接与接触默认规则](references/connection-contact-defaults.md)。
-- 活动层板连接：`movable_shelf_connector`（`two_in_one` 二合一 / `shelf_pin` 隔板钉）。有活动层板时必须显式选择，经 `requested_options` 传入并盖章到 `PanelRecord`。没提供时运行时拒绝，不静默补齐。
+- 活动层板连接：`movable_shelf_connector`（`two_in_one` 二合一 / `shelf_pin` 层板托）。有活动层板时必须显式选择，经 `requested_options` 传入并盖章到 `PanelRecord`。没提供时运行时拒绝，不静默补齐。
 - 五金：铰链、滑轨、拉手、层板托、固定、防倾倒及荷载。单门铰链侧 `door_hinge_side`（`left` / `right`）是制造输入。双门由制造按门板位置派生。不从意图重建，也不硬编码覆盖。
 - 公差和净空：门缝、安装/设备缝隙、地墙不平、安全余量。
 

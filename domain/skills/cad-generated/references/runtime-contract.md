@@ -6,7 +6,7 @@
 
 唯一应用层入口：`domain/skills/cad-generated/scripts/furniture_workflow/workflow_orchestrator.py`。它接受已规划的全屋 `layout_plan`（按房间组织的家具包络 CAD 单元）。板件/制造字段经 `create_project(..., stage_inputs=)` 或 `run_next`/`retry_stage` 的 `stage_input` 进入所属阶段。字段转换、阶段实现和校验归各 Skill，Orchestrator 只管理生命周期。没有一次性自动确认的批处理入口。
 
-- `floor_cabinet` / `wall_cabinet`：layout 只确认柜类、外包络和房间门窗（`openings[]`）。柜门、层板、槽背板/背板安装、踢脚在 `panel_plan` 才准入。
+- `floor_cabinet` / `wall_cabinet`：layout 只确认柜类、外形尺寸和房间门窗（`openings[]`）。柜门、层板、槽背板/背板安装、踢脚在 `panel_plan` 才准入。
 
 它们不是任意家具配置器。承诺变体前检查板件拓扑模板；其他类别未实现前只做意图/建模方案。
 
@@ -89,7 +89,7 @@ store/<project-id>/
 }
 ```
 
-`width/depth/height` 必须在意图确认前明确提供；不再用类别预设替代客户确认的外包络。板件必填字段必须完整提交；料档字段（`board_thickness` / `back_thickness` / `door_thickness` / `drawer_bottom_thickness` / `drawer_back_thickness`）可省略，由车间工艺卡展开（料板 18、卷后背板 9、门与抽屉盒同料板）。代码不按柜型静默补其他默认方案。完整值经确定性准入后才写入 `panel_plan.cabinets[].spec`。
+`width/depth/height` 必须在意图确认前明确提供；不再用类别预设替代客户确认的外形尺寸。板件必填字段必须完整提交；料档字段（`board_thickness` / `back_thickness` / `door_thickness` / `drawer_bottom_thickness` / `drawer_back_thickness`）可省略，由车间工艺卡展开（柜体板 18、9 厘背板 9、门与抽屉盒同柜体板）。代码不按柜型静默补其他默认方案。完整值经确定性准入后才写入 `panel_plan.cabinets[].spec`。
 
 契约为扁平 JSON。规范字段使用 `furniture_category/width/depth/height` 或 `rooms[]`；适配器把单件快捷写法展开成一间工作室房间 + 一个 CAD 单元，把板件规范字段路由到 `stage_inputs.panels`，把制造选项（含 `door_hinge_side`、`movable_shelf_connector`、`edge_banding`）和外观路由到 `stage_inputs.manufacturing`。扁平请求不接受历史名 `type`、`furniture_type`、`overall_size`、`hanging_height`、`mounting_height`、`mounting_height_mm`、`mount_mode`。吊柜离地用 `origin_z_mm` 或 `hanging_height_mm`，贴顶用 `hanging_mode=flush_ceiling`。可选 `constraints` 必须有阶段映射；未分类约束在协议路由时拒绝。扁平示例里的 `door_hinge_side` 是制造选项，不是板件规范字段。
 
@@ -177,7 +177,7 @@ Feature Tree v2 支持板件 `box` 和定向 `cut_box`；发射器先建板、�
 ## 运行时板件与 BOM 路径
 
 - `furniture_layout/pipeline.py::plan_project_layout()`：计算多房间定位、摆放检查和预览，产出可执行 CAD 单元；`generate_room_cad()` 发射房屋与包络 CAD。
-- `furniture_panel_planning/panel_pipeline.py::plan_panel_stage()`：从已确认 CAD 单元投影出的柜体外包络物化功能数量、结构规格、精确净空、背板方案，并生成实体板件角色、尺寸和位置。
+- `furniture_panel_planning/panel_pipeline.py::plan_panel_stage()`：从已确认 CAD 单元投影出的柜体外形尺寸物化功能数量、结构规格、精确净空、背板方案，并生成实体板件角色、尺寸和位置。
 - `furniture_manufacturing/manufacturing_bom.py::plan_manufacturing()`：材料、封边、五金、BOM、槽；`emit_drilled_holes()` 输出配合孔。
 
 `cabinet_pipeline.py::CabinetPipelineResult` 只是已确认板件+制造结果的快照，供 CAD 写入使用。Orchestrator 按阶段调用各 Skill，不合并检查点。

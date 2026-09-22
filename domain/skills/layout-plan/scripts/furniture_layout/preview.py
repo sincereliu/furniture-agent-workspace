@@ -90,7 +90,7 @@ def render_preview(scene: RoomScene) -> dict[str, object]:
         (
             f'<desc id="desc">{escape(item_summary)}在'
             f'{escape(room.name)}中的透视三维占位；房间为透明包络，'
-            "不透明长方体为家具成品包络。</desc>"
+            "不透明长方体为家具外形尺寸。</desc>"
         ),
         "<defs>",
         (

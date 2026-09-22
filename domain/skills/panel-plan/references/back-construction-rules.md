@@ -1,11 +1,11 @@
 # 背板结构规则
 
-回答“成品外包络确认后，柜体采用什么背板结构，以及由此得到哪些精确结构尺寸？”；本文件是背板设计的唯一规则中心。
+回答“外形尺寸确认后，柜体采用什么背板结构，以及由此得到哪些精确结构尺寸？”；本文件是背板设计的唯一规则中心。
 
 ## 阶段输入
 
 - `back_mount`：规范值为 `groove/insert/cover`；必须由提案显式给出，不存在运行时缺省或 `auto` 解析。
-- `board_thickness/back_thickness/door_thickness`：来自已准入料档；背板厚为卷后背板 `9` mm，见 [料档与工艺卡](sheet-stock-catalog.md)。
+- `board_thickness/back_thickness/door_thickness`：来自已准入料档；入槽和外盖背板厚为 9 厘背板 `9` mm，见 [料档与工艺卡](sheet-stock-catalog.md)。
 - `back_offset/front_face_margin/front_gap`。
 - `groove_depth/groove_clearance/back_rail_height`。
 
@@ -22,7 +22,7 @@
 - 柜体前端统一预留 `door_thickness + front_gap`，所有板件保持在已确认成品深度内。
 - `groove/insert`：柜体从 `Y=0` 开始，背板基准为 `back_offset`，内部 Y 起点为 `back_offset + back_thickness`。
 - `cover`：背板位于 `Y=0`，柜体从 `Y=back_thickness` 开始，背板不得与柜体重叠。
-- 内部 X/Z 范围由成品外包络、柜体板厚和踢脚高度计算；所有净宽、净高、净深必须为正。
+- 内部 X/Z 范围由外形尺寸、柜体板厚和踢脚高度计算；所有净宽、净高、净深必须为正。
 
 ## 背板与背拉条
 

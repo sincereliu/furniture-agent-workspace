@@ -131,11 +131,11 @@ def _cabinet_markdown(cabinet: Mapping[str, Any]) -> str:
     lines = [
         f"## {cabinet['id']}（{cabinet['furniture_category']}）",
         "",
-        f"外包络 {_triple(envelope, 'width', 'depth', 'height')} mm",
+        f"外形尺寸 {_triple(envelope, 'width', 'depth', 'height')} mm",
         f"内部净空 {_triple(clearance, 'width', 'depth', 'height')} mm",
         back_line,
         (
-            f"料厚 料板 {_format_mm(thickness['board'])} / "
+            f"料厚 柜体板 {_format_mm(thickness['board'])} / "
             f"背板 {_format_mm(thickness['back'])} / "
             f"门 {_format_mm(thickness['door'])}"
         ),
@@ -167,7 +167,7 @@ def _cabinet_markdown(cabinet: Mapping[str, Any]) -> str:
     if contacts:
         lines.extend(
             [
-                "| 承面 | 端面 | 承面方向 |",
+                "| 大面 | 端面 | 大面方向 |",
                 "|------|------|----------|",
             ]
         )

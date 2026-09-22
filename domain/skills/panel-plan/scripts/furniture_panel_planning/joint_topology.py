@@ -1,8 +1,8 @@
-"""接触拓扑 — 板件之间的承面–端面邻接。
+"""接触拓扑 — 板件之间的大面–端面邻接。
 
 不依赖板件名称（"side"/"top" 等），只根据几何位置 + 语义面
-推导出哪块板的承面被哪块板的端面顶住。
-输出键 `bearing_id`/`end_id` 分别是承面/端面板件。
+推导出哪块板的大面被哪块板的端面顶住。
+输出键 `bearing_id`/`end_id` 分别是大面/端面板件。
 """
 
 from __future__ import annotations
@@ -28,14 +28,14 @@ _JOINT_FIELDS = frozenset(
 
 @dataclass(frozen=True)
 class PanelJoint:
-    """一条承面–端面邻接：承面被端面顶住。
+    """一条大面–端面邻接：大面被端面顶住。
 
     只有几何。连不连不在本阶段。
     """
 
-    bearing_id: str  # 承面板件 ID
+    bearing_id: str  # 大面板件 ID
     end_id: str  # 端面板件 ID
-    face: str  # 承面所用语义面（inner_face 的值，如 "+x"）
+    face: str  # 大面所用语义面（inner_face 的值，如 "+x"）
     edge_axis: str  # 端面所在轴（"x"/"y"/"z"）
     edge_sign: int  # 端面方向：+1=轴正端，-1=轴负端
     end_z: float  # 端面件厚度中心线的 Z 坐标（几何基准）
@@ -102,9 +102,9 @@ def _axis_range(panel: PanelPlacement, axis: str) -> tuple[float, float]:
 
 
 def compute_joints(placements: Sequence[PanelPlacement]) -> list[PanelJoint]:
-    """从板件列表推导所有承面–端面邻接。
+    """从板件列表推导所有大面–端面邻接。
 
-    对每块有 inner_face 的板（承面候选），
+    对每块有 inner_face 的板（大面候选），
     找出所有端面顶在该面上的板（端面候选）。
     """
     joints: list[PanelJoint] = []
@@ -118,7 +118,7 @@ def compute_joints(placements: Sequence[PanelPlacement]) -> list[PanelJoint]:
         face_axis = _axis_char(face_dir)
         face_pos = _face_position(bearing, face_dir)
 
-        # 待检查的轴线（承面法向之外的另外两轴）
+        # 待检查的轴线（大面法向之外的另外两轴）
         other_axes = [a for a in ("x", "y", "z") if a != face_axis]
 
         for end_panel in placements:
@@ -128,7 +128,7 @@ def compute_joints(placements: Sequence[PanelPlacement]) -> list[PanelJoint]:
             # 抽屉前板底边搁柜体底板）不是连接，排除跨装配 joint。
             if _is_drawer(bearing) != _is_drawer(end_panel):
                 continue
-            # 端面件必须在这个承面上有端面才可能接触
+            # 端面件必须在这个大面上有端面才可能接触
             end_min, end_max = _axis_range(end_panel, face_axis)
 
             if not (
@@ -171,7 +171,7 @@ def compute_joints(placements: Sequence[PanelPlacement]) -> list[PanelJoint]:
 
 
 def is_bearing(panel_id: str, joints: Sequence[PanelJoint]) -> bool:
-    """该板是否在某条接触中担任承面。"""
+    """该板是否在某条接触中担任大面。"""
     return any(j.bearing_id == panel_id for j in joints)
 
 
@@ -181,7 +181,7 @@ def is_end(panel_id: str, joints: Sequence[PanelJoint]) -> bool:
 
 
 def bearing_joints(panel_id: str, joints: Sequence[PanelJoint]) -> list[PanelJoint]:
-    """该板作为承面参与的所有接触。"""
+    """该板作为大面参与的所有接触。"""
     return [j for j in joints if j.bearing_id == panel_id]
 
 

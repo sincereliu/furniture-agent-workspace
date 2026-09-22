@@ -1,17 +1,17 @@
 ---
 name: panel-plan
-description: 用于 panel_plan 阶段。当用户说“几扇门”“几层板”“要不要抽屉”“背板怎么装”“踢脚多高”“板厚多少”，或需要从已确认外包络生成可审查板件时使用。门、层板、抽屉、背板安装、背拉条和踢脚先由 LLM 提案，经结构化代码准入后物化。料厚按车间料档准入，不是开放默认值。单位审计与优化属于旁路分析，不属于核心板件生成。
+description: 用于 panel_plan 阶段。当用户说“几扇门”“几层板”“要不要抽屉”“背板怎么装”“踢脚多高”“板厚多少”，或需要从已确认外形尺寸生成可审查板件时使用。门、层板、抽屉、背板安装、背拉条和踢脚先由 LLM 提案，经结构化代码准入后物化。料厚按车间料档准入，不是开放默认值。单位审计与优化属于旁路分析，不属于核心板件生成。
 ---
 
 # 家具板件规划
 
 阶段：`panel_plan`
 
-**这一阶段只回答一件事：已确认的柜体外包络里面，门、层板、抽屉、背板、踢脚和料厚怎么落成板。** 交出去的是一版还没确认的板件。房间怎么摆、材料五金、柜体模型都不在这里做。
+**这一阶段只回答一件事：已确认的柜体外形尺寸里面，门、层板、抽屉、背板、踢脚和料厚怎么落成板。** 交出去的是一版还没确认的板件。房间怎么摆、材料五金、柜体模型都不在这里做。
 
 ## 人要交什么
 
-前置只有已确认并冻结的 `layout_plan`。这里只读 CAD 单元外包络：`furniture_category`，以及宽、深、高。不读房间、摆放或离地，也不改类别或外包络。
+前置只有已确认并冻结的 `layout_plan`。这里只读已确认外形尺寸：`furniture_category`，以及宽、深、高。不读房间、摆放或离地，也不改类别或外形尺寸。
 
 整份板件方案写入 `stage_inputs.panels.parameters`。必填字段、可选料档和候选起点见 [提案契约](references/panel-proposal-contract.md)。料厚目录与工艺卡见 [料档与工艺卡](references/sheet-stock-catalog.md)。
 
@@ -24,7 +24,7 @@ description: 用于 panel_plan 阶段。当用户说“几扇门”“几层板�
 
 按编号往下做。第 6 步是客户要另一版时的回头路。第 7 步是确认。
 
-1. **确认布局已经冻结。** 没有已确认的 `layout_plan` 就停。不要回布局里改外包络。
+1. **确认布局已经冻结。** 没有已确认的 `layout_plan` 就停。不要回布局里改外形尺寸。
 2. **把客户的话收成整份板件方案。** 这一步只整理，还不调用工具。没说清的构造值写成假设给客户看。不要在脚本里做关键词识别、同义词映射或开放方案排序。
 3. **写入参数并调用 `furniture_run_next`。** `FurnitureSpec.from_intent()` 校验意图已经确认、字段完整和类型、以及客观结构冲突，并按工艺卡展开省略的料档，首次物化完整规范。
 4. **代码生成柜体。** 依据 [背板结构规则](references/back-construction-rules.md)、[板件定义规则](references/panel-definition-rules.md)、[抽屉尺寸链](references/drawer-dimension-chain.md) 和 `references/cabinet-topologies/` 生成柜体实例及其 `spec` / `interior` / `back_mount_resolution` / `assemblies`。背板模式需要背拉条时，同一阶段把背拉条物化并纳入校验。运行时统一校验柜体身份、子装配归属、结构规格、精确净空、板件标识、尺寸、位置、依赖和背板几何。
@@ -37,7 +37,7 @@ description: 用于 panel_plan 阶段。当用户说“几扇门”“几层板�
 ## 本阶段不做什么
 
 - 房间、摆放、门窗洞口：布局阶段。
-- 材料、封边、五金、孔，以及「连不连」：制造阶段。这里只产出尺寸、位置和承面–端面接触。口径见 [术语规范表](references/terminology-glossary.md)。
+- 材料、封边、五金、孔，以及「连不连」：制造阶段。这里只产出尺寸、位置和大面–端面接触。口径见 [术语规范表](references/terminology-glossary.md)。
 - 特征树和柜体模型：后面的阶段。
 - 代码按自然语言、柜型或内置 profile 选方案。料档省略只由工艺卡展开。
 
@@ -54,7 +54,7 @@ description: 用于 panel_plan 阶段。当用户说“几扇门”“几层板�
 
 - 规范术语和单位口径： [术语规范表](references/terminology-glossary.md)
 - 提案字段、显式值要求和 LLM 候选起点： [提案契约](references/panel-proposal-contract.md)
-- 料板/背板目录、工艺卡和角色绑定： [料档与工艺卡](references/sheet-stock-catalog.md)
+- 柜体板/背板目录、工艺卡和角色绑定： [料档与工艺卡](references/sheet-stock-catalog.md)
 - 背板模式解析、背板基准、内部净深和背拉条约束： [背板结构规则](references/back-construction-rules.md)
 - 板件角色、门/层板/踢脚规则和柜型拓扑边界： [板件定义规则](references/panel-definition-rules.md)
 - 层板列表、计算层与固定/活动层板物化： [层板规则](references/shelf-planning-rules.md)

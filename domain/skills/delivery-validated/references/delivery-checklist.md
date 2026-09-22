@@ -15,7 +15,7 @@
 
 ## 已由上游阶段负责的语义关卡
 
-- 房间布局、可执行柜类和成品外包络归 `layout_plan` 验证。
+- 房间布局、可执行柜类和外形尺寸归 `layout_plan` 验证。
 - 精确净空、背板模式、区域边界、板件标识、尺寸、位置、依赖和背板几何归 `panel_plan` 验证。
 - BOM、封边、解析后的 `back_mount`、`groove` 四条槽以及“背板五金数量与主孔、配合孔数量一致”归 `manufacture_plan` 验证。
 - Feature Tree 标识、依赖、目标和切削包络归 `feature_tree_planned` 验证。
