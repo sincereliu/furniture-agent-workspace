@@ -62,6 +62,30 @@ class CabinetStageCompositionTests(unittest.TestCase):
                 depth=600,
             )
 
+    @unittest.expectedFailure
+    def test_length_width_are_flat_dimensions_not_world_axes(self) -> None:
+        """已知缺口（「发现 A」）的自动提醒，条目在 manufacture-plan/backlog.md。
+
+        length_mm/width_mm 目前固定取世界坐标 size_x/size_y，板厚方向落在 X 或 Y
+        的板件会把板厚当成开料尺寸。缺口修好时本测试转为 unexpected success、
+        套件转红 —— 那是信号：去 backlog.md 把该条目移入「已落地」。
+        """
+        panels = by_role(self.bom.panels)
+
+        side = panels["left_side_panel"]
+        self.assertEqual(side.size_x, 18.0)  # 世界 X 轴是板厚方向
+        self.assertEqual(
+            (side.length_mm, side.width_mm),
+            (side.size_y, side.size_z),  # 期望：取自板件平面
+        )
+
+        back = panels["back_panel"]
+        self.assertEqual(back.size_y, 9.0)  # 世界 Y 轴是板厚方向
+        self.assertEqual(
+            (back.length_mm, back.width_mm),
+            (back.size_x, back.size_z),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

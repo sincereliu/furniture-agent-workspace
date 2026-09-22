@@ -62,6 +62,28 @@ Get-ChildItem -Recurse -Directory -Filter .cadgen-store temp, generated -ErrorAc
   Remove-Item -Recurse -Force
 ```
 
+## 跑测试
+
+在仓库根目录、PowerShell：
+
+```powershell
+.\.venv\Scripts\python.exe domain\skills\cad-generated\scripts\run_tests.py
+```
+
+入口在 `run_tests.py`，用标准库 `unittest`，不需要额外安装。它调 `runtime_paths.bootstrap_runtime_paths()` 装好各阶段包，再 discover `domain/skills/cad-generated/scripts/tests/` 下的全部测试。加 `-v` 会列出每个未失败用例。
+
+合格结果是最后一行 `ran <总数>, failed 0, errored 0, skipped 0`。退出码 0 表示全绿。
+
+测试会建临时目录并往 `store/`、`temp/` 写文件，所以要在一个可写工作区里跑；**报 `PermissionError` 或 `FileNotFoundError` 都是运行环境不允许写文件，不是代码缺陷**——先确认工作区可写，再判断测试是否真的红了。
+
+已知环境限制：在 DSH 的 Windows 写入限制沙箱（`workspace-write`）下，`tempfile` 建出的临时目录会被拒绝访问，表现是一整片 `PermissionError`，涉及约 37 个用例。原因是沙箱给受限进程的新建对象补的那个 capability ACE，会被 `chmod` 重写 DACL 时抹掉，而 `tempfile.mkdtemp()` 恰好用 `mode=0o700`（唯一触发值；`0o755`/`0o750`/`0o711`/`0o777` 都正常）。这与本仓库代码无关，普通机器上是全绿；换更宽的权限预设即可绕开。
+
+本仓库测试按 `unittest` 写，不依赖 pytest。只想跑单个文件时加 `-p`：
+
+```powershell
+.\.venv\Scripts\python.exe domain\skills\cad-generated\scripts\run_tests.py -p test_panel_rule_contracts.py
+```
+
 ## fnm / Node（可选）
 
 日常跑家具 CAD **不用** Node。需要改 Viewer 或从 checkout 打 `_runtime` 时：
