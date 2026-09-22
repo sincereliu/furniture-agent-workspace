@@ -63,8 +63,8 @@ class MovableShelfConnectorMigrationTests(unittest.TestCase):
         two_names = {h.name for h in two.hardware}
         pin_names = {h.name for h in pin.hardware}
         self.assertIn("二合一连接件", two_names)
-        self.assertNotIn("隔板钉", two_names)
-        self.assertIn("隔板钉", pin_names)
+        self.assertNotIn("层板托", two_names)
+        self.assertIn("层板托", pin_names)
         self.assertNotIn("二合一连接件", pin_names)
 
     def test_option_is_stamped_onto_movable_shelf_panels(self) -> None:

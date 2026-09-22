@@ -146,7 +146,7 @@ class HardwareRecord:
 
 @dataclass(frozen=True)
 class MaterialRecord:
-    """材料 BOM 一项：基材(m²) / 饰面(m²) / 封边皮(m)。"""
+    """材料 BOM 一项：基材(m²) / 饰面(m²) / 封边条(m)。"""
 
     category: str = ""    # substrate / surface / edge_banding
     key: str = ""         # 稳定键（目录键）

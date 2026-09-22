@@ -42,7 +42,7 @@ def plan_manufacturing(
 
 | 分组 | 字段 | 作用 |
 |---|---|---|
-| 外形 | `furniture_category`, `width`, `depth`, `height` | 柜型与外包络 |
+| 外形 | `furniture_category`, `width`, `depth`, `height` | 柜型与外形尺寸 |
 | 料厚 | `board_thickness`, `back_thickness`, `door_thickness`, `drawer_bottom_thickness`, `drawer_back_thickness` | 各角色板件的厚度（**权威来源**） |
 | 背板 | `back_mount`, `back_offset`, `back_rail_height`, `groove_depth`, `groove_clearance` | 背板安装方式与槽参数 |
 | 门/抽屉 | `n_doors`, `drawer_count`, `drawer_side_clearance`, `drawer_layer_gap`, `drawer_back_clearance` | 门抽屉配置与净空 |
@@ -58,7 +58,7 @@ def plan_manufacturing(
 | 几何 | `size_x`, `size_y`, `size_z`, `pos_x`, `pos_y`, `pos_z` | **世界坐标**三轴尺寸与最小角点 |
 | 朝向 | `orientation`（**空置**）, `inner_face`, `outer_face` | 板件朝向与内外可见面 |
 | 材质角色 | `material_role` | carcass / door / back |
-| 接触 | `joints` | 面-边接触拓扑（承面/端面） |
+| 接触 | `joints` | 面-边接触拓扑（大面/端面） |
 | 其他 | `quantity`, `depends_on`, `note`, `door_overlay` | 数量、依赖、备注、门盖方式 |
 
 **`requested_options`（4 个合法键）**——制造层选型：
@@ -68,7 +68,7 @@ def plan_manufacturing(
 | `options` | 连接件嵌套选项（透传给各 `Connector.boms`） |
 | `movable_shelf_connector` | 活动层板连接方式（`two_in_one` / `shelf_pin`） |
 | `door_hinge_side` | 单门铰链侧（`left` / `right`） |
-| `edge_banding` | 封边皮选型（`{material, thickness}`） |
+| `edge_banding` | 封边条选型（`{material, thickness}`） |
 
 **`appearance`**——按材质角色的材质选型：
 
@@ -99,8 +99,8 @@ def plan_manufacturing(
 | 字段 | 生产者 | 消费者 | 所有者 | 用途 | 判定 |
 |---|---|---|---|---|---|
 | `size_x/y/z` | panel-plan（topology_solver） | 制造层孔位/校验多处 | 设计层 | 几何 | ✅ |
-| `length_mm` / `width_mm` | **制造层自造**（`_manufacturing_panel`：固定取 `size_x`/`size_y`） | `area_m2`、markdown 开料尺寸、`estimate_materials` 封边皮周长 | **设计层**（板件平面尺寸） | 展示 + 计算 | ❌ **越界 + 无主**（发现 A：派生规则从未定义） |
-| `thickness` | 制造层（按 `material_role` 从 `spec` 取） | 铰链门厚校验、`hole_validator`、材料分组键、封边皮宽度、markdown | 设计层（`spec` 料厚） | 加工 + 计算 + 展示 | ✅ 来源权威 |
+| `length_mm` / `width_mm` | **制造层自造**（`_manufacturing_panel`：固定取 `size_x`/`size_y`） | `area_m2`、markdown 开料尺寸、`estimate_materials` 封边条周长 | **设计层**（板件平面尺寸） | 展示 + 计算 | ❌ **越界 + 无主**（发现 A：派生规则从未定义） |
+| `thickness` | 制造层（按 `material_role` 从 `spec` 取） | 铰链门厚校验、`hole_validator`、材料分组键、封边条宽度、markdown | 设计层（`spec` 料厚） | 加工 + 计算 + 展示 | ✅ 来源权威 |
 | `material`（字符串 `"18mm柜体板"`） | 制造层自造（f-string 拼） | **无消费者** | 制造层 | — | ❌ **死字段 + 越界**（由 `thickness`+`material_role` 可派生） |
 | `material_role` | panel-plan 提供，**未收进 `PanelRecord`** | `_normalize_appearance`、`_manufacturing_panel`（仅 placement 层面） | 设计层 | 材质角色 | ❌ **丢失**（appearance 一致性校验因此做不了） |
 | `substrate` / `surface` | 制造层（appearance 物化，`_manufacturing_panel`） | `validation`、`estimate_materials`、`_material_label` | 制造层 | 计算 + 展示 + 校验 | ⚠️ 健康，但与 `BOMReport.appearance` 冗余 |
@@ -137,7 +137,7 @@ def plan_manufacturing(
         │
         ▼ 准入（查表校验，失败即拒）
    _normalize_appearance               → appearance_by_role
-   _normalize_edge_banding_selection   → 封边皮选型
+   _normalize_edge_banding_selection   → 封边条选型
    movable_shelf_connector / door_hinge_side 校验与派生
         │
         ▼ 逐块板物化 _manufacturing_panel(placement, 选型)

@@ -26,7 +26,7 @@ def build_edge_banding(
     surface: str,
     selection: Mapping[str, str] | None = None,
 ) -> Dict[str, Dict]:
-    """构造一块板的结构化封边：封哪些边 + 封边皮规格（选型 + 派生）。
+    """构造一块板的结构化封边：封哪些边 + 封边条规格（选型 + 派生）。
 
     派生：宽度 = 板件厚度；颜色 = surface 的 color 段（同色）。
     非四边类型返回空字典（不封边）。

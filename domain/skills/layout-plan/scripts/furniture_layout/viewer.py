@@ -65,7 +65,7 @@ def render_viewer(scene: RoomScene) -> dict[str, object]:
             "reset",
         ],
         "alt_text": (
-            f"{item_summary}在{scene.room.name}中的可旋转三维包络；"
+            f"{item_summary}在{scene.room.name}中的可旋转三维外形尺寸；"
             "拖拽旋转、滚轮缩放，并可选择正视、左右视图和俯视"
         ),
         "html": html,
@@ -112,10 +112,10 @@ footer{display:flex;justify-content:space-between;gap:16px;padding:10px 18px 13p
     </nav>
   </header>
   <section class="stage">
-    <canvas id="scene" width="960" height="600" aria-label="透明房间与不透明家具包络"></canvas>
+    <canvas id="scene" width="960" height="600" aria-label="透明房间与不透明家具外形尺寸"></canvas>
     <div class="badge" id="status">透视视角</div>
   </section>
-  <footer><span>透明线框：房间</span><span>蓝色实体：家具包络</span><span>红色实体：障碍物</span></footer>
+  <footer><span>透明线框：房间</span><span>蓝色实体：家具外形尺寸</span><span>红色实体：障碍物</span></footer>
 </main>
 <script id="scene-data" type="application/json">__SCENE_JSON__</script>
 <script>

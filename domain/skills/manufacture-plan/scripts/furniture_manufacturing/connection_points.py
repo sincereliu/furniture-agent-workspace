@@ -1,7 +1,7 @@
 """制造层连接点（ConnectionPoint）——配对孔的组合。
 
 一个三合一 = 轮孔 + 杆孔 + 螺母孔 = 一个连接点，本质是「一件事：把两块板连起来」。
-现状 `connection_id` 是 `HoleSpec`/`HoleFeature` 上的字符串（`<承面>→<端面>#<排次>`）；
+现状 `connection_id` 是 `HoleSpec`/`HoleFeature` 上的字符串（`<大面>→<端面>#<排次>`）；
 本模块把它升级为实体：结构字段 + 组成孔，支持整体增删与按点校验。
 
 完整口径见 references/feature-contract.md「连接点（ConnectionPoint）」。
@@ -18,9 +18,9 @@ if TYPE_CHECKING:
 
 @dataclass
 class ConnectionPoint:
-    """一个三合一连接点：承面/端面在某排的连接。
+    """一个三合一连接点：大面/端面在某排的连接。
 
-    `connection_id` 是稳定 id（承面→端面#排次，由 `make_connection_id` 生成）；
+    `connection_id` 是稳定 id（大面→端面#排次，由 `make_connection_id` 生成）；
     `bearing_id`/`end_id`/`row_index` 是它确定性解析出的结构字段；
     `holes` 是这个点的组成孔（1 轮 + 1 杆 + 1 螺母）。
     """
@@ -56,7 +56,7 @@ class ConnectionPoint:
 
 
 def parse_connection_id(connection_id: str) -> tuple[str, str, int]:
-    """把 connection_id（`<承面>→<端面>#<排次>`）确定性解析回结构字段。
+    """把 connection_id（`<大面>→<端面>#<排次>`）确定性解析回结构字段。
 
     这是 `make_connection_id` 的结构化逆向，非自然语言解析：分隔符 `→` 与 `#`
     是固定契约，面板 id 不含这两个字符。

@@ -1,8 +1,8 @@
-"""活动层板连接件：二合一与隔板钉。
+"""活动层板连接件：二合一与层板托。
 
 两者都服务 movable_shelf（活动层板），用于层板可拆卸 / 小范围调整：
 - 二合一（TwoInOneConnector）：偏心轮装在层板底面、连接杆打在侧板，有固定作用；
-- 隔板钉（ShelfPinConnector）：单钉打在侧板，单纯架住层板。
+- 层板托（ShelfPinConnector）：单钉打在侧板，单纯架住层板。
 
 活动层板由 spec.shelves 里 `shelf_type="movable"` 的层板生成；连接方式由
 `movable_shelf_connector` 选择（two_in_one / shelf_pin）。下列几何定位
@@ -147,18 +147,18 @@ class TwoInOneConnector(Connector):
 
 
 class ShelfPinConnector(Connector):
-    """隔板钉：单钉打在侧板，单纯架住层板。
+    """层板托：单钉打在侧板，单纯架住层板。
 
     钉孔打在侧板内侧面（水平钻入），钉孔中心比层板底面低 shelf_bottom_offset_mm
     （= 钉半径 2.5mm），层板架在钉上。
     """
 
-    name = "隔板钉"
+    name = "层板托"
     hole_type_for_json = "shelf_pin"
     catalog_entry = "shelf_pin"
     rules_section = None
     hole_legend = {
-        "shelf_pin": {"color": "#00A86B", "label": "隔板钉孔 5mm", "glb_group": "隔板钉孔"},
+        "shelf_pin": {"color": "#00A86B", "label": "层板托孔 5mm", "glb_group": "层板托孔"},
     }
 
     def match(self, panels: List[PanelRecord]) -> Dict[str, Any]:
@@ -188,7 +188,7 @@ class ShelfPinConnector(Connector):
                         x_global=sx, y_global=sy, z_global=sz,
                         x_local=side_x, y_local=y_local, z_local=z_local,
                         diameter=pin_d, depth=pin_depth, direction=drill_dir,
-                        is_face_hole=True, note=f"隔板钉孔({shelf.name})"))
+                        is_face_hole=True, note=f"层板托孔({shelf.name})"))
         return result
 
     def boms(

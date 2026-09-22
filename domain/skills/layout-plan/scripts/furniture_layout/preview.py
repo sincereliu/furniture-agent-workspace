@@ -84,7 +84,7 @@ def render_preview(scene: RoomScene) -> dict[str, object]:
             f'role="img" aria-labelledby="title desc">'
         ),
         (
-            f'<title id="title">{escape(room.name)}家具透视三维包络预览'
+            f'<title id="title">{escape(room.name)}家具透视三维外形尺寸预览'
             "</title>"
         ),
         (
@@ -121,7 +121,7 @@ def render_preview(scene: RoomScene) -> dict[str, object]:
         (
             '<text x="76" y="74" font-family="sans-serif" font-size="14" '
             f'fill="#475569">{room.width_mm:g} × {room.depth_mm:g} × '
-            f'{room.height_mm:g} mm · 透明为房间 · 蓝色为家具包络'
+            f'{room.height_mm:g} mm · 透明为房间 · 蓝色为家具外形尺寸'
             " · 红色为障碍物 · 青色为门窗</text>"
         ),
     ]
@@ -243,7 +243,7 @@ def render_preview(scene: RoomScene) -> dict[str, object]:
         "width_px": PREVIEW_WIDTH_PX,
         "height_px": PREVIEW_HEIGHT_PX,
         "alt_text": (
-            f"{item_summary}在{room.name}中的透视三维包络位置："
+            f"{item_summary}在{room.name}中的透视三维外形尺寸位置："
             "房间透明，家具为不透明长方体"
         ),
         "svg": "".join(svg),

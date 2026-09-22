@@ -268,7 +268,7 @@ def _normalize_appearance(
 def _normalize_edge_banding_selection(raw: Any) -> dict[str, str]:
     """校验封边选型 {material, thickness}，缺省用默认 abs/t1_0。
 
-    键值必须命中封边皮目录（查表准入）；未知字段/键报错。
+    键值必须命中封边条目录（查表准入）；未知字段/键报错。
     """
     selection = dict(DEFAULT_EDGE_BANDING_SELECTION)
     if raw is None:
@@ -595,11 +595,11 @@ def estimate_hardware(
 
 
 def estimate_materials(panels: List[PanelRecord]) -> List[MaterialRecord]:
-    """从板件派生材料 BOM：基材(m²) + 饰面(m²) + 封边皮(m)。
+    """从板件派生材料 BOM：基材(m²) + 饰面(m²) + 封边条(m)。
 
     与 estimate_hardware 对称：五金从 Feature/ConnectionPoint 派生，
     材料从 PanelRecord 的 substrate/surface/edge_banding 派生。
-    封边皮长度按「四边」周长 2×(长+宽) 计量；非四边集合暂不计量。
+    封边条长度按「四边」周长 2×(长+宽) 计量；非四边集合暂不计量。
     """
     substrate_by_key: dict[tuple, float] = {}
     surface_by_key: dict[str, float] = {}

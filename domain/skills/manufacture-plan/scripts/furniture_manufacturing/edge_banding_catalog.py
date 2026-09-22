@@ -1,10 +1,10 @@
-"""封边皮目录加载器。
+"""封边条目录加载器。
 
-封边皮是材质的补充单一真源，两个独立维度：
+封边条是材质的补充单一真源，两个独立维度：
 - material：封边材质（abs/pvc/laser，决定工艺）
-- thickness：封边皮自身厚度（0.8/1.0/2.0mm）
+- thickness：封边条自身厚度（0.8/1.0/2.0mm）
 
-宽度（= 板件厚度）与颜色（= 同色，来自 surface 颜色段）是派生属性，不进目录。
+宽度（= 板件厚度）与颜色（= 同色，来自 surface 花色）是派生属性，不进目录。
 键 = 稳定代号（引用用），name = 可读全名（可改）。校验 = 查表。
 """
 from __future__ import annotations
@@ -33,7 +33,7 @@ def material_keys() -> list[str]:
 
 
 def thickness_keys() -> list[str]:
-    """封边皮厚度所有合法键。"""
+    """封边条厚度所有合法键。"""
     section = _load_raw().get("thickness", {})
     return list(section) if isinstance(section, dict) else []
 
@@ -45,6 +45,6 @@ def material_name(key: str) -> str:
 
 
 def thickness_mm(key: str) -> float:
-    """封边皮厚度键对应的毫米值；未知键返回 0.0。"""
+    """封边条厚度键对应的毫米值；未知键返回 0.0。"""
     entry = _load_raw().get("thickness", {}).get(key)
     return float(entry.get("value_mm", 0.0)) if isinstance(entry, dict) else 0.0

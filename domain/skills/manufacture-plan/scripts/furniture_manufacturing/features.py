@@ -88,12 +88,12 @@ class GrooveFeature(Feature):
 
 @dataclass
 class EdgeBandFeature(Feature):
-    """封边：一条边（封哪条边 + 封边皮材质/厚度/宽度/颜色）。"""
+    """封边：一条边（封哪条边 + 封边条材质/厚度/宽度/颜色）。"""
 
     edges: str = ""
     material: str = ""          # 材质键：abs/pvc/laser
-    thickness_mm: float = 0.0   # 封边皮自身厚度
-    width_mm: float = 0.0       # 封边皮宽度（= 板厚）
+    thickness_mm: float = 0.0   # 封边条自身厚度
+    width_mm: float = 0.0       # 封边条宽度（= 板厚）
     color: str = ""             # 同色 → surface 的 color 段
 
 

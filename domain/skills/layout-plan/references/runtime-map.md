@@ -6,9 +6,9 @@
 
 代码**不会**按「这是卧室」自动排床和衣柜。房间类型不是算法输入。
 
-- 人 / LLM 给出每件的外包络和摆法意图：靠哪面墙、从哪开始、要不要沿墙铺满，或自由坐标。
+- 人 / LLM 给出每件的外形尺寸和摆法意图：靠哪面墙、从哪开始、要不要沿墙铺满，或自由坐标。
 - `placement.py` 把这句话换成房间毫米（原点、转角、fill 实宽、足迹、净距）。
-- `placement_check.py` 只回答能不能站住：越界、外包络干涉、遮挡门窗洞口。失败整单拒绝，**不换墙重排**。要改位置，改提案或在编辑器里拖，再走同一条算路。
+- `placement_check.py` 只回答能不能站住：越界、外形干涉、遮挡门窗洞口。失败整单拒绝，**不换墙重排**。要改位置，改提案或在编辑器里拖，再走同一条算路。
 
 ## 算路
 
@@ -16,7 +16,7 @@
 
 `fill` 件等所有固定件摆完再算：先扣同高度上门窗、贴墙障碍、已摆家具，未给偏移取最长空段，给了则从该点铺到该空段终点。空段没有就失败。
 
-三种摆法的公式见 [空间布局规则](spatial-layout-rules.md)。贴边接触不算干涉；外包络正体积相交、越出房间、遮挡门窗洞口才拒绝。
+三种摆法的公式见 [空间布局规则](spatial-layout-rules.md)。贴边接触不算干涉；外形尺寸发生正体积相交、越出房间、遮挡门窗洞口才拒绝。
 
 ## 两个出口，同一内核
 
@@ -39,7 +39,7 @@
 | `project_layout.py` | 多房间检查点、`LayoutUnit`、工作室单柜捷径 | schema |
 | `scene.py` | 房间/件的 schema 与解析 | schema |
 | `placement.py` | wall / free / fill 换成毫米 | calculation |
-| `placement_check.py` | 越界、外包络干涉、遮挡门窗洞口 | calculation |
+| `placement_check.py` | 越界、外形干涉、遮挡门窗洞口 | calculation |
 | `validation.py` | `admit_scene`（规划）；dict 上再核预览（冻结） | validation |
 | `preview.py` / `viewer.py` | SVG 与只读轨道视图 | calculation |
 | `editor.py` | 可编辑 HTML，以及项目只读预览（复用同一画布，不发 edit op）；JS 摆放检查必须与 `placement_check.py` 同步 | calculation |

@@ -155,7 +155,7 @@ def render_editor(scene_id: str, scene: RoomScene) -> dict[str, object]:
             "placement_stop",
         ],
         "alt_text": (
-            f"{scene.room.name}的可编辑包络视图；点击家具包络任意位置可选中，"
+            f"{scene.room.name}的可编辑外形尺寸视图；点击家具外形尺寸任意位置可选中，"
             "拖动改位置（与别的家具或障碍物干涉、越出房间或遮挡门窗洞口时停在接触处），"
             "拖橙点或旋转环改朝向、拖蓝点改离地高度；"
             "每件的正面用绿色描边标出（约定：局部 +Y 为正面），选中件还有指向正面的箭头；"
@@ -296,7 +296,7 @@ canvas.panning{cursor:grabbing}
   </header>
   <div class="workspace">
     <section class="stage">
-      <canvas id="scene" width="960" height="600" aria-label="房间与家具包络；点选家具后可拖动移动、拖橙点旋转、拖蓝点改离地高度"></canvas>
+      <canvas id="scene" width="960" height="600" aria-label="房间与家具外形尺寸；点选家具后可拖动移动、拖橙点旋转、拖蓝点改离地高度"></canvas>
       <div class="toast" id="status">点击一件家具开始</div>
     </section>
     <aside class="sidebar">
@@ -311,7 +311,7 @@ canvas.panning{cursor:grabbing}
       <section class="card">
         <h2>图例</h2>
         <ul class="legend">
-          <li><i class="chip furniture"></i>家具包络</li>
+          <li><i class="chip furniture"></i>家具外形尺寸</li>
           <li><i class="chip selected"></i>选中 / 旋转环与手柄（橙）</li>
           <li><i class="chip height"></i>离地高度手柄（蓝）</li>
           <li><i class="chip dim"></i>净距标注线（紫）</li>
@@ -1026,7 +1026,7 @@ function anchorFreeCell(x,y,probe){
   }
   return null;
 }
-// 高度：0 到「层高 - 自身高度」之间，且不能和其他外包络干涉。
+// 高度：0 到「层高 - 自身高度」之间，且不能和其他外形干涉。
 function heightProbe(item,footprint){
   return z=>(z<0||z+item.height>room.height_mm+EPSILON_MM)
     ?{label:"层高",id:null,reason:"outside_room"}
