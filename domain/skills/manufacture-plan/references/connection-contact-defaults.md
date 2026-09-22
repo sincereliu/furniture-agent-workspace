@@ -2,14 +2,14 @@
 
 回答“板件阶段 `compute_joints()` 算出的两条板之间的**接触**，制造阶段默认哪些固定、哪些只接触？”
 
-本文件是**默认连不连**的唯一规则中心。几何接触由板件阶段产出；默认连不连由本表在制造阶段解析到每条 `PanelJoint.connection`。
+本文件是**默认连不连**的唯一规则中心。几何接触由板件阶段产出；默认连不连由本表在制造阶段解析，写到制造接触 `Contact.connection`。
 
 ## 两个概念
 
 | 概念 | 含义 | 谁决定 |
 | --- | --- | --- |
 | 接触（joint） | 两块板几何上贴合：female 的面被 male 的端面顶住 | 板件阶段 `compute_joints()`，客观几何 |
-| 连接（connection） | 该接触是否要固定 | 本表；制造 `default_joint_connection()` 写入 `PanelJoint.connection` |
+| 连接（connection） | 该接触是否要固定 | 本表；制造 `default_joint_connection()` 写入 `Contact.connection` |
 
 接触是几何事实，连接是工艺决策。二者分开：几何归板件阶段，默认连接归本表。
 
@@ -17,7 +17,7 @@
 
 ## 已落地
 
-`plan_manufacturing` 按面板类型重解析每条接触，写出 `connection: on | off`。板件阶段只产 `bearing_id/end_id/face/edge` 拓扑；字段缺省 `on` 仅作序列化占位。旧序列化没有该字段时按 `on` 加载。`off` 的接触不再进入打孔/五金；轴方向和制造层派生的 `cam_face` 只用于选择三合一这类五金，不再用来猜连不连。
+`plan_manufacturing` 按面板类型重解析每条接触，写出 `connection: on | off`。板件阶段只产 `bearing_id/end_id/face/edge` 拓扑，接触记录里没有 `connection`。板件旧档若带这个字段，读入时丢掉，不拿来当结论。本阶段已经保存的接触若缺 `connection`，按旧档视为 `on`。`off` 的接触不再进入打孔/五金；轴方向和制造层派生的 `cam_face` 只用于选择三合一这类五金，不再用来猜连不连。
 
 本轮**没有**逐条 `on/off/auto` 提案覆盖字段。用户若要改某条连接，只能通过后续契约扩展或整阶段 `revise_stage_output()`；不要假装现在就能提交开关。
 

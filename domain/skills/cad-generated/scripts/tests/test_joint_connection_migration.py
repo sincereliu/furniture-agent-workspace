@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import unittest
+from dataclasses import asdict
 from pathlib import Path
 
 
@@ -78,6 +79,49 @@ class JointConnectionMigrationTests(unittest.TestCase):
         ]
         self.assertTrue(top_joints)
         self.assertTrue(all(j.connection == "on" for j in top_joints))
+
+    def test_panel_joint_drops_legacy_connection(self) -> None:
+        from furniture_panel_planning.joint_topology import PanelJoint
+
+        joint = PanelJoint.from_dict(
+            {
+                "bearing_id": "a",
+                "end_id": "b",
+                "face": "+x",
+                "edge_axis": "x",
+                "edge_sign": 1,
+                "end_z": 9,
+                "end_size_z": 18,
+                "connection": "off",
+            }
+        )
+        self.assertFalse(hasattr(joint, "connection"))
+
+    def test_incoming_connection_flag_is_ignored(self) -> None:
+        spec = furniture_spec(
+            furniture_category="floor_cabinet",
+            width=800, depth=600, height=1000,
+            n_doors=2, back_mount="groove",
+        )
+        structure = CabinetStructure.from_spec(spec)
+        raw_panels = []
+        for panel in plan_panels(spec, structure):
+            item = asdict(panel)
+            for joint in item["joints"]:
+                joint["connection"] = "off"
+            raw_panels.append(item)
+        bom = plan_manufacturing(asdict(spec), raw_panels)
+        by_label = {panel.label: panel for panel in bom.panels}
+        side = next(panel for panel in bom.panels if panel.role == "left_side_panel")
+        top_joints = [
+            joint for joint in side.joints
+            if "top" in {
+                by_label[joint.bearing_id].panel_type,
+                by_label[joint.end_id].panel_type,
+            }
+        ]
+        self.assertTrue(top_joints)
+        self.assertTrue(all(joint.connection == "on" for joint in top_joints))
 
 
 if __name__ == "__main__":

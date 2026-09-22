@@ -442,6 +442,7 @@ class SkillArchitectureTests(unittest.TestCase):
             for path in panel_package.glob("*.py")
         )
         self.assertNotIn("furniture_layout", panel_source)
+        self.assertNotIn("furniture_manufacturing", panel_source)
         manufacturing_package = (
             SKILLS_ROOT
             / "manufacture-plan"
@@ -454,6 +455,18 @@ class SkillArchitectureTests(unittest.TestCase):
         self.assertFalse((panel_package / "panel_face.py").exists())
         self.assertFalse((panel_package / "manufacturing_edge_banding.py").exists())
         self.assertTrue((manufacturing_package / "manufacturing_edge_banding.py").is_file())
+        manufacturing_source = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in manufacturing_package.rglob("*.py")
+        )
+        self.assertNotIn("furniture_panel_planning", manufacturing_source)
+        self.assertNotIn("furniture_layout", manufacturing_source)
+        layout_imports = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in layout_package.rglob("*.py")
+        )
+        self.assertNotIn("furniture_panel_planning", layout_imports)
+        self.assertNotIn("furniture_manufacturing", layout_imports)
 
     def test_geometric_rules_live_in_their_owning_stages(self) -> None:
         intent_package = (

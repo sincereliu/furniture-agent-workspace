@@ -39,4 +39,4 @@
 | `validation.py` | 检查点入口；柜体/装配在 `validation_cabinet.py`，板件角色在 `validation_panels.py` | validation |
 | `quantitative_audit.py` / `design_optimization.py` | 旁路分析 | 只写 `stage_analyses` |
 
-本阶段只产出尺寸、位置和承面–端面接触。连不连默认规则在制造 [连接与接触默认规则](../manufacture-plan/references/connection-contact-defaults.md)。
+本阶段只产出尺寸、位置和承面–端面接触。接触字段是 `bearing_id`、`end_id`、`face`、`edge_axis`、`edge_sign`、`end_z`、`end_size_z`。旧冻结接触若带 `connection`，加载时丢掉。连不连由制造阶段自己决定。

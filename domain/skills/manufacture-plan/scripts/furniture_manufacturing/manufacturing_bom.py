@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from typing import Any, List, Mapping
+from typing import Any, List, Mapping, Sequence
 
-from furniture_panel_planning.cabinet_identity import index_by_role, qualify_panel_id
-from furniture_panel_planning.panel_spec import FurnitureSpec, resolve_back_mount
-from furniture_panel_planning.panel_models import PanelPlacement
-
+from .confirmed_panels import (
+    ConfirmedConstruction,
+    ConfirmedPanel,
+    admit_construction,
+    admit_panels,
+)
+from .panel_ids import index_by_role, qualify_panel_id
 from .manufacturing_edge_banding import (
     DEFAULT_EDGE_BANDING_SELECTION,
     build_edge_banding,
@@ -59,7 +62,7 @@ MANUFACTURING_OPTION_FIELDS = frozenset(
     }
 )
 
-# appearance 按板件材质角色选型（对应 PanelPlacement.material_role）
+# appearance 按已确认板件的 material_role 选型
 MATERIAL_ROLES = frozenset({"carcass", "door", "back"})
 
 
@@ -109,13 +112,13 @@ def default_joint_connection(female: PanelRecord, male: PanelRecord) -> str:
 
 
 def _derive_door_hinge_sides(
-    placements: list[PanelPlacement],
+    placements: Sequence[ConfirmedPanel],
     single_door_side: str | None,
 ) -> dict[str, str | None]:
     """按门板 X 位置推导每块门板的铰链侧。
 
     单门：必须显式提供 door_hinge_side（left/right）；双门：左门=left、右门=right。
-    panel-plan 不再携带 door_hinge_side，这里由制造层派生。
+    铰链侧只在本阶段派生。
     """
     doors = sorted(
         (p for p in placements if p.panel_type == "door"),
@@ -135,10 +138,9 @@ def _derive_door_hinge_sides(
 
 
 def _resolve_joint_connections(panels: list[PanelRecord]) -> None:
-    """在制造层按面板类型重解析每条接触的连不连（原在 panel-plan 解析）。
+    """按面板类型写下每条接触的连不连。
 
-    panel-plan 只产接触拓扑（bearing_id/end_id/face/edge）；连不连是制造层关注点
-    （只影响孔位与五金，不影响面板几何），故在此重解析并写回每个 PanelRecord。
+    读入的接触只有几何。连不连只影响孔位与五金，写在本阶段自己的接触记录上。
     """
     by_label = {panel.label: panel for panel in panels}
     for panel in panels:
@@ -206,7 +208,7 @@ def recompute_features(
 
 def _normalize_appearance(
     appearance: Mapping[str, Any] | None,
-    placements: list[PanelPlacement],
+    placements: Sequence[ConfirmedPanel],
 ) -> dict[str, dict[str, str]]:
     """校验并规范化 appearance 选型（按 material_role）。
 
@@ -300,13 +302,19 @@ def _normalize_edge_banding_selection(raw: Any) -> dict[str, str]:
 
 
 def plan_manufacturing(
-    spec: FurnitureSpec,
-    placements: list[PanelPlacement],
+    spec: Any,
+    placements: Sequence[Any],
     *,
     requested_options: Mapping[str, Any] | None = None,
     appearance: Mapping[str, Any] | None = None,
 ) -> BOMReport:
-    """Stage 4: apply materials and emit explicit machining operations."""
+    """Apply materials and emit explicit machining operations.
+
+    ``spec`` and ``placements`` may be confirmed-panel objects or mappings.
+    Only the fields this stage machines are copied.
+    """
+    spec = admit_construction(spec)
+    placements = admit_panels(placements)
     options = dict(requested_options or {})
     unknown = sorted(set(options) - MANUFACTURING_OPTION_FIELDS)
     if unknown:
@@ -324,7 +332,7 @@ def plan_manufacturing(
         movable_shelf_connector = ""
     door_hinge_side = options.get("door_hinge_side")
     hinge_side_by_label = _derive_door_hinge_sides(placements, door_hinge_side)
-    back_mount = resolve_back_mount(spec.back_mount)
+    back_mount = spec.back_mount
     appearance_by_role = _normalize_appearance(appearance, placements)
     edge_banding_selection = _normalize_edge_banding_selection(
         options.get("edge_banding")
@@ -376,7 +384,7 @@ def plan_manufacturing(
     )
 
 
-def _cam_face_for(placement: PanelPlacement) -> str | None:
+def _cam_face_for(placement: ConfirmedPanel) -> str | None:
     """Which face manufacturing operates the eccentric cam from.
 
     Horizontal carcass boards use the world-down face of the board.
@@ -393,11 +401,11 @@ def _cam_face_for(placement: PanelPlacement) -> str | None:
 
 
 def _manufacturing_panel(
-    spec: FurnitureSpec,
+    spec: ConfirmedConstruction,
     back_mount: str,
     movable_shelf_connector: str,
     door_hinge_side: str | None,
-    placement: PanelPlacement,
+    placement: ConfirmedPanel,
     material_selection: Mapping[str, str] | None = None,
     edge_banding_selection: Mapping[str, str] | None = None,
 ) -> PanelRecord:
@@ -487,14 +495,14 @@ def _edge_banding_for(
 
 
 def _back_groove_operations(
-    spec: FurnitureSpec,
+    spec: ConfirmedConstruction,
     back_mount: str,
-    placements: list[PanelPlacement],
+    placements: Sequence[ConfirmedPanel],
 ) -> list[MachiningOperation]:
     if back_mount != "groove":
         return []
     operations: list[MachiningOperation] = []
-    by_parent: dict[str, list[PanelPlacement]] = {}
+    by_parent: dict[str, list[ConfirmedPanel]] = {}
     for panel in placements:
         by_parent.setdefault(panel.parent_id or "", []).append(panel)
     required = {"left_side_panel", "right_side_panel", "top_panel", "bottom_panel", "back_panel"}

@@ -21,8 +21,8 @@ BOM、校验、导出、设备路线都是它们的派生或标注。
 | 物理层 | 真做出来 | 工厂（仓库之外，只出机器文件） |
 
 分界线的判据是「改变面板几何 vs 只改变加工/五金」：**改变面板几何（尺寸/位置/拓扑）
-→ panel-plan；只改变孔/槽/封边/BOM → manufacturing。** 设计层产出 `PanelJoint` 拓扑
-（`bearing_id/end_id/face/edge`）；不产孔位、不选五金、不决定连不连与铰链侧——那些由制造层
+→ panel-plan；只改变孔/槽/封边/BOM → manufacturing。** 设计层产出接触拓扑
+（`bearing_id/end_id/face/edge`），记录里没有连不连。孔位、五金、连不连与铰链侧由制造层
 决定/推导（「用什么五金仍由制造连接件决定」）。孔位是「实现」不是「目标」：它在工艺层
 由代码确定性推导，不在设计层定。
 
@@ -46,9 +46,9 @@ panel-plan 失效、从面板重跑——面板其实没变，白跑且修订语
   panel-plan 的 `FurnitureSpec` 移除，改为制造阶段 `requested_options` 输入，经
   `plan_manufacturing` 盖章到 `PanelRecord`；有活动层板却未提供时运行时拒绝。改它只
   重跑 manufacturing 及下游。
-- ✅ `connection`（连不连 on/off）：**已迁移**。panel-plan 不再解析，制造层在
-  `plan_manufacturing` 按面板类型重解析（`default_joint_connection`）；拓扑
-  （`bearing_id/end_id/face/edge`）留在 panel-plan。
+- ✅ `connection`（连不连 on/off）：**已迁出板件类型**。接触几何留在 panel-plan，
+  接触记录不含 `connection`。制造读入时丢掉历史字段，按面板类型重解析
+  （`default_joint_connection`），写在自己的 `Contact.connection` 上。
 - ✅ `door_hinge_side`（铰链侧）：**已迁移**。单门为制造输入（`requested_options`，
   `left`/`right`），双门由制造按门板 X 位置派生；panel-plan 不再携带。
 - `back_mount`（groove/insert/cover）**留在** panel-plan：它改变背板尺寸与柜体深度

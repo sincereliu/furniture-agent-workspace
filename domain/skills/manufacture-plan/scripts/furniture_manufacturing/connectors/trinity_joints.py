@@ -1,13 +1,18 @@
-"""三合一连接拓扑辅助：从 PanelJoint 判定母件/公件。"""
+"""三合一连接拓扑辅助：从制造接触判定母件/公件。"""
 
 from typing import Any, Dict, Mapping, Set
 
+from furniture_manufacturing.confirmed_panels import Contact
 from furniture_manufacturing.manufacturing_models import PanelRecord
-from furniture_panel_planning.joint_topology import joint_is_connected
+
+
+def joint_is_connected(joint: Contact) -> bool:
+    """True when this stage resolved the contact as fixed."""
+    return joint.connection == "on"
 
 
 def _joints_of(panel: PanelRecord) -> list:
-    """面板参与的所有连接（PanelJoint 列表）。"""
+    """面板参与的所有制造接触。"""
     return list(panel.joints) if panel.joints else []
 
 

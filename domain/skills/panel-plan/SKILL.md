@@ -37,7 +37,7 @@ description: 用于 panel_plan 阶段。当用户说“几扇门”“几层板�
 ## 本阶段不做什么
 
 - 房间、摆放、门窗洞口：布局阶段。
-- 材料、封边、五金、孔，以及「连不连」：制造阶段。这里只产出尺寸、位置和承面–端面接触。口径见 [术语规范表](references/terminology-glossary.md)。连不连见 [连接与接触默认规则](../manufacture-plan/references/connection-contact-defaults.md)。
+- 材料、封边、五金、孔，以及「连不连」：制造阶段。这里只产出尺寸、位置和承面–端面接触。口径见 [术语规范表](references/terminology-glossary.md)。
 - 特征树和柜体模型：后面的阶段。
 - 代码按自然语言、柜型或内置 profile 选方案。料档省略只由工艺卡展开。
 

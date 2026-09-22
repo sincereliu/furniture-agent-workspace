@@ -16,6 +16,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Mapping
 
 from furniture_manufacturing.connectors.base import Connector, HoleSpec
+from furniture_manufacturing.panel_ids import panel_role
 from furniture_manufacturing.manufacturing_models import (
     HardwareRecord,
     MachiningOperation,
@@ -50,8 +51,6 @@ class DrawerSlideConnector(Connector):
         约定：drawer_side_z300 / drawer_front_z300 同属抽屉 z300。
         无后缀（如 drawer_side）时以 role 自身为 key。
         """
-        from furniture_panel_planning.cabinet_identity import panel_role
-
         role = panel.role or panel_role(panel.label)
         parts = role.split("_")
         return f"{panel.parent_id}:{parts[-1]}" if panel.parent_id else (

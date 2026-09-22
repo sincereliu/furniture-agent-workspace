@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from furniture_delivery_validation.validation import ValidationReport
-from furniture_panel_planning.cabinet_identity import index_by_role, panel_role
-from furniture_panel_planning.panel_spec import FurnitureSpec, resolve_back_mount
-from furniture_panel_planning.panel_models import PanelPlacement
+from typing import Any, Sequence
 
+from furniture_delivery_validation.validation import ValidationReport
+
+from .confirmed_panels import admit_construction, admit_panels
 from .connectors import ALL_CONNECTORS
 from .features import EdgeBandFeature, GrooveFeature, HoleFeature
 from .hole_validator import (
@@ -21,13 +21,16 @@ from .manufacturing_bom import (
     collect_features,
     emit_drilled_holes,
 )
+from .panel_ids import index_by_role, panel_role
 
 
 def validate_manufacturing(
-    spec: FurnitureSpec,
+    spec: Any,
     bom: BOMReport,
-    placements: list[PanelPlacement],
+    placements: Sequence[Any],
 ) -> ValidationReport:
+    spec = admit_construction(spec)
+    placements = admit_panels(placements)
     report = ValidationReport(stage="manufacture_plan")
     if bom.requested_options:
         report.add_warning(
@@ -143,7 +146,7 @@ def validate_manufacturing(
     actual_back_groove_ids = {
         panel_role(groove.feature_id) for groove in back_grooves
     }
-    back_mount = resolve_back_mount(spec.back_mount)
+    back_mount = spec.back_mount
     if (
         back_mount == "groove"
         and actual_back_groove_ids != expected_back_groove_ids

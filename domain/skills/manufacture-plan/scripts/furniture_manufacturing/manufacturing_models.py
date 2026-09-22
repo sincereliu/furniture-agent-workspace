@@ -34,7 +34,7 @@ class PanelRecord:
     inner_face: str = ""
     outer_face: str = ""
     cam_face: str | None = None
-    joints: list = field(default_factory=list)  # list[PanelJoint], face-to-edge adjacencies
+    joints: list = field(default_factory=list)  # list[Contact], geometry plus on/off
     movable_shelf_connector: str = ""
     role: str = ""
     parent_id: str = ""
@@ -43,21 +43,21 @@ class PanelRecord:
     def from_dict(cls, data: Mapping[str, Any]) -> "PanelRecord":
         """Restore serialized panel joints at the manufacturing boundary."""
 
-        from furniture_panel_planning.joint_topology import PanelJoint
+        from furniture_manufacturing.confirmed_panels import Contact
+        from furniture_manufacturing.panel_ids import (
+            DEFAULT_CABINET_ID,
+            panel_cabinet_id,
+            panel_role,
+        )
 
         values = dict(data)
         raw_joints = values.get("joints", [])
         if not isinstance(raw_joints, list):
             raise ValueError("manufacturing panel joints must be a list")
         values["joints"] = [
-            item if isinstance(item, PanelJoint) else PanelJoint.from_dict(item)
+            item if isinstance(item, Contact) else Contact.from_dict(item)
             for item in raw_joints
         ]
-        from furniture_panel_planning.cabinet_identity import (
-            DEFAULT_CABINET_ID,
-            panel_cabinet_id,
-            panel_role,
-        )
 
         label = str(values.get("label", ""))
         if not values.get("role"):

@@ -22,18 +22,16 @@ _JOINT_FIELDS = frozenset(
         "edge_sign",
         "end_z",
         "end_size_z",
-        "connection",
     }
 )
+_LEGACY_IGNORED_FIELDS = frozenset({"connection"})
 
 
 @dataclass(frozen=True)
 class PanelJoint:
     """一条承面–端面邻接：承面被端面顶住。
 
-    `connection` 是制造阶段写入的连不连（on/off）。本阶段 `compute_joints()`
-    只填几何邻接；字段默认 `on` 仅作序列化占位，制造层
-    `default_joint_connection` 会按面板类型重解析。
+    只有几何。连不连不在本阶段。
     """
 
     bearing_id: str  # 承面板件 ID
@@ -43,18 +41,19 @@ class PanelJoint:
     edge_sign: int  # 端面方向：+1=轴正端，-1=轴负端
     end_z: float  # 端面件厚度中心线的 Z 坐标（几何基准）
     end_size_z: float = 0.0  # 端面件在 z 方向的尺寸（横板=板厚）
-    connection: str = "on"  # resolved on/off; missing on old payloads means on
-
-    def __post_init__(self) -> None:
-        if self.connection not in {"on", "off"}:
-            raise ValueError("connection must be 'on' or 'off'")
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PanelJoint":
-        """Restore one serialized contact. Unknown keys are rejected."""
+        """Restore one serialized contact. Unknown keys are rejected.
+
+        Old frozen contacts may still carry ``connection``. That flag is
+        dropped here; it is not a panel-stage decision.
+        """
         if not isinstance(data, Mapping):
             raise ValueError("panel joint must be an object")
         values = dict(data)
+        for name in _LEGACY_IGNORED_FIELDS:
+            values.pop(name, None)
         unknown = sorted(set(values) - _JOINT_FIELDS)
         if unknown:
             raise ValueError("panel joint does not support: " + ", ".join(unknown))
@@ -176,15 +175,6 @@ def compute_joints(placements: Sequence[PanelPlacement]) -> list[PanelJoint]:
             )
 
     return joints
-
-
-def joint_is_connected(joint: PanelJoint) -> bool:
-    """True when the resolved switch says this contact should be fixed.
-
-    ``connection`` 现在由制造层在 `plan_manufacturing` 中重解析（见制造层
-    `default_joint_connection`）；panel-plan 只产接触拓扑，不再解析连不连。
-    """
-    return getattr(joint, "connection", "on") == "on"
 
 
 def is_bearing(panel_id: str, joints: Sequence[PanelJoint]) -> bool:

@@ -26,7 +26,7 @@ from furniture_manufacturing.manufacturing_models import (
     MachiningOperation,
     PanelRecord,
 )
-from furniture_panel_planning.cabinet_identity import index_by_role
+from furniture_manufacturing.panel_ids import index_by_role
 
 
 class BackMountConnector(Connector):

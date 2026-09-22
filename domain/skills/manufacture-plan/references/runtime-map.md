@@ -4,7 +4,7 @@
 
 ## 交接
 
-板件几何来自已确认冻结文件，不重跑 `panel-plan`。Orchestrator 用 `confirmed_panel_sha256` 读 `store/<project-id>/panels/<sha256>.json`，再 `require_primary_handoff()` 还原 `FurnitureSpec` / `PanelPlacement`。本阶段自己的提案在 `stage_inputs.manufacturing`。无 Store 或尚未记下确认哈希时读内存 `stage_outputs.panel_plan`。
+板件几何来自已确认冻结文件，不重跑 `panel-plan`。Orchestrator 用 `confirmed_panel_sha256` 读 `store/<project-id>/panels/<sha256>.json`。本阶段用 `confirmed_panels.py` 只抄加工要用的字段：柜类、外包络、料厚、已经解析好的背板模式和槽参数，以及每块板的尺寸、位置、语义面和接触几何。不引用板件阶段的 Python 类型。多出来的板件字段忽略。接触上若带有历史 `connection`，读入时丢掉，连不连由本阶段重算。本阶段已经保存的接触若缺 `connection`，按旧档视为 `on`。板件 id 仍是 `{cabinet_id}__{role}`；旧制造记录缺 `role` 或 `parent_id` 时从这段 id 还原，没有柜体前缀时父级用 `cabinet_1`。本阶段自己的提案在 `stage_inputs.manufacturing`。无 Store 或尚未记下确认哈希时读内存 `stage_outputs.panel_plan`。
 
 ## 五金连接件（`connectors/`）
 
@@ -20,7 +20,7 @@
 - 目录键（`hardware_catalog.yaml`）全英文：顶层按套 `three_in_one` / `two_in_one` / `shelf_pin`，套内规格组 `standard`，零件键 `cam` / `rod` / `nut` / `pin`；每个零件分 `part`（实物，BOM/采购）与 `hole`（打孔，钻孔）两层，配合余量直接写入 `hole` 数值，不做代码派生。
 - 孔类型（`hole_type`）按 `<套名>_<零件>`：`three_in_one_cam` / `three_in_one_rod` / `three_in_one_nut`、`two_in_one_cam` / `two_in_one_rod`、`shelf_pin`；进入 `drilled-holes.json` / GLB 标签 / 校验计数。内嵌背板三合一与柜体三合一统一为 `three_in_one_*`，靠 `HoleSpec.connection_id`（`<female>→<male>#<排次>`，确定性、非随机）区分来源。
 - 活动层板连接方式由制造阶段输入 `movable_shelf_connector`（`two_in_one`/`shelf_pin`）显式选择，经 `plan_manufacturing` 盖章到 `PanelRecord`；`TwoInOneConnector`/`ShelfPinConnector` 只处理选中自己的板件，避免两者同时出孔/BOM。有活动层板却未提供时运行时拒绝。
-- `PanelJoint.connection`（连不连）由制造层在 `plan_manufacturing` 按面板类型重解析；默认口径见 [连接与接触默认规则](connection-contact-defaults.md)。`off` 的接触不进入三合一打孔。轴方向和制造层派生的 `cam_face` 只用于选择三合一五金，不再回答「连不连」。
+- 连不连写在制造接触 `Contact.connection` 上，由 `plan_manufacturing` 按面板类型重解析（`default_joint_connection`）。默认口径见 [连接与接触默认规则](connection-contact-defaults.md)。`off` 的接触不进入三合一打孔。轴方向和制造层派生的 `cam_face` 只用于选择三合一五金。
 
 ## 材料目录与 appearance 物化
 
@@ -65,7 +65,7 @@
 | 想改什么 | 去哪改 |
 |---|---|
 | 门宽 / 门高 | `domain/skills/panel-plan/scripts/furniture_panel_planning/topology_solver.py`（`_door_panels` 的 `dw`/`dh` 公式） |
-| 铰链侧（左/右） | 同上，`_door_panels` 写 `door_hinge_side`；单门改走 `stage_inputs.manufacturing` 的 `door_hinge_side` |
+| 铰链侧（左/右） | `domain/skills/manufacture-plan/scripts/furniture_manufacturing/manufacturing_bom.py`（`_derive_door_hinge_sides`；单门来自 `stage_inputs.manufacturing` 的 `door_hinge_side`） |
 | 铰链数量（按门高分档） | `domain/skills/manufacture-plan/scripts/furniture_manufacturing/hardware_rules.yaml`（`hinge_drilling.count_by_door_height`） |
 | 杯孔直径 / 深度 | 同上（`hinge_drilling.cup_by_variant_group`） |
 | 杯孔到门边距离 | 同上（`hinge_drilling.position.edge_offset_mm`） |
