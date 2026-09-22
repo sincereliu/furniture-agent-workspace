@@ -76,8 +76,23 @@ class RoomSceneEditorTests(unittest.TestCase):
 
     def test_editor_leaves_no_placeholders(self) -> None:
         html = str(render_editor("demo", _scene())["html"])
-        for placeholder in ("__SCENE_ID__", "__SCENE_JSON__", "__ROOM_NAME__"):
+        self.assertIn("const READ_ONLY=false", html)
+        for placeholder in (
+            "__SCENE_ID__",
+            "__SCENE_JSON__",
+            "__HEADING__",
+            "__HEADING_SUFFIX__",
+            "__READ_ONLY__",
+            "__POLL_URL__",
+            "__ROOMS_JSON__",
+            "__VERSION_JSON__",
+            "__BODY_CLASS__",
+            "__APP_LABEL__",
+            "__TIPS__",
+            "__SHUTDOWN_BUTTON__",
+        ):
             self.assertNotIn(placeholder, html)
+        self.assertNotIn('id="shutdown-preview"', html)
 
     def test_editor_declares_move_and_rotate_controls(self) -> None:
         result = render_editor("demo", _scene())

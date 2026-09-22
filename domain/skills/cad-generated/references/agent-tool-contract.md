@@ -27,7 +27,7 @@ result = session.call(name, arguments)  # arguments 为对象或 JSON 字符串
 
 | 工具 | 作用 |
 | --- | --- |
-| `furniture_create_project` | 用房间布局或单件快捷字段开工，停在未确认的 `layout_plan` |
+| `furniture_create_project` | 用房间布局或单件快捷字段开工，停在未确认的 `layout_plan`。成功后在本机打开该项目的预览页（环境变量 `FURNITURE_PREVIEW_BROWSER=0` 时不开） |
 | `furniture_get_project` | 读当前 Revision 快照 |
 | `furniture_confirm_stage` | 确认当前检查点；意图/板件确认时冻结 JSON |
 | `furniture_run_next` | 在已确认检查点上生成下一阶段的第一次 attempt |

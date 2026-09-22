@@ -25,7 +25,7 @@
 | 全屋 `layout_plan` | `pipeline.plan_project_layout` / `ProjectLayout.from_source` | 越界、干涉或遮挡洞口则不创建项目 | Project Store；确认后冻成 CAD 单元 |
 | 独立房间场景 | `pipeline.plan_room_scene` | 同一套 `admit_scene` | `scene_store` → `generated/room-scenes/`；**不是**阶段检查点 |
 
-独立房间 HTTP（`cad-generated/scripts/server.py`）只服务场景编辑与房间包络 CAD，不进入 `STAGE_SEQUENCE`。柜体 STEP 仍走确认布局后的 `furniture_run_next(..., generate_cad=True)`。
+独立房间 HTTP（`cad-generated/scripts/server.py`）服务场景编辑与房间包络 CAD，不进入 `STAGE_SEQUENCE`。同一服务上的 `GET /api/project/{project_id}/preview` 只读 Project Store 里的最新布局，不写 `stage_outputs`。柜体 STEP 仍走确认布局后的 `furniture_run_next(..., generate_cad=True)`。
 
 下游板件只读已确认的 `LayoutUnit`（`furniture_category` 为 `floor_cabinet` / `wall_cabinet`，且该件不是 `manufacture: false`）。客户点名不制造的包络留在房间里，不是 `LayoutUnit`。房间 STEP 不是柜体 CAD。
 
@@ -42,7 +42,7 @@
 | `placement_check.py` | 越界、外包络干涉、遮挡门窗洞口 | calculation |
 | `validation.py` | `admit_scene`（规划）；dict 上再核预览（冻结） | validation |
 | `preview.py` / `viewer.py` | SVG 与只读轨道视图 | calculation |
-| `editor.py` | 可编辑 HTML；JS 摆放检查必须与 `placement_check.py` 同步 | calculation |
+| `editor.py` | 可编辑 HTML，以及项目只读预览（复用同一画布，不发 edit op）；JS 摆放检查必须与 `placement_check.py` 同步 | calculation |
 | `scene_edit.py` | 源上的一次原子 op，本身不算几何 | schema |
 | `scene_store.py` | 独立场景只存源，读取时重算 | side_effect |
 | `cad.py` | 房间包络树与房间 STEP，不是 `furniture_cad` | side_effect |

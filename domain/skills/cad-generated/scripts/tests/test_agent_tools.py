@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+
+os.environ.setdefault("FURNITURE_PREVIEW_BROWSER", "0")
 
 
 SCRIPT_ROOT = Path(__file__).resolve().parents[1]

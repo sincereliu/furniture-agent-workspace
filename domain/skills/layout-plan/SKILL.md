@@ -91,7 +91,7 @@ rooms:
 2. **收成上面的 `rooms[]`。** 这一步只整理客户的话，还不调用工具。清单是猜的，就先把假设给客户看。
 3. **调用 `furniture_create_project`。** 传入项目 `name` 和 `rooms`。代码先把摆法换成毫米坐标，再检查三件事：盒子出不出房间、盒子互相干涉不干涉、遮不遮挡这间房的门窗洞口。三件都过了才建出项目。
 4. **失败就改了再调。** 把返回的冲突告诉客户，改那一件的位置或尺寸，再调用一次。代码不会自己换一面墙重排。
-5. **成功就停。** 把 `project.current_view`（各房间的图）给客户看，记下 `project.id`。不要接着做柜体内部。
+5. **成功就停。** 把 `project.current_view`（各房间的图）给客户看，记下 `project.id`。`furniture_create_project` 会在本机打开预览页，不要再把链接交给客户去点。打开失败时才告诉客户 `preview.url`。之后每次 `furniture_revise_layout`，这一页自己换成新的包络，不要再开一次。客户要停掉后台时，让他们点预览页上的「退出」，不要只关标签页。不要接着做柜体内部。
 6. **客户认这版摆放，再确认。** 调用 `furniture_confirm_stage(project_id, stage="layout_plan")`。确认后，客户没有点名不制造、并且带 `furniture_category` 的柜子冻成下游只读的盒子：宽、深、高，加上这个柜类。`manufacture: false` 的包络留在房间里，不在这批盒子中。之后做板件只读这批盒子。
 7. **客户要改房间或盒子。** 调用 `furniture_revise_layout(project_id, rooms)`，传入改过的 `rooms`。这是另起一版布局。
 8. **客户要做某一件柜的内部。** 第 6 步已经确认之后，调用 `furniture_run_next(project_id, stage_input=...)` 进入板件阶段。`stage_input` 按板件阶段准备。客户点名不制造的包络留在房间图里。工具参数见 [交互工具面](../cad-generated/references/agent-tool-contract.md)。

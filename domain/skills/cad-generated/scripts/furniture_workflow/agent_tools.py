@@ -43,6 +43,7 @@ from .agent_tool_schema import (
     openai_tools,
     tool_names,
 )
+from .project_preview import open_project_preview
 from .workflow_orchestrator import (
     RETRYABLE_STAGES,
     FurnitureOrchestrator,
@@ -81,7 +82,14 @@ class FurnitureToolSession:
             payload = _parse_arguments(arguments)
             if tool == TOOL_CREATE_PROJECT:
                 project = self._create_project(payload)
-                return self._ok(tool, project, include_view=True, progressed=True)
+                result = self._ok(
+                    tool, project, include_view=True, progressed=True
+                )
+                result["preview"] = open_project_preview(
+                    project.id,
+                    workspace_root=self.orchestrator.workspace_root,
+                )
+                return result
             if tool not in TOOL_NAMES:
                 raise ToolProtocolError(
                     "UNKNOWN_TOOL",

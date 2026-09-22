@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import re
 import sys
 from pathlib import Path
 from typing import Any, Literal
@@ -14,18 +16,19 @@ from uuid import uuid4
 SCRIPT_ROOT = Path(__file__).resolve().parent
 WORKSPACE_ROOT = Path(__file__).resolve().parents[4]
 OUTPUT_ROOT = WORKSPACE_ROOT / "generated"
+STORE_ROOT = WORKSPACE_ROOT / "store"
 sys.path.insert(0, str(SCRIPT_ROOT))
 
 from runtime_paths import bootstrap_runtime_paths
 
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
-from furniture_layout.editor import render_editor
+from furniture_layout.editor import render_editor, render_project_preview
 from furniture_layout.pipeline import generate_room_cad, plan_room_scene
 from furniture_layout.scene import RoomScene
 from furniture_layout.scene_edit import apply_edit
@@ -35,14 +38,19 @@ from furniture_layout.scene_store import (
     save_scene_source,
 )
 from furniture_layout.validation import validate_room_scene
+from furniture_workflow.project_preview import project_layout_document
+from furniture_workflow.workflow_store import JsonProjectStore
 
-API_VERSION = "0.7.0"
+API_VERSION = "0.8.0"
+SAFE_PROJECT_ID = re.compile(r"^[A-Za-z0-9_-]+$")
+_LOCAL_SHUTDOWN_HOSTS = {"127.0.0.1", "::1"}
 
 app = FastAPI(
     title="Furniture Agent — 房间场景布局",
     version=API_VERSION,
     description=(
         "独立房间场景 API：多件包络摆放、摆放检查、SVG 预览、互动 Viewer 与房间 CAD。"
+        "项目布局预览只读 store 里的最新布局，对话修订后由页面自己刷新。"
         "家具生成走交互工具面，不提供一次性拆单批处理。"
     ),
 )
@@ -162,6 +170,25 @@ async def health():
     return {"status": "ok", "version": API_VERSION}
 
 
+def stop_preview_server() -> bool:
+    """Ask the running preview server to finish and exit."""
+    server = getattr(app.state, "preview_server", None)
+    if server is None:
+        return False
+    server.should_exit = True
+    return True
+
+
+@app.post("/api/preview/shutdown")
+async def preview_shutdown(request: Request):
+    """Stop this local preview process after the response is sent."""
+    host = request.client.host if request.client is not None else ""
+    if host not in _LOCAL_SHUTDOWN_HOSTS:
+        raise HTTPException(status_code=403, detail="preview shutdown is local only")
+    asyncio.get_running_loop().call_later(0.3, stop_preview_server)
+    return {"status": "stopping"}
+
+
 @app.get("/", response_class=HTMLResponse)
 async def root():
     return """
@@ -170,6 +197,44 @@ async def root():
     <p><a href="/docs">API 文档 (Swagger)</a></p>
     </body></html>
     """
+
+
+def _load_project(project_id: str):
+    if not SAFE_PROJECT_ID.fullmatch(project_id):
+        raise HTTPException(
+            status_code=422,
+            detail="project_id may contain only letters, digits, '-' and '_'",
+        )
+    try:
+        return JsonProjectStore(STORE_ROOT).load(project_id)
+    except ValueError as exc:
+        message = str(exc)
+        status = 404 if message.startswith("project not found") else 422
+        raise HTTPException(status_code=status, detail=message) from exc
+
+
+def _project_layout_document(project_id: str) -> dict[str, Any]:
+    document = project_layout_document(_load_project(project_id))
+    if not document["rooms"]:
+        raise HTTPException(status_code=422, detail="project layout has no rooms")
+    return document
+
+
+@app.get("/api/project/{project_id}/layout")
+async def project_layout(project_id: str):
+    """最新布局：房间和已摆放的包络。不含预览 HTML。"""
+    return _project_layout_document(project_id)
+
+
+@app.get("/api/project/{project_id}/preview", response_class=HTMLResponse)
+async def project_preview(project_id: str) -> HTMLResponse:
+    """只读布局页。打开后每秒再读 layout，版本变了就换包络并保持相机。"""
+    document = _project_layout_document(project_id)
+    try:
+        html = render_project_preview(project_id, document)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return HTMLResponse(content=html)
 
 
 def _plan_scene(req: RoomSceneRequest) -> dict[str, Any]:
@@ -331,7 +396,10 @@ async def room_scene_editor(scene_id: str) -> HTMLResponse:
 def main() -> None:
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    config = uvicorn.Config(app, host="127.0.0.1", port=8000)
+    server = uvicorn.Server(config)
+    app.state.preview_server = server
+    server.run()
 
 
 if __name__ == "__main__":

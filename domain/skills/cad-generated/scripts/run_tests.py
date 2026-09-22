@@ -8,9 +8,13 @@ checkout can run every test with one documented command.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import unittest
 from pathlib import Path
+
+# Creating a project opens a browser. Tests must not.
+os.environ["FURNITURE_PREVIEW_BROWSER"] = "0"
 
 
 SCRIPT_ROOT = Path(__file__).resolve().parent

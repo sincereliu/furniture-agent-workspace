@@ -99,7 +99,7 @@ store/<project-id>/
 
 ## API 契约
 
-`server.py` 只提供独立房间场景。请求体为 `room + items[]`；除 `GET` 外都是 JSON body。完整端点：
+`server.py` 提供独立房间场景，以及只读的项目布局预览。房间场景请求体为 `room + items[]`；除 `GET` 外都是 JSON body。完整端点：
 
 | 方法 | 路径 | 作用 |
 | --- | --- | --- |
@@ -112,10 +112,15 @@ store/<project-id>/
 | GET | `/api/room-scenes` | 列出已保存的 `scene_ids` |
 | POST | `/api/room-scene/{scene_id}/edit` | 应用**一次**编辑 op |
 | GET | `/api/room-scene/{scene_id}/editor` | 可编辑视图（自包含 HTML） |
+| GET | `/api/project/{project_id}/layout` | 读项目最新布局：房间与已摆放包络 |
+| GET | `/api/project/{project_id}/preview` | 只读布局页，按版本号自行刷新 |
+| POST | `/api/preview/shutdown` | 本机请求后让预览服务干净退出 |
 
-另有 `GET /health` 与 `GET /`（Swagger 入口），不是场景契约的一部分。缺场景返回 404，参数或校验不通过返回 422。
+另有 `GET /health` 与 `GET /`（Swagger 入口），不是场景契约的一部分。缺场景或项目返回 404，参数或校验不通过返回 422。`project_id` 只允许英文字母、数字、`-` 和 `_`。
 
-上表后五个端点组成场景状态（供交互编辑）：只存源（房间定义 + 多件包络及其摆放请求），**不存派生结果**——摆放坐标、footprint、净距、预览都在读取时重算；存储独立于家具主流程，不写 `stage_outputs`。
+项目预览读 `store/<project-id>/project.json` 的最新 Revision，不写 `stage_outputs`，也不写 `generated/room-scenes/`。`layout` 返回 `revision_id`、`revision_number`、`layout_confirmed`、`version` 和每间房的已摆放包络，不含预览 HTML。`preview` 打开时带上当前第一间房，之后每秒再读 `layout`：`version` 没变不重画；变了且没有正在转视角或平移，就换上新包络并保持相机角度。多间房可在页上切换，默认第一间。这一页不把拖动写回项目。页上的「退出」向 `POST /api/preview/shutdown` 发本机请求，服务发完响应后结束进程。只关浏览器标签不会停服务。项目文件仍留在 `store/`。非本机来源返回 403。
+
+`/api/room-scene/save`、`/api/room-scene/{scene_id}`、`/api/room-scenes`、`/api/room-scene/{scene_id}/edit`、`/api/room-scene/{scene_id}/editor` 组成场景状态（供交互编辑）：只存源（房间定义 + 多件包络及其摆放请求），**不存派生结果**——摆放坐标、footprint、净距、预览都在读取时重算；存储独立于家具主流程，不写 `stage_outputs`。
 
 编辑是**单 op、原子**：`move`（按当前 `mode` 二选一——`wall` 收 `host_wall`/`offset_mm`，`free` 收 `origin_x_mm`/`origin_y_mm`；**混给即拒**，换模式必须显式给 `mode` 并给出目标模式的坐标）、`rotate`（`rotation_z_deg`）、`resize`（`width`/`depth`/`height` 任意子集，至少一个）。每个 op 只接受自己的字段，白名单外即拒；**重算与校验通过才落盘**，失败整体拒绝，不留半成品。批量 op 留待多选拖动或场景级操作出现时再加。
 

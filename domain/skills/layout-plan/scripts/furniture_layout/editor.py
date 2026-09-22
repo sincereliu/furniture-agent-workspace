@@ -20,6 +20,8 @@
 
 拖动期间只做本地预览，松手才发**一个** edit op，由后端重算并校验——失败会显示
 原因，不回退本地已画的形状。
+
+项目预览复用同一块画布，但是只读：不发 edit op，按版本号换上新的包络。
 """
 
 from __future__ import annotations
@@ -35,9 +37,9 @@ EDITOR_WIDTH_PX = 960
 EDITOR_HEIGHT_PX = 600
 
 
-def render_editor(scene_id: str, scene: RoomScene) -> dict[str, object]:
-    """Return self-contained HTML that edits one saved room scene."""
-    payload: dict[str, Any] = {
+def editor_scene_payload(scene: RoomScene) -> dict[str, Any]:
+    """Scene JSON the canvas already draws. Same shape after a reload."""
+    return {
         "room": scene.room.to_dict(),
         # 与服务端 PlacedItem.to_dict() 同构：编辑后用同一形状替换，不引入第二种结构。
         "items": [item.to_dict() for item in scene.items],
@@ -52,16 +54,82 @@ def render_editor(scene_id: str, scene: RoomScene) -> dict[str, object]:
         ],
         "openings": [opening.to_dict() for opening in scene.room.openings],
     }
-    scene_json = (
+
+
+def _json_for_script(payload: object) -> str:
+    return (
         json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
         .replace("&", "\\u0026")
         .replace("<", "\\u003c")
         .replace(">", "\\u003e")
     )
-    html = (
-        _EDITOR_HTML.replace("__SCENE_JSON__", scene_json)
+
+
+_EDITOR_TIPS = (
+    "拖动时干涉、越界或遮挡门窗洞口会停在接触处<br>"
+    "选中件：紫线是四向净距，灰线是本体宽/深/高<br>"
+    "橙点或旋转环拖了调朝向（Shift 1°）· 蓝点调离地高度<br>"
+    "前/后/左/右视里上下拖 = 改高度<br>"
+    "右侧的距离 / 朝向 / 离地可输入，也可用 − / ＋ 走整数档<br>"
+    "空白处拖拽转视角 · 右键/中键/Shift+左键拖拽平移 · 滚轮缩放 · Esc 取消选中"
+)
+
+_PREVIEW_TIPS = (
+    "只读预览，位置由对话更新。<br>"
+    "空白处拖拽转视角 · 右键/中键/Shift+左键拖拽平移 · 滚轮缩放<br>"
+    "有多间房时在上方切换，默认第一间<br>"
+    "退出会停掉后台预览服务，然后再关闭这个标签页"
+)
+_SHUTDOWN_BUTTON = (
+    '<button type="button" id="shutdown-preview">退出</button>'
+)
+
+
+def _render_canvas_html(
+    *,
+    scene_id: str,
+    scene_payload: dict[str, Any],
+    rooms: list[dict[str, Any]],
+    version: str,
+    read_only: bool,
+    poll_url: str,
+    heading_suffix: str,
+    tips: str,
+    app_label: str,
+    shutdown_button: str,
+) -> str:
+    room_name = str(scene_payload["room"]["name"])
+    heading = f"{room_name} · {heading_suffix}"
+    return (
+        _EDITOR_HTML.replace("__SCENE_JSON__", _json_for_script(scene_payload))
         .replace("__SCENE_ID__", escape(scene_id, quote=True))
-        .replace("__ROOM_NAME__", escape(scene.room.name, quote=True))
+        .replace("__HEADING__", escape(heading, quote=True))
+        .replace("__HEADING_SUFFIX__", _json_for_script(heading_suffix))
+        .replace("__READ_ONLY__", "true" if read_only else "false")
+        .replace("__POLL_URL__", _json_for_script(poll_url))
+        .replace("__ROOMS_JSON__", _json_for_script(rooms))
+        .replace("__VERSION_JSON__", _json_for_script(version))
+        .replace("__BODY_CLASS__", "readonly" if read_only else "")
+        .replace("__APP_LABEL__", escape(app_label, quote=True))
+        .replace("__TIPS__", tips)
+        .replace("__SHUTDOWN_BUTTON__", shutdown_button)
+    )
+
+
+def render_editor(scene_id: str, scene: RoomScene) -> dict[str, object]:
+    """Return self-contained HTML that edits one saved room scene."""
+    payload = editor_scene_payload(scene)
+    html = _render_canvas_html(
+        scene_id=scene_id,
+        scene_payload=payload,
+        rooms=[],
+        version="",
+        read_only=False,
+        poll_url="",
+        heading_suffix="布局编辑",
+        tips=_EDITOR_TIPS,
+        app_label="可编辑家具布局",
+        shutdown_button="",
     )
     return {
         "media_type": "text/html",
@@ -100,13 +168,38 @@ def render_editor(scene_id: str, scene: RoomScene) -> dict[str, object]:
     }
 
 
+def render_project_preview(
+    project_id: str,
+    document: dict[str, Any],
+) -> str:
+    """Read-only canvas for one project. The page polls `document` replacements."""
+    rooms = list(document["rooms"])
+    if not rooms:
+        raise ValueError("project layout has no rooms")
+    first = rooms[0]["scene"]
+    if not isinstance(first, dict):
+        raise ValueError("project room scene must be an object")
+    return _render_canvas_html(
+        scene_id=project_id,
+        scene_payload=first,
+        rooms=rooms,
+        version=str(document["version"]),
+        read_only=True,
+        poll_url=f"/api/project/{project_id}/layout",
+        heading_suffix="布局预览",
+        tips=_PREVIEW_TIPS,
+        app_label="布局预览",
+        shutdown_button=_SHUTDOWN_BUTTON,
+    )
+
+
 _EDITOR_HTML = r"""<!doctype html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'">
-<title>__ROOM_NAME__ · 布局编辑</title>
+<title>__HEADING__</title>
 <style>
 :root{
   --ink:#0f172a;--muted:#64748b;--line:#e2e8f0;--line-strong:#cbd5e1;
@@ -126,6 +219,11 @@ body{margin:0;background:linear-gradient(180deg,#f7f9fc 0,#eef1f6 100%);padding:
 .toolbar button{appearance:none;border:0;background:transparent;color:var(--muted);border-radius:8px;padding:7px 11px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;transition:background .12s,color .12s}
 .toolbar button:hover{background:#f1f5f9;color:var(--ink)}
 .toolbar button[aria-pressed="true"]{background:var(--accent);color:#fff;box-shadow:0 1px 3px rgba(79,70,229,.35)}
+#shutdown-preview{margin-left:4px;color:#b91c1c}
+#shutdown-preview:hover{background:#fef2f2;color:#b91c1c}
+.room-switch:not([hidden]){display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:var(--muted)}
+.room-switch select{border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);font:inherit;font-weight:600;padding:6px 8px}
+body.readonly .detail input.num,body.readonly .detail .step{pointer-events:none;opacity:.72}
 .workspace{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:14px;min-height:0}
 .stage{position:relative;height:100%;min-height:340px;border-radius:16px;overflow:hidden;background:var(--canvas);border:1px solid var(--line);box-shadow:0 1px 2px rgba(15,23,42,.05),0 18px 40px -26px rgba(15,23,42,.42)}
 canvas{display:block;width:100%;height:100%;touch-action:none;cursor:default}
@@ -174,13 +272,16 @@ canvas.panning{cursor:grabbing}
 @media (max-width:980px){.workspace{grid-template-columns:minmax(0,1fr)}.stage{min-height:420px}.app{height:auto}}
 </style>
 </head>
-<body>
-<main class="app" aria-label="可编辑家具布局">
+<body class="__BODY_CLASS__">
+<main class="app" aria-label="__APP_LABEL__">
   <header class="topbar">
     <div class="titles">
-      <h1>__ROOM_NAME__ · 布局编辑</h1>
+      <h1 id="heading">__HEADING__</h1>
       <p id="room-meta"></p>
     </div>
+    <label class="room-switch" id="room-switch-wrap" hidden>房间
+      <select id="room-switch" aria-label="房间"></select>
+    </label>
     <nav class="toolbar" aria-label="视角选择">
       <button type="button" data-view="perspective" aria-pressed="true">透视</button>
       <button type="button" data-view="top" aria-pressed="false">俯视</button>
@@ -190,6 +291,7 @@ canvas.panning{cursor:grabbing}
       <button type="button" data-view="right" aria-pressed="false">右视</button>
       <button type="button" data-view="reset" aria-pressed="false">复位</button>
       <button type="button" id="toggle-dims" aria-pressed="true">标注</button>
+      __SHUTDOWN_BUTTON__
     </nav>
   </header>
   <div class="workspace">
@@ -218,7 +320,7 @@ canvas.panning{cursor:grabbing}
           <li><i class="chip obstacle"></i>障碍物</li>
           <li><i class="chip opening"></i>门窗</li>
         </ul>
-        <p class="tips">拖动时干涉、越界或遮挡门窗洞口会停在接触处<br>选中件：紫线是四向净距，灰线是本体宽/深/高<br>橙点或旋转环拖了调朝向（Shift 1°）· 蓝点调离地高度<br>前/后/左/右视里上下拖 = 改高度<br>右侧的距离 / 朝向 / 离地可输入，也可用 − / ＋ 走整数档<br>空白处拖拽转视角 · 右键/中键/Shift+左键拖拽平移 · 滚轮缩放 · Esc 取消选中</p>
+        <p class="tips">__TIPS__</p>
       </section>
     </aside>
   </div>
@@ -228,6 +330,11 @@ canvas.panning{cursor:grabbing}
 (()=>{
 "use strict";
 const SCENE_ID="__SCENE_ID__";
+const READ_ONLY=__READ_ONLY__;
+const POLL_URL=__POLL_URL__;
+let rooms=__ROOMS_JSON__;
+let layoutVersion=__VERSION_JSON__;
+let roomIndex=0;
 const scene=JSON.parse(document.getElementById("scene-data").textContent);
 const normalizeItems=items=>items.map(item=>{
   const placement=item.placement||{};
@@ -238,11 +345,26 @@ scene.items=normalizeItems(scene.items||[]);
 scene.obstacles=scene.obstacles||[];
 scene.openings=scene.openings||[];
 const canvas=document.getElementById("scene"),ctx=canvas.getContext("2d"),status=document.getElementById("status");
-const room=scene.room;
+let room=scene.room;
 // 视图中心。平移是就地改它（相机的一切都相对它算）；切视角时动画回 HOME_TARGET。
-const HOME_TARGET=[room.width_mm/2,room.depth_mm/2,room.height_mm*.42];
+let HOME_TARGET=[room.width_mm/2,room.depth_mm/2,room.height_mm*.42];
 const target=[...HOME_TARGET];
-const diagonal=Math.hypot(room.width_mm,room.depth_mm,room.height_mm);
+let diagonal=Math.hypot(room.width_mm,room.depth_mm,room.height_mm);
+function bindRoom(){
+  room=scene.room;
+  HOME_TARGET=[room.width_mm/2,room.depth_mm/2,room.height_mm*.42];
+  diagonal=Math.hypot(room.width_mm,room.depth_mm,room.height_mm);
+  const roomMeta=document.getElementById("room-meta");
+  if(roomMeta){
+    roomMeta.textContent=[`${Math.round(room.width_mm)} × ${Math.round(room.depth_mm)} × ${Math.round(room.height_mm)} mm`,
+      `${scene.items.length} 件家具`].join(" · ");
+  }
+  const heading=document.getElementById("heading");
+  if(heading){
+    heading.textContent=(room.name||"房间")+" · "+__HEADING_SUFFIX__;
+    document.title=heading.textContent;
+  }
+}
 const DEFAULT_YAW=-Math.PI/4,DEFAULT_PITCH=.95;
 // 立面视图把相机放到水平（pitch 0）并从四个方向看；前视=站在南边往北看，依此类推。
 const VIEWS={
@@ -1038,6 +1160,7 @@ function detachToFree(activeDrag){
   setStatus(`${activeDrag.item.label} 已离开墙面，改为自由摆放`,"warn");
 }
 function selectHint(item){
+  if(READ_ONLY)return `已选中 ${item.label}`;
   return item.placement.mode==="wall"
     ?`已选中 ${item.label}：沿墙拖动，向外拖可离开墙面`
     :`已选中 ${item.label}：拖动可移动`;
@@ -1155,6 +1278,7 @@ function selectItem(id){
   render();
 }
 function nudgeHeight(item,delta){
+  if(READ_ONLY)return;
   const base=Math.round(item.placement.origin_z_mm||0);
   const solved=resolveInteger(base,base+delta,heightProbe(item,item.footprint));
   if(solved.value===base){setStatus(`离地高度已经是 ${base} mm，${delta>0?"再高":"再低"}${placementStop(solved.blocker)}`,"warn");return}
@@ -1174,6 +1298,7 @@ function withDragContext(item,run){
 // 手动填某一边的净距：把包络移到「相邻那面 + 输入值」，照样过摆放检查，
 // 所以只会停在到得了的地方，不会把家具塞进邻居里。
 function setGap(item,direction,value){
+  if(READ_ONLY)return;
   const gap=distancesOf(item)[direction];
   const horizontal=direction==="west"||direction==="east";
   const sign=(direction==="west"||direction==="north")?1:-1;
@@ -1196,6 +1321,7 @@ function setGap(item,direction,value){
   persist(item,"move").then(()=>{render()});
 }
 function setRotationValue(item,degrees){
+  if(READ_ONLY)return;
   const result=applyRotation(item,footprintCenter(item),degrees);
   render();
   if(!result.applied){
@@ -1205,6 +1331,7 @@ function setRotationValue(item,degrees){
   persist(item,"rotate").then(()=>{render()});
 }
 function setHeightValue(item,value){
+  if(READ_ONLY)return;
   const base=Math.round(item.placement.origin_z_mm||0),target=Math.round(value);
   const solved=resolveInteger(base,target,heightProbe(item,item.footprint));
   setItemHeight(item,solved.value);
@@ -1228,6 +1355,16 @@ canvas.addEventListener("pointerdown",event=>{
   const [sx,sy]=screenPoint(event);
   // 右键 / 中键一律平移（多数三维软件的习惯），不看下面压着什么。
   if(event.button===1||event.button===2){startPan(event);return}
+  if(READ_ONLY){
+    const readonlyHit=hitTest(sx,sy);
+    if(readonlyHit){selectItem(readonlyHit.id);return}
+    if(event.shiftKey){startPan(event);return}
+    state.selectedId=null;state.blocked=null;
+    state.orbiting=true;state.lastX=event.clientX;state.lastY=event.clientY;
+    canvas.classList.add("orbiting");canvas.setPointerCapture(event.pointerId);
+    render();
+    return;
+  }
   const heightItem=handleAt(sx,sy,state.heightHandle);
   if(heightItem){
     drag={kind:"height",item:heightItem,startScreen:[sx,sy],moved:false,
@@ -1363,6 +1500,7 @@ async function reload(){
   }catch(error){/* 回退失败时保留画面，状态栏已有提示 */}
 }
 async function persist(item,kind){
+  if(READ_ONLY)return false;
   const placement=item.placement,op={op:kind==="rotate"?"rotate":"move",item_id:item.id};
   if(kind==="rotate")op.rotation_z_deg=Math.round(normalizeAngle(placement.rotation_z_deg)*10)/10;
   if(placement.mode==="wall"){op.offset_mm=Math.round(placement.offset_mm)}
@@ -1517,11 +1655,7 @@ if(detailBox&&detailBox.addEventListener){
     applyDetailValues(detailBox,item,true);
   });
 }
-const roomMeta=document.getElementById("room-meta");
-if(roomMeta){
-  roomMeta.textContent=[`${Math.round(room.width_mm)} × ${Math.round(room.depth_mm)} × ${Math.round(room.height_mm)} mm`,
-    `${scene.items.length} 件家具`].join(" · ");
-}
+bindRoom();
 fitCanvas();
 const defaults={yaw:DEFAULT_YAW,pitch:DEFAULT_PITCH,distance:fitDistance(DEFAULT_PITCH,DEFAULT_YAW)};
 const state={...defaults,orbiting:false,panning:false,lastX:0,lastY:0,active:"perspective",selectedId:null,
@@ -1534,6 +1668,91 @@ if(typeof location!=="undefined"&&location.hash.length>1){
   if(view&&VIEWS[view])setView(view);
   const wanted=params.get("item");
   if(wanted&&scene.items.some(candidate=>candidate.id===wanted))selectItem(wanted);
+}
+function syncRoomSwitch(){
+  const wrap=document.getElementById("room-switch-wrap");
+  const select=document.getElementById("room-switch");
+  if(!wrap||!select)return;
+  if(!rooms||rooms.length<2){wrap.hidden=true;return}
+  wrap.hidden=false;
+  const signature=rooms.map(entry=>`${entry.id}:${entry.name}`).join("|");
+  if(select.dataset.signature!==signature){
+    select.dataset.signature=signature;
+    select.innerHTML=rooms.map((entry,index)=>`<option value="${index}">${escapeHtml(entry.name||entry.id)}</option>`).join("");
+  }
+  select.value=String(roomIndex);
+}
+function showRoom(index,keepCamera){
+  if(!rooms||!rooms[index])return;
+  roomIndex=index;
+  const next=rooms[index].scene;
+  scene.room=next.room;
+  scene.items=normalizeItems(next.items||[]);
+  scene.obstacles=next.obstacles||[];
+  scene.openings=next.openings||[];
+  bindRoom();
+  if(!keepCamera){
+    target[0]=HOME_TARGET[0];target[1]=HOME_TARGET[1];target[2]=HOME_TARGET[2];
+    state.adjusted=false;
+    state.yaw=DEFAULT_YAW;state.pitch=DEFAULT_PITCH;
+    state.distance=fitDistance(DEFAULT_PITCH,DEFAULT_YAW);
+    state.active="perspective";
+    document.querySelectorAll("[data-view]").forEach(button=>button.setAttribute("aria-pressed",String(button.dataset.view==="perspective")));
+  }
+  if(state.selectedId&&!scene.items.some(item=>item.id===state.selectedId)){
+    state.selectedId=null;state.blocked=null;
+  }
+  panelSignature=null;
+  detailItemId=undefined;
+  syncRoomSwitch();
+  render();
+}
+function layoutVersionOf(payload){
+  return String(payload.version||"");
+}
+async function pollLayout(){
+  if(!POLL_URL)return;
+  if(drag||state.orbiting||state.panning)return;
+  try{
+    const response=await fetch(POLL_URL,{cache:"no-store",headers:{Accept:"application/json"}});
+    if(!response.ok)return;
+    const payload=await response.json();
+    if(layoutVersionOf(payload)===layoutVersion)return;
+    if(drag||state.orbiting||state.panning)return;
+    layoutVersion=layoutVersionOf(payload);
+    rooms=payload.rooms||[];
+    const currentId=scene.room&&scene.room.id;
+    let index=rooms.findIndex(entry=>entry.id===currentId);
+    let keepCamera=true;
+    if(index<0){index=0;keepCamera=false}
+    showRoom(index,keepCamera);
+  }catch(error){}
+}
+const roomSwitch=document.getElementById("room-switch");
+if(roomSwitch){
+  roomSwitch.addEventListener("change",()=>{
+    const index=Number(roomSwitch.value);
+    if(!Number.isInteger(index)||!rooms[index])return;
+    showRoom(index,false);
+  });
+}
+syncRoomSwitch();
+let pollTimer=0;
+if(POLL_URL)pollTimer=setInterval(pollLayout,1000);
+const shutdownButton=document.getElementById("shutdown-preview");
+if(shutdownButton){
+  shutdownButton.addEventListener("click",async()=>{
+    shutdownButton.disabled=true;
+    if(pollTimer)clearInterval(pollTimer);
+    try{
+      await fetch("/api/preview/shutdown",{method:"POST",cache:"no-store"});
+      setStatus("预览服务已退出，可以关闭这个标签页");
+      window.close();
+    }catch(error){
+      shutdownButton.disabled=false;
+      setStatus("退出失败："+error,"error");
+    }
+  });
 }
 })();
 </script>
