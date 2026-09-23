@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from hashlib import sha256
-import json
 from typing import Any
 
 from furniture_cad.cad_bridge import BridgeResult
 
 from .cabinet_pipeline import CabinetPipelineResult
+from .workflow_digest import stable_digest as _stable_digest
 from .workflow_project import Project, Revision
 from .workflow_state import WorkflowStage
 
@@ -40,16 +39,6 @@ ANALYSIS_METHOD_SKILLS = {
     "test_statistics": "statistical-analysis",
     "production_simulation": "simpy",
 }
-
-
-def _stable_digest(value: Any) -> str:
-    encoded = json.dumps(
-        value,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    return sha256(encoded).hexdigest()
 
 
 @dataclass(frozen=True)

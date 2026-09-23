@@ -14,10 +14,15 @@ from .validation import raise_unless_admitted, validate_room_scene
 from .viewer import render_viewer
 
 
-def _plan_scene(
+def plan_scene(
     room: Mapping[str, Any],
     items: Sequence[Mapping[str, Any]],
 ) -> RoomScene:
+    """Place every item and admit the result; geometry only, no preview.
+
+    项目布局的编辑走这里重算被改的那一间（见 `project_edit.py`）：场景源进来，
+    摆放坐标、footprint、净距都是算出来的，所以改完不会留下过期的派生字段。
+    """
     room_model = RoomModel.from_dict(room)
     specs = parse_item_specs(items)
     placed = place_items(room_model, specs)
@@ -31,7 +36,7 @@ def plan_room_scene(
     items: Sequence[Mapping[str, Any]],
 ) -> dict[str, Any]:
     """Place every item, admit the placement, then emit preview and viewer."""
-    scene = _plan_scene(room, items)
+    scene = plan_scene(room, items)
     return {
         "room": scene.room.to_dict(),
         "items": [item.to_dict() for item in scene.items],

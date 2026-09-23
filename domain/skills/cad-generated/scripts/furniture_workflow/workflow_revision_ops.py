@@ -23,6 +23,7 @@ from .workflow_constants import (
     STAGE_INPUT_KEYS,
     OrchestrationResult,
 )
+from .workflow_digest import stable_digest
 from .workflow_project import Project, Revision, StageAttempt
 from .workflow_state import (
     STAGE_SEQUENCE,
@@ -53,8 +54,19 @@ def _canonicalize_stage_input(
 
 class RevisionOpsMixin:
     def revise(self, project: Project, layout: ProjectLayout) -> Revision:
-        """Start a new revision at stage 1; all parent artifacts become stale."""
-        revision = project.add_revision(layout)
+        """Start a new revision at stage 1; all parent artifacts become stale.
+
+        新 Revision **带走父修订的 `stage_inputs`**：那些参数是柜体的构造意图
+        （门数、层板、背板安装…），摆放/房间变了它们并没有变。清掉它们会让下一次
+        `run_next()` 直接报 "panel proposal is incomplete"（见 references/backlog.md
+        「已知缺口」第 1 条）——摆放级改动不该顺带丢掉柜体参数。
+        内容对不上时下游仍会自己报错（层板间距填不满内部净空之类），那是准确得多的失败。
+        """
+        parent = project.revisions[-1] if project.revisions else None
+        revision = project.add_revision(
+            layout,
+            stage_inputs=deepcopy(parent.stage_inputs) if parent else None,
+        )
         self._persist(project)
         return revision
 
@@ -199,6 +211,10 @@ class RevisionOpsMixin:
             revision.stage_outputs[requested.value] = revision.layout.to_dict()
         if requested == WorkflowStage.PANELS_PLANNED:
             revision.confirmed_panel_sha256 = revision.panel_sha256
+        # 记下"人确认的是哪一份内容"：修订继承靠这条回指真正的点头那一版。
+        revision.approved_digests[requested.value] = stable_digest(
+            revision.stage_outputs[requested.value]
+        )
 
         revision.approve_stage(requested)
         revision.workflow.record(f"{requested.value} confirmed")

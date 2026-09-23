@@ -29,6 +29,8 @@
 
 下游板件只读已确认的 `LayoutUnit`（`furniture_category` 为 `floor_cabinet` / `wall_cabinet`，且该件不是 `manufacture: false`）。客户点名不制造的包络留在房间里，不是 `LayoutUnit`。房间 STEP 不是柜体 CAD。
 
+`LayoutUnit` 的 `id` / `furniture_category` / `width` / `depth` / `height` 是**下游依赖面**：这五个字段不变，板件与制造的内容就不变，可以跨 Revision 继承（见编排层 [修订继承设计](../../cad-generated/references/revision-inheritance-design.md)）。**例外**：`fill` 件的 `width` 由该墙净长派生，改房间就会改它 —— 这类件永远算"变了"，必须重算。
+
 冻结/确认时 `validate_project_layout` / `validate_room_scene` 再核 preview/viewer 是否由当前几何重建。规划准入不画 SVG。
 
 ## 模块
@@ -42,8 +44,9 @@
 | `placement_check.py` | 越界、外形干涉、遮挡门窗洞口 | calculation |
 | `validation.py` | `admit_scene`（规划）；dict 上再核预览（冻结） | validation |
 | `preview.py` / `viewer.py` | SVG 与只读轨道视图 | calculation |
-| `editor.py` | 可编辑 HTML，以及项目只读预览（复用同一画布，不发 edit op）；原点三轴与光标坐标读数也长在这张画布上；JS 摆放检查必须与 `placement_check.py` 同步 | calculation |
-| `scene_edit.py` | 源上的一次原子 op，本身不算几何 | schema |
+| `editor.py` | 可编辑 HTML，以及项目只读预览（复用同一画布，不发 edit op）；原点三轴与光标坐标读数也长在这张画布上；多间房按页眉药丸切换，当前房间写进 `?room=` 深链；页眉身份牌区分「只读预览 / 草稿」；JS 摆放检查必须与 `placement_check.py` 同步 | calculation |
+| `scene_edit.py` | 源上的一次原子 op，本身不算几何；项目布局的编辑与场景编辑**共用**这一套词表与白名单 | schema |
+| `project_edit.py` | 项目布局上的一次 op：把目标房间还原成场景源 → 复用 `scene_edit` → `plan_scene` 重算并准入；返回未确认的新布局（版本/Revision/落盘不在这里） | calculation |
 | `scene_store.py` | 独立场景只存源，读取时重算 | side_effect |
 | `cad.py` | 房间包络树与房间 STEP，不是 `furniture_cad` | side_effect |
 

@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass, field
-from hashlib import sha256
-import json
 from typing import Any
 from uuid import uuid4
 
@@ -13,16 +11,12 @@ from furniture_delivery_validation.validation import ValidationReport
 from furniture_layout.project_layout import ProjectLayout
 
 from .workflow_artifacts import ArtifactManifest
+from .workflow_digest import stable_digest
 from .workflow_state import WorkflowStage, WorkflowState, parse_stage, utc_now
 
 
 def _id(prefix: str) -> str:
     return f"{prefix}_{uuid4().hex}"
-
-
-def _canonical_sha256(value: Any) -> str:
-    encoded = json.dumps(value, ensure_ascii=False, sort_keys=True).encode("utf-8")
-    return sha256(encoded).hexdigest()
 
 
 def _stage_key(stage: str | WorkflowStage) -> str:
@@ -94,6 +88,24 @@ class Revision:
     stage_attempts: dict[str, list[StageAttempt]] = field(default_factory=dict)
     selected_attempts: dict[str, int] = field(default_factory=dict)
     confirmed_panel_sha256: str | None = None
+    #: 每个已确认阶段**当时确认的是哪份内容**（阶段名 → 内容摘要）。
+    #: 修订继承靠它回指"人真的为这份内容点过头"，见 workflow_inheritance.py。
+    approved_digests: dict[str, str] = field(default_factory=dict)
+    #: 这一版的哪些阶段沿用了更早那一版的内容（阶段名 → {sha256, from_revision, from_stage}）。
+    #: `approved_stages` 的含义是"这份内容已被确认过"，不是"人在这一版又点了一次头"。
+    inherited: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+    def confirmed_digest(self, stage: str | WorkflowStage) -> str | None:
+        """这个阶段**已确认的那份内容**的摘要；没确认过就是 `None`。
+
+        板件另有一条历史字段 `confirmed_panel_sha256`（下游按它读冻结板件），
+        老项目文件里只有它、没有 `approved_digests`，所以这里做一次回退。
+        """
+        key = _stage_key(stage)
+        digest = self.approved_digests.get(key)
+        if digest is None and key == WorkflowStage.PANELS_PLANNED.value:
+            digest = self.confirmed_panel_sha256
+        return digest
 
     def __post_init__(self) -> None:
         if self.manifest is None:
@@ -135,14 +147,14 @@ class Revision:
 
     @property
     def layout_sha256(self) -> str:
-        return _canonical_sha256(self.layout.to_dict())
+        return stable_digest(self.layout.to_dict())
 
     @property
     def panel_sha256(self) -> str | None:
         output = self.stage_outputs.get(WorkflowStage.PANELS_PLANNED.value)
         if not isinstance(output, dict):
             return None
-        return _canonical_sha256(output)
+        return stable_digest(output)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -162,6 +174,8 @@ class Revision:
             "stage_outputs": self.stage_outputs,
             "stage_analyses": self.stage_analyses,
             "approved_stages": self.approved_stages,
+            "approved_digests": dict(self.approved_digests),
+            "inherited": deepcopy(self.inherited),
             "stage_attempts": {
                 stage: [item.to_dict() for item in attempts]
                 for stage, attempts in self.stage_attempts.items()
@@ -234,6 +248,14 @@ class Revision:
                 if data.get("confirmed_panel_sha256")
                 else None
             ),
+            approved_digests={
+                parse_stage(str(stage)).value: str(digest)
+                for stage, digest in dict(data.get("approved_digests", {})).items()
+            },
+            inherited={
+                parse_stage(str(stage)).value: dict(record)
+                for stage, record in dict(data.get("inherited", {})).items()
+            },
         )
 
 

@@ -55,6 +55,7 @@ result = session.call(name, arguments)  # arguments 为对象或 JSON 字符串
 `project` 只含协议状态，不是完整 `project.json`：
 
 - `id` / `revision_id` / `current_stage` / `approved_stages` / `next_stage`
+- `inherited`（哪些阶段沿用了更早那一版的内容，附 `sha256` 与 `from_revision`）与 `inherited_stages`。摆动摆放或改房间后板件内容没变时，系统会**承认**上一版的确认而不是让人再点一次头——快照必须把它显示出来，别让"少做了一步"变得看不见（见 [修订继承设计](revision-inheritance-design.md)）
 - `allowed_tools`、`required_tool`、`cad_generation_required`
 - `attempts`（编号、是否通过、错误；不含整份输出）
 - `current_view`（当前阶段给人看的内容；`include_view=false` 可省略）。`panel_plan` 是确认审查清单（净空、板件一行一条、接触去重、`markdown`），不是冻结 `cabinets[]` 树；冻结板件仍在 Store。其他阶段一般就是该阶段结果本身。

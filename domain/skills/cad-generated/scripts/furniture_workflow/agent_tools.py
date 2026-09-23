@@ -326,6 +326,10 @@ def project_snapshot(
             serial is not None and revision.is_stage_approved(serial)
         ),
         "approved_stages": list(revision.approved_stages),
+        # 哪些阶段沿用了更早那一版的内容（内容逐字节相同，所以免掉再确认一次）。
+        # 让人看得见"系统少做了一步"，而不是悄悄少做：R3，见 revision-inheritance-design.md。
+        "inherited": deepcopy(revision.inherited),
+        "inherited_stages": sorted(revision.inherited),
         "next_stage": next_stage.value if next_stage is not None else None,
         "layout": deepcopy(revision.layout.to_dict()),
         "layout_confirmed": bool(revision.layout.confirmed),

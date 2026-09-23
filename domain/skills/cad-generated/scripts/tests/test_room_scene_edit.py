@@ -18,6 +18,7 @@ bootstrap_runtime_paths(WORKSPACE_ROOT)
 from fastapi import HTTPException
 
 import server
+from fake_request_support import local_request, remote_request
 from furniture_layout.scene_edit import apply_edit
 
 
@@ -265,7 +266,8 @@ class RoomSceneEditApiTests(unittest.TestCase):
                             ),
                         )
                     ],
-                )
+                ),
+                local_request(),
             )
         )
 
@@ -277,6 +279,7 @@ class RoomSceneEditApiTests(unittest.TestCase):
                 server.RoomSceneEditRequest(
                     op="resize", item_id="wardrobe", width=900
                 ),
+                local_request(),
             )
         )
         self.assertEqual(response.items[0]["width"], 900)
@@ -292,6 +295,7 @@ class RoomSceneEditApiTests(unittest.TestCase):
                     server.RoomSceneEditRequest(
                         op="move", item_id="wardrobe", origin_x_mm=100
                     ),
+                    local_request(),
                 )
             )
         self.assertEqual(ctx.exception.status_code, 422)
@@ -308,6 +312,7 @@ class RoomSceneEditApiTests(unittest.TestCase):
                     server.RoomSceneEditRequest(
                         op="resize", item_id="wardrobe", width=5000
                     ),
+                    local_request(),
                 )
             )
         self.assertEqual(ctx.exception.status_code, 422)
@@ -322,9 +327,27 @@ class RoomSceneEditApiTests(unittest.TestCase):
                     server.RoomSceneEditRequest(
                         op="resize", item_id="wardrobe", width=900
                     ),
+                    local_request(),
                 )
             )
         self.assertEqual(ctx.exception.status_code, 404)
+
+    def test_edit_refuses_remote_caller(self) -> None:
+        """编辑会落盘：非本机来源 403，且改动一个字都不许进文件。"""
+        self._save()
+        with self.assertRaises(HTTPException) as ctx:
+            asyncio.run(
+                server.edit_room_scene(
+                    "demo",
+                    server.RoomSceneEditRequest(
+                        op="resize", item_id="wardrobe", width=900
+                    ),
+                    remote_request(),
+                )
+            )
+        self.assertEqual(ctx.exception.status_code, 403)
+        reloaded = asyncio.run(server.load_room_scene("demo"))
+        self.assertEqual(reloaded.items[0]["width"], 1800)
 
     def test_rotating_a_wall_item_to_free_is_accepted_end_to_end(self) -> None:
         """编辑器拖旋转手柄发出的 op：绕中心转 270°，并收回房间内，改成自由摆放。
@@ -344,6 +367,7 @@ class RoomSceneEditApiTests(unittest.TestCase):
                     origin_x_mm=800,
                     origin_y_mm=1800,
                 ),
+                local_request(),
             )
         )
         placement = response.items[0]["placement"]
@@ -370,6 +394,7 @@ class RoomSceneEditApiTests(unittest.TestCase):
                     server.RoomSceneEditRequest(
                         op="rotate", item_id="wardrobe", rotation_z_deg=45
                     ),
+                    local_request(),
                 )
             )
         self.assertEqual(ctx.exception.status_code, 422)

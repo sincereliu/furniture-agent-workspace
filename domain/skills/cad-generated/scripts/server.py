@@ -38,12 +38,35 @@ from furniture_layout.scene_store import (
     save_scene_source,
 )
 from furniture_layout.validation import validate_room_scene
+from furniture_workflow.project_layout_edit import (
+    LayoutEditDisabled,
+    VersionConflict,
+    edit_project_layout,
+)
 from furniture_workflow.project_preview import project_layout_document
 from furniture_workflow.workflow_store import JsonProjectStore
 
 API_VERSION = "0.8.0"
 SAFE_PROJECT_ID = re.compile(r"^[A-Za-z0-9_-]+$")
-_LOCAL_SHUTDOWN_HOSTS = {"127.0.0.1", "::1"}
+_LOCAL_HOSTS = {"127.0.0.1", "::1"}
+ACCESS_LOCAL = "local"
+ACCESS_DENIED = "denied"
+
+
+def access_scope(request: Request) -> str:
+    """这一次请求从哪儿来。写权限的唯一判据就在这里，别散到各个端点里。
+
+    现在只有两种来源：本机进程（`local`）和其余（`denied`）——服务只监听 `127.0.0.1`，
+    所以今天没有第三个来源。将来要给外人只读分享时，在这一处多认一种凭证（`shared`），
+    各写端点的门不用动。**URL 参数不是权限**：`?mode=view` 只是页面表达，谁都能改地址栏。
+    """
+    host = request.client.host if request.client is not None else ""
+    return ACCESS_LOCAL if host in _LOCAL_HOSTS else ACCESS_DENIED
+
+
+def may_edit(request: Request) -> bool:
+    """写操作（落盘、停进程）只对本机来源开放。"""
+    return access_scope(request) == ACCESS_LOCAL
 
 app = FastAPI(
     title="Furniture Agent — 房间场景布局",
@@ -165,6 +188,16 @@ class RoomSceneEditRequest(BaseModel):
     height: float | None = Field(default=None, gt=0)
 
 
+class ProjectLayoutEditRequest(RoomSceneEditRequest):
+    """页面上改项目布局里的一件：与场景编辑同一套 op，外加并发版本。
+
+    `expected_version` 必填：它是页面最近一次从 `/layout` 看到的 `version`。
+    对不上就拒绝——页面上的画面已经过期，不能拿它去覆盖。
+    """
+
+    expected_version: str = Field(..., min_length=1, description="页面最近看到的 version")
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok", "version": API_VERSION}
@@ -182,8 +215,7 @@ def stop_preview_server() -> bool:
 @app.post("/api/preview/shutdown")
 async def preview_shutdown(request: Request):
     """Stop this local preview process after the response is sent."""
-    host = request.client.host if request.client is not None else ""
-    if host not in _LOCAL_SHUTDOWN_HOSTS:
+    if not may_edit(request):
         raise HTTPException(status_code=403, detail="preview shutdown is local only")
     asyncio.get_running_loop().call_later(0.3, stop_preview_server)
     return {"status": "stopping"}
@@ -227,14 +259,57 @@ async def project_layout(project_id: str):
 
 
 @app.get("/api/project/{project_id}/preview", response_class=HTMLResponse)
-async def project_preview(project_id: str) -> HTMLResponse:
-    """只读布局页。打开后每秒再读 layout，版本变了就换包络并保持相机。"""
+async def project_preview(project_id: str, mode: str | None = None) -> HTMLResponse:
+    """只读布局页。打开后每秒再读 layout，版本变了就换包络并保持相机。
+
+    `?mode=view` 出分享形态（换牌子、去掉「退出」）。**它只是表达，不是权限**：
+    参数谁都能改，写权限由 `may_edit()` 判定。
+    """
     document = _project_layout_document(project_id)
     try:
-        html = render_project_preview(project_id, document)
+        html = render_project_preview(project_id, document, mode=mode)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return HTMLResponse(content=html)
+
+
+@app.post("/api/project/{project_id}/layout/edit")
+async def edit_project_layout_endpoint(
+    project_id: str,
+    req: ProjectLayoutEditRequest,
+    request: Request,
+):
+    """页面上改一件家具的摆放，落成一个新 Revision（草稿）。
+
+    三道门，顺序固定：本机来源 → 灰度开关 → 版本对得上。任何一道不过都不落盘。
+    一次只改一件、只改一处；改完布局回到未确认，下游要重新走（见 references/runtime-contract.md
+    「页面写项目」段）。
+    """
+    if not may_edit(request):
+        raise HTTPException(status_code=403, detail="editing a project layout is local only")
+    payload = req.model_dump(exclude_none=True)
+    expected_version = payload.pop("expected_version")
+    project = _load_project(project_id)
+    try:
+        return edit_project_layout(
+            project,
+            payload,
+            expected_version=expected_version,
+            workspace_root=WORKSPACE_ROOT,
+            store_root=STORE_ROOT,
+        )
+    except LayoutEditDisabled as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except VersionConflict as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": str(exc),
+                "current_version": exc.current_version,
+            },
+        ) from exc
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 def _plan_scene(req: RoomSceneRequest) -> dict[str, Any]:
@@ -299,14 +374,19 @@ async def plan_room_viewer(req: RoomSceneRequest) -> HTMLResponse:
 
 
 @app.post("/api/plan-room/cad", response_model=RoomSceneResponse)
-async def plan_room_cad(req: RoomSceneRequest):
+async def plan_room_cad(req: RoomSceneRequest, request: Request):
+    """出房间 CAD：会往磁盘写源文件与 STEP，所以和落盘一样要求本机来源。"""
+    if not may_edit(request):
+        raise HTTPException(status_code=403, detail="generating room CAD is local only")
     payload = req.model_copy(update={"generate_cad": True})
     return RoomSceneResponse(**_plan_scene(payload))
 
 
 @app.post("/api/room-scene/save")
-async def save_room_scene(req: RoomSceneSaveRequest):
+async def save_room_scene(req: RoomSceneSaveRequest, request: Request):
     """保存场景的源；派生结果（摆放/预览）不落盘，读取时重算。"""
+    if not may_edit(request):
+        raise HTTPException(status_code=403, detail="saving scenes is local only")
     scene_id = req.scene_id or f"scene-{uuid4().hex[:12]}"
     payload = req.model_dump(exclude_none=True)
     try:
@@ -339,8 +419,10 @@ async def list_room_scenes():
 
 
 @app.post("/api/room-scene/{scene_id}/edit", response_model=RoomSceneResponse)
-async def edit_room_scene(scene_id: str, req: RoomSceneEditRequest):
+async def edit_room_scene(scene_id: str, req: RoomSceneEditRequest, request: Request):
     """应用一次编辑：重算并校验通过才落盘，失败即整体拒绝（不留半成品）。"""
+    if not may_edit(request):
+        raise HTTPException(status_code=403, detail="editing scenes is local only")
     try:
         source = load_scene_source(scene_id, root=OUTPUT_ROOT)
     except FileNotFoundError as exc:

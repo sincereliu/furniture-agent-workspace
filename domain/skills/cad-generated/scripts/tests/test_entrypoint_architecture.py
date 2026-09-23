@@ -39,6 +39,12 @@ class EntrypointArchitectureTests(unittest.TestCase):
         self.assertNotIn("furniture_workflow.workflow_orchestrator", server_modules)
         self.assertNotIn("furniture_feature_tree.feature_tree_emitter", server_modules)
         self.assertNotIn("furniture_cad.cad_bridge", server_modules)
+        # 页面写项目（P3）走 workflow 侧门面：门面才驱动 orchestrator，HTTP 层不自己开。
+        layout_edit_modules = imported_modules(
+            SCRIPTS_ROOT / "furniture_workflow" / "project_layout_edit.py"
+        )
+        self.assertIn("workflow_orchestrator", layout_edit_modules)
+        self.assertIn("furniture_layout.project_edit", layout_edit_modules)
         server_text = (SCRIPTS_ROOT / "server.py").read_text(encoding="utf-8")
         self.assertNotIn("/api/plan-cabinet", server_text)
         self.assertNotIn("/api/plan-layout", server_text)

@@ -22,6 +22,11 @@ from .input_adapter import (
 )
 from .workflow_artifact_writer import prepare_artifact_dir, write_artifacts
 from .workflow_constants import RETRYABLE_STAGES, OrchestrationResult
+from .workflow_inheritance import (
+    inheritance_source,
+    inherited_evidence,
+    stage_digest,
+)
 from .workflow_project import Project, Revision, StageAttempt
 from .workflow_state import STAGE_SEQUENCE, WorkflowStage, parse_stage, stage_index
 
@@ -156,12 +161,12 @@ class StageRunnerMixin:
                 self._fail_retryable_stage(revision, stage, stage_input, str(exc))
                 return
             self._complete_retryable_stage(
+                project,
                 revision,
                 stage,
                 output,
                 stage_input,
                 "construction, exact clearances, and physical panels planned",
-                project_id=project.id,
             )
             return
 
@@ -179,12 +184,12 @@ class StageRunnerMixin:
                 self._fail_retryable_stage(revision, stage, stage_input, str(exc))
                 return
             self._complete_retryable_stage(
+                project,
                 revision,
                 stage,
                 asdict(bom),
                 stage_input,
                 "materials, hardware, and preliminary BOM planned",
-                project_id=project.id,
             )
             return
 
@@ -206,12 +211,12 @@ class StageRunnerMixin:
                 self._fail_retryable_stage(revision, stage, {}, str(exc))
                 return
             self._complete_retryable_stage(
+                project,
                 revision,
                 stage,
                 feature_tree,
                 {},
                 "Feature Tree v2 with target-specific machining cuts planned",
-                project_id=project.id,
             )
             return
 
@@ -290,17 +295,16 @@ class StageRunnerMixin:
 
     def _complete_retryable_stage(
         self,
+        project: Project,
         revision: Revision,
         stage: WorkflowStage,
         output: dict[str, Any],
         inputs: dict[str, Any],
         note: str,
-        *,
-        project_id: str | None = None,
     ) -> None:
         revision.stage_outputs[stage.value] = deepcopy(output)
         report = self._validate_stage_output(
-            revision, stage, project_id=project_id
+            revision, stage, project_id=project.id
         )
         revision.validations.append(report)
         attempt = self._record_attempt(
@@ -327,6 +331,35 @@ class StageRunnerMixin:
         if stage == WorkflowStage.FEATURE_TREE_PLANNED:
             revision.feature_tree = deepcopy(output)
         revision.workflow.advance(stage, note)
+        self._inherit_settled_stage(project, revision, stage, output)
+
+    def _inherit_settled_stage(
+        self,
+        project: Project,
+        revision: Revision,
+        stage: WorkflowStage,
+        output: Mapping[str, Any],
+    ) -> None:
+        """内容没变就不让人再确认一次（修订继承 R1/R2）。
+
+        判据是**逐字节相同**：更早的 Revision 上这个阶段已确认，且确认的就是这份内容。
+        命中就地把本阶段记为已确认，并留下 `inherited` 回指——不改任何产物、不跳过重算。
+        重算是毫秒级，真正的代价是让人再点一次头（见 references/revision-inheritance-design.md）。
+        """
+        digest = stage_digest(output)
+        source = inheritance_source(project, revision, stage, digest)
+        if source is None:
+            return
+        revision.inherited[stage.value] = inherited_evidence(
+            source, stage=stage, digest=digest
+        )
+        if stage == WorkflowStage.PANELS_PLANNED:
+            revision.confirmed_panel_sha256 = digest
+        revision.approved_digests[stage.value] = digest
+        revision.approve_stage(stage)
+        revision.workflow.record(
+            f"{stage.value} inherited from revision {source.number} (same content)"
+        )
 
     def _fail_retryable_stage(
         self,
