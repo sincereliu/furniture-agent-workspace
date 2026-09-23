@@ -4,13 +4,9 @@
 
 ## 待评审
 
-### 只读预览页右栏的"假控件"（方案已定，未实施）
+### 摆放级改动不该重跑柜体（跨阶段需求，登记在编排层）
 
-只读的项目预览页右栏照样生成输入框和 − / ＋ 按钮，只用 `.readonly` 样式禁掉指针事件：看得见、点不动、也不解释为什么。
-
-已定方案：只读时**不生成**这些控件，只留纯文字（净距、摆放、位置、坐标、朝向、离地、离顶），并把"可以直接输入任意毫米值…"那句提示换成"只读预览：位置由对话更新；要自己拖，用草稿页"。
-
-落点：`editor.py::detailMarkup()` 一个函数。只读版把同样的 `data-gap` / `data-field` / `data-who` 钩子挂到 `<span>` 上即可 —— `applyDetailValues()` 已经按 `tagName==="INPUT"` 分支，取值与刷新逻辑不用改。
+改摆放 / 改房间会开新 Revision 并从本阶段重来，但柜体内容其实一个字都没变（板件只读 `id / furniture_category / width / depth / height`）。柜体没变时下游全部重做、还要人重新确认，代价偏大。证据、缺口与候选方向登记在 [编排与生命周期未落地需求](../../cad-generated/references/backlog.md)，机制与判据见 [修订继承设计](../../cad-generated/references/revision-inheritance-design.md)。本阶段要注意的是依赖面与 `fill` 例外（见 [运行时映射](runtime-map.md)）。
 
 ### 门窗的增删改，以及"锁定"
 
@@ -58,6 +54,11 @@
 
 ## 已落地（留档）
 
+- 页面写项目（P3）：`POST /api/project/{id}/layout/edit` —— 页面上改一件的摆放，落成一个新 Revision（未确认）。几何复用房间场景编辑那套 op 词表与重算/准入（新增 `project_edit.py`：`RoomScene` ↔ 场景源往返 + `plan_scene`），版本与生命周期归 `furniture_workflow/project_layout_edit.py` 门面；三道门（本机来源 / 灰度开关 / `expected_version`）任一不过都不落盘。`fill` 件拒绝摆放类 op（宽与偏移由墙上空段派生）。设计见 [页面写项目设计](../../cad-generated/references/project-layout-edit-design.md)；预览页**尚未**接上这个 op（属单页内核收敛）。
+- 页面身份与房间导航：两页页眉各挂一块身份牌（预览「只读预览 · 由对话更新」 / 草稿「草稿 · 不影响项目」）；多间房的切换从下拉改成页眉药丸按钮（只有一间房时整条藏掉），当前房间写进地址栏 `?room=<id>`，切房间时 `history.replaceState` 跟着改，链接可分享；深链按房间 → 视角 → 选中件依次生效。
+- 只读分享形态：预览页带 `?mode=view`（`preview_url(id, mode="view")` / `open_project_preview(id, share=True)`）时牌子换「只读分享 · 链接可转发」、提示语换成"只看不改"、**不生成「退出」按钮**。它只是表达，不承担权限；写权限的门在服务端（见 [访问模式与外网分享](../../cad-generated/references/preview-access-design.md)）。
+- 内容指纹收敛到一个实现：`workflow_digest.stable_digest`（key 排序 + 紧凑分隔符的规范化 JSON 上取 sha256），`workflow_constants` / `workflow_project` 都改用它，`project_preview` 的 `version` 从「修订号」改成内容版本 `layout_sha256:确认位`。
+- 只读预览页去掉"编辑痕迹"：右栏**不生成**输入框与 − / ＋ 按钮（只留纯文字读数，提示语换成"只读预览：位置由对话更新；要自己拖，用草稿页"）；画布上**不画橙色旋转手柄、旋转环与刻度、蓝色离地手柄**（保留"正面朝哪"的绿箭头与「前」）；图例里"旋转环与手柄（橙）""离地高度手柄（蓝）"两行在只读页隐藏。落点：`detailMarkup()` 与 `drawRotateHandle()` / `drawHeightHandle()` 里按 `READ_ONLY` 分支，绿箭头抽成 `drawFrontArrow()` 两页共用；图例行标 `data-edit-only` + 一条 `body.readonly` 的 CSS。可编辑页一个字没动。
 - 视图控件与坐标层：两页统一为"正视图下拉 + 复位"，预设键 `default_view`（旧的 `#view=perspective` 走别名），补 `仰视`，双击吸附 / 再双击回到进它之前那一眼，转视角后标识变「自由视角」；默认视角正南偏东 15°、俯仰 0.35。
 - 相机左右镜像修正：房间坐标系是 X 东 / Y 南（左手系），右向量必须取 `cross(up, forward)`；转视角的拖动符号要一起翻。两页都改了。
 - 原点三轴与光标坐标读数：两页一致（轴长就是总宽 / 总深 / 总高，带 `O (0,0,0)`）；Viewer 原先右下角那个固定不动的小图标已删除。

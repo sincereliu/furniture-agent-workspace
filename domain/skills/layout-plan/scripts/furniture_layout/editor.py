@@ -72,19 +72,33 @@ _EDITOR_TIPS = (
     "前/后/左/右视里上下拖 = 改高度<br>"
     "右侧的距离 / 朝向 / 离地可输入，也可用 − / ＋ 走整数档<br>"
     "空白处拖拽转视角 · 右键/中键/Shift+左键拖拽平移 · 滚轮缩放 · Esc 取消选中<br>"
-  "双击画面吸到最近的正视图，再双击回到自由视角"
+    "双击画面吸到最近的正视图，再双击回到自由视角"
 )
 
 _PREVIEW_TIPS = (
     "只读预览，位置由对话更新。<br>"
     "空白处拖拽转视角 · 右键/中键/Shift+左键拖拽平移 · 滚轮缩放<br>"
-  "双击画面吸到最近的正视图，再双击回到自由视角<br>"
-    "有多间房时在上方切换，默认第一间<br>"
+    "双击画面吸到最近的正视图，再双击回到自由视角<br>"
+    "有多间房时点上方房间名切换，地址栏 ?room= 直接指向某间房<br>"
     "退出会停掉后台预览服务，然后再关闭这个标签页"
+)
+_SHARE_TIPS = (
+    "这是只读分享链接：只看不改，位置由房主那边更新。<br>"
+    "空白处拖拽转视角 · 右键/中键/Shift+左键拖拽平移 · 滚轮缩放<br>"
+    "双击画面吸到最近的正视图，再双击回到自由视角<br>"
+    "有多间房时点上方房间名切换，地址栏 ?room= 直接指向某间房"
 )
 _SHUTDOWN_BUTTON = (
     '<button type="button" id="shutdown-preview">退出</button>'
 )
+# 页面身份的牌子：一眼说清「这一页能不能改、改了算不算数」。
+# 预览页=只读投影，草稿页=可改但不进项目；两者都不写项目，写项目只走对话或确认流程。
+# 分享形态（预览页带 ?mode=view）另加一块牌子：这页是给外人看的，转发链接即可。
+# 注意：`?mode=view` 只是"表达"，不是权限——地址栏谁都能改，真正的门在服务端
+# （`server.access_scope()`，见 runtime-contract「写权限」段）。
+_PREVIEW_BADGE = "只读预览 · 由对话更新"
+_DRAFT_BADGE = "草稿 · 不影响项目"
+_SHARE_BADGE = "只读分享 · 链接可转发"
 
 
 def _render_canvas_html(
@@ -98,20 +112,27 @@ def _render_canvas_html(
     heading_suffix: str,
     tips: str,
     app_label: str,
+    mode_badge: str,
     shutdown_button: str,
+    share_form: bool = False,
 ) -> str:
     room_name = str(scene_payload["room"]["name"])
     heading = f"{room_name} · {heading_suffix}"
+    body_class = " ".join(
+        name for name in ("readonly" if read_only else "", "share" if share_form else "") if name
+    )
     return (
         _EDITOR_HTML.replace("__SCENE_JSON__", _json_for_script(scene_payload))
         .replace("__SCENE_ID__", escape(scene_id, quote=True))
         .replace("__HEADING__", escape(heading, quote=True))
         .replace("__HEADING_SUFFIX__", _json_for_script(heading_suffix))
+        .replace("__MODE_BADGE__", escape(mode_badge, quote=True))
         .replace("__READ_ONLY__", "true" if read_only else "false")
+        .replace("__SHARE_FORM__", "true" if share_form else "false")
         .replace("__POLL_URL__", _json_for_script(poll_url))
         .replace("__ROOMS_JSON__", _json_for_script(rooms))
         .replace("__VERSION_JSON__", _json_for_script(version))
-        .replace("__BODY_CLASS__", "readonly" if read_only else "")
+        .replace("__BODY_CLASS__", body_class)
         .replace("__APP_LABEL__", escape(app_label, quote=True))
         .replace("__TIPS__", tips)
         .replace("__SHUTDOWN_BUTTON__", shutdown_button)
@@ -131,6 +152,7 @@ def render_editor(scene_id: str, scene: RoomScene) -> dict[str, object]:
         heading_suffix="布局编辑",
         tips=_EDITOR_TIPS,
         app_label="可编辑家具布局",
+        mode_badge=_DRAFT_BADGE,
         shutdown_button="",
     )
     return {
@@ -176,14 +198,22 @@ def render_editor(scene_id: str, scene: RoomScene) -> dict[str, object]:
 def render_project_preview(
     project_id: str,
     document: dict[str, Any],
+    *,
+    mode: str | None = None,
 ) -> str:
-    """Read-only canvas for one project. The page polls `document` replacements."""
+    """Read-only canvas for one project. The page polls `document` replacements.
+
+    `mode="view"`（链接写成 `?mode=view`）出**分享形态**：牌子换成"只读分享"、
+    不带「退出」按钮（外人不能停你本机的预览服务）、提示语不提草稿页。
+    这只是页面表达，不承担权限——写权限由服务端 `access_scope()` 判定。
+    """
     rooms = list(document["rooms"])
     if not rooms:
         raise ValueError("project layout has no rooms")
     first = rooms[0]["scene"]
     if not isinstance(first, dict):
         raise ValueError("project room scene must be an object")
+    share_form = mode == "view"
     return _render_canvas_html(
         scene_id=project_id,
         scene_payload=first,
@@ -192,9 +222,11 @@ def render_project_preview(
         read_only=True,
         poll_url=f"/api/project/{project_id}/layout",
         heading_suffix="布局预览",
-        tips=_PREVIEW_TIPS,
-        app_label="布局预览",
-        shutdown_button=_SHUTDOWN_BUTTON,
+        tips=_SHARE_TIPS if share_form else _PREVIEW_TIPS,
+        app_label="只读布局分享" if share_form else "布局预览",
+        mode_badge=_SHARE_BADGE if share_form else _PREVIEW_BADGE,
+        shutdown_button="" if share_form else _SHUTDOWN_BUTTON,
+        share_form=share_form,
     )
 
 
@@ -226,11 +258,20 @@ body{margin:0;background:linear-gradient(180deg,#f7f9fc 0,#eef1f6 100%);padding:
 .toolbar button[aria-pressed="true"]{background:var(--accent);color:#fff;box-shadow:0 1px 3px rgba(79,70,229,.35)}
 #shutdown-preview{margin-left:4px;color:#b91c1c}
 #shutdown-preview:hover{background:#fef2f2;color:#b91c1c}
-.room-switch:not([hidden]){display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:var(--muted)}
-.room-switch select{border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);font:inherit;font-weight:600;padding:6px 8px}
+/* 房间切换：多间房时按一排小药丸，当前那间高亮；只有一间房时整条藏掉。 */
+.room-band:not([hidden]){display:flex;align-items:center;flex-wrap:wrap;gap:4px;background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:4px;box-shadow:0 1px 2px rgba(15,23,42,.05)}
+.room-band button{appearance:none;border:1px solid transparent;background:transparent;color:var(--muted);border-radius:8px;padding:7px 11px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;transition:background .12s,color .12s,border-color .12s}
+.room-band button:hover{background:#f1f5f9;color:var(--ink)}
+.room-band button[aria-pressed="true"]{background:var(--accent-soft);border-color:#c7d2fe;color:#3730a3}
+/* 身份牌：这页是只读预览还是草稿，写在标题底下。 */
+.mode-badge{margin:7px 0 0;display:inline-block;font-size:11.5px;font-weight:600;color:#475569;background:#f1f5f9;border:1px solid var(--line);border-radius:999px;padding:3px 10px}
+body.readonly .mode-badge{color:#1d4ed8;background:#eff6ff;border-color:#bfdbfe}
+/* 分享形态另给一种颜色：拿到链接的人一眼能看出这不是他自己那台机器上的页面。 */
+body.share .mode-badge{color:#b45309;background:#fffbeb;border-color:#fcd34d}
 .view-switch{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:var(--muted)}
 .view-switch select{border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);font:inherit;font-weight:600;padding:6px 8px}
-body.readonly .detail input.num,body.readonly .detail .step{pointer-events:none;opacity:.72}
+/* 只读页没有编辑手柄，图例里对应的两行也藏掉——留着就是假广告。 */
+body.readonly .legend [data-edit-only]{display:none}
 .workspace{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:14px;min-height:0}
 .stage{position:relative;height:100%;min-height:340px;border-radius:16px;overflow:hidden;background:var(--canvas);border:1px solid var(--line);box-shadow:0 1px 2px rgba(15,23,42,.05),0 18px 40px -26px rgba(15,23,42,.42)}
 canvas{display:block;width:100%;height:100%;touch-action:none;cursor:default}
@@ -288,10 +329,9 @@ canvas.panning{cursor:grabbing}
     <div class="titles">
       <h1 id="heading">__HEADING__</h1>
       <p id="room-meta"></p>
+      <p class="mode-badge" id="mode-badge">__MODE_BADGE__</p>
     </div>
-    <label class="room-switch" id="room-switch-wrap" hidden>房间
-      <select id="room-switch" aria-label="房间"></select>
-    </label>
+    <nav class="room-band" id="room-band" aria-label="房间切换" hidden></nav>
     <nav class="toolbar" aria-label="视角选择">
       <label class="view-switch">
         <select id="view-select" aria-label="正视图">
@@ -328,8 +368,8 @@ canvas.panning{cursor:grabbing}
         <h2>图例</h2>
         <ul class="legend">
           <li><i class="chip furniture"></i>家具外形尺寸</li>
-          <li><i class="chip selected"></i>选中 / 旋转环与手柄（橙）</li>
-          <li><i class="chip height"></i>离地高度手柄（蓝）</li>
+          <li data-edit-only><i class="chip selected"></i>选中 / 旋转环与手柄（橙）</li>
+          <li data-edit-only><i class="chip height"></i>离地高度手柄（蓝）</li>
           <li><i class="chip dim"></i>净距标注线（紫）</li>
           <li><i class="chip size"></i>本体尺寸 宽/深/高（深灰）</li>
           <li><i class="chip front"></i>正面（绿边）</li>
@@ -348,6 +388,8 @@ canvas.panning{cursor:grabbing}
 "use strict";
 const SCENE_ID="__SCENE_ID__";
 const READ_ONLY=__READ_ONLY__;
+// 分享形态（预览页 ?mode=view）：只影响文案，不改权限。
+const SHARE_FORM=__SHARE_FORM__;
 const POLL_URL=__POLL_URL__;
 let rooms=__ROOMS_JSON__;
 let layoutVersion=__VERSION_JSON__;
@@ -861,16 +903,38 @@ function headingScreenAngle(item,project,center,height){
   const tip=project([center[0]+vector[0]*reach,center[1]+vector[1]*reach,height]);
   return Math.atan2(tip.y-pivot.y,tip.x-pivot.x);
 }
+// 「正面朝哪」：从选中件中心指出去的绿箭头 + 「前」。这在两页都画——它是信息，不是手柄。
+function drawFrontArrow(item,project,pivot,radius){
+  const center=footprintCenter(item),height=(item.z_start+item.z_end)/2;
+  const heading=headingScreenAngle(item,project,center,height);
+  const tipX=pivot.x+Math.cos(heading)*radius,tipY=pivot.y+Math.sin(heading)*radius;
+  ctx.strokeStyle="#047857";ctx.lineWidth=px(2.4);
+  ctx.beginPath();ctx.moveTo(pivot.x,pivot.y);ctx.lineTo(tipX,tipY);ctx.stroke();
+  const back=heading+Math.PI;
+  ctx.beginPath();
+  ctx.moveTo(tipX+Math.cos(back-0.42)*px(10),tipY+Math.sin(back-0.42)*px(10));
+  ctx.lineTo(tipX,tipY);
+  ctx.lineTo(tipX+Math.cos(back+0.42)*px(10),tipY+Math.sin(back+0.42)*px(10));
+  ctx.stroke();
+  const labelX=clamp(tipX+Math.cos(heading)*px(14),px(14),W-px(14));
+  const labelY=clamp(tipY+Math.sin(heading)*px(14),px(14),H-px(14));
+  ctx.font=`700 ${Math.round(px(12.5))}px "Microsoft YaHei",system-ui,sans-serif`;
+  ctx.textAlign="center";ctx.textBaseline="middle";
+  ctx.lineWidth=px(3.5);ctx.strokeStyle="rgba(255,255,255,.95)";ctx.strokeText("前",labelX,labelY);
+  ctx.fillStyle="#047857";ctx.fillText("前",labelX,labelY);
+}
 function drawRotateHandle(project){
   const item=scene.items.find(candidate=>candidate.id===state.selectedId);
   if(!item){state.handle=null;state.rotateRing=null;return}
   const center=footprintCenter(item),height=(item.z_start+item.z_end)/2;
   const pivot=project([center[0],center[1],height]);
   const top=project([center[0],center[1],item.z_end]);
+  const radius=px(74);
+  // 只读页（项目预览）不画橙点、旋转环和刻度：那些是抓取点，只读时点不动，只会让人以为能拖。
+  if(READ_ONLY){state.handle=null;state.rotateRing=null;drawFrontArrow(item,project,pivot,radius);return}
   const handle={x:clamp(top.x+px(32),px(20),W-px(20)),y:clamp(top.y-px(48),px(20),H-px(20))};
   state.handle=handle;
   // 旋转环：把转轴、刻度和当前朝向都画出来，整圈都是可抓区域。
-  const radius=px(74);
   state.rotateRing={x:pivot.x,y:pivot.y,radius};
   ctx.save();
   ctx.setLineDash([px(3),px(5)]);
@@ -887,24 +951,8 @@ function drawRotateHandle(project){
     ctx.lineTo(pivot.x+Math.cos(a)*radius,pivot.y+Math.sin(a)*radius);
     ctx.stroke();
   }
-  const heading=headingScreenAngle(item,project,center,height);
-  // 朝向箭头指向「正面」，箭头外再标个「前」。
-  const tipX=pivot.x+Math.cos(heading)*radius,tipY=pivot.y+Math.sin(heading)*radius;
-  ctx.strokeStyle="#047857";ctx.lineWidth=px(2.4);
-  ctx.beginPath();ctx.moveTo(pivot.x,pivot.y);ctx.lineTo(tipX,tipY);ctx.stroke();
-  const back=heading+Math.PI;
-  ctx.beginPath();
-  ctx.moveTo(tipX+Math.cos(back-0.42)*px(10),tipY+Math.sin(back-0.42)*px(10));
-  ctx.lineTo(tipX,tipY);
-  ctx.lineTo(tipX+Math.cos(back+0.42)*px(10),tipY+Math.sin(back+0.42)*px(10));
-  ctx.stroke();
   ctx.restore();
-  const labelX=clamp(tipX+Math.cos(heading)*px(14),px(14),W-px(14));
-  const labelY=clamp(tipY+Math.sin(heading)*px(14),px(14),H-px(14));
-  ctx.font=`700 ${Math.round(px(12.5))}px "Microsoft YaHei",system-ui,sans-serif`;
-  ctx.textAlign="center";ctx.textBaseline="middle";
-  ctx.lineWidth=px(3.5);ctx.strokeStyle="rgba(255,255,255,.95)";ctx.strokeText("前",labelX,labelY);
-  ctx.fillStyle="#047857";ctx.fillText("前",labelX,labelY);
+  drawFrontArrow(item,project,pivot,radius);
   ctx.strokeStyle="rgba(180,83,9,.5)";ctx.lineWidth=px(1.6);
   ctx.setLineDash([px(4),px(4)]);
   ctx.beginPath();ctx.moveTo(top.x,top.y);ctx.lineTo(handle.x,handle.y);ctx.stroke();
@@ -925,6 +973,8 @@ function drawRotateHandle(project){
   }
 }
 function drawHeightHandle(project){
+  // 只读页不画离地高度手柄（蓝点）：它也是抓取点。
+  if(READ_ONLY){state.heightHandle=null;return}
   const item=scene.items.find(candidate=>candidate.id===state.selectedId);
   if(!item){state.heightHandle=null;return}
   const center=footprintCenter(item),top=project([center[0],center[1],item.z_end]);
@@ -1313,19 +1363,34 @@ function detailMarkup(item){
   // 输入框一律 step=1：原生上下箭头按 1 走，不会「先吸附到 10 的整数倍」——
   // 那是 HTML 规范里 type=number 微调按钮的行为（基准 0、step=10 时 192 → 200）。
   // 粗调用旁边的 − / ＋：净距 10、离地 50、朝向 15，点一下就是正好加这么多。
-  const gapRow=(label,key)=>`<dt>${label}</dt><dd><button type="button" class="step" data-gap-step="${key}" data-delta="-10" aria-label="${label}减 10">−</button><input class="num" type="number" step="1" data-gap="${key}" aria-label="${label}"><button type="button" class="step" data-gap-step="${key}" data-delta="10" aria-label="${label}加 10">＋</button><span class="who" data-who="${key}"></span></dd>`;
+  // 只读页（项目预览）**不生成**这些控件：灰着留在那儿只会让人点一下发现没反应、又不说明原因。
+  // 读数照样刷新——钩子挂在 <span> 上，applyDetailValues() 已按 tagName==="INPUT" 分支处理。
+  const gapRow=(label,key)=>READ_ONLY
+    ? `<dt>${label}</dt><dd><span data-gap="${key}"></span> mm<span class="who" data-who="${key}"></span></dd>`
+    : `<dt>${label}</dt><dd><button type="button" class="step" data-gap-step="${key}" data-delta="-10" aria-label="${label}减 10">−</button><input class="num" type="number" step="1" data-gap="${key}" aria-label="${label}"><button type="button" class="step" data-gap-step="${key}" data-delta="10" aria-label="${label}加 10">＋</button><span class="who" data-who="${key}"></span></dd>`;
+  const rotationRow=READ_ONLY
+    ? `<span data-field="rotation"></span>°<span class="who" data-front></span>`
+    : `<button type="button" class="step" data-rotation-step data-delta="-15" aria-label="逆时针 15°">−</button><input class="num" type="number" step="1" data-rotation data-field="rotation" aria-label="朝向角度"><button type="button" class="step" data-rotation-step data-delta="15" aria-label="顺时针 15°">＋</button><span class="who">°</span><span class="who" data-front></span>`;
+  const heightRow=READ_ONLY
+    ? `<span data-field="height"></span> mm`
+    : `<button type="button" class="step" data-height="-50" aria-label="降低 50">−</button><input class="num" type="number" step="1" data-height-input data-field="height" aria-label="离地高度"><button type="button" class="step" data-height="50" aria-label="升高 50">＋</button><span class="who">mm</span>`;
+  const hint=READ_ONLY
+    ? `<p class="hint-inline">${SHARE_FORM
+        ? "只读分享：这一页只能看，位置由房主那边更新。"
+        : "只读预览：位置由对话更新；要自己拖，用草稿页。"}</p>`
+    : `<p class="hint-inline">可以直接输入任意毫米值，回车生效。输入框的上下箭头走 1；旁边的 − / ＋ 走整数档（净距 10 · 离地 50 · 朝向 15）。到不了就只挪到能到的地方，并在左下角说明是越界、干涉还是遮挡门窗洞口。</p>`;
   return `<dl class="detail">
     <dt>名称</dt><dd>${escapeHtml(item.label)}</dd>
     <dt>尺寸</dt><dd>${round(item.width)}×${round(item.depth)}×${round(item.height)}</dd>
     <dt>摆放</dt><dd data-field="mode"></dd>
     <dt>位置</dt><dd data-field="position"></dd>
     <dt>坐标</dt><dd data-field="coord"></dd>
-    <dt>朝向</dt><dd><button type="button" class="step" data-rotation-step data-delta="-15" aria-label="逆时针 15°">−</button><input class="num" type="number" step="1" data-rotation data-field="rotation" aria-label="朝向角度"><button type="button" class="step" data-rotation-step data-delta="15" aria-label="顺时针 15°">＋</button><span class="who">°</span><span class="who" data-front></span></dd>
-    <dt>离地</dt><dd><button type="button" class="step" data-height="-50" aria-label="降低 50">−</button><input class="num" type="number" step="1" data-height-input data-field="height" aria-label="离地高度"><button type="button" class="step" data-height="50" aria-label="升高 50">＋</button><span class="who">mm</span></dd>
+    <dt>朝向</dt><dd>${rotationRow}</dd>
+    <dt>离地</dt><dd>${heightRow}</dd>
     <dt>离顶</dt><dd><span data-field="ceiling"></span> mm</dd>
     ${gapRow("西距","west")}${gapRow("东距","east")}${gapRow("北距","north")}${gapRow("南距","south")}
   </dl>
-  <p class="hint-inline">可以直接输入任意毫米值，回车生效。输入框的上下箭头走 1；旁边的 − / ＋ 走整数档（净距 10 · 离地 50 · 朝向 15）。到不了就只挪到能到的地方，并在左下角说明是越界、干涉还是遮挡门窗洞口。</p>`;
+  ${hint}`;
 }
 // 只在换选中件时才重建 DOM，之后一律就地改值。
 // 早先的做法是「焦点在面板里就整块不刷新」，结果点了 −/＋ 之后数字不跟着动，
@@ -1850,27 +1915,53 @@ const state={...defaults,orbiting:false,panning:false,lastX:0,lastY:0,active:"de
 render();
 // 一进来就把视角标识摆对：默认是透视位，下拉显示「自由视角」、透视按钮高亮。
 syncViewControls();
-// 深链：#view=front&item=desk 直接打开某个视角并选中某件，方便分享/复现。
-if(typeof location!=="undefined"&&location.hash.length>1){
-  const params=new URLSearchParams(location.hash.slice(1));
-  const view=params.get("view");
-  const target=view?(VIEW_ALIASES[view]||view):null;
-  if(target&&VIEWS[target])setView(target);
-  const wanted=params.get("item");
-  if(wanted&&scene.items.some(candidate=>candidate.id===wanted))selectItem(wanted);
-}
-function syncRoomSwitch(){
-  const wrap=document.getElementById("room-switch-wrap");
-  const select=document.getElementById("room-switch");
-  if(!wrap||!select)return;
-  if(!rooms||rooms.length<2){wrap.hidden=true;return}
-  wrap.hidden=false;
-  const signature=rooms.map(entry=>`${entry.id}:${entry.name}`).join("|");
-  if(select.dataset.signature!==signature){
-    select.dataset.signature=signature;
-    select.innerHTML=rooms.map((entry,index)=>`<option value="${index}">${escapeHtml(entry.name||entry.id)}</option>`).join("");
+// 深链：#view=front&item=desk 直接打开某个视角并选中某件；?room=<id>（写成 #room=<id> 也认）
+// 直接打开某间房。链接可分享、可复现，所以切房间时也把地址栏里的 ?room= 跟着改。
+function deepLinkParams(){
+  const params=new URLSearchParams(typeof location!=="undefined"?location.search:"");
+  if(typeof location!=="undefined"&&location.hash.length>1){
+    new URLSearchParams(location.hash.slice(1)).forEach((value,key)=>{
+      if(!params.has(key))params.set(key,value);
+    });
   }
-  select.value=String(roomIndex);
+  return params;
+}
+const deepLink=deepLinkParams();
+const deepLinkRoom=deepLink.get("room");
+if(deepLinkRoom&&rooms){
+  const wanted=rooms.findIndex(entry=>entry.id===deepLinkRoom);
+  if(wanted>0)showRoom(wanted,false);
+}
+const deepLinkView=deepLink.get("view");
+const deepLinkTarget=deepLinkView?(VIEW_ALIASES[deepLinkView]||deepLinkView):null;
+if(deepLinkTarget&&VIEWS[deepLinkTarget])setView(deepLinkTarget);
+const deepLinkItem=deepLink.get("item");
+if(deepLinkItem&&scene.items.some(candidate=>candidate.id===deepLinkItem))selectItem(deepLinkItem);
+function syncRoomUrl(){
+  if(!rooms||rooms.length<2)return;
+  const entry=rooms[roomIndex];
+  if(!entry||!entry.id||typeof history==="undefined")return;
+  try{
+    const url=new URL(location.href);
+    url.searchParams.set("room",entry.id);
+    history.replaceState(null,"",url.toString());
+  }catch(error){}
+}
+function syncRoomBand(){
+  const band=document.getElementById("room-band");
+  if(!band)return;
+  if(!rooms||rooms.length<2){band.hidden=true;return}
+  band.hidden=false;
+  const signature=rooms.map(entry=>`${entry.id}:${entry.name}`).join("|");
+  if(band.dataset.signature!==signature){
+    band.dataset.signature=signature;
+    band.innerHTML=rooms.map((entry,index)=>
+      `<button type="button" data-room-index="${index}" aria-pressed="${index===roomIndex}">${escapeHtml(entry.name||entry.id)}</button>`).join("");
+    return;
+  }
+  Array.from(band.querySelectorAll("button")).forEach(button=>{
+    button.setAttribute("aria-pressed",Number(button.dataset.roomIndex)===roomIndex?"true":"false");
+  });
 }
 function showRoom(index,keepCamera){
   if(!rooms||!rooms[index])return;
@@ -1894,7 +1985,8 @@ function showRoom(index,keepCamera){
   }
   panelSignature=null;
   detailItemId=undefined;
-  syncRoomSwitch();
+  syncRoomBand();
+  syncRoomUrl();
   render();
 }
 function layoutVersionOf(payload){
@@ -1918,15 +2010,18 @@ async function pollLayout(){
     showRoom(index,keepCamera);
   }catch(error){}
 }
-const roomSwitch=document.getElementById("room-switch");
-if(roomSwitch){
-  roomSwitch.addEventListener("change",()=>{
-    const index=Number(roomSwitch.value);
-    if(!Number.isInteger(index)||!rooms[index])return;
+const roomBand=document.getElementById("room-band");
+if(roomBand){
+  roomBand.addEventListener("click",event=>{
+    const button=event.target&&event.target.closest?event.target.closest("button[data-room-index]"):null;
+    if(!button)return;
+    const index=Number(button.dataset.roomIndex);
+    if(!Number.isInteger(index)||!rooms||!rooms[index]||index===roomIndex)return;
     showRoom(index,false);
   });
 }
-syncRoomSwitch();
+syncRoomBand();
+syncRoomUrl();
 let pollTimer=0;
 if(POLL_URL)pollTimer=setInterval(pollLayout,1000);
 const shutdownButton=document.getElementById("shutdown-preview");

@@ -18,6 +18,7 @@ bootstrap_runtime_paths(WORKSPACE_ROOT)
 from fastapi import HTTPException
 
 import server
+from fake_request_support import local_request
 from furniture_layout.editor import render_editor
 from furniture_layout.pipeline import plan_room_scene
 from furniture_layout.scene import RoomScene
@@ -82,6 +83,7 @@ class RoomSceneEditorTests(unittest.TestCase):
             "__SCENE_JSON__",
             "__HEADING__",
             "__HEADING_SUFFIX__",
+            "__MODE_BADGE__",
             "__READ_ONLY__",
             "__POLL_URL__",
             "__ROOMS_JSON__",
@@ -100,6 +102,24 @@ class RoomSceneEditorTests(unittest.TestCase):
         self.assertIn('id="coord"', html)
         self.assertIn("function drawOriginAxes(project)", html)
         self.assertIn('data-field="coord"', html)
+
+    def test_editor_carries_the_draft_badge_and_no_room_band(self) -> None:
+        """草稿页只有一间房：挂身份牌，房间带留空（JS 见不到第二间就保持 hidden）。"""
+        html = str(render_editor("demo", _scene())["html"])
+        self.assertIn(
+            '<p class="mode-badge" id="mode-badge">草稿 · 不影响项目</p>', html
+        )
+        self.assertIn('<nav class="room-band" id="room-band" aria-label="房间切换" hidden></nav>', html)
+        self.assertIn("let rooms=[]", html)
+
+    def test_editable_panel_arm_keeps_the_input_controls(self) -> None:
+        """去掉只读页的控件时别误伤可编辑页：可编辑那支的输入框与 −/＋ 必须还在。"""
+        html = str(render_editor("demo", _scene())["html"])
+        self.assertIn("const READ_ONLY=false", html)
+        self.assertIn('data-gap-step="${key}"', html)
+        self.assertIn("data-rotation-step", html)
+        self.assertIn("data-height-input", html)
+        self.assertIn("可以直接输入任意毫米值", html)
 
     def test_editor_declares_move_and_rotate_controls(self) -> None:
         result = render_editor("demo", _scene())
@@ -190,7 +210,8 @@ class RoomSceneEditorApiTests(unittest.TestCase):
                             ),
                         )
                     ],
-                )
+                ),
+                local_request(),
             )
         )
 
