@@ -47,6 +47,7 @@ result = orchestrator.run_next(
 `run_next()`/`run_until()` 不越过未确认检查点。返回当前输出后等待确认。
 
 - 布局确认：`confirm_stage(project, "layout_plan")` 把确认后的布局冻成 `store/<project-id>/layouts/<layout-sha256>.json`。之后板件只读这份冻结布局里的可执行 CAD 单元。
+- **房间级确认**：布局检查点是"**每间都审过**"的派生值——`confirm_room(project, room_id)` 审一间，`pending_room_ids()` 说还差哪几间，全部审过时布局才 `confirmed` 并进 `approved_stages`（下游仍只认这一个闸门，panel / 制造 / CAD 的契约没改）。`confirm_stage(layout_plan)` 保留"一次确认全部"的老语义，等价于把剩下的房间一次审完。**没动过的房间，确认跟着走**：新 Revision 里某间房的内容与父修订**逐字节相同**且父修订审过它，就自动记入 `approved_rooms` 并在 `inherited_rooms[room_id] = {sha256, from_revision}` 留痕；若这样凑齐了每一间，布局检查点当场成立（不必再让人点一次头）。所以"改一间只审一间"成立，而"改的是没审过的那间"仍要人看。老项目文件没有 `approved_rooms`：`confirmed: true` 等价于"每间都审过"。
 - 内容指纹只有一个实现：`furniture_workflow/workflow_digest.py::stable_digest`——对 `json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",",":"))` 取 sha256。`layout_sha256`、`panel_sha256`、`source_sha256`、`stage_output_sha256` 都走它；**别再各写一份**，否则同一份内容在两个模块里算出两个指纹，冻结文件会互相认不出。交付验证的 `validation._stable_digest` 是同一套算法在独立包里的副本，有测试盯着两者一致。
 - 板件确认：`confirm_stage(project, "panel_plan")` 把已确认板件冻成 `store/<project-id>/panels/<panel-sha256>.json`，并记下 `confirmed_panel_sha256`。有 Store 时制造、板件旁路分析、CAD `panel-plan.json` 和交付分析哈希都按该哈希读冻结文件，文件缺失则失败；无 Store 时读内存中已确认输出。`retry_stage(project, "manufacture_plan")` 不重跑板件。
 - 同一冻结上游再试规划：`retry_stage(project, stage, stage_input=...)`。适用于未确认或需作废下游的 `panel_plan`、`manufacture_plan`、`feature_tree_planned`。失败只记录该次 attempt，不把 Revision 标为 `FAILED`。
@@ -114,19 +115,35 @@ store/<project-id>/
 | POST | `/api/room-scene/{scene_id}/edit` | 应用**一次**编辑 op（写 · 本机） |
 | GET | `/api/room-scene/{scene_id}/editor` | 可编辑视图（自包含 HTML） |
 | GET | `/api/project/{project_id}/layout` | 读项目最新布局：房间与已摆放包络 |
-| POST | `/api/project/{project_id}/layout/edit` | 页面上改一件的摆放，落成新 Revision（写 · 本机 · 灰度） |
+| POST | `/api/project/{project_id}/layout/edit` | 页面上改一件的摆放：工作副本原地改，否则落成新 Revision（写 · 本机 · 灰度） |
+| POST | `/api/project/{project_id}/layout/undo` | 撤销工作副本上的最后 N 步（写 · 本机 · 灰度） |
+| POST | `/api/project/{project_id}/edit-lease` | 申请 / 续租编辑权（写 · 本机） |
+| DELETE | `/api/project/{project_id}/edit-lease` | 归还编辑权（写 · 本机） |
+| POST | `/api/project/{project_id}/edit-lease/takeover` | 强制收回编辑权（写 · 本机） |
 | GET | `/api/project/{project_id}/preview` | 只读布局页，按版本号自行刷新 |
 | POST | `/api/preview/shutdown` | 本机请求后让预览服务干净退出（写 · 本机） |
 
 另有 `GET /health` 与 `GET /`（Swagger 入口），不是场景契约的一部分。缺场景或项目返回 404，参数或校验不通过返回 422。`project_id` 只允许英文字母、数字、`-` 和 `_`。
 
-写权限（`may_edit`）：**有副作用的端点只对本机来源开放**——停进程（`/api/preview/shutdown`）、保存场景（`/api/room-scene/save`）、编辑场景（`/api/room-scene/{scene_id}/edit`）、出房间 CAD（`/api/plan-room/cad`，会写源文件与 STEP）、改项目布局（`/api/project/{project_id}/layout/edit`）。非本机来源一律 403，且在动手之前就拒（不能先写一半再报错）。判据只有 `server.access_scope()` 一处，只看 `request.client.host`；**URL 参数不是权限**——`?mode=view` 这类只是页面表达，地址栏谁都能改，门必须在服务端。将来要给外人只读分享，在这一处多认一种凭证（新增 `shared` 来源），各端点不用动。读端点不受限（服务本来只监听 `127.0.0.1`）。外网分享的 token 形态与开门顺序见 [访问模式与外网分享](preview-access-design.md)。
+写权限（`may_edit`）：**有副作用的端点只对本机来源开放**——停进程（`/api/preview/shutdown`）、保存场景（`/api/room-scene/save`）、编辑场景（`/api/room-scene/{scene_id}/edit`）、出房间 CAD（`/api/plan-room/cad`，会写源文件与 STEP）、改项目布局（`/api/project/{project_id}/layout/edit`）、编辑租约三个端点。非本机来源一律 403，且在动手之前就拒（不能先写一半再报错）。判据只有 `server.access_scope()` 一处，只看 `request.client.host`；**URL 参数不是权限**——`?mode=view` 这类只是页面表达，地址栏谁都能改，门必须在服务端。将来要给外人只读分享，在这一处多认一种凭证（新增 `shared` 来源），各端点不用动。读端点不受限（服务本来只监听 `127.0.0.1`）。外网分享的 token 形态与开门顺序见 [访问模式与外网分享](preview-access-design.md)。
+
+**编辑租约（谁在写）**：写权限回答"这台机器上能不能写"，租约回答"**此刻轮到谁写**"。同一个项目的页面（拖动）与助手（对话）都能改，两边同时改就会互相覆盖——`expected_version` 只能事后发现（409），租约事前就分开。它落在 `<store>/<project-id>/edit-lease.json`（tmp + replace 原子写），**因为写者不在同一个进程里**：页面走 HTTP 服务进程、助手直接调 orchestrator，内存里的锁互相看不见。规矩三条：① `LEASE_TTL_SECONDS=45` 没续租就失效（页面每 5 秒心跳，助手每步续一次；关标签页、崩溃、断网都不用管）；② 被别人持有就是 `LeaseHeld`，**不静默接管**——人把活交给助手 = 授权让出，由 `handover_to_agent()` 显式转移并让页面显示「助手正在处理」，页面拿到的是 **423**（带 `holder` / `label` / `expires_in`）；③ `transfer()` 让人**随时抢得回来**（页面的「收回编辑权」按钮走 `/edit-lease/takeover`）——租约不是用来把主人关在门外的。写请求带 `X-Edit-Lease: <token>`；租约空闲或持在调用方手里才放行。状态码分工：**403** 不许写 · **409** 信息过期 · **422** 改动不合法 · **423** 编辑权在别人手里。
 
 项目预览读 `store/<project-id>/project.json` 的最新 Revision，不写 `stage_outputs`，也不写 `generated/room-scenes/`。`layout` 返回 `revision_id`、`revision_number`、`layout_confirmed`、`version` 和每间房的已摆放包络，不含预览 HTML。`version` 是**内容版本**，不是修订号：它是 `layout_sha256:确认位`（如 `5d28c9b6…:0`），同一份布局换个修订号不会让它变，页面刷新靠它判断"要不要重画"。别把它当成给人看的版本号（给人看的是 `revision_number`），也别把 `revision_id` 编进去——那会让每次重读都像变了。`preview` 打开时带上当前第一间房，之后每秒再读 `layout`：`version` 没变不重画；变了且没有正在转视角或平移，就换上新包络并保持相机角度。多间房在页上按**药丸按钮**切换（只有一间房时整条藏掉），默认第一间；当前那间写进地址栏 `?room=<id>`，切房间时用 `history.replaceState` 跟着改，所以链接能分享、能复现。页眉挂一块**身份牌**（预览页「只读预览 · 由对话更新」，草稿页「草稿 · 不影响项目」）——一眼说清这一页能不能改、改了算不算数。预览页带 `?mode=view` 时出**分享形态**：牌子换「只读分享 · 链接可转发」（琥珀色），提示语改成"只看不改"，且**不生成「退出」按钮**（那按钮能停掉本机预览服务，不该给拿到链接的人）；写链接用 `project_preview.preview_url(id, mode="view")` 或 `open_project_preview(id, share=True)`。这一页不把拖动写回项目。页上的「退出」向 `POST /api/preview/shutdown` 发本机请求，服务发完响应后结束进程。只关浏览器标签不会停服务。项目文件仍留在 `store/`。非本机来源返回 403。
 
 页面写项目（`POST /api/project/{project_id}/layout/edit`）：改**一件**家具的摆放，一次请求只改一处。body = `{op, item_id, expected_version, …op 字段}`；op 词表与字段白名单**复用房间场景编辑**（`scene_edit.apply_edit`，只有 `move` / `rotate` / `resize`），这里不另写一份判断。三道门按顺序，任何一道不过都**不落盘**：① 本机来源（`may_edit`）→ 403；② 灰度开关 `FURNITURE_PROJECT_LAYOUT_EDIT=1`（不设就是关，`true` / `yes` / 空一律当关）→ 403，理由里点名变量；③ `expected_version` 必须等于页面最近一次看到的 `version` → 不符回 409，detail 里带 `current_version`，页面刷新后重试。
 
-成功 = **追加一个新 Revision**（不复用、不原地改），响应就是 `GET /layout` 那份文档（新 `revision_number` 与 `version`），页面可直接换上新包络。新 Revision 的布局一律**未确认**（改过的内容没人点过头），下游按老规矩重做；父修订的 `stage_inputs` **原样带走**——摆放变了，柜体构造意图（门数、层板、背板安装…）没变，不带走会让下一次 `run_next()` 报 `panel proposal is incomplete`。几何校验不过（越界、与别的件或障碍物干涉、遮挡门窗洞口）回 422，**一个 Revision 都不留**。`fill` 件的宽与偏移由墙上的空段算出，所以拒绝摆放类 op（改了也会被重算覆盖，与其静默丢掉不如明说）。判断、取舍与尚未做的部分见 [页面写项目设计](project-layout-edit-design.md)。
+成功之后落在哪里，取决于**这一版还没有下游产物**（工作副本，方案 H）：
+
+- **还没有下游产物 → 原地改这一版**：`revision_number` 不变、`version`（内容摘要）变，改动进 `revision.working_ops`（记**改动前的旧值**，供撤销；**不是审计**）。改到哪一间，**那一间的确认作废**（移出 `approved_rooms`；因此不再"每间都审过"时，`layout.confirmed` 与 `approved_stages` 里的 `layout_plan` 一并撤回——不能让"已确认"挂在一份改过的内容上）。
+- **已经有下游产物 → 追加新 Revision**：已经有东西依赖这一版，再改就不是同一版。新版从空日志开始（触发它的那次改动也记一条），父修订的 `stage_inputs` **原样带走**——摆放变了，柜体构造意图（门数、层板、背板安装…）没变，不带走会让下一次 `run_next()` 报 `panel proposal is incomplete`。
+- 下游阶段一产出，工作副本就**关门**（`Revision.close_working_copy()`：清空日志 + 一条 `workflow` 事件）；页面牌子一直显示「草稿中 · 同一版 · 已调整 N 次」或「这一版已有下游产物：改动会落成新一版」，别让人以为版号变了。
+
+撤销（`POST /api/project/{project_id}/layout/undo`，body `{expected_version, steps}`）：只在工作副本还开着时可用，**逐条恢复旧值**（失败整体拒绝），并留一条 `undo N step(s)` 事件——撤销会让"已经跟人说过"的内容变样，必须看得出来。窗口的边界是**下游产物**，不是时间：没有下游产物时随时可以撤，有了就不能（再往回走是"修订"的事：明确、留痕、下游跟着作废）。
+
+响应就是 `GET /layout` 那份文档（含 `working: {open, ops, can_undo}`），页面可直接换上新包络。几何校验不过（越界、与别的件或障碍物干涉、遮挡门窗洞口）回 422，**什么都不改**。`fill` 件的宽与偏移由墙上的空段算出，所以拒绝摆放类 op（改了也会被重算覆盖，与其静默丢掉不如明说）。判断、取舍与尚未做的部分见 [页面写项目设计](project-layout-edit-design.md)。
+
+页面能不能编辑由**服务端按权限渲染**：本机来源（`may_edit`）给可编辑页，其余给只读页；`?mode=view`（分享形态）在本机也强制只读。可编辑页还要自己拿到**编辑租约**才算真的能写（申请 / 5 秒心跳 / 闲置 5 分钟自动让出 / 离开页面归还）。
 
 `/api/room-scene/save`、`/api/room-scene/{scene_id}`、`/api/room-scenes`、`/api/room-scene/{scene_id}/edit`、`/api/room-scene/{scene_id}/editor` 组成场景状态（供交互编辑）：只存源（房间定义 + 多件包络及其摆放请求），**不存派生结果**——摆放坐标、footprint、净距、预览都在读取时重算；存储独立于家具主流程，不写 `stage_outputs`。
 

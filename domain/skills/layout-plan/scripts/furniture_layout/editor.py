@@ -88,6 +88,14 @@ _SHARE_TIPS = (
     "双击画面吸到最近的正视图，再双击回到自由视角<br>"
     "有多间房时点上方房间名切换，地址栏 ?room= 直接指向某间房"
 )
+#: 可编辑的项目页（本机来源）——提示语要说清"什么时候要审、什么时候算数"。
+_PROJECT_EDITOR_TIPS = (
+    "拖动改位置（与别的家具或障碍物干涉、越出房间或遮挡门窗洞口时停在接触处）<br>"
+    "选中件：橙点或旋转环改朝向 · 蓝点改离地高度 · 右侧也能直接输入<br>"
+    "还没跑下游时，改动就落在**这一版**上（版号不变）；改到哪一间，哪一间就要重看一眼<br>"
+    "空白处拖拽转视角 · 双击吸到最近的正视图 · 滚轮缩放<br>"
+    "多间房时点上方房间名切换，地址栏 ?room= 直接指向某间房"
+)
 _SHUTDOWN_BUTTON = (
     '<button type="button" id="shutdown-preview">退出</button>'
 )
@@ -99,6 +107,7 @@ _SHUTDOWN_BUTTON = (
 _PREVIEW_BADGE = "只读预览 · 由对话更新"
 _DRAFT_BADGE = "草稿 · 不影响项目"
 _SHARE_BADGE = "只读分享 · 链接可转发"
+_PROJECT_EDIT_BADGE = "可直接拖动 · 无下游产物时改的是同一版"
 
 
 def _render_canvas_html(
@@ -115,6 +124,8 @@ def _render_canvas_html(
     mode_badge: str,
     shutdown_button: str,
     share_form: bool = False,
+    edit_url: str = "",
+    undo_url: str = "",
 ) -> str:
     room_name = str(scene_payload["room"]["name"])
     heading = f"{room_name} · {heading_suffix}"
@@ -130,6 +141,8 @@ def _render_canvas_html(
         .replace("__READ_ONLY__", "true" if read_only else "false")
         .replace("__SHARE_FORM__", "true" if share_form else "false")
         .replace("__POLL_URL__", _json_for_script(poll_url))
+        .replace("__EDIT_URL__", _json_for_script(edit_url))
+        .replace("__UNDO_URL__", _json_for_script(undo_url))
         .replace("__ROOMS_JSON__", _json_for_script(rooms))
         .replace("__VERSION_JSON__", _json_for_script(version))
         .replace("__BODY_CLASS__", body_class)
@@ -200,12 +213,13 @@ def render_project_preview(
     document: dict[str, Any],
     *,
     mode: str | None = None,
+    read_only: bool = True,
 ) -> str:
-    """Read-only canvas for one project. The page polls `document` replacements.
+    """Canvas for one project. The page polls `document` replacements.
 
-    `mode="view"`（链接写成 `?mode=view`）出**分享形态**：牌子换成"只读分享"、
-    不带「退出」按钮（外人不能停你本机的预览服务）、提示语不提草稿页。
-    这只是页面表达，不承担权限——写权限由服务端 `access_scope()` 判定。
+    `read_only` 由**服务端按权限**决定（本机来源可编辑；其余只读），`mode="view"` 再强制只读。
+    之所以不靠 URL 参数判权限：参数谁都能改（见 runtime-contract「写权限」段）。
+    可编辑时页面还要自己拿到**编辑租约**才算真的能写——那是页面的事，见 workflow_lease.py。
     """
     rooms = list(document["rooms"])
     if not rooms:
@@ -214,17 +228,29 @@ def render_project_preview(
     if not isinstance(first, dict):
         raise ValueError("project room scene must be an object")
     share_form = mode == "view"
+    if share_form:
+        read_only = True
     return _render_canvas_html(
         scene_id=project_id,
         scene_payload=first,
         rooms=rooms,
         version=str(document["version"]),
-        read_only=True,
+        read_only=read_only,
         poll_url=f"/api/project/{project_id}/layout",
+        edit_url=f"/api/project/{project_id}/layout/edit",
+        undo_url=f"/api/project/{project_id}/layout/undo",
         heading_suffix="布局预览",
-        tips=_SHARE_TIPS if share_form else _PREVIEW_TIPS,
-        app_label="只读布局分享" if share_form else "布局预览",
-        mode_badge=_SHARE_BADGE if share_form else _PREVIEW_BADGE,
+        tips=_SHARE_TIPS if share_form else (
+            _PREVIEW_TIPS if read_only else _PROJECT_EDITOR_TIPS
+        ),
+        app_label="只读布局分享" if share_form else (
+            "只读布局预览" if read_only else "可编辑家具布局"
+        ),
+        mode_badge=(
+            _SHARE_BADGE if share_form
+            else _PREVIEW_BADGE if read_only
+            else _PROJECT_EDIT_BADGE
+        ),
         shutdown_button="" if share_form else _SHUTDOWN_BUTTON,
         share_form=share_form,
     )
@@ -263,11 +289,21 @@ body{margin:0;background:linear-gradient(180deg,#f7f9fc 0,#eef1f6 100%);padding:
 .room-band button{appearance:none;border:1px solid transparent;background:transparent;color:var(--muted);border-radius:8px;padding:7px 11px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;transition:background .12s,color .12s,border-color .12s}
 .room-band button:hover{background:#f1f5f9;color:var(--ink)}
 .room-band button[aria-pressed="true"]{background:var(--accent-soft);border-color:#c7d2fe;color:#3730a3}
+/* 还没审过的房间在药丸上带一个记号——"改一间只审一间"要看得见还差哪间。 */
+.room-band button[data-pending="true"]{color:#b45309}
+.room-band button[aria-pressed="true"][data-pending="true"]{color:#92400e;background:#fffbeb;border-color:#fcd34d}
 /* 身份牌：这页是只读预览还是草稿，写在标题底下。 */
 .mode-badge{margin:7px 0 0;display:inline-block;font-size:11.5px;font-weight:600;color:#475569;background:#f1f5f9;border:1px solid var(--line);border-radius:999px;padding:3px 10px}
 body.readonly .mode-badge{color:#1d4ed8;background:#eff6ff;border-color:#bfdbfe}
 /* 分享形态另给一种颜色：拿到链接的人一眼能看出这不是他自己那台机器上的页面。 */
 body.share .mode-badge{color:#b45309;background:#fffbeb;border-color:#fcd34d}
+/* 编辑租约：谁此刻在写这个项目（助手正在处理 / 另一窗口在编辑）。 */
+.lease-badge{margin:6px 0 0;display:inline-block;font-size:11.5px;font-weight:600;color:#92400e;background:#fffbeb;border:1px solid #fcd34d;border-radius:999px;padding:3px 10px}
+.lease-badge.mine{color:#065f46;background:#ecfdf5;border-color:#a7f3d0}
+/* 工作副本状态：还没下游产物时改的是同一版（版号不变），这一点必须一直看得见。 */
+.working-badge{margin:6px 0 0;display:inline-block;font-size:11.5px;font-weight:600;color:#5b21b6;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:999px;padding:3px 10px}
+.working-badge.closed{color:#475569;background:#f1f5f9;border-color:var(--line)}
+#take-lease{color:#b45309}
 .view-switch{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:var(--muted)}
 .view-switch select{border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);font:inherit;font-weight:600;padding:6px 8px}
 /* 只读页没有编辑手柄，图例里对应的两行也藏掉——留着就是假广告。 */
@@ -330,6 +366,8 @@ canvas.panning{cursor:grabbing}
       <h1 id="heading">__HEADING__</h1>
       <p id="room-meta"></p>
       <p class="mode-badge" id="mode-badge">__MODE_BADGE__</p>
+      <p class="working-badge" id="working-badge" hidden></p>
+      <p class="lease-badge" id="lease-badge" hidden></p>
     </div>
     <nav class="room-band" id="room-band" aria-label="房间切换" hidden></nav>
     <nav class="toolbar" aria-label="视角选择">
@@ -346,6 +384,7 @@ canvas.panning{cursor:grabbing}
       </label>
       <button type="button" data-view="default_view" aria-pressed="true">复位</button>
       <button type="button" id="toggle-dims" aria-pressed="true">标注</button>
+      <button type="button" id="take-lease" hidden>收回编辑权</button>
       __SHUTDOWN_BUTTON__
     </nav>
   </header>
@@ -390,6 +429,9 @@ const SCENE_ID="__SCENE_ID__";
 const READ_ONLY=__READ_ONLY__;
 // 分享形态（预览页 ?mode=view）：只影响文案，不改权限。
 const SHARE_FORM=__SHARE_FORM__;
+// 项目页（服务端按权限渲染成可编辑）用这两个地址写回；草稿页写场景源，两者都空。
+const PROJECT_EDIT_URL=__EDIT_URL__;
+const PROJECT_UNDO_URL=__UNDO_URL__;
 const POLL_URL=__POLL_URL__;
 let rooms=__ROOMS_JSON__;
 let layoutVersion=__VERSION_JSON__;
@@ -1660,6 +1702,7 @@ canvas.addEventListener("pointermove",event=>{
   state.viewMoved=true;render();
 });
 async function reload(){
+  if(PROJECT_EDIT_URL){await refreshProjectDocument();return}
   try{
     const response=await fetch(`/api/room-scene/${encodeURIComponent(SCENE_ID)}`);
     if(!response.ok)return;
@@ -1667,23 +1710,58 @@ async function reload(){
     scene.items=normalizeItems(next.items||[]);
   }catch(error){/* 回退失败时保留画面，状态栏已有提示 */}
 }
+// 项目页：把服务端文档换到画布上（保持相机与当前房间）。
+function applyDocument(payload){
+  if(payload.version!==undefined)layoutVersion=String(payload.version);
+  if(payload.lease!==undefined)applyLease(payload.lease||null);
+  if(payload.working)applyWorking(payload);
+  if(!payload.rooms)return;
+  rooms=payload.rooms;
+  const currentId=scene.room&&scene.room.id;
+  let index=rooms.findIndex(entry=>entry.id===currentId);
+  if(index<0)index=0;
+  showRoom(index,true);
+}
+async function refreshProjectDocument(){
+  try{
+    const response=await fetch(POLL_URL,{cache:"no-store",headers:{Accept:"application/json"}});
+    if(!response.ok)return false;
+    applyDocument(await response.json());
+    return true;
+  }catch(error){return false}
+}
 async function persist(item,kind){
   if(READ_ONLY)return false;
+  if(PROJECT_EDIT_URL&&!leaseToken){
+    setStatus("这一页现在只能看：编辑权不在你手上（点「收回编辑权」或等助手做完）","warn");
+    return false;
+  }
   const placement=item.placement,op={op:kind==="rotate"?"rotate":"move",item_id:item.id};
   if(kind==="rotate")op.rotation_z_deg=Math.round(normalizeAngle(placement.rotation_z_deg)*10)/10;
   if(placement.mode==="wall"){op.offset_mm=Math.round(placement.offset_mm)}
   else{op.mode="free";op.origin_x_mm=Math.round(placement.origin_x_mm);op.origin_y_mm=Math.round(placement.origin_y_mm)}
   // origin_z_mm 是 move 的共享字段，平面移动时顺带带上也不会互相干扰。
   if(kind!=="rotate")op.origin_z_mm=Math.round(placement.origin_z_mm||0);
+  const url=PROJECT_EDIT_URL||`/api/room-scene/${encodeURIComponent(SCENE_ID)}/edit`;
+  const headers={"Content-Type":"application/json"};
+  if(leaseToken)headers["X-Edit-Lease"]=leaseToken;
+  if(PROJECT_EDIT_URL)op.expected_version=layoutVersion;
   try{
-    const response=await fetch(`/api/room-scene/${encodeURIComponent(SCENE_ID)}/edit`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(op)});
+    const response=await fetch(url,{method:"POST",headers,body:JSON.stringify(op)});
     if(!response.ok){
       const detail=await response.json().catch(()=>({}));
-      setStatus("改动被拒绝，已回到原位："+(detail.detail||response.status),"error");
-      await reload();
+      await reportWriteFailure(response.status,detail,item);
       return false;
     }
     const next=await response.json();
+    if(PROJECT_EDIT_URL){
+      applyDocument(next);
+      const working=next.working||{};
+      setStatus(working.open===false
+        ? `已保存 ${item.label}（这一版已有下游产物，改动落成了新一版）`
+        : `已保存 ${item.label}（同一版，草稿中${working.ops?` · 已调整 ${working.ops} 次`:""}）`);
+      return true;
+    }
     scene.items=normalizeItems(next.items||[]);
     setStatus(`已保存 ${item.label}`);
     return true;
@@ -1692,6 +1770,28 @@ async function persist(item,kind){
     await reload();
     return false;
   }
+}
+// 写失败要说清是哪一种：不许写 / 编辑权在别人手里 / 画面过期 / 这次改动本身不合法。
+async function reportWriteFailure(status,detail,item){
+  const raw=detail&&detail.detail!==undefined?detail.detail:detail;
+  const message=typeof raw==="string"?raw:JSON.stringify(raw||status);
+  if(status===423){
+    setStatus("助手正在处理这个项目，你的这次改动没有保存；它做完就还给你","warn");
+    await refreshProjectDocument();
+    return;
+  }
+  if(status===409){
+    const current=(raw&&raw.current_version)||"";
+    const mineMoved=current&&layoutVersion&&current.split(":")[0]!==layoutVersion.split(":")[0];
+    setStatus(mineMoved
+      ? "布局已在别处更新（画面已为你刷新），刚才那次拖动没有保存"
+      : "这一版刚被确认过，画面没变，请再拖一次","warn");
+    await refreshProjectDocument();
+    return;
+  }
+  if(status===403){setStatus("这一页没有写权限（分享或只读）","error");return}
+  setStatus(`改动被拒绝，已回到原位：${message}`,"error");
+  await reload();
 }
 canvas.addEventListener("pointerup",event=>{
   if(state.panning){
@@ -1955,8 +2055,13 @@ function syncRoomBand(){
   const signature=rooms.map(entry=>`${entry.id}:${entry.name}`).join("|");
   if(band.dataset.signature!==signature){
     band.dataset.signature=signature;
-    band.innerHTML=rooms.map((entry,index)=>
-      `<button type="button" data-room-index="${index}" aria-pressed="${index===roomIndex}">${escapeHtml(entry.name||entry.id)}</button>`).join("");
+    band.innerHTML=rooms.map((entry,index)=>{
+      // 逐间确认：还没审过的那间在药丸上标出来（"改一间只审一间"要看得见差哪间）。
+      const pending=entry.approved===false?" · 待审":"";
+      const pressed=index===roomIndex?' aria-pressed="true"':' aria-pressed="false"';
+      const mark=entry.approved===false?' data-pending="true"':"";
+      return `<button type="button" data-room-index="${index}"${pressed}${mark}>${escapeHtml(entry.name||entry.id)}${pending}</button>`;
+    }).join("");
     return;
   }
   Array.from(band.querySelectorAll("button")).forEach(button=>{
@@ -1992,6 +2097,98 @@ function showRoom(index,keepCamera){
 function layoutVersionOf(payload){
   return String(payload.version||"");
 }
+// 编辑租约：同一时刻只有一个写者能动这个项目。页面这一侧只做两件事——
+// **看得见**（谁在写）与**抢回来**（人永远抢得回来）。裁定在服务端，
+// 见 references/runtime-contract.md「编辑租约」段。
+const LEASE_URL=POLL_URL?POLL_URL.replace(/\/layout$/,"/edit-lease"):"";
+const LEASE_TOKEN_KEY="dsh-edit-lease:"+SCENE_ID;
+const LEASE_ID_KEY=LEASE_TOKEN_KEY+":id";
+const LEASE_LABEL_KEY=LEASE_TOKEN_KEY+":label";
+let leaseToken=sessionStorage.getItem(LEASE_TOKEN_KEY)||"";
+let leaseId=sessionStorage.getItem(LEASE_ID_KEY)||"";
+if(!sessionStorage.getItem(LEASE_LABEL_KEY)){
+  sessionStorage.setItem(LEASE_LABEL_KEY,"窗口 "+Math.random().toString(16).slice(2,6));
+}
+const leaseLabel=sessionStorage.getItem(LEASE_LABEL_KEY);
+// 工作副本：没有下游产物时改动原地生效（版号不变）——这句必须一直挂着，别让人以为版号变了。
+function applyWorking(payload){
+  const badge=document.getElementById("working-badge");
+  if(!badge)return;
+  const working=payload&&payload.working;
+  if(!PROJECT_EDIT_URL||!working){badge.hidden=true;return}
+  const revision=payload.revision_number?`第 ${payload.revision_number} 版 · `:"";
+  badge.hidden=false;
+  badge.classList.toggle("closed",working.open===false);
+  badge.textContent=working.open===false
+    ?`${revision}已有下游产物：改动会落成新一版`
+    :`${revision}草稿中 · 同一版${working.ops?` · 已调整 ${working.ops} 次`:""}${READ_ONLY?"（只读）":""}`;
+}
+function applyLease(lease){
+  const badge=document.getElementById("lease-badge");
+  const button=document.getElementById("take-lease");
+  if(!badge||!button)return;
+  const mine=Boolean(lease&&leaseToken&&lease.id===leaseId);
+  if(!lease){
+    badge.hidden=true;badge.classList.remove("mine");button.hidden=true;return;
+  }
+  const who=lease.holder==="agent"?"助手正在处理":(mine?"编辑权在你手上":"另一窗口正在编辑");
+  badge.textContent=`${who} · ${Math.round(lease.expires_in||0)} 秒后自动释放`;
+  badge.hidden=false;
+  badge.classList.toggle("mine",mine);
+  // 助手拿着时给一个出口；自己拿着不用抢，分享形态不给外人这个按钮。
+  button.hidden=SHARE_FORM||lease.holder!=="agent";
+}
+async function leasePost(path,body){
+  const headers={"Content-Type":"application/json"};
+  if(leaseToken)headers["X-Edit-Lease"]=leaseToken;
+  return fetch(path,{method:"POST",cache:"no-store",headers,body:JSON.stringify(body)});
+}
+const takeLeaseButton=document.getElementById("take-lease");
+if(takeLeaseButton){
+  takeLeaseButton.addEventListener("click",async()=>{
+    takeLeaseButton.disabled=true;
+    try{
+      const response=await fetch(LEASE_URL+"/takeover",{
+        method:"POST",cache:"no-store",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({holder:"page",label:leaseLabel}),
+      });
+      if(!response.ok)throw new Error(response.status);
+      const lease=await response.json();
+      leaseToken=lease.token;leaseId=lease.id;
+      sessionStorage.setItem(LEASE_TOKEN_KEY,leaseToken);
+      sessionStorage.setItem(LEASE_ID_KEY,leaseId);
+      applyLease(lease);
+      setStatus("已收回编辑权：助手下次写入会被挡下");
+    }catch(error){
+      setStatus("收回失败："+error,"error");
+    }finally{
+      takeLeaseButton.disabled=false;
+    }
+  });
+}
+function heartbeatLease(){
+  if(!leaseToken||!LEASE_URL)return;
+  leasePost(LEASE_URL,{holder:"page",label:leaseLabel,token:leaseToken})
+    .then(response=>(response&&response.ok?response.json():null))
+    .then(lease=>{
+      if(!lease)return;
+      leaseId=lease.id;
+      sessionStorage.setItem(LEASE_ID_KEY,leaseId);
+      applyLease(lease);
+    })
+    .catch(()=>{});
+}
+if(LEASE_URL)setInterval(heartbeatLease,5000);
+// 关页面就还回去；带 keepalive 让请求在卸载后仍能发出。
+window.addEventListener("pagehide",()=>{
+  if(!leaseToken||!LEASE_URL)return;
+  try{
+    fetch(LEASE_URL,{
+      method:"DELETE",cache:"no-store",keepalive:true,
+      headers:{"X-Edit-Lease":leaseToken},
+    });
+  }catch(error){}
+});
 async function pollLayout(){
   if(!POLL_URL)return;
   if(drag||state.orbiting||state.panning)return;
@@ -1999,6 +2196,9 @@ async function pollLayout(){
     const response=await fetch(POLL_URL,{cache:"no-store",headers:{Accept:"application/json"}});
     if(!response.ok)return;
     const payload=await response.json();
+    // 租约与版本无关：助手接管或让出时布局一个字没变，也必须立刻显示出来。
+    applyLease(payload.lease||null);
+    applyWorking(payload);
     if(layoutVersionOf(payload)===layoutVersion)return;
     if(drag||state.orbiting||state.panning)return;
     layoutVersion=layoutVersionOf(payload);
@@ -2024,6 +2224,57 @@ syncRoomBand();
 syncRoomUrl();
 let pollTimer=0;
 if(POLL_URL)pollTimer=setInterval(pollLayout,1000);
+// ---------------------------------------------------------------- 项目页的编辑权
+// 服务端按权限把这一页渲染成可编辑；能不能**真的写**由编辑租约说话（同一时刻只有一个写者）。
+// 页面只负责：申请、心跳、闲置让出、被抢走/被收回时跟着变。
+const IDLE_YIELD_SECONDS=300;
+let lastInteraction=Date.now();
+let idleYielded=false;
+function markInteraction(){
+  lastInteraction=Date.now();
+  if(idleYielded&&PROJECT_EDIT_URL&&!READ_ONLY&&!leaseToken)acquireLease();
+}
+["pointerdown","keydown","wheel","pointermove"].forEach(name=>{
+  window.addEventListener(name,markInteraction,{passive:true});
+});
+async function acquireLease(){
+  if(!PROJECT_EDIT_URL||READ_ONLY||SHARE_FORM)return null;
+  try{
+    const response=await leasePost(LEASE_URL,{holder:"page",label:leaseLabel,token:leaseToken||undefined});
+    if(response.status===423){
+      const detail=await response.json().catch(()=>({}));
+      applyLease(detail.detail&&detail.detail.holder?detail.detail:(detail.detail||null));
+      idleYielded=false;
+      return null;
+    }
+    if(!response.ok)return null;
+    const lease=await response.json();
+    leaseToken=lease.token;leaseId=lease.id;idleYielded=false;
+    sessionStorage.setItem(LEASE_TOKEN_KEY,leaseToken);
+    sessionStorage.setItem(LEASE_ID_KEY,leaseId);
+    applyLease(lease);
+    return lease;
+  }catch(error){return null}
+}
+function idleGuard(){
+  if(!PROJECT_EDIT_URL||READ_ONLY||SHARE_FORM)return;
+  if(!leaseToken)return;
+  if(Date.now()-lastInteraction<IDLE_YIELD_SECONDS*1000)return;
+  // 闲置太久：把编辑权还回去，别让一个开着的标签页把项目占一整天。
+  fetch(LEASE_URL,{method:"DELETE",cache:"no-store",headers:{"X-Edit-Lease":leaseToken}})
+    .catch(()=>{});
+  leaseToken="";idleYielded=true;
+  sessionStorage.removeItem(LEASE_TOKEN_KEY);
+  applyLease(null);
+  setStatus("闲置太久，已让出编辑权 · 点一下就能拿回来");
+}
+if(PROJECT_EDIT_URL)setInterval(idleGuard,30000);
+if(PROJECT_EDIT_URL&&!READ_ONLY){
+  acquireLease().then(lease=>{
+    if(lease)setStatus("可以直接拖动：还没有下游产物时，改动落在同一版上；改到哪一间，哪一间就要重看一眼");
+  });
+  refreshProjectDocument();
+}
 const shutdownButton=document.getElementById("shutdown-preview");
 if(shutdownButton){
   shutdownButton.addEventListener("click",async()=>{

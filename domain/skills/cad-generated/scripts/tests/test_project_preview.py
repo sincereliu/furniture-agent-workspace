@@ -106,7 +106,7 @@ class ProjectPreviewTests(unittest.TestCase):
             asyncio.run(server.project_layout("project_missing"))
         self.assertEqual(missing.exception.status_code, 404)
         with self.assertRaises(HTTPException) as preview:
-            asyncio.run(server.project_preview("project_missing"))
+            asyncio.run(server.project_preview("project_missing", local_request()))
         self.assertEqual(preview.exception.status_code, 404)
 
     def test_project_id_rejects_path_escape(self) -> None:
@@ -133,7 +133,9 @@ class ProjectPreviewTests(unittest.TestCase):
 
     def test_preview_embeds_first_room_and_polls_layout(self) -> None:
         project = self.orchestrator.create_project("家", home_layout(bed_offset_mm=200))
-        response = asyncio.run(server.project_preview(project.id))
+        response = asyncio.run(
+            server.project_preview(project.id, remote_request())
+        )
         html = response.body.decode("utf-8")
         self.assertEqual(response.media_type, "text/html")
         self.assertIn("<canvas", html)
@@ -141,6 +143,7 @@ class ProjectPreviewTests(unittest.TestCase):
         self.assertIn('"offset_mm":200', html)
         self.assertIn("卧室", html)
         self.assertIn("客厅", html)
+        # 非本机来源 → 只读页（能不能编辑由服务端按权限渲染，不看 URL 参数）。
         self.assertIn("const READ_ONLY=true", html)
         self.assertIn(f'/api/project/{project.id}/layout', html)
         self.assertIn('id="shutdown-preview"', html)
@@ -153,10 +156,25 @@ class ProjectPreviewTests(unittest.TestCase):
         self.assertNotIn("__SCENE_JSON__", html)
         self.assertNotIn("__POLL_URL__", html)
 
+    def test_local_preview_is_rendered_editable(self) -> None:
+        """本机来源 → 可编辑页：写入地址、租约、工作副本状态都在；只读那支不再出现。"""
+        project = self.orchestrator.create_project("家", home_layout(bed_offset_mm=200))
+        html = asyncio.run(
+            server.project_preview(project.id, local_request())
+        ).body.decode("utf-8")
+        self.assertIn("const READ_ONLY=false", html)
+        self.assertIn(f'"/api/project/{project.id}/layout/edit"', html)
+        self.assertIn(f'"/api/project/{project.id}/layout/undo"', html)
+        self.assertIn('<p class="mode-badge" id="mode-badge">可直接拖动', html)
+        self.assertIn("function applyWorking(payload)", html)
+        self.assertIn("第 ${payload.revision_number} 版", html)
+        self.assertIn("function reportWriteFailure(status,detail,item)", html)
+        self.assertIn("const IDLE_YIELD_SECONDS=300", html)
+
     def test_preview_shows_room_axes_and_cursor_coordinates(self) -> None:
         """房间坐标要看得见：原点三轴（带总宽/总深/总高）+ 光标读数 + 右栏坐标行。"""
         project = self.orchestrator.create_project("家", home_layout(bed_offset_mm=200))
-        html = asyncio.run(server.project_preview(project.id)).body.decode("utf-8")
+        html = asyncio.run(server.project_preview(project.id, local_request())).body.decode("utf-8")
         self.assertIn('id="coord"', html)
         self.assertIn("function drawOriginAxes(project)", html)
         self.assertIn("O (0,0,0)", html)
@@ -171,11 +189,14 @@ class ProjectPreviewTests(unittest.TestCase):
     def test_preview_switches_rooms_with_chips_and_a_shareable_room_link(self) -> None:
         """房间切换是药丸不是下拉；切房间要写进地址栏 ?room=，链接能分享、能复现。"""
         project = self.orchestrator.create_project("家", home_layout(bed_offset_mm=200))
-        html = asyncio.run(server.project_preview(project.id)).body.decode("utf-8")
+        html = asyncio.run(server.project_preview(project.id, local_request())).body.decode("utf-8")
         self.assertIn('<nav class="room-band" id="room-band" aria-label="房间切换" hidden></nav>', html)
         self.assertIn("function syncRoomBand()", html)
         self.assertIn('data-room-index="${index}"', html)
-        self.assertIn('aria-pressed="${index===roomIndex}"', html)
+        self.assertIn("aria-pressed", html)
+        # 还没审过的房间在药丸上带记号：改一间只审一间，要看得见还差哪间。
+        self.assertIn('data-pending="true"', html)
+        self.assertIn("· 待审", html)
         # 只有一间房时整条房间带藏掉，不留一个点了没反应的控件。
         self.assertIn("if(!rooms||rooms.length<2){band.hidden=true;return}", html)
         self.assertIn('deepLink.get("room")', html)
@@ -184,33 +205,44 @@ class ProjectPreviewTests(unittest.TestCase):
         self.assertNotIn("room-switch", html)
 
     def test_both_pages_carry_a_mode_badge(self) -> None:
-        """每页自报身份：预览=只读预览·由对话更新，草稿=草稿·不影响项目。"""
+        """每页自报身份：可编辑=可直接拖动，只读（非本机）=只读预览，草稿=草稿·不影响项目。"""
         project = self.orchestrator.create_project("家", home_layout(bed_offset_mm=200))
-        preview = asyncio.run(server.project_preview(project.id)).body.decode("utf-8")
+        editable = asyncio.run(
+            server.project_preview(project.id, local_request())
+        ).body.decode("utf-8")
+        self.assertIn('<p class="mode-badge" id="mode-badge">可直接拖动', editable)
+        self.assertNotIn("__MODE_BADGE__", editable)
+        readonly = asyncio.run(
+            server.project_preview(project.id, remote_request())
+        ).body.decode("utf-8")
         self.assertIn(
-            '<p class="mode-badge" id="mode-badge">只读预览 · 由对话更新</p>', preview
+            '<p class="mode-badge" id="mode-badge">只读预览 · 由对话更新</p>', readonly
         )
-        self.assertNotIn("__MODE_BADGE__", preview)
 
     def test_share_mode_swaps_the_badge_and_drops_the_exit_button(self) -> None:
         """`?mode=view` = 分享形态：牌子换成"只读分享"、页面里根本没有「退出」。
 
         「退出」能停掉本机的预览服务，不能给拿到链接的人用，所以分享形态是
-        **不生成**这个按钮，而不是生成后藏起来。
+        **不生成**这个按钮，而不是生成后藏起来。分享形态在本机也强制只读。
         """
         project = self.orchestrator.create_project("家", home_layout(bed_offset_mm=200))
-        share = asyncio.run(server.project_preview(project.id, mode="view")).body.decode("utf-8")
+        share = asyncio.run(
+            server.project_preview(project.id, local_request(), mode="view")
+        ).body.decode("utf-8")
         self.assertIn('<p class="mode-badge" id="mode-badge">只读分享 · 链接可转发</p>', share)
         self.assertNotIn('id="shutdown-preview"', share)
         self.assertIn('const SHARE_FORM=true', share)
+        self.assertIn("const READ_ONLY=true", share)  # 本机 + ?mode=view 也是只读
         self.assertIn("只读分享：这一页只能看，位置由房主那边更新。", share)
         self._assert_body_class(share, "readonly share")
-        # 不带参数仍是原来那一页：牌子、退出按钮、草稿页提示都在。
-        normal = asyncio.run(server.project_preview(project.id)).body.decode("utf-8")
-        self.assertIn('<p class="mode-badge" id="mode-badge">只读预览 · 由对话更新</p>', normal)
+        # 不带参数、本机来源：可编辑页，退出按钮在。
+        normal = asyncio.run(
+            server.project_preview(project.id, local_request())
+        ).body.decode("utf-8")
         self.assertIn('id="shutdown-preview"', normal)
         self.assertIn('const SHARE_FORM=false', normal)
-        self._assert_body_class(normal, "readonly")
+        self.assertIn("const READ_ONLY=false", normal)
+        self._assert_body_class(normal, "")
 
     def _assert_body_class(self, html: str, expected: str) -> None:
         self.assertIn(f'<body class="{expected}">', html)
@@ -224,8 +256,9 @@ class ProjectPreviewTests(unittest.TestCase):
             "http://127.0.0.1:8000/api/project/project_abc/preview",
         )
         source = (SCRIPT_ROOT / "server.py").read_text(encoding="utf-8")
-        # mode 只喂给渲染；判据函数连 mode 都拿不到，所以它不可能参与授权。
-        self.assertIn("render_project_preview(project_id, document, mode=mode)", source)
+        # 只读与否由服务端按权限算；判据函数连 mode 都拿不到，所以它不可能参与授权。
+        self.assertIn('read_only = mode == "view" or not may_edit(request)', source)
+        self.assertIn("read_only=read_only", source)
         self.assertIn("def access_scope(request: Request) -> str:", source)
         self.assertIn("def may_edit(request: Request) -> bool:", source)
 
@@ -236,7 +269,9 @@ class ProjectPreviewTests(unittest.TestCase):
         不能断言"整页源码里没有 class=\"num\""——那串在可编辑支里。
         """
         project = self.orchestrator.create_project("家", home_layout(bed_offset_mm=200))
-        html = asyncio.run(server.project_preview(project.id)).body.decode("utf-8")
+        html = asyncio.run(
+            server.project_preview(project.id, remote_request())
+        ).body.decode("utf-8")
         self.assertIn("const READ_ONLY=true", html)
         readonly_gap = '<dt>${label}</dt><dd><span data-gap="${key}"></span> mm<span class="who" data-who="${key}"></span></dd>'
         self.assertIn(readonly_gap, html)
@@ -286,7 +321,7 @@ class ProjectPreviewTests(unittest.TestCase):
             after["rooms"][0]["scene"]["items"][0]["placement"]["offset_mm"],
             800,
         )
-        html = asyncio.run(server.project_preview(project.id)).body.decode("utf-8")
+        html = asyncio.run(server.project_preview(project.id, local_request())).body.decode("utf-8")
         self.assertIn('"offset_mm":800', html)
         self.assertNotIn('"offset_mm":200', html)
 
@@ -429,7 +464,7 @@ class OpenProjectPreviewTests(unittest.TestCase):
         self.assertFalse(server.may_edit(remote_request()))
         source = (SCRIPT_ROOT / "server.py").read_text(encoding="utf-8")
         self.assertEqual(source.count("_LOCAL_HOSTS"), 2)  # 定义一次 + 判据里读一次
-        self.assertEqual(source.count("if not may_edit(request):"), 5)  # 五个有副作用的端点
+        self.assertEqual(source.count("if not may_edit(request):"), 9)  # 九个有副作用的端点
         endpoints = source.split("def may_edit")[1]
         self.assertNotIn("request.client.host", endpoints)
 

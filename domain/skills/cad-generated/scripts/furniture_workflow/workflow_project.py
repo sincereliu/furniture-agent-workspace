@@ -94,6 +94,65 @@ class Revision:
     #: 这一版的哪些阶段沿用了更早那一版的内容（阶段名 → {sha256, from_revision, from_stage}）。
     #: `approved_stages` 的含义是"这份内容已被确认过"，不是"人在这一版又点了一次头"。
     inherited: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: 房间级确认：这一版里**人已经看过**的房间 id。布局检查点（`layout.confirmed`）是它的派生值——
+    #: 所有房间都进过这个列表，整份布局才算确认。改一间只审一间。
+    approved_rooms: list[str] = field(default_factory=list)
+    #: 哪些房间的确认是**沿用**父修订的（房间 id → {sha256, from_revision}）：房间内容逐字节没变。
+    inherited_rooms: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: **工作副本的撤销日志**：这一版还没有下游产物时，页面拖动能原地改它；每次改动记一条
+    #: （改的是哪一件、改动前的旧值），用于撤销。**不是审计**——有下游产物时整条清空。
+    #: 记旧值而不是"从头重放"，所以丢掉最旧的几条只意味着"撤不到那么远"，不会让撤销错位。
+    working_ops: list[dict[str, Any]] = field(default_factory=list)
+
+    def has_downstream_artifacts(self) -> bool:
+        """已经有东西依赖这一版了吗？（除 `layout_plan` 之外的产物或尝试）
+
+        这是**工作副本的边界**：没有下游产物时，改多少次都还是同一版（版号不变、内容可变）；
+        一旦下游产出，再改就不是同一版了——那是新版的事。
+        """
+        key = WorkflowStage.LAYOUT_PLAN.value
+        if any(stage != key for stage in self.stage_outputs):
+            return True
+        return any(attempts for attempts in self.stage_attempts.values())
+
+    def close_working_copy(self, *, reason: str) -> bool:
+        """关掉工作副本：清空撤销日志（版本本身不动、不冻结）。
+
+        下游一产出就调它——那时"再改"已经不是同一版了，日志留着也没有意义。
+        """
+        if not self.working_ops:
+            return False
+        self.working_ops.clear()
+        self.workflow.record(f"working copy closed ({reason})")
+        return True
+
+    def room_digest(self, room_id: str) -> str | None:
+        """某一间房**内容**的摘要（房间定义 + 已摆放包络）；没有这间房返回 `None`。"""
+        for scene in self.layout.rooms:
+            if scene.room.id == room_id:
+                return stable_digest(scene.to_dict())
+        return None
+
+    def approved_room_ids(self) -> set[str]:
+        """已经审过的房间。
+
+        老项目文件里没有 `approved_rooms`——那时 `layout.confirmed` 是唯一记号，
+        它为真就等价于"每一间都审过了"。
+        """
+        if self.approved_rooms:
+            return set(self.approved_rooms)
+        if self.layout.confirmed:
+            return {scene.room.id for scene in self.layout.rooms}
+        return set()
+
+    def pending_room_ids(self) -> list[str]:
+        """还没审的房间，按布局顺序——"还差哪间"要能直接说出来。"""
+        approved = self.approved_room_ids()
+        return [
+            scene.room.id
+            for scene in self.layout.rooms
+            if scene.room.id not in approved
+        ]
 
     def confirmed_digest(self, stage: str | WorkflowStage) -> str | None:
         """这个阶段**已确认的那份内容**的摘要；没确认过就是 `None`。
@@ -176,6 +235,9 @@ class Revision:
             "approved_stages": self.approved_stages,
             "approved_digests": dict(self.approved_digests),
             "inherited": deepcopy(self.inherited),
+            "approved_rooms": list(self.approved_rooms),
+            "inherited_rooms": deepcopy(self.inherited_rooms),
+            "working_ops": deepcopy(self.working_ops),
             "stage_attempts": {
                 stage: [item.to_dict() for item in attempts]
                 for stage, attempts in self.stage_attempts.items()
@@ -256,6 +318,12 @@ class Revision:
                 parse_stage(str(stage)).value: dict(record)
                 for stage, record in dict(data.get("inherited", {})).items()
             },
+            approved_rooms=[str(room_id) for room_id in data.get("approved_rooms", [])],
+            inherited_rooms={
+                str(room_id): dict(record)
+                for room_id, record in dict(data.get("inherited_rooms", {})).items()
+            },
+            working_ops=[dict(entry) for entry in data.get("working_ops", [])],
         )
 
 
@@ -286,6 +354,8 @@ class Project:
             stage_inputs=dict(stage_inputs or {}),
             parent_revision_id=parent.id if parent else None,
         )
+        if parent is not None:
+            _carry_room_approvals(parent, revision)
         self.revisions.append(revision)
         return revision
 
@@ -305,3 +375,43 @@ class Project:
             created_at=str(data["created_at"]),
             revisions=[Revision.from_dict(item) for item in data.get("revisions", [])],
         )
+
+
+def _carry_room_approvals(parent: "Revision", revision: "Revision") -> None:
+    """没动过的房间，确认跟着走。
+
+    判据是**这一间的内容逐字节相同**（房间定义 + 摆放），与整份布局的摘要无关——
+    改次卧不该让主卧重新审一遍。沿用要留痕（`inherited_rooms`），审计时能回指到真正点头的那一版；
+    `approved_rooms` 只放"人看过"的房间，所以沿用的也算进去——它的含义是"这份内容已被确认过"。
+
+    每间都审过（沿用的也算）时，**布局检查点当场成立**：调用方不必再让人点一次头。
+    所以 `revise()` 到一个没有房间改动的布局时，下游可以直接往下走。
+    留痕用房间级的 `inherited_rooms`（逐间的摘要 + 回指），不写阶段级 `inherited`——
+    后者表示"这个阶段的产出整份沿用"，而这里的布局内容可能只是等价，别把两件事混起来。
+    """
+    approved = parent.approved_room_ids()
+    if not approved:
+        return
+    for scene in revision.layout.rooms:
+        room_id = scene.room.id
+        if room_id not in approved or room_id in revision.approved_rooms:
+            continue
+        digest = stable_digest(scene.to_dict())
+        if parent.room_digest(room_id) != digest:
+            continue
+        revision.approved_rooms.append(room_id)
+        revision.inherited_rooms[room_id] = {
+            "sha256": digest,
+            "from_revision": parent.id,
+        }
+    if revision.pending_room_ids():
+        return
+    key = WorkflowStage.LAYOUT_PLAN.value
+    revision.layout = revision.layout.confirm()
+    revision.stage_outputs[key] = revision.layout.to_dict()
+    revision.approved_digests[key] = stable_digest(revision.layout.to_dict())
+    revision.approve_stage(WorkflowStage.LAYOUT_PLAN)
+    revision.workflow.record(
+        f"layout_plan carried {len(revision.inherited_rooms)} reviewed room(s) "
+        f"from revision {parent.number}"
+    )

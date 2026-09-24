@@ -42,13 +42,23 @@ from furniture_workflow.project_layout_edit import (
     LayoutEditDisabled,
     VersionConflict,
     edit_project_layout,
+    undo_layout_edit,
 )
 from furniture_workflow.project_preview import project_layout_document
+from furniture_workflow.workflow_lease import (
+    LeaseHeld,
+    LeaseLost,
+    acquire,
+    release,
+    transfer,
+)
 from furniture_workflow.workflow_store import JsonProjectStore
 
 API_VERSION = "0.8.0"
 SAFE_PROJECT_ID = re.compile(r"^[A-Za-z0-9_-]+$")
 _LOCAL_HOSTS = {"127.0.0.1", "::1"}
+#: 写请求带回编辑租约凭据的头。
+_LEASE_HEADER = "X-Edit-Lease"
 ACCESS_LOCAL = "local"
 ACCESS_DENIED = "denied"
 
@@ -198,6 +208,15 @@ class ProjectLayoutEditRequest(RoomSceneEditRequest):
     expected_version: str = Field(..., min_length=1, description="页面最近看到的 version")
 
 
+class ProjectLayoutUndoRequest(BaseModel):
+    """撤销工作副本上的最后 N 步（只在没有下游产物时可用）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_version: str = Field(..., min_length=1, description="页面最近看到的 version")
+    steps: int = Field(default=1, ge=1, le=50)
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok", "version": API_VERSION}
@@ -231,6 +250,82 @@ async def root():
     """
 
 
+def _lease_held_detail(exc: LeaseHeld) -> dict[str, Any]:
+    """423 的说明：谁在写、还有几秒——页面据此显示"另一窗口正在编辑"。"""
+    return {"message": str(exc), **exc.lease.snapshot()}
+
+
+class EditLeaseRequest(BaseModel):
+    """申请编辑权：谁在申请 + 一个稳定的自称。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    holder: Literal["page", "agent"] = "page"
+    label: str = Field(default="", description="谁在编辑，给人看的，如「窗口 3f2a」")
+    token: str | None = Field(default=None, description="续租时带回上次拿到的 token")
+
+
+@app.post("/api/project/{project_id}/edit-lease")
+async def acquire_edit_lease(
+    project_id: str,
+    req: EditLeaseRequest,
+    request: Request,
+):
+    """申请或续租编辑权。被别人拿着回 423（带 holder / label / expires_in）。
+
+    写请求要带 `X-Edit-Lease: <token>`；没带、而租约在别人手里时，写也会被 423 挡下。
+    """
+    if not may_edit(request):
+        raise HTTPException(status_code=403, detail="edit lease is local only")
+    _load_project(project_id)  # 项目不存在就 404，别把租约发给不存在的项目
+    try:
+        lease = acquire(
+            STORE_ROOT,
+            project_id,
+            holder=req.holder,
+            label=req.label,
+            token=req.token,
+        )
+    except LeaseHeld as exc:
+        raise HTTPException(status_code=423, detail=_lease_held_detail(exc)) from exc
+    return lease.to_dict()
+
+
+@app.delete("/api/project/{project_id}/edit-lease")
+async def release_edit_lease(project_id: str, request: Request):
+    """归还编辑权（页面关掉 / 助手做完）。页面卸载时用 keepalive 发这个。"""
+    if not may_edit(request):
+        raise HTTPException(status_code=403, detail="edit lease is local only")
+    token = request.headers.get(_LEASE_HEADER, "")
+    try:
+        released = release(STORE_ROOT, project_id, token=token)
+    except LeaseLost as exc:
+        raise HTTPException(
+            status_code=409, detail={"message": str(exc)}
+        ) from exc
+    return {"released": released}
+
+
+@app.post("/api/project/{project_id}/edit-lease/takeover")
+async def takeover_edit_lease(
+    project_id: str,
+    req: EditLeaseRequest,
+    request: Request,
+):
+    """强制收回：人永远抢得回来（页面上「收回编辑权」按钮走这里）。"""
+    if not may_edit(request):
+        raise HTTPException(status_code=403, detail="edit lease is local only")
+    _load_project(project_id)
+    lease = transfer(
+        STORE_ROOT,
+        project_id,
+        to=req.holder,
+        label=req.label,
+        reason="takeover",
+    )
+    return lease.to_dict()
+
+
 def _load_project(project_id: str):
     if not SAFE_PROJECT_ID.fullmatch(project_id):
         raise HTTPException(
@@ -246,7 +341,7 @@ def _load_project(project_id: str):
 
 
 def _project_layout_document(project_id: str) -> dict[str, Any]:
-    document = project_layout_document(_load_project(project_id))
+    document = project_layout_document(_load_project(project_id), store_root=STORE_ROOT)
     if not document["rooms"]:
         raise HTTPException(status_code=422, detail="project layout has no rooms")
     return document
@@ -259,15 +354,22 @@ async def project_layout(project_id: str):
 
 
 @app.get("/api/project/{project_id}/preview", response_class=HTMLResponse)
-async def project_preview(project_id: str, mode: str | None = None) -> HTMLResponse:
-    """只读布局页。打开后每秒再读 layout，版本变了就换包络并保持相机。
+async def project_preview(project_id: str, request: Request, mode: str | None = None) -> HTMLResponse:
+    """布局页。打开后每秒再读 layout，版本变了就换包络并保持相机。
 
-    `?mode=view` 出分享形态（换牌子、去掉「退出」）。**它只是表达，不是权限**：
-    参数谁都能改，写权限由 `may_edit()` 判定。
+    **能不能编辑由服务端按权限渲染**：本机来源（`may_edit`）给可编辑页，其余给只读页。
+    `?mode=view` 在此之上强制只读（分享形态：换牌子、去掉「退出」）——**URL 参数不是权限**：
+    参数谁都能改，真正的门是 `may_edit()` 与编辑租约。
     """
     document = _project_layout_document(project_id)
+    read_only = mode == "view" or not may_edit(request)
     try:
-        html = render_project_preview(project_id, document, mode=mode)
+        html = render_project_preview(
+            project_id,
+            document,
+            mode=mode,
+            read_only=read_only,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return HTMLResponse(content=html)
@@ -297,7 +399,10 @@ async def edit_project_layout_endpoint(
             expected_version=expected_version,
             workspace_root=WORKSPACE_ROOT,
             store_root=STORE_ROOT,
+            lease_token=request.headers.get(_LEASE_HEADER) or None,
         )
+    except LeaseHeld as exc:
+        raise HTTPException(status_code=423, detail=_lease_held_detail(exc)) from exc
     except LayoutEditDisabled as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except VersionConflict as exc:
@@ -307,6 +412,41 @@ async def edit_project_layout_endpoint(
                 "message": str(exc),
                 "current_version": exc.current_version,
             },
+        ) from exc
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/api/project/{project_id}/layout/undo")
+async def undo_project_layout_edit(
+    project_id: str,
+    req: ProjectLayoutUndoRequest,
+    request: Request,
+):
+    """撤销工作副本上的最后 N 步。只在**还没有下游产物**时可用；失败整体拒绝。
+
+    撤销本身留一条事件：它会让"已经跟人说过"的内容变样，必须看得出来。
+    """
+    if not may_edit(request):
+        raise HTTPException(status_code=403, detail="editing a project layout is local only")
+    project = _load_project(project_id)
+    try:
+        return undo_layout_edit(
+            project,
+            expected_version=req.expected_version,
+            steps=req.steps,
+            workspace_root=WORKSPACE_ROOT,
+            store_root=STORE_ROOT,
+            lease_token=request.headers.get(_LEASE_HEADER) or None,
+        )
+    except LeaseHeld as exc:
+        raise HTTPException(status_code=423, detail=_lease_held_detail(exc)) from exc
+    except LayoutEditDisabled as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except VersionConflict as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"message": str(exc), "current_version": exc.current_version},
         ) from exc
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

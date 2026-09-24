@@ -44,6 +44,7 @@ from .agent_tool_schema import (
     tool_names,
 )
 from .project_preview import open_project_preview
+from .workflow_lease import LEASE_TTL_SECONDS, handover_to_agent, read_lease
 from .workflow_orchestrator import (
     RETRYABLE_STAGES,
     FurnitureOrchestrator,
@@ -105,21 +106,59 @@ class FurnitureToolSession:
                     default=True,
                 )
                 return self._ok(tool, project, include_view=include_view)
-            if tool == TOOL_CONFIRM_STAGE:
-                return self._confirm_stage(project, payload)
-            if tool == TOOL_RUN_NEXT:
-                return self._run_next(project, payload)
-            if tool == TOOL_RETRY_STAGE:
-                return self._retry_stage(project, payload)
-            if tool == TOOL_SELECT_ATTEMPT:
-                return self._select_attempt(project, payload)
-            if tool == TOOL_REVISE_LAYOUT:
-                return self._revise_layout(project, payload)
-            raise ToolProtocolError("UNKNOWN_TOOL", f"unknown tool: {tool}")
+            # 写动作前先接管编辑租约：人把活交给助手 = 授权让出（方案 B，不再问一遍）。
+            # 页面会因此切成只读，所以结果里带一句 handover 让模型告诉人——
+            # 见 references/runtime-contract.md「编辑租约」段。
+            handover = self._take_edit_lease(project)
+            result = self._dispatch_write(tool, project, payload)
+            if handover is not None:
+                result["handover"] = handover
+            return result
         except ToolProtocolError as exc:
             return self._error(tool, exc.code, exc.message, project=project)
         except (TypeError, ValueError, json.JSONDecodeError) as exc:
             return self._error(tool, "INVALID_ARGUMENT", str(exc), project=project)
+
+    def _dispatch_write(
+        self,
+        tool: str,
+        project: Project,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        """走"会改项目"的那几个工具。租约已经在外面接管好了。"""
+        if tool == TOOL_CONFIRM_STAGE:
+            return self._confirm_stage(project, payload)
+        if tool == TOOL_RUN_NEXT:
+            return self._run_next(project, payload)
+        if tool == TOOL_RETRY_STAGE:
+            return self._retry_stage(project, payload)
+        if tool == TOOL_SELECT_ATTEMPT:
+            return self._select_attempt(project, payload)
+        if tool == TOOL_REVISE_LAYOUT:
+            return self._revise_layout(project, payload)
+        raise ToolProtocolError("UNKNOWN_TOOL", f"unknown tool: {tool}")
+
+    def _take_edit_lease(self, project: Project) -> dict[str, Any] | None:
+        """接管编辑租约并给出要转告人的那句话；没发生转移就返回 `None`。
+
+        工具面没有"项目存储"时（纯内存测试）没有租约可谈，直接跳过。
+        """
+        store = self.orchestrator.project_store
+        if store is None:
+            return None
+        lease, taken_over = handover_to_agent(
+            store.root, project.id, label="助手", reason="handover"
+        )
+        if not taken_over:
+            return None
+        return {
+            "taken_over": True,
+            "holder": lease.holder,
+            "message": (
+                "编辑权已从页面接过来（页面现在是只读，显示「助手正在处理」）；"
+                f"做完会自动还回去（{LEASE_TTL_SECONDS} 秒内没有下一步就自动失效）。"
+            ),
+        }
 
     def _create_project(self, payload: dict[str, Any]) -> Project:
         _reject_unknown_keys(payload, _CREATE_KEYS)
@@ -136,6 +175,22 @@ class FurnitureToolSession:
         revision = project.latest
         _reject_failed(revision)
         requested = payload.get("stage")
+        room_id = payload.get("room_id")
+        if room_id is not None:
+            if not isinstance(room_id, str) or not room_id:
+                raise ValueError("room_id must be a non-empty string")
+            if requested is not None and requested != WorkflowStage.LAYOUT_PLAN.value:
+                raise ValueError("room_id only applies to layout_plan")
+            before = revision.workflow.current
+            self.orchestrator.confirm_room(project, room_id)
+            self._remember(project)
+            latest = project.latest
+            return self._ok(
+                TOOL_CONFIRM_STAGE,
+                project,
+                progressed=latest.workflow.current != before
+                or latest.is_stage_approved(WorkflowStage.LAYOUT_PLAN),
+            )
         stage = (
             _require_serial_stage(requested)
             if requested is not None
@@ -268,7 +323,11 @@ class FurnitureToolSession:
             "tool": tool,
             "error": None,
             "progressed": progressed,
-            "project": project_snapshot(project, include_view=include_view),
+            "project": project_snapshot(
+                project,
+                include_view=include_view,
+                store=self.orchestrator.project_store,
+            ),
         }
 
     def _error(
@@ -284,7 +343,11 @@ class FurnitureToolSession:
             "error": {"code": code, "message": message},
             "progressed": False,
             "project": (
-                project_snapshot(project, include_view=False)
+                project_snapshot(
+                    project,
+                    include_view=False,
+                    store=self.orchestrator.project_store,
+                )
                 if project is not None
                 else None
             ),
@@ -295,7 +358,9 @@ def project_snapshot(
     project: Project,
     *,
     include_view: bool = True,
+    store: Any | None = None,
 ) -> dict[str, Any]:
+    """协议状态快照。给了 `store` 就带上编辑租约（谁在写、还有几秒）。"""
     revision = project.latest
     current = revision.workflow.current
     serial = current if current in STAGE_SEQUENCE else None
@@ -333,6 +398,14 @@ def project_snapshot(
         "next_stage": next_stage.value if next_stage is not None else None,
         "layout": deepcopy(revision.layout.to_dict()),
         "layout_confirmed": bool(revision.layout.confirmed),
+        # 房间级确认：布局检查点是"每间都审过"的派生值。改一间只审一间，
+        # 没动过的房间确认跟着走过来（见 `inherited_rooms`）。
+        "approved_rooms": list(revision.approved_rooms),
+        "pending_rooms": revision.pending_room_ids(),
+        "inherited_rooms": deepcopy(revision.inherited_rooms),
+        # 编辑租约：谁此刻在写这个项目（不含 token）。有人在页面上改时，
+        # 助手要么等人让出，要么由工具面自动接管并告诉人——见 workflow_lease.py。
+        "lease": _lease_snapshot(project, store),
         "layout_sha256": revision.layout_sha256,
         "confirmed_panel_sha256": revision.confirmed_panel_sha256,
         "allowed_tools": allowed_tools(revision),
@@ -344,6 +417,17 @@ def project_snapshot(
         "current_view": current_view,
         "stage_sequence": list(_STAGE_VALUES),
     }
+
+
+def _lease_snapshot(project: Project, store: Any | None) -> dict[str, Any] | None:
+    """当前编辑租约（对外快照，不含 token）；没有存储或没有租约就是 `None`。
+
+    快照要看得见它：模型据此决定"有人在页面上改，先别动"还是"我该接管了"。
+    """
+    if store is None:
+        return None
+    lease = read_lease(store.root, project.id)
+    return lease.snapshot() if lease is not None else None
 
 
 def allowed_tools(revision: Revision) -> list[str]:

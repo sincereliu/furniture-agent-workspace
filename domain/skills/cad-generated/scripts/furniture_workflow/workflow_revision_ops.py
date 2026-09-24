@@ -177,6 +177,32 @@ class RevisionOpsMixin:
     def confirm_layout(self, project: Project) -> Revision:
         return self.confirm_stage(project, WorkflowStage.LAYOUT_PLAN)
 
+    def confirm_room(self, project: Project, room_id: str) -> Revision:
+        """审过一间房。**所有房间都审过，布局检查点才算确认。**
+
+        改一间只审一间：未动过的房间，确认在 `add_revision()` 里就跟着走过来了
+        （内容逐字节相同才沿用）。这里只补"人看过的那一间"。
+        布局阶段没确认前，`workflow.current` 一直停在 `layout_plan`，下游不会跑。
+        """
+        revision = project.latest
+        if revision.workflow.current != WorkflowStage.LAYOUT_PLAN:
+            raise ValueError(
+                "only the layout stage may be confirmed room by room: "
+                f"{revision.workflow.current.value}"
+            )
+        if revision.is_stage_approved(WorkflowStage.LAYOUT_PLAN):
+            raise ValueError("layout is already confirmed; nothing left to review")
+        known = {scene.room.id for scene in revision.layout.rooms}
+        if room_id not in known:
+            raise ValueError(f"unknown room: {room_id}")
+        if room_id not in revision.approved_rooms:
+            revision.approved_rooms.append(room_id)
+        revision.workflow.record(f"layout room reviewed: {room_id}")
+        if not revision.pending_room_ids():
+            return self.confirm_stage(project, WorkflowStage.LAYOUT_PLAN)
+        self._persist(project)
+        return revision
+
     def confirm_stage(
         self,
         project: Project,
@@ -207,6 +233,9 @@ class RevisionOpsMixin:
             return revision
 
         if requested == WorkflowStage.LAYOUT_PLAN:
+            # 整份确认 = 每间都算审过（一次确认全部，与房间级确认同一条路）。
+            for room_id in revision.pending_room_ids():
+                revision.approved_rooms.append(room_id)
             revision.layout = revision.layout.confirm()
             revision.stage_outputs[requested.value] = revision.layout.to_dict()
         if requested == WorkflowStage.PANELS_PLANNED:

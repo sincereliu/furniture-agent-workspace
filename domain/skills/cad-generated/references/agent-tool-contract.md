@@ -29,7 +29,7 @@ result = session.call(name, arguments)  # arguments 为对象或 JSON 字符串
 | --- | --- |
 | `furniture_create_project` | 用房间布局或单件快捷字段开工，停在未确认的 `layout_plan`。成功后在本机打开该项目的预览页（环境变量 `FURNITURE_PREVIEW_BROWSER=0` 时不开） |
 | `furniture_get_project` | 读当前 Revision 快照 |
-| `furniture_confirm_stage` | 确认当前检查点；意图/板件确认时冻结 JSON |
+| `furniture_confirm_stage` | 确认当前检查点；意图/板件确认时冻结 JSON。带 `room_id` 时只审那一间房（仅 `layout_plan`）：每间都审过，布局检查点才成立 |
 | `furniture_run_next` | 在已确认检查点上生成下一阶段的第一次 attempt |
 | `furniture_retry_stage` | 对同一冻结上游再试 `panel_plan` / `manufacture_plan` / `feature_tree_planned` |
 | `furniture_select_stage_attempt` | 选用某次通过的 attempt，再确认 |
@@ -55,6 +55,8 @@ result = session.call(name, arguments)  # arguments 为对象或 JSON 字符串
 `project` 只含协议状态，不是完整 `project.json`：
 
 - `id` / `revision_id` / `current_stage` / `approved_stages` / `next_stage`
+- `approved_rooms` / `pending_rooms` / `inherited_rooms`：布局的房间级确认。**每间都审过，布局检查点才成立**；`furniture_confirm_stage` 带 `room_id`（只对 `layout_plan`，一次审一间）或整份确认都行。没动过的房间，确认自动沿用父修订（`inherited_rooms` 回指真正点头的那一版）——所以 `pending_rooms` 就是"还差人看的哪几间"
+- `lease`：编辑租约（谁此刻在写这个项目，含 `holder` / `label` / `expires_in`，**不含 token**）。写动作前工具面会**自动接管**租约，并把 `handover`（`taken_over` + 一句 `message`）放进结果里——模型要把那句话转告人："页面已切成只读，我做完还给你"
 - `inherited`（哪些阶段沿用了更早那一版的内容，附 `sha256` 与 `from_revision`）与 `inherited_stages`。摆动摆放或改房间后板件内容没变时，系统会**承认**上一版的确认而不是让人再点一次头——快照必须把它显示出来，别让"少做了一步"变得看不见（见 [修订继承设计](revision-inheritance-design.md)）
 - `allowed_tools`、`required_tool`、`cad_generation_required`
 - `attempts`（编号、是否通过、错误；不含整份输出）

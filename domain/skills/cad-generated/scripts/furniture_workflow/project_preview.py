@@ -17,6 +17,7 @@ import webbrowser
 from typing import Any
 
 from furniture_layout.editor import editor_scene_payload
+from furniture_workflow.workflow_lease import read_lease
 from furniture_workflow.workflow_project import Project, Revision
 
 PREVIEW_PORT = 8000
@@ -37,23 +38,45 @@ def layout_version(revision: Revision) -> str:
     return f"{revision.layout_sha256}:{int(bool(revision.layout.confirmed))}"
 
 
-def project_layout_document(project: Project) -> dict[str, Any]:
-    """Return the latest layout without preview HTML or viewer markup."""
+def project_layout_document(
+    project: Project,
+    *,
+    store_root: str | Path | None = None,
+) -> dict[str, Any]:
+    """Return the latest layout without preview HTML or viewer markup.
+
+    给了 `store_root` 就带上**编辑租约**的对外快照（谁在写、还有几秒）——页面每秒轮询
+    这个文档，所以"助手正在处理"不需要再多发一个请求。
+    """
     revision = project.latest
     confirmed = bool(revision.layout.confirmed)
+    approved = revision.approved_room_ids()
     rooms = [
         {
             "id": scene.room.id,
             "name": scene.room.name,
+            "approved": scene.room.id in approved,
             "scene": editor_scene_payload(scene),
         }
         for scene in revision.layout.rooms
     ]
+    lease = read_lease(store_root, project.id) if store_root is not None else None
     return {
         "project_id": project.id,
         "revision_id": revision.id,
         "revision_number": revision.number,
         "layout_confirmed": confirmed,
+        # 工作副本：还没下游产物时，改动原地生效（版号不变）；log 是撤销依据（不是审计）。
+        "working": {
+            "open": not revision.has_downstream_artifacts(),
+            "ops": len(revision.working_ops),
+            "can_undo": bool(revision.working_ops),
+        },
+        "lease": lease.snapshot() if lease is not None else None,
+        # 房间级确认：布局检查点 = 每间都审过。页面据此标"哪间还没看过"。
+        "approved_rooms": list(revision.approved_rooms),
+        "pending_rooms": revision.pending_room_ids(),
+        "inherited_rooms": deepcopy(revision.inherited_rooms),
         "version": layout_version(revision),
         # 哪些阶段沿用了更早那一版的内容（内容逐字节相同 → 免掉再确认一次）。
         # 页面据此说明"这次没让你重新确认板件"，而不是悄悄少做一步。

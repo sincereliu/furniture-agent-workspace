@@ -44,7 +44,7 @@
 | `placement_check.py` | 越界、外形干涉、遮挡门窗洞口 | calculation |
 | `validation.py` | `admit_scene`（规划）；dict 上再核预览（冻结） | validation |
 | `preview.py` / `viewer.py` | SVG 与只读轨道视图 | calculation |
-| `editor.py` | 可编辑 HTML，以及项目只读预览（复用同一画布，不发 edit op）；原点三轴与光标坐标读数也长在这张画布上；多间房按页眉药丸切换，当前房间写进 `?room=` 深链；页眉身份牌区分「只读预览 / 草稿」；JS 摆放检查必须与 `placement_check.py` 同步 | calculation |
+| `editor.py` | 可编辑 HTML，以及项目页（服务端按权限渲染成**可编辑 / 只读 / 分享**三态，复用同一画布）；原点三轴与光标坐标读数也长在这张画布上；多间房按页眉药丸切换，当前房间写进 `?room=` 深链；页眉三块牌子（身份 / 工作副本 / 编辑权）；JS 摆放检查必须与 `placement_check.py` 同步 | calculation |
 | `scene_edit.py` | 源上的一次原子 op，本身不算几何；项目布局的编辑与场景编辑**共用**这一套词表与白名单 | schema |
 | `project_edit.py` | 项目布局上的一次 op：把目标房间还原成场景源 → 复用 `scene_edit` → `plan_scene` 重算并准入；返回未确认的新布局（版本/Revision/落盘不在这里） | calculation |
 | `scene_store.py` | 独立场景只存源，读取时重算 | side_effect |

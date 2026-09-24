@@ -167,7 +167,8 @@ class ProjectLayoutEditTests(unittest.TestCase):
 
     # ---- 成功路径 ----
 
-    def test_move_lands_as_a_new_unconfirmed_revision(self) -> None:
+    def test_move_lands_in_the_working_copy(self) -> None:
+        """还没有下游产物：改动**原地**落进这一版——版号不变，内容摘要变（方案 H）。"""
         project = self._project()
         before = self._document(project.id)
 
@@ -181,9 +182,10 @@ class ProjectLayoutEditTests(unittest.TestCase):
             expected_version=before["version"],
         )
 
-        self.assertEqual(after["revision_number"], 2)
-        self.assertNotEqual(after["version"], before["version"])
-        self.assertFalse(after["layout_confirmed"])
+        self.assertEqual(after["revision_number"], 1)  # 版号不动
+        self.assertNotEqual(after["version"], before["version"])  # 内容摘要动
+        self.assertTrue(after["working"]["open"])
+        self.assertEqual(after["working"]["ops"], 1)
         moved = self._item(after, "bedroom", "wardrobe")["placement"]
         self.assertEqual((moved["origin_x_mm"], moved["origin_y_mm"]), (600, 400))
         # 别的房间与别的件一个字都没动。
@@ -195,35 +197,44 @@ class ProjectLayoutEditTests(unittest.TestCase):
         )
         # 真落进 store 了：换一个 store 实例从磁盘读回来还是新位置。
         reloaded = self._document(project.id)
-        self.assertEqual(reloaded["revision_number"], 2)
+        self.assertEqual(reloaded["revision_number"], 1)
         self.assertEqual(
             self._item(reloaded, "bedroom", "wardrobe")["placement"]["origin_x_mm"], 600
         )
 
-    def test_new_revision_keeps_the_cabinet_stage_inputs(self) -> None:
-        """摆放变了，柜体参数没变：新 Revision 必须带走 stage_inputs。
+    def test_editing_after_downstream_starts_a_new_revision(self) -> None:
+        """一旦有下游产物，再改就**不是同一版**了：追加新 Revision，并带走 stage_inputs。
 
-        否则下一次 `run_next()` 会报 "panel proposal is incomplete"（backlog 已知缺口 1）。
+        `stage_inputs` 必须带走（backlog 已知缺口 1）：否则下一次 `run_next()` 会报
+        "panel proposal is incomplete"。
         """
         project = self._project()
-        before = self._document(project.id)
-        self._edit(
+        self.orchestrator.confirm_layout(project)
+        self.orchestrator.run_next(project)  # panel_plan 产出 → 工作副本关门
+        self.assertTrue(project.latest.has_downstream_artifacts())
+        closed = self._document(project.id)
+        self.assertFalse(closed["working"]["open"])
+
+        after = self._edit(
             project.id,
             local_request(),
             op="move",
-            item_id="desk",
-            origin_x_mm=2400,
-            origin_y_mm=1000,
-            expected_version=before["version"],
+            item_id="wardrobe",
+            origin_x_mm=600,
+            origin_y_mm=400,
+            expected_version=closed["version"],
         )
+        self.assertEqual(after["revision_number"], 2)
+        self.assertTrue(after["working"]["open"])  # 新一版从空日志开始
+        self.assertEqual(after["working"]["ops"], 1)
         stored = self.store.load(project.id)
         self.assertEqual(stored.latest.number, 2)
         self.assertEqual(stored.latest.stage_inputs, PANEL_INPUT)
 
-    def test_edit_never_inherits_the_confirmed_flag(self) -> None:
-        """确认过的布局被改过之后必须重新确认：新布局不能继承那个确认位。"""
+    def test_edit_revokes_the_review_of_the_room_it_touched(self) -> None:
+        """确认过的布局被改动之后必须重新确认——而且只牵连被改的那一间。"""
         project = self._project()
-        self.orchestrator.confirm_stage(project, "layout_plan")
+        self.orchestrator.confirm_layout(project)
         confirmed = self._document(project.id)
         self.assertTrue(confirmed["layout_confirmed"])
 
@@ -235,10 +246,11 @@ class ProjectLayoutEditTests(unittest.TestCase):
             width=2000,
             expected_version=confirmed["version"],
         )
-        self.assertEqual(after["revision_number"], 2)
-        self.assertFalse(after["layout_confirmed"])
+        self.assertEqual(after["revision_number"], 1)  # 还是同一版（工作副本）
+        self.assertFalse(after["layout_confirmed"])  # 但确认位撤回
+        self.assertEqual(after["pending_rooms"], ["bedroom"])  # 只有被改的那一间待审
         self.assertEqual(self._item(after, "bedroom", "wardrobe")["width"], 2000)
-        # 未确认的布局不写冻结文件：不能伪造一份"已确认"的布局。
+        # 确认位撤回后不再写冻结文件：不能伪造一份"已确认"的布局。
         frozen = list((self.root / project.id / "layouts").glob("*.json"))
         self.assertEqual(len(frozen), 1)
         self.assertNotIn(

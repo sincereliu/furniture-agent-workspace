@@ -46,7 +46,7 @@ _CREATE_KEYS = frozenset(
 _REVISE_KEYS = frozenset({"project_id"}) | (_CREATE_KEYS - {"name"})
 _ENVELOPE_KEYS = frozenset(_INTENT_FLAT_KEYS)
 _GET_KEYS = frozenset({"project_id", "include_view"})
-_CONFIRM_KEYS = frozenset({"project_id", "stage"})
+_CONFIRM_KEYS = frozenset({"project_id", "stage", "room_id"})
 _RUN_NEXT_KEYS = frozenset(
     {
         "project_id",
@@ -193,7 +193,10 @@ _OPENAI_TOOLS: list[dict[str, Any]] = [
                 "Confirm the current checkpoint after the user accepts it. "
                 "Freezes layout_plan or panel_plan JSON when those stages "
                 "are confirmed. Cannot skip ahead. Optional stage must equal "
-                "the current stage."
+                "the current stage. For layout_plan you may pass room_id to "
+                "review one room at a time: the layout checkpoint is confirmed "
+                "only after every room has been reviewed (rooms that did not "
+                "change keep their review automatically)."
             ),
             "parameters": {
                 "type": "object",
@@ -203,6 +206,13 @@ _OPENAI_TOOLS: list[dict[str, Any]] = [
                     "stage": {
                         "type": "string",
                         "enum": list(_STAGE_VALUES),
+                    },
+                    "room_id": {
+                        "type": "string",
+                        "description": (
+                            "layout_plan only: review this one room instead of "
+                            "the whole layout"
+                        ),
                     },
                 },
                 "required": ["project_id"],

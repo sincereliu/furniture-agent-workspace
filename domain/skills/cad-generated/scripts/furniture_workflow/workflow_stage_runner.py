@@ -331,6 +331,8 @@ class StageRunnerMixin:
         if stage == WorkflowStage.FEATURE_TREE_PLANNED:
             revision.feature_tree = deepcopy(output)
         revision.workflow.advance(stage, note)
+        # 下游一产出，工作副本就关门：再改已经不是同一版了，撤销日志留着也没有意义。
+        revision.close_working_copy(reason=f"{stage.value} produced")
         self._inherit_settled_stage(project, revision, stage, output)
 
     def _inherit_settled_stage(
