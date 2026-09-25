@@ -1,10 +1,12 @@
 # 仓库约定
 
 - 做家具或查找阶段入口时，读 [家具智能体](.agents/skills/furniture-agent/SKILL.md)。
-- 搜索与列目录默认只针对 `domain/` 与 `.agents/`。不要扫 `store/`、`generated/`、`temp/`、`changelog/`、`external/`。只有用户点名 CAD 桥或科学分析时，才打开 `external/` 里对应的单个 Skill。不要先读 `README.md` 或整份 `domain/skills/cad-generated/references/runtime-contract.md`。
+- 搜索与列目录默认只针对 `domain/` 与 `.agents/`。不要扫 `store/`、`generated/`、`temp/`、`changelog/`、`external/`、`vendor/`。不要先读 `README.md` 或整份 `domain/skills/cad-generated/references/runtime-contract.md`。
+- `external/` 是用子模块跟踪的上游整仓。只有用户点名 CAD 桥或科学分析时，才打开里面对应的那一个 Skill。升级是移动子模块指针。
+- `vendor/` 是本仓库自己提供、版本钉死的第三方构建文件。现在是 `vendor/three/0.186.0/`，预览服务按同名 URL 挂出。升级是替换这些文件。默认不读里面的库源码。
 - 改代码先打开对应阶段包，再按该 Skill 的参考导航打开具体文件：
-  - 布局 → `domain/skills/layout-plan/`
-  - 门、层板、抽屉、背板、踢脚、料厚 → `domain/skills/panel-plan/`
+  - 布局、房间门窗（`openings[]`）→ `domain/skills/layout-plan/`
+  - 柜门、层板、抽屉、背板、踢脚、料厚 → `domain/skills/panel-plan/`
   - 材料、封边、连接、五金、BOM、孔 → `domain/skills/manufacture-plan/`
   - 特征树 → `domain/skills/feature-tree/`
   - 确认、重试、冻结、状态机、交互工具 → `domain/skills/cad-generated/scripts/furniture_workflow/` 与 `references/agent-tool-contract.md`

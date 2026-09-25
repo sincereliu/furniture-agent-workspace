@@ -34,7 +34,7 @@ STAGE_SKILL_NAMES = (
 ALLOWED_SCRIPT_ROOTS = tuple(
     Path("domain") / "skills" / skill_name / "scripts" for skill_name in STAGE_SKILL_NAMES
 ) + (Path("temp"),)
-EXCLUDED_ROOTS = {".git", ".venv", "external"}
+EXCLUDED_ROOTS = {".git", ".venv", "external", "vendor"}
 FORBIDDEN_TOP_LEVEL_CODE_TREES = {"packages", "scripts", "scratch", "tests", "tmp"}
 
 
