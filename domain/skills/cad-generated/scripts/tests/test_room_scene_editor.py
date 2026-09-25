@@ -100,7 +100,7 @@ class RoomSceneEditorTests(unittest.TestCase):
         """坐标层长在共用画布上，可编辑页同样要有。"""
         html = str(render_editor("demo", _scene())["html"])
         self.assertIn('id="coord"', html)
-        self.assertIn("function drawOriginAxes(project)", html)
+        self.assertIn("mountLayout", html)
         self.assertIn('data-field="coord"', html)
 
     def test_editor_carries_the_draft_badge_and_no_room_band(self) -> None:

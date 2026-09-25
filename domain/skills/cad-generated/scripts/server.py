@@ -90,6 +90,16 @@ app = FastAPI(
 
 OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
 app.mount("/generated", StaticFiles(directory=str(OUTPUT_ROOT)), name="generated")
+LAYOUT_STATIC = (
+    WORKSPACE_ROOT
+    / "domain"
+    / "skills"
+    / "layout-plan"
+    / "scripts"
+    / "furniture_layout"
+    / "static"
+)
+app.mount("/vendor/three", StaticFiles(directory=str(LAYOUT_STATIC)), name="layout_three")
 
 
 class RoomOpeningRequest(BaseModel):

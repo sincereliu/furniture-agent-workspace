@@ -99,16 +99,23 @@ class ApiEntrypointTests(unittest.TestCase):
         for view in (b"top", b"bottom", b"front", b"back", b"left", b"right"):
             self.assertIn(b'<option value="' + view + b'"', viewer_response.body)
         self.assertIn(b'data-view="default_view"', viewer_response.body)
-        # 右向量必须取 cross(up, forward)，否则整幅画面左右镜像。
-        self.assertIn(b"cross([0,0,1],forward)", viewer_response.body)
-        # 坐标层与可编辑页一致：原点三轴（带总宽/总深/总高）+ 光标坐标读数；旧的固定小图标已去掉。
-        self.assertIn(b"function drawOriginAxes(project)", viewer_response.body)
-        self.assertIn("总宽".encode("utf-8"), viewer_response.body)
-        self.assertIn("总深".encode("utf-8"), viewer_response.body)
-        self.assertIn("总高".encode("utf-8"), viewer_response.body)
+        self.assertIn(b"mountLayout", viewer_response.body)
         self.assertIn(b'id="coord"', viewer_response.body)
-        self.assertIn(b"unprojectToGround(sx,sy)", viewer_response.body)
+        self.assertNotIn(b'getContext("2d")', viewer_response.body)
         self.assertNotIn(b"function drawAxis()", viewer_response.body)
+        scene = (
+            WORKSPACE_ROOT
+            / "domain"
+            / "skills"
+            / "layout-plan"
+            / "scripts"
+            / "furniture_layout"
+            / "static"
+            / "layout_scene.js"
+        ).read_text(encoding="utf-8")
+        self.assertIn("X 东 · 总宽", scene)
+        self.assertIn("Y 南 · 总深", scene)
+        self.assertIn("Z 上 · 总高", scene)
 
     def test_plan_room_rejects_missing_room_size(self) -> None:
         with self.assertRaises(ValidationError):

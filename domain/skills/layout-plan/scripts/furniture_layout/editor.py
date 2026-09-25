@@ -6,8 +6,8 @@
 旋转由 `host_wall` 派生，所以旋转墙摆会在同一个 op 里改成自由摆放。靠墙件往
 房间内拖过阈值也会转成自由摆放。
 
-相机是同一套轨道相机，除了透视/俯视，还有前/后/左/右四个立面视图。相机接近
-水平（pitch 很小）时地面射线求交会退化，所以那种视角下拖动改成在「水平轴 +
+画面、转视角、缩放和点选由 three.js 负责。房间坐标仍是 X 东、Y 南、Z 上。
+相机接近水平（pitch 很小）时地面射线求交会退化，所以那种视角下拖动改成在「水平轴 +
 高度」这个竖直平面里走，上下拖就是改高度。
 
 选中件的四向净距（到最近的家具/障碍物/墙）直接画在图上：先找同一高度带、垂直
@@ -261,7 +261,7 @@ _EDITOR_HTML = r"""<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'">
 <title>__HEADING__</title>
 <style>
 :root{
@@ -422,9 +422,11 @@ canvas.panning{cursor:grabbing}
   </div>
 </main>
 <script id="scene-data" type="application/json">__SCENE_JSON__</script>
-<script>
-(()=>{
-"use strict";
+<script type="importmap">
+{"imports":{"three":"/vendor/three/three.module.js"}}
+</script>
+<script type="module">
+import { mountLayout } from "/vendor/three/layout_scene.js";
 const SCENE_ID="__SCENE_ID__";
 const READ_ONLY=__READ_ONLY__;
 // 分享形态（预览页 ?mode=view）：只影响文案，不改权限。
@@ -445,7 +447,9 @@ const normalizeItems=items=>items.map(item=>{
 scene.items=normalizeItems(scene.items||[]);
 scene.obstacles=scene.obstacles||[];
 scene.openings=scene.openings||[];
-const canvas=document.getElementById("scene"),ctx=canvas.getContext("2d"),status=document.getElementById("status");
+const canvas=document.getElementById("scene"),status=document.getElementById("status");
+const view=mountLayout(canvas);
+let placing=false;
 let room=scene.room;
 // 视图中心。平移是就地改它（相机的一切都相对它算）；切视角时动画回 HOME_TARGET。
 let HOME_TARGET=[room.width_mm/2,room.depth_mm/2,room.height_mm*.42];
@@ -487,70 +491,29 @@ const VIEW_ALIASES={perspective:"default_view"};
 // 相机几乎与地面齐平时，地面射线求交会退化（交点跑到几万毫米外），
 // 所以这个角度以下改成在竖直平面里拖：横向 = 该视图的水平轴，纵向 = 高度。
 const ELEVATION_MAX_PITCH=.12;
-let W=960,H=600,uiScale=1;
-// 画布按设备像素比放大，线更锐利；阈值仍按 CSS 像素定义，用 px() 换算。
-function fitCanvas(){
-  const rect=canvas.getBoundingClientRect();
-  const cssWidth=rect.width||960,cssHeight=rect.height||600;
-  const ratio=Math.min(2,window.devicePixelRatio||1);
-  W=Math.max(320,Math.round(cssWidth*ratio));
-  H=Math.max(200,Math.round(cssHeight*ratio));
-  canvas.width=W;canvas.height=H;
-  uiScale=W/cssWidth;
-}
+let uiScale=1;
+function fitCanvas(){view.resize();uiScale=1}
 const px=css=>css*uiScale;
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-const sub=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]];
-const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
-const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
-const norm=a=>{const n=Math.hypot(...a)||1;return a.map(v=>v/n)};
-const midpoint=pts=>pts[0].map((_,i)=>pts.reduce((s,p)=>s+p[i],0)/pts.length);
-const focal=()=>H/(2*Math.tan(48*Math.PI/360));
-function camera(distance,pitch,yaw){
-  const p=pitch===undefined?state.pitch:pitch,y=yaw===undefined?state.yaw:yaw;
-  const d=distance===undefined?state.distance:distance;
-  const cp=Math.cos(p),sp=Math.sin(p),cy=Math.cos(y),sy=Math.sin(y);
-  const position=[target[0]+d*cp*cy,target[1]+d*cp*sy,target[2]+d*sp];
-  // 房间坐标系是 X 东 / Y 南 / Z 上（左手系），叉乘顺序必须和它配套：右向量要取
-  // cross(up, forward)。写成 cross(forward, up) 得到的是「左」向量，整幅画面会左右镜像——
-  // 前视（站在南边往北看）会把东墙画到左边，和真实方位正好相反。
-  const forward=norm(sub(target,position)),right=norm(cross([0,0,1],forward)),up=norm(cross(forward,right));
-  return{position,forward,right,up};
-}
-function projector(cam){
-  const f=focal();
-  return point=>{const rel=sub(point,cam.position),depth=dot(rel,cam.forward);return{x:W/2+dot(rel,cam.right)/depth*f,y:H/2-dot(rel,cam.up)/depth*f,depth}};
+function camera(){return view.basis()}
+function projector(){
+  return point=>view.project(point[0],point[1],point[2]||0);
 }
 function unprojectToGround(sx,sy){
-  const cam=camera(),f=focal();
-  const ax=(sx-W/2)/f,ay=-(sy-H/2)/f;
-  const dir=norm([
-    cam.forward[0]+cam.right[0]*ax+cam.up[0]*ay,
-    cam.forward[1]+cam.right[1]*ax+cam.up[1]*ay,
-    cam.forward[2]+cam.right[2]*ax+cam.up[2]*ay,
-  ]);
-  if(Math.abs(dir[2])<1e-6)return null;
-  const t=-cam.position[2]/dir[2];
-  if(!(t>0))return null;
-  return [cam.position[0]+dir[0]*t,cam.position[1]+dir[1]*t];
+  const rect=canvas.getBoundingClientRect();
+  return view.ground(rect.left+sx,rect.top+sy);
 }
-// 竖直平面拖动：屏幕位移按该点的透视尺度换算成毫米。
-// 屏幕 y 变小 = 往上 = z 变大，所以取负号。
 function verticalPlaneScale(point){
-  const depth=projector(camera())(point).depth;
-  return depth/focal();
+  const cam=camera();
+  const rel=[point[0]-cam.position[0],point[1]-cam.position[1],(point[2]||0)-cam.position[2]];
+  const depth=rel[0]*cam.forward[0]+rel[1]*cam.forward[1]+rel[2]*cam.forward[2];
+  const fov=48*Math.PI/180;
+  return 2*Math.tan(fov/2)*Math.max(depth,1)/(canvas.clientHeight||600);
 }
 function screenPoint(event){
   const rect=canvas.getBoundingClientRect();
-  return [(event.clientX-rect.left)*(W/rect.width),(event.clientY-rect.top)*(H/rect.height)];
+  return [event.clientX-rect.left,event.clientY-rect.top];
 }
-// 平视时按屏幕像素换算成毫米，拖动才和画面 1:1。
-// 中心沿相机的右/上方向走，所以任何视角下都是「往哪拖、画面往哪走」。
-function panBy(dxCss,dyCss){
-  const cam=camera(),per=uiScale*state.distance/focal();
-  for(let i=0;i<3;i++)target[i]+=(-cam.right[i]*dxCss+cam.up[i]*dyCss)*per;
-}
-// 取景要按房间中心算，否则平移过之后会把房间框到画外。
 function withHomeCentre(run){
   const saved=[target[0],target[1],target[2]];
   target[0]=HOME_TARGET[0];target[1]=HOME_TARGET[1];target[2]=HOME_TARGET[2];
@@ -641,167 +604,21 @@ function resolveInteger(from,to,probe){
   return{value:low,blocker};
 }
 
-function boxVertices(box){const b=box.footprint.map(p=>[p[0],p[1],box.z_start]),t=box.footprint.map(p=>[p[0],p[1],box.z_end]);return[...b,...t]}
-const boxFaces=[[0,3,2,1],[4,5,6,7],[0,1,5,4],[1,2,6,5],[2,3,7,6],[3,0,4,7]];
-const boxFaceAlpha=[.55,.95,.82,.72,.88,.76];
-const roomFaces=[[0,1,2,3],[4,7,6,5],[0,4,5,1],[1,5,6,2],[2,6,7,3],[3,7,4,0]];
-const roomEdges=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
-const FURNITURE="#7d9ae0",OBSTACLE="#dd8f8f";
-function visible(face,verts,cam){const a=verts[face[0]],b=verts[face[1]],c=verts[face[2]],normal=cross(sub(b,a),sub(c,b));return dot(normal,sub(cam.position,midpoint(face.map(i=>verts[i]))))>0}
-function path(points){ctx.beginPath();ctx.moveTo(points[0].x,points[0].y);for(const p of points.slice(1))ctx.lineTo(p.x,p.y);ctx.closePath()}
-function roomVertices(){const w=room.width_mm,d=room.depth_mm,h=room.height_mm;return[[0,0,0],[w,0,0],[w,d,0],[0,d,0],[0,0,h],[w,0,h],[w,d,h],[0,d,h]]}
-// 取景：二分出把整个房间装进画面（留 20% 余量，给手柄和墙面留空间）的最小距离，
-// 窗口尺寸/房间比例/视角都不用手调。深度 <= 0 表示角点跑到相机后面，投影会翻号
-// 变垃圾值，必须直接判为「装不下」，否则二分会被这种假的小跨度骗到相机贴脸。
-function roomFits(distance,pitch,yaw){
-  const cam=camera(distance,pitch,yaw),project=projector(cam),verts=roomVertices();
-  let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
-  for(const vertex of verts){
-    const rel=sub(vertex,cam.position);
-    if(dot(rel,cam.forward)<=1)return false;
-    const p=project(vertex);
-    minX=Math.min(minX,p.x);maxX=Math.max(maxX,p.x);
-    minY=Math.min(minY,p.y);maxY=Math.max(maxY,p.y);
-  }
-  return (maxX-minX)/W<=.8&&(maxY-minY)/H<=.8;
-}
 function fitDistance(pitch,yaw){
-  let low=diagonal*.4,high=diagonal*3;
-  for(let i=0;i<44;i++){
-    const mid=(low+high)/2;
-    if(roomFits(mid,pitch,yaw))high=mid;else low=mid;
-  }
-  return high;
+  const aspect=(canvas.clientWidth||960)/Math.max(canvas.clientHeight||600,1);
+  const vFov=48*Math.PI/180;
+  const limit=Math.min(vFov,2*Math.atan(Math.tan(vFov/2)*aspect));
+  const margin=pitch<ELEVATION_MAX_PITCH?1.15:1.25;
+  return diagonal*0.5/Math.sin(limit/2)*margin;
 }
-function openingPoints(o){const s=o.offset_mm,e=s+o.width_mm,z0=o.sill_height_mm,z1=z0+o.height_mm,w=room.width_mm,d=room.depth_mm;if(o.wall==="north")return[[s,0,z0],[e,0,z0],[e,0,z1],[s,0,z1]];if(o.wall==="east")return[[w,s,z0],[w,e,z0],[w,e,z1],[w,s,z1]];if(o.wall==="south")return[[w-s,d,z0],[w-e,d,z0],[w-e,d,z1],[w-s,d,z1]];return[[0,d-s,z0],[0,d-e,z0],[0,d-e,z1],[0,d-s,z1]]}
-function gridStep(){
-  const longest=Math.max(room.width_mm,room.depth_mm);
-  for(const step of [200,250,500,1000,2000])if(longest/step<=14)return step;
-  return 5000;
+function render(){
+  placing=true;
+  view.setView(state.yaw,state.pitch,state.distance,target);
+  placing=false;
+  view.sync(scene,{selectedId:state.selectedId,dims:state.dims,readOnly:READ_ONLY,blockedId:state.blocked});
+  syncPanel();
 }
-function drawBackdrop(){
-  const gradient=ctx.createLinearGradient(0,0,0,H);
-  gradient.addColorStop(0,"#f9fbfd");gradient.addColorStop(1,"#e7ecf3");
-  ctx.fillStyle=gradient;ctx.fillRect(0,0,W,H);
-}
-function drawFloor(project){
-  const w=room.width_mm,d=room.depth_mm;
-  const quad=()=>path([[0,0],[w,0],[w,d],[0,d]].map(point=>project([point[0],point[1],0])));
-  quad();
-  const gradient=ctx.createLinearGradient(0,H*.12,0,H*.96);
-  gradient.addColorStop(0,"#ffffff");gradient.addColorStop(1,"#eef2f7");
-  ctx.fillStyle=gradient;ctx.fill();
-  ctx.save();quad();ctx.clip();
-  const step=gridStep();
-  ctx.strokeStyle="rgba(148,163,184,.45)";ctx.lineWidth=1;
-  for(let x=step;x<w;x+=step){const a=project([x,0,0]),b=project([x,d,0]);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke()}
-  for(let y=step;y<d;y+=step){const a=project([0,y,0]),b=project([w,y,0]);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke()}
-  ctx.restore();
-  quad();
-  ctx.strokeStyle="rgba(100,116,139,.50)";ctx.lineWidth=px(1.4);ctx.stroke();
-}
-// roomFaces[2..5] 依次是北/东/南/西墙，法线朝房间内。透视视角下只画远端那两面，
-// 免得近墙在家具前面盖一层灰罩；立面视图里相机在房间外侧水平看，改画「正对相机」
-// 那一面（也就是能看到内表面的那面墙），房间才立得起来。
-const wallFaces={north:2,east:3,south:4,west:5};
-function drawWalls(project,cam){
-  const verts=roomVertices();
-  const elevation=isElevation();
-  const shown=Object.entries(wallFaces).filter(([,i])=>visible(roomFaces[i],verts,cam)).map(([name])=>name);
-  const farWalls=new Set(shown);
-  const faces=roomFaces.slice(2).filter(face=>visible(face,verts,cam))
-    .map(face=>({face,depth:face.reduce((s,i)=>s+project(verts[i]).depth,0)/face.length}))
-    .sort((a,b)=>b.depth-a.depth);
-  for(const entry of faces){
-    path(entry.face.map(index=>project(verts[index])));
-    ctx.fillStyle="rgba(148,163,184,.16)";ctx.fill();
-  }
-  for(const opening of scene.openings){
-    const corners=openingPoints(opening);
-    if(!farWalls.has(opening.wall)){
-      // 近端/侧向的门窗画成墙脚的粗虚线 + 名目，像平面图的洞口标注：看得见，又不盖住家具。
-      const a=project(corners[0]),b=project(corners[1]);
-      ctx.setLineDash([px(7),px(5)]);
-      ctx.strokeStyle="rgba(2,132,199,.75)";ctx.lineWidth=px(3);
-      ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.font=`700 ${Math.round(px(12))}px "Microsoft YaHei",system-ui,sans-serif`;
-      ctx.textAlign="center";ctx.textBaseline="middle";
-      ctx.lineWidth=px(3.5);ctx.strokeStyle="rgba(255,255,255,.92)";
-      ctx.strokeText(openingLabel(opening.kind),(a.x+b.x)/2,(a.y+b.y)/2);
-      ctx.fillStyle="#0369a1";
-      ctx.fillText(openingLabel(opening.kind),(a.x+b.x)/2,(a.y+b.y)/2);
-    }else{
-      path(corners.map(project));
-      ctx.fillStyle="rgba(125,211,252,.34)";ctx.fill();
-      ctx.strokeStyle="rgba(2,132,199,.7)";ctx.lineWidth=px(1.5);ctx.stroke();
-    }
-  }
-  ctx.strokeStyle="rgba(100,116,139,.45)";ctx.lineWidth=px(1.3);
-  for(const edge of roomEdges){
-    const a=project(verts[edge[0]]),b=project(verts[edge[1]]);
-    ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
-  }
-  if(elevation){
-    // 立面视图没有地面网格可参照，给个地脚线，房间才不像悬空。
-    const floor=[[0,0,0],[room.width_mm,0,0],[room.width_mm,room.depth_mm,0],[0,room.depth_mm,0]].map(v=>project(v));
-    path(floor);
-    ctx.strokeStyle="rgba(100,116,139,.6)";ctx.lineWidth=px(1.8);ctx.stroke();
-  }
-}
-function drawShadows(project){
-  if(isElevation())return;
-  for(const box of scene.items){
-    path(box.footprint.map(point=>project([point[0],point[1],0])));
-    ctx.fillStyle=box.id===state.selectedId?"rgba(180,83,9,.16)":"rgba(15,23,42,.10)";
-    ctx.fill();
-  }
-}
-function drawSolids(project,cam){
-  const faces=[];
-  const push=(box,base,selected,blocked,markFront)=>{
-    const verts=boxVertices(box);
-    boxFaces.forEach((face,index)=>{
-      if(!visible(face,verts,cam))return;
-      // boxFaces[4] = [2,3,7,6]，两边正是 footprint[2]→[3]，
-      // 也就是局部 +Y 那条边——正面。给家具的正面换个描边色。
-      const front=markFront&&index===4;
-      faces.push({
-        points:face.map(i=>project(verts[i])),
-        depth:face.reduce((s,i)=>s+project(verts[i]).depth,0)/face.length,
-        fill:base,alpha:boxFaceAlpha[index],
-        stroke:blocked?"#dc2626":front?"#047857":(selected?"#b45309":"rgba(30,41,79,.55)"),
-        width:blocked?px(2.4):front?px(2.6):(selected?px(2.4):px(1.2)),
-      });
-    });
-  };
-  for(const obstacle of scene.obstacles)push(obstacle,OBSTACLE,false,false,false);
-  for(const box of scene.items)push(box,FURNITURE,box.id===state.selectedId,box.id===state.blocked,true);
-  faces.sort((a,b)=>b.depth-a.depth);
-  for(const face of faces){
-    path(face.points);
-    ctx.globalAlpha=face.alpha;ctx.fillStyle=face.fill;ctx.fill();ctx.globalAlpha=1;
-    ctx.strokeStyle=face.stroke;ctx.lineWidth=face.width;ctx.stroke();
-  }
-  // 正面也可能背对相机：再在正面那侧的墙脚补一条绿线，任何角度都看得出正面对哪。
-  ctx.strokeStyle="#047857";ctx.lineWidth=px(2.4);ctx.lineCap="round";
-  for(const box of scene.items){
-    const a=project([box.footprint[2][0],box.footprint[2][1],box.z_start]);
-    const b=project([box.footprint[3][0],box.footprint[3][1],box.z_start]);
-    ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
-  }
-  ctx.lineCap="butt";
-  ctx.font=`700 ${Math.round(px(15))}px "Microsoft YaHei",system-ui,sans-serif`;
-  ctx.textAlign="center";ctx.textBaseline="middle";
-  for(const f of scene.items){
-    const center=footprintCenter(f),p=project([center[0],center[1],(f.z_start+f.z_end)/2]);
-    ctx.lineWidth=px(4);ctx.strokeStyle="rgba(15,23,42,.72)";ctx.strokeText(f.label,p.x,p.y);
-    ctx.fillStyle="#fff";ctx.fillText(f.label,p.x,p.y);
-  }
-}
-/* ---------- 净距：到最近邻（或墙）的四向标注 ---------- */
-// 先在同一高度带里、垂直方向有重叠的邻居中找最近的一件；没有才退到墙。
-// 与房间净距（clearances）同一套矩形口径，标注线才好读。
+
 function boxOf(footprint){
   const xs=footprint.map(point=>point[0]),ys=footprint.map(point=>point[1]);
   return{x0:Math.min(...xs),x1:Math.max(...xs),y0:Math.min(...ys),y1:Math.max(...ys)};
@@ -843,314 +660,15 @@ function distancesOf(item){
   }
   return result;
 }
-function drawDimensions(project){
-  if(!state.dims)return;
-  const item=scene.items.find(candidate=>candidate.id===state.selectedId);
-  if(!item)return;
-  const gaps=distancesOf(item),box=boxOf(item.footprint);
-  const midX=(box.x0+box.x1)/2,midY=(box.y0+box.y1)/2;
-  const specs=[
-    [box.x0,midY,box.x0-gaps.west.gap,midY,true],
-    [box.x1,midY,box.x1+gaps.east.gap,midY,true],
-    [midX,box.y0,midX,box.y0-gaps.north.gap,false],
-    [midX,box.y1,midX,box.y1+gaps.south.gap,false],
-  ];
-  const values=[gaps.west,gaps.east,gaps.north,gaps.south];
-  ctx.font=`700 ${Math.round(px(11.5))}px "Microsoft YaHei",system-ui,sans-serif`;
-  ctx.textAlign="center";ctx.textBaseline="middle";
-  specs.forEach((spec,index)=>{
-    const a=project([spec[0],spec[1],0]),b=project([spec[2],spec[3],0]);
-    const vertical=spec[4];
-    ctx.strokeStyle="rgba(124,58,237,.85)";ctx.lineWidth=px(1.4);
-    ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
-    const tick=px(4.5);
-    for(const p of [a,b]){
-      ctx.beginPath();
-      if(vertical){ctx.moveTo(p.x,p.y-tick);ctx.lineTo(p.x,p.y+tick)}
-      else{ctx.moveTo(p.x-tick,p.y);ctx.lineTo(p.x+tick,p.y)}
-      ctx.stroke();
-    }
-    const label=String(Math.round(values[index].gap));
-    const lx=(a.x+b.x)/2,ly=(a.y+b.y)/2-px(10);
-    ctx.lineWidth=px(3.5);ctx.strokeStyle="rgba(255,255,255,.95)";
-    ctx.strokeText(label,lx,ly);
-    ctx.fillStyle="#6d28d9";
-    ctx.fillText(label,lx,ly);
-  });
-  drawItemDimensions(project,item);
-}
-// 家具本体的尺寸线：宽 / 深 / 高。都沿局部轴量，所以跟着朝向走，不是量 AABB。
-// 宽深两条朝包络中心让开一段，免得和外圈净距线、本体轮廓叠在一起。
-// 三条都从原点角（局部 0,0）出发，正好成一组坐标框。
-function itemDimensionSpecs(item){
-  const fp=item.footprint,centre=footprintCenter(item);
-  const smaller=Math.min(item.width,item.depth);
-  const inset=Math.min(Math.max(60,Math.min(180,smaller*0.2)),smaller*0.35);
-  const pull=(a,b)=>{
-    const mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2;
-    const length=Math.hypot(centre[0]-mx,centre[1]-my)||1;
-    const ux=(centre[0]-mx)/length,uy=(centre[1]-my)/length;
-    return [[a[0]+ux*inset,a[1]+uy*inset,0],[b[0]+ux*inset,b[1]+uy*inset,0]];
-  };
-  const corner=[fp[0][0],fp[0][1]];
-  return [
-    {label:`宽 ${Math.round(item.width)}`,ends:pull(fp[0],fp[1])},
-    {label:`深 ${Math.round(item.depth)}`,ends:pull(fp[0],fp[3])},
-    {label:`高 ${Math.round(item.height)}`,
-      ends:[[corner[0],corner[1],item.z_start],[corner[0],corner[1],item.z_end]]},
-  ];
-}
-function drawItemDimensions(project,item){
-  ctx.font=`700 ${Math.round(px(11))}px "Microsoft YaHei",system-ui,sans-serif`;
-  ctx.textAlign="center";ctx.textBaseline="middle";
-  const centre=footprintCenter(item);
-  const centreScreen=project([centre[0],centre[1],(item.z_start+item.z_end)/2]);
-  for(const spec of itemDimensionSpecs(item)){
-    const a=project(spec.ends[0]),b=project(spec.ends[1]);
-    const dx=b.x-a.x,dy=b.y-a.y,length=Math.hypot(dx,dy)||1;
-    const nx=-dy/length,ny=dx/length,tick=px(4.5);
-    ctx.strokeStyle="rgba(51,65,85,.9)";ctx.lineWidth=px(1.4);
-    ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(a.x-nx*tick,a.y-ny*tick);ctx.lineTo(a.x+nx*tick,a.y+ny*tick);
-    ctx.moveTo(b.x-nx*tick,b.y-ny*tick);ctx.lineTo(b.x+nx*tick,b.y+ny*tick);
-    ctx.stroke();
-    // 标签往外放（背离本体中心），免得挤在家具名和其他数字上。
-    const mx=(a.x+b.x)/2,my=(a.y+b.y)/2;
-    let ox=mx-centreScreen.x,oy=my-centreScreen.y;
-    const span=Math.hypot(ox,oy)||1;
-    const lx=mx+ox/span*px(11),ly=my+oy/span*px(11);
-    ctx.lineWidth=px(3.5);ctx.strokeStyle="rgba(255,255,255,.95)";ctx.strokeText(spec.label,lx,ly);
-    ctx.fillStyle="#334155";ctx.fillText(spec.label,lx,ly);
-  }
-}
-// 正面方向。约定见 spatial-layout-rules：件局部 X 左→右、Y 后→前，原点在左后下角，
-// 所以局部 +Y 那一侧就是正面（靠墙件背面贴墙、正面朝室内）。转到世界是 (−sinθ, cosθ)。
 function frontVector(item){
   const rad=(item.placement.rotation_z_deg||0)*Math.PI/180;
   return [-Math.sin(rad),Math.cos(rad)];
 }
-// 正面朝哪一边，说成人话。方向词的顺序是先东西后南北（西南、东南、东北、西北）。
 function frontCompass(item){
   const vector=frontVector(item),parts=[];
   if(vector[0]>0.38)parts.push("东");else if(vector[0]<-0.38)parts.push("西");
   if(vector[1]>0.38)parts.push("南");else if(vector[1]<-0.38)parts.push("北");
   return parts.join("")||"—";
-}
-// 正面方向在屏幕上的角度，用来画朝向箭头。
-function headingScreenAngle(item,project,center,height){
-  const vector=frontVector(item);
-  const reach=Math.max(200,room.width_mm*.08);
-  const pivot=project([center[0],center[1],height]);
-  const tip=project([center[0]+vector[0]*reach,center[1]+vector[1]*reach,height]);
-  return Math.atan2(tip.y-pivot.y,tip.x-pivot.x);
-}
-// 「正面朝哪」：从选中件中心指出去的绿箭头 + 「前」。这在两页都画——它是信息，不是手柄。
-function drawFrontArrow(item,project,pivot,radius){
-  const center=footprintCenter(item),height=(item.z_start+item.z_end)/2;
-  const heading=headingScreenAngle(item,project,center,height);
-  const tipX=pivot.x+Math.cos(heading)*radius,tipY=pivot.y+Math.sin(heading)*radius;
-  ctx.strokeStyle="#047857";ctx.lineWidth=px(2.4);
-  ctx.beginPath();ctx.moveTo(pivot.x,pivot.y);ctx.lineTo(tipX,tipY);ctx.stroke();
-  const back=heading+Math.PI;
-  ctx.beginPath();
-  ctx.moveTo(tipX+Math.cos(back-0.42)*px(10),tipY+Math.sin(back-0.42)*px(10));
-  ctx.lineTo(tipX,tipY);
-  ctx.lineTo(tipX+Math.cos(back+0.42)*px(10),tipY+Math.sin(back+0.42)*px(10));
-  ctx.stroke();
-  const labelX=clamp(tipX+Math.cos(heading)*px(14),px(14),W-px(14));
-  const labelY=clamp(tipY+Math.sin(heading)*px(14),px(14),H-px(14));
-  ctx.font=`700 ${Math.round(px(12.5))}px "Microsoft YaHei",system-ui,sans-serif`;
-  ctx.textAlign="center";ctx.textBaseline="middle";
-  ctx.lineWidth=px(3.5);ctx.strokeStyle="rgba(255,255,255,.95)";ctx.strokeText("前",labelX,labelY);
-  ctx.fillStyle="#047857";ctx.fillText("前",labelX,labelY);
-}
-function drawRotateHandle(project){
-  const item=scene.items.find(candidate=>candidate.id===state.selectedId);
-  if(!item){state.handle=null;state.rotateRing=null;return}
-  const center=footprintCenter(item),height=(item.z_start+item.z_end)/2;
-  const pivot=project([center[0],center[1],height]);
-  const top=project([center[0],center[1],item.z_end]);
-  const radius=px(74);
-  // 只读页（项目预览）不画橙点、旋转环和刻度：那些是抓取点，只读时点不动，只会让人以为能拖。
-  if(READ_ONLY){state.handle=null;state.rotateRing=null;drawFrontArrow(item,project,pivot,radius);return}
-  const handle={x:clamp(top.x+px(32),px(20),W-px(20)),y:clamp(top.y-px(48),px(20),H-px(20))};
-  state.handle=handle;
-  // 旋转环：把转轴、刻度和当前朝向都画出来，整圈都是可抓区域。
-  state.rotateRing={x:pivot.x,y:pivot.y,radius};
-  ctx.save();
-  ctx.setLineDash([px(3),px(5)]);
-  ctx.strokeStyle="rgba(180,83,9,.34)";ctx.lineWidth=px(1.2);
-  ctx.beginPath();ctx.arc(pivot.x,pivot.y,radius,0,Math.PI*2);ctx.stroke();
-  ctx.setLineDash([]);
-  for(let deg=0;deg<360;deg+=15){
-    const a=deg*Math.PI/180,major=deg%45===0;
-    const inner=radius-(major?px(7):px(4));
-    ctx.strokeStyle=major?"rgba(180,83,9,.5)":"rgba(180,83,9,.26)";
-    ctx.lineWidth=px(1.4);
-    ctx.beginPath();
-    ctx.moveTo(pivot.x+Math.cos(a)*inner,pivot.y+Math.sin(a)*inner);
-    ctx.lineTo(pivot.x+Math.cos(a)*radius,pivot.y+Math.sin(a)*radius);
-    ctx.stroke();
-  }
-  ctx.restore();
-  drawFrontArrow(item,project,pivot,radius);
-  ctx.strokeStyle="rgba(180,83,9,.5)";ctx.lineWidth=px(1.6);
-  ctx.setLineDash([px(4),px(4)]);
-  ctx.beginPath();ctx.moveTo(top.x,top.y);ctx.lineTo(handle.x,handle.y);ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.beginPath();ctx.arc(handle.x,handle.y,px(14),0,Math.PI*2);
-  ctx.fillStyle="#f59e0b";ctx.fill();
-  ctx.strokeStyle="#b45309";ctx.lineWidth=px(2);ctx.stroke();
-  ctx.beginPath();ctx.arc(handle.x,handle.y,px(6.5),-Math.PI*.75,Math.PI*.55);
-  ctx.strokeStyle="#fff";ctx.lineWidth=px(2.2);ctx.stroke();
-  if(drag&&drag.kind==="rotate"){
-    // 拖动时就地显示角度，不用去猜吸附到哪了。
-    const label=`${Math.round(normalizeAngle(item.placement.rotation_z_deg||0))}°`;
-    ctx.font=`700 ${Math.round(px(13))}px "Microsoft YaHei",system-ui,sans-serif`;
-    ctx.textAlign="center";ctx.textBaseline="middle";
-    const lx=clamp(handle.x+px(28),px(26),W-px(26)),ly=handle.y-px(16);
-    ctx.lineWidth=px(4);ctx.strokeStyle="rgba(255,255,255,.95)";ctx.strokeText(label,lx,ly);
-    ctx.fillStyle="#b45309";ctx.fillText(label,lx,ly);
-  }
-}
-function drawHeightHandle(project){
-  // 只读页不画离地高度手柄（蓝点）：它也是抓取点。
-  if(READ_ONLY){state.heightHandle=null;return}
-  const item=scene.items.find(candidate=>candidate.id===state.selectedId);
-  if(!item){state.heightHandle=null;return}
-  const center=footprintCenter(item),top=project([center[0],center[1],item.z_end]);
-  const handle={x:clamp(top.x-px(30),px(20),W-px(20)),y:clamp(top.y-px(46),px(20),H-px(20))};
-  state.heightHandle=handle;
-  ctx.strokeStyle="rgba(29,78,216,.5)";ctx.lineWidth=px(1.6);
-  ctx.setLineDash([px(4),px(4)]);
-  ctx.beginPath();ctx.moveTo(top.x,top.y);ctx.lineTo(handle.x,handle.y);ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.beginPath();ctx.arc(handle.x,handle.y,px(12),0,Math.PI*2);
-  ctx.fillStyle="#3b82f6";ctx.fill();
-  ctx.strokeStyle="#1d4ed8";ctx.lineWidth=px(2);ctx.stroke();
-  ctx.strokeStyle="#fff";ctx.lineWidth=px(1.8);
-  ctx.beginPath();
-  ctx.moveTo(handle.x,handle.y-px(6));ctx.lineTo(handle.x,handle.y+px(6));
-  ctx.moveTo(handle.x-px(3.6),handle.y-px(2.4));ctx.lineTo(handle.x,handle.y-px(6));ctx.lineTo(handle.x+px(3.6),handle.y-px(2.4));
-  ctx.moveTo(handle.x-px(3.6),handle.y+px(2.4));ctx.lineTo(handle.x,handle.y+px(6));ctx.lineTo(handle.x+px(3.6),handle.y+px(2.4));
-  ctx.stroke();
-}
-/* ---------- 房间原点与 X/Y/Z 轴：轴长就是房间的总宽 / 总深 / 总高 ---------- */
-// 原点在西北角地面（与空间布局规则的坐标约定一致）。三根轴画在房间外侧一点，箭头指向
-// +X（东）、+Y（南）、+Z（上），轴上直接标出房间总宽 / 总深 / 总高。正对着相机被压成
-// 一点、或者跑到相机后面的那根就不画。画在标注层，和净距线一样盖在家具上面。
-function drawOriginAxes(project){
-  const origin=project([0,0,0]);
-  if(!(origin.depth>0))return;
-  const gap=Math.max(120,Math.min(room.width_mm,room.depth_mm)*.04);
-  const centre=project([room.width_mm/2,room.depth_mm/2,0]);
-  const arms=[
-    {from:[0,-gap,0],tip:[room.width_mm,-gap,0],witness:[[0,0,0],[0,-gap,0]],color:"#dc2626",
-      label:`X 东 · 总宽 ${Math.round(room.width_mm)}`},
-    {from:[-gap,0,0],tip:[-gap,room.depth_mm,0],witness:[[0,0,0],[-gap,0,0]],color:"#047857",
-      label:`Y 南 · 总深 ${Math.round(room.depth_mm)}`},
-    {from:[-gap,-gap,0],tip:[-gap,-gap,room.height_mm],color:"#2563eb",
-      label:`Z 上 · 总高 ${Math.round(room.height_mm)}`},
-  ];
-  ctx.save();
-  ctx.font=`700 ${Math.round(px(12))}px "Microsoft YaHei",system-ui,sans-serif`;
-  ctx.textAlign="center";ctx.textBaseline="middle";
-  for(const arm of arms){
-    const a=project(arm.from),b=project(arm.tip);
-    if(!(a.depth>0)||!(b.depth>0))continue;
-    // 正对相机时这根轴会压成一个点，标出来只是糊一坨，索性不画。
-    if(Math.hypot(b.x-a.x,b.y-a.y)<px(26))continue;
-    if(arm.witness){
-      const [w0,w1]=arm.witness.map(project);
-      ctx.save();ctx.setLineDash([px(4),px(4)]);ctx.strokeStyle=arm.color;ctx.lineWidth=px(1);
-      ctx.beginPath();ctx.moveTo(w0.x,w0.y);ctx.lineTo(w1.x,w1.y);ctx.stroke();ctx.restore();
-    }
-    const angle=Math.atan2(b.y-a.y,b.x-a.x);
-    ctx.strokeStyle=arm.color;ctx.lineWidth=px(1.8);ctx.lineCap="round";
-    ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
-    const head=px(10);
-    ctx.beginPath();
-    ctx.moveTo(b.x,b.y);
-    ctx.lineTo(b.x-head*Math.cos(angle-.42),b.y-head*Math.sin(angle-.42));
-    ctx.lineTo(b.x-head*Math.cos(angle+.42),b.y-head*Math.sin(angle+.42));
-    ctx.closePath();ctx.fillStyle=arm.color;ctx.fill();
-    // 标签朝房间外侧让开，免得压在家具上。
-    const mx=(a.x+b.x)/2,my=(a.y+b.y)/2;
-    let ox=mx-centre.x,oy=my-centre.y;
-    const length=Math.hypot(ox,oy)||1;
-    ox=mx+ox/length*px(15);oy=my+oy/length*px(15);
-    ctx.lineWidth=px(3.5);ctx.strokeStyle="rgba(255,255,255,.92)";
-    ctx.strokeText(arm.label,ox,oy);
-    ctx.fillStyle=arm.color;ctx.fillText(arm.label,ox,oy);
-  }
-  ctx.beginPath();ctx.arc(origin.x,origin.y,px(3.4),0,Math.PI*2);ctx.fillStyle="#0f172a";ctx.fill();
-  // 原点字样也往房间外面让开：房间这一侧常常压着家具的名字。
-  let rx=origin.x-centre.x,ry=origin.y-centre.y;
-  const radius=Math.hypot(rx,ry)||1;
-  rx=origin.x+rx/radius*px(16);ry=origin.y+ry/radius*px(16);
-  ctx.font=`700 ${Math.round(px(11))}px "Microsoft YaHei",system-ui,sans-serif`;
-  ctx.lineWidth=px(3.5);ctx.strokeStyle="rgba(255,255,255,.92)";
-  ctx.strokeText("O (0,0,0)",rx,ry);
-  ctx.fillStyle="#0f172a";ctx.fillText("O (0,0,0)",rx,ry);
-  ctx.restore();
-}
-function render(){
-  ctx.setTransform(1,0,0,1,0,0);
-  const cam=camera(),project=projector(cam);
-  drawBackdrop();
-  drawFloor(project);
-  drawWalls(project,cam);
-  drawShadows(project);
-  drawSolids(project,cam);
-  drawDimensions(project);
-  drawOriginAxes(project);
-  drawRotateHandle(project);
-  drawHeightHandle(project);
-  syncPanel();
-}
-function pointInPolygon(points,sx,sy){
-  let inside=false;
-  for(let i=0,j=points.length-1;i<points.length;j=i++){
-    const a=points[i],b=points[j];
-    if((a.y>sy)!==(b.y>sy)&&sx<(b.x-a.x)*(sy-a.y)/(b.y-a.y)+a.x)inside=!inside;
-  }
-  return inside;
-}
-function distanceToSegment(sx,sy,a,b){
-  const dx=b.x-a.x,dy=b.y-a.y;
-  const lengthSquared=dx*dx+dy*dy;
-  const t=lengthSquared?clamp(((sx-a.x)*dx+(sy-a.y)*dy)/lengthSquared,0,1):0;
-  return Math.hypot(sx-(a.x+t*dx),sy-(a.y+t*dy));
-}
-// 轮廓线上的点落在多边形边界上，射线法在那里数值上是不确定的；给一圈容差，
-// 否则点家具的描边会穿透去转视角。
-function distanceToPolygon(points,sx,sy){
-  if(pointInPolygon(points,sx,sy))return 0;
-  let best=Infinity;
-  for(let i=0,j=points.length-1;i<points.length;j=i++){
-    best=Math.min(best,distanceToSegment(sx,sy,points[j],points[i]));
-  }
-  return best;
-}
-// 点选整个包络：凸盒 6 个面的投影并集就是轮廓。先取点中实体的，再取点在容差边上的，
-// 同类里取最靠前的那个面。
-function hitTest(sx,sy){
-  const project=projector(camera());
-  let best=null,bestRank=Infinity,bestDepth=Infinity;
-  for(const item of scene.items){
-    const verts=boxVertices(item);let depth=Infinity,rank=Infinity;
-    for(const face of boxFaces){
-      const points=face.map(index=>project(verts[index]));
-      const distance=distanceToPolygon(points,sx,sy);
-      if(distance>px(5))continue;
-      const faceDepth=points.reduce((sum,point)=>sum+point.depth,0)/points.length;
-      if(faceDepth<depth){depth=faceDepth;rank=distance>0?1:0}
-    }
-    if(depth===Infinity)continue;
-    if(rank<bestRank||(rank===bestRank&&depth<bestDepth)){best=item;bestRank=rank;bestDepth=depth}
-  }
-  return best;
 }
 function footprintCenter(item){
   const count=item.footprint.length||1;
@@ -1345,19 +863,6 @@ function selectHint(item){
     ?`已选中 ${item.label}：沿墙拖动，向外拖可离开墙面`
     :`已选中 ${item.label}：拖动可移动`;
 }
-function handleAt(sx,sy,handle){
-  if(!handle)return null;
-  if(Math.hypot(handle.x-sx,handle.y-sy)>px(22))return null;
-  return scene.items.find(item=>item.id===state.selectedId)||null;
-}
-// 旋转环也整圈可抓：比一个小圆点好点太多。
-function ringAt(sx,sy){
-  const ring=state.rotateRing;
-  if(!ring)return null;
-  const distance=Math.hypot(sx-ring.x,sy-ring.y);
-  if(Math.abs(distance-ring.radius)>px(14))return null;
-  return scene.items.find(item=>item.id===state.selectedId)||null;
-}
 const escapeHtml=value=>String(value).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
 // 侧栏列表只在结构变化时重建。
 let panelSignature=null;
@@ -1550,62 +1055,52 @@ function setHeightValue(item,value){
   persist(item,"move").then(()=>{render()});
 }
 let drag=null;
-// 平移视图：右键 / 中键拖，或空白处 Shift+左键拖。只动视图中心，不发任何 op。
-function startPan(event){
-  state.panning=true;state.adjusted=true;
-  state.lastX=event.clientX;state.lastY=event.clientY;
-  canvas.classList.add("panning");
-  canvas.setPointerCapture(event.pointerId);
-}
 canvas.addEventListener("pointerdown",event=>{
   const [sx,sy]=screenPoint(event);
-  // 右键 / 中键一律平移（多数三维软件的习惯），不看下面压着什么。
-  if(event.button===1||event.button===2){startPan(event);return}
+  if(event.button===1||event.button===2)return;
+  const picked=view.pick(event.clientX,event.clientY);
+  const pickedItem=picked?scene.items.find(item=>item.id===picked.itemId):null;
   if(READ_ONLY){
-    const readonlyHit=hitTest(sx,sy);
-    if(readonlyHit){selectItem(readonlyHit.id);return}
-    if(event.shiftKey){startPan(event);return}
+    if(pickedItem){selectItem(pickedItem.id);return}
     state.selectedId=null;state.blocked=null;
-    state.orbiting=true;state.lastX=event.clientX;state.lastY=event.clientY;
-    canvas.classList.add("orbiting");canvas.setPointerCapture(event.pointerId);
     render();
     return;
   }
-  const heightItem=handleAt(sx,sy,state.heightHandle);
-  if(heightItem){
-    drag={kind:"height",item:heightItem,startScreen:[sx,sy],moved:false,
-      startZ:heightItem.placement.origin_z_mm||0};
+  if(picked&&picked.kind==="height"&&pickedItem){
+    view.setEnabled(false);
+    drag={kind:"height",item:pickedItem,startScreen:[sx,sy],moved:false,
+      startZ:pickedItem.placement.origin_z_mm||0};
     canvas.classList.add("moving");
-    setStatus(`离地高度 ${Math.round(heightItem.z_start)} mm`);
+    setStatus(`离地高度 ${Math.round(pickedItem.z_start)} mm`);
     canvas.setPointerCapture(event.pointerId);
     return;
   }
-  const rotateItem=ringAt(sx,sy)||handleAt(sx,sy,state.handle);
-  if(rotateItem){
-    const center=footprintCenter(rotateItem),height=(rotateItem.z_start+rotateItem.z_end)/2;
-    const origin=projector(camera())([center[0],center[1],height]);
+  if(picked&&(picked.kind==="rotate"||picked.kind==="ring")&&pickedItem){
+    view.setEnabled(false);
+    const center=footprintCenter(pickedItem),height=(pickedItem.z_start+pickedItem.z_end)/2;
+    const origin=projector()([center[0],center[1],height]);
     const startAngle=Math.atan2(sy-origin.y,sx-origin.x)*180/Math.PI;
-    drag={kind:"rotate",item:rotateItem,center,height,origin,startAngle,lastAngle:startAngle,
+    drag={kind:"rotate",item:pickedItem,center,height,origin,startAngle,lastAngle:startAngle,
       accumulated:0,moved:false,startScreen:[sx,sy],
-      startRotation:rotateItem.placement.rotation_z_deg||0,startMode:rotateItem.placement.mode,
+      startRotation:pickedItem.placement.rotation_z_deg||0,startMode:pickedItem.placement.mode,
       sign:rotationSign(center,height)};
     canvas.classList.add("moving");
-    setStatus(`旋转 ${rotateItem.label}…`);
+    setStatus(`旋转 ${pickedItem.label}…`);
     canvas.setPointerCapture(event.pointerId);
     return;
   }
   const ground=unprojectToGround(sx,sy);
-  const hit=hitTest(sx,sy);
-  if(hit&&(ground||isElevation())){
-    const placement=hit.placement;
-    state.selectedId=hit.id;state.blocked=null;
-    drag={kind:"move",item:hit,ground,startScreen:[sx,sy],moved:false,
+  if(pickedItem&&picked.kind==="item"&&(ground||isElevation())){
+    view.setEnabled(false);
+    const placement=pickedItem.placement;
+    state.selectedId=pickedItem.id;state.blocked=null;
+    drag={kind:"move",item:pickedItem,ground,startScreen:[sx,sy],moved:false,
       startOrigin:[placement.origin_x_mm||0,placement.origin_y_mm||0],
       startOffset:placement.offset_mm||0,startZ:placement.origin_z_mm||0,
       horizontal:horizontalAxis(),elevation:isElevation(),
-      startFootprint:hit.footprint.map(point=>[...point])};
+      startFootprint:pickedItem.footprint.map(point=>[...point])};
     if(placement.mode==="wall"&&!drag.elevation){
-      const normal=wallNormal(placement.host_wall),project=projector(camera()),center=footprintCenter(hit);
+      const normal=wallNormal(placement.host_wall),project=projector(),center=footprintCenter(pickedItem);
       if(normal){
         const from=project([center[0],center[1],0]);
         const to=project([center[0]+normal[0]*300,center[1]+normal[1]*300,0]);
@@ -1614,25 +1109,15 @@ canvas.addEventListener("pointerdown",event=>{
       }
     }
     canvas.classList.add("moving");
-    setStatus(selectHint(hit));
+    setStatus(selectHint(pickedItem));
     render();
     canvas.setPointerCapture(event.pointerId);
     return;
   }
-  // 空白处 Shift+左键 = 平移；普通左键仍是转视角。家具/手柄优先，所以放在它们之后。
-  if(event.shiftKey){startPan(event);return}
   state.selectedId=null;state.blocked=null;
-  state.orbiting=true;state.lastX=event.clientX;state.lastY=event.clientY;
-  canvas.classList.add("orbiting");canvas.setPointerCapture(event.pointerId);
   render();
-});
+},true);
 canvas.addEventListener("pointermove",event=>{
-  if(state.panning){
-    const dx=event.clientX-state.lastX,dy=event.clientY-state.lastY;
-    state.lastX=event.clientX;state.lastY=event.clientY;
-    panBy(dx,dy);render();
-    return;
-  }
   if(drag){
     const [sx,sy]=screenPoint(event);
     if(!drag.moved){
@@ -1693,13 +1178,6 @@ canvas.addEventListener("pointermove",event=>{
     render();
     return;
   }
-  if(!state.orbiting)return;
-  const dx=event.clientX-state.lastX,dy=event.clientY-state.lastY;state.lastX=event.clientX;state.lastY=event.clientY;
-  // 转视角要跟手：往右拖，靠近自己的那一边就跟着往右走，和拖动家具是同一个心智模型。
-  // 相机右向量改成真实方位之后，这里的符号必须一起翻——否则整个房间会朝反方向转。
-  // 下限放到 -1.48，仰视才落得下去。
-  state.yaw+=dx*.008;state.pitch=clamp(state.pitch+dy*.006,-1.48,1.48);
-  state.viewMoved=true;render();
 });
 async function reload(){
   if(PROJECT_EDIT_URL){await refreshProjectDocument();return}
@@ -1807,16 +1285,13 @@ canvas.addEventListener("pointerup",event=>{
       :kind==="height"?Math.round(item.placement.origin_z_mm||0)===Math.round(drag.startZ)
       :false;
     drag=null;state.blocked=null;canvas.classList.remove("moving");
+    view.setEnabled(true);
     canvas.releasePointerCapture(event.pointerId);
     if(moved&&!unchanged){persist(item,kind).then(()=>{render()})}
     else{setStatus(selectHint(item));render()}
     return;
   }
-  if(state.orbiting){
-    state.orbiting=false;canvas.classList.remove("orbiting");canvas.releasePointerCapture(event.pointerId);
-    // 真的转过视角就不再站在任何正视图上了；平移/缩放不算（方向没变）。
-    if(state.viewMoved){state.viewMoved=false;state.active="free";syncViewControls()}
-  }
+  view.setEnabled(true);
 });
 // 光标落点的房间坐标。原点在西北角地面、X 向东、Y 向南。
 // 相机贴地（立面视图）时地面射线求交会退化，交点能跑到几万毫米外；拖动那边同样躲开这个角度，
@@ -1842,14 +1317,16 @@ canvas.addEventListener("pointerleave",()=>{
 canvas.addEventListener("pointercancel",()=>{drag=null;state.blocked=null;state.panning=false;canvas.classList.remove("moving","orbiting","panning")});
 // 右键要用来平移，别弹系统菜单。
 canvas.addEventListener("contextmenu",event=>event.preventDefault());
-canvas.addEventListener("wheel",event=>{event.preventDefault();cancelFrame(viewAnimation);viewAnimation=0;state.adjusted=true;state.distance=clamp(state.distance*Math.exp(event.deltaY*.001),diagonal*.4,diagonal*3.4);render()},{passive:false});
 window.addEventListener("keydown",event=>{
+  if(event.key==="Shift")view.setShiftPan(true);
   if(event.key==="Escape")selectItem(null);
   const item=scene.items.find(candidate=>candidate.id===state.selectedId);
   if(!item)return;
   if(event.key==="PageUp"){event.preventDefault();nudgeHeight(item,50)}
   if(event.key==="PageDown"){event.preventDefault();nudgeHeight(item,-50)}
 });
+window.addEventListener("keyup",event=>{if(event.key==="Shift")view.setShiftPan(false)});
+
 window.addEventListener("resize",()=>{
   fitCanvas();
   if(!viewAnimation&&!state.adjusted)state.distance=fitDistance(state.pitch,state.yaw);
@@ -2012,6 +1489,23 @@ const defaults={yaw:DEFAULT_YAW,pitch:DEFAULT_PITCH,distance:fitDistance(DEFAULT
 const state={...defaults,orbiting:false,panning:false,lastX:0,lastY:0,active:"default_view",selectedId:null,
   freeView:null,viewMoved:false,
   handle:null,heightHandle:null,rotateRing:null,blocked:null,adjusted:false,dims:true};
+view.controls.addEventListener("start",()=>{
+  state.orbiting=true;
+  state._pose=view.readView();
+  canvas.classList.add("orbiting");
+});
+view.controls.addEventListener("change",()=>{if(!placing)view.draw()});
+view.controls.addEventListener("end",()=>{
+  const pose=view.readView();
+  const before=state._pose;
+  state.yaw=pose.yaw;state.pitch=pose.pitch;state.distance=pose.distance;
+  target[0]=pose.target[0];target[1]=pose.target[1];target[2]=pose.target[2];
+  state.orbiting=false;state.panning=false;
+  canvas.classList.remove("orbiting","panning");
+  if(before&&(Math.abs(pose.yaw-before.yaw)>0.01||Math.abs(pose.pitch-before.pitch)>0.01)){
+    state.active="free";syncViewControls();
+  }
+});
 render();
 // 一进来就把视角标识摆对：默认是透视位，下拉显示「自由视角」、透视按钮高亮。
 syncViewControls();
@@ -2290,7 +1784,6 @@ if(shutdownButton){
     }
   });
 }
-})();
 </script>
 </body>
 </html>

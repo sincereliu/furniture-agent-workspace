@@ -176,15 +176,23 @@ class ProjectPreviewTests(unittest.TestCase):
         project = self.orchestrator.create_project("家", home_layout(bed_offset_mm=200))
         html = asyncio.run(server.project_preview(project.id, local_request())).body.decode("utf-8")
         self.assertIn('id="coord"', html)
-        self.assertIn("function drawOriginAxes(project)", html)
-        self.assertIn("O (0,0,0)", html)
-        self.assertIn("X 东 · 总宽", html)
-        self.assertIn("Y 南 · 总深", html)
-        self.assertIn("Z 上 · 总高", html)
+        self.assertIn("mountLayout", html)
         self.assertIn('data-field="coord"', html)
         self.assertIn("unprojectToGround(sx,sy)", html)
-        # 右向量必须是 cross(up, forward)：反过来会让整幅画面左右镜像，前视把东墙画到左边。
-        self.assertIn("cross([0,0,1],forward)", html)
+        scene_js = (
+            WORKSPACE_ROOT
+            / "domain"
+            / "skills"
+            / "layout-plan"
+            / "scripts"
+            / "furniture_layout"
+            / "static"
+            / "layout_scene.js"
+        ).read_text(encoding="utf-8")
+        self.assertIn("O (0,0,0)", scene_js)
+        self.assertIn("X 东 · 总宽", scene_js)
+        self.assertIn("Y 南 · 总深", scene_js)
+        self.assertIn("Z 上 · 总高", scene_js)
 
     def test_preview_switches_rooms_with_chips_and_a_shareable_room_link(self) -> None:
         """房间切换是药丸不是下拉；切房间要写进地址栏 ?room=，链接能分享、能复现。"""
@@ -281,14 +289,20 @@ class ProjectPreviewTests(unittest.TestCase):
         self.assertIn('<span data-field="rotation"></span>°<span class="who" data-front></span>', html)
         self.assertIn('<span data-field="height"></span> mm', html)
         self.assertIn("只读预览：位置由对话更新；要自己拖，用草稿页。", html)
-        # 只读页不画编辑手柄：橙点/旋转环与蓝点都不生成，但"正面"绿箭头保留。
-        self.assertIn(
-            "if(READ_ONLY){state.handle=null;state.rotateRing=null;"
-            "drawFrontArrow(item,project,pivot,radius);return}",
-            html,
-        )
-        self.assertIn("if(READ_ONLY){state.heightHandle=null;return}", html)
-        self.assertIn("function drawFrontArrow(item,project,pivot,radius)", html)
+        scene_js = (
+            WORKSPACE_ROOT
+            / "domain"
+            / "skills"
+            / "layout-plan"
+            / "scripts"
+            / "furniture_layout"
+            / "static"
+            / "layout_scene.js"
+        ).read_text(encoding="utf-8")
+        handle_block = scene_js.split("if (!readOnly)", 1)[1]
+        self.assertIn('kind: "rotate"', handle_block)
+        self.assertIn('kind: "height"', handle_block)
+        self.assertLess(scene_js.index("0x047857"), scene_js.index("if (!readOnly)"))
         self.assertNotIn("只读预览：位置由对话更新；要自己拖，用草稿页。", readonly_gap)
 
     def test_content_digest_has_one_implementation(self) -> None:
