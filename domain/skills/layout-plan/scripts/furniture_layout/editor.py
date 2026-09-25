@@ -423,10 +423,10 @@ canvas.panning{cursor:grabbing}
 </main>
 <script id="scene-data" type="application/json">__SCENE_JSON__</script>
 <script type="importmap">
-{"imports":{"three":"/vendor/three/three.module.js"}}
+{"imports":{"three":"/vendor/three/0.186.0/three.module.js"}}
 </script>
 <script type="module">
-import { mountLayout } from "/vendor/three/layout_scene.js";
+import { mountLayout } from "/layout-view/layout_scene.js";
 const SCENE_ID="__SCENE_ID__";
 const READ_ONLY=__READ_ONLY__;
 // 分享形态（预览页 ?mode=view）：只影响文案，不改权限。

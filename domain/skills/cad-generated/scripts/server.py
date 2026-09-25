@@ -90,7 +90,9 @@ app = FastAPI(
 
 OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
 app.mount("/generated", StaticFiles(directory=str(OUTPUT_ROOT)), name="generated")
-LAYOUT_STATIC = (
+# 固定的 three.js 0.186.0。页面从这里加载，不放在布局技能里。
+THREE_DIST = WORKSPACE_ROOT / "vendor" / "three" / "0.186.0"
+LAYOUT_PAGE = (
     WORKSPACE_ROOT
     / "domain"
     / "skills"
@@ -99,7 +101,8 @@ LAYOUT_STATIC = (
     / "furniture_layout"
     / "static"
 )
-app.mount("/vendor/three", StaticFiles(directory=str(LAYOUT_STATIC)), name="layout_three")
+app.mount("/vendor/three/0.186.0", StaticFiles(directory=str(THREE_DIST)), name="three_0_186_0")
+app.mount("/layout-view", StaticFiles(directory=str(LAYOUT_PAGE)), name="layout_view")
 
 
 class RoomOpeningRequest(BaseModel):

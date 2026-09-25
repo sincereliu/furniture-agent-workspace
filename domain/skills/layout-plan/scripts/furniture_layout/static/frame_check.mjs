@@ -1,4 +1,4 @@
-import * as THREE from "./three.module.js";
+import * as THREE from "../../../../../../vendor/three/0.186.0/three.module.js";
 import { cameraThreePosition, roomToThree } from "./layout_frame.js";
 
 const mapped = roomToThree(1000, 200, 300);

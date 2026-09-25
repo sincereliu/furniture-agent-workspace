@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { OrbitControls } from "./OrbitControls.js";
+import { OrbitControls } from "/vendor/three/0.186.0/OrbitControls.js";
 import { cameraThreePosition, roomToThree } from "./layout_frame.js";
 
 export { cameraThreePosition, roomToThree };
