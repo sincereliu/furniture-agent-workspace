@@ -81,7 +81,7 @@ _PREVIEW_TIPS = (
     "空白处拖拽转视角 · 右键/中键/Shift+左键拖拽平移 · 滚轮缩放<br>"
     "双击画面吸到最近的正视图，再双击回到自由视角<br>"
     "有多间房时点上方房间名切换，地址栏 ?room= 直接指向某间房<br>"
-    "退出会停掉后台预览服务，然后再关闭这个标签页"
+    "关掉这一页后预览服务会自己停；点「退出」则马上停"
 )
 _SHARE_TIPS = (
     "这是只读分享链接：只看不改，位置由房主那边更新。<br>"
@@ -1814,6 +1814,11 @@ if(PROJECT_EDIT_URL&&!READ_ONLY){
   });
   refreshProjectDocument();
 }
+function pulsePreview(){
+  fetch("/api/preview/presence",{method:"POST",cache:"no-store",keepalive:true}).catch(()=>{});
+}
+pulsePreview();
+setInterval(pulsePreview,1000);
 const shutdownButton=document.getElementById("shutdown-preview");
 if(shutdownButton){
   shutdownButton.addEventListener("click",async()=>{

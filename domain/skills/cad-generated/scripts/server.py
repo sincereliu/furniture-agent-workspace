@@ -65,6 +65,8 @@ from furniture_workflow.workflow_lease import (
 from furniture_workflow.workflow_store import JsonProjectStore
 
 API_VERSION = "0.8.0"
+# 最后一页关掉后，超过这个秒数没有页面报「还在」，预览进程就退出。
+PRESENCE_GRACE_SECONDS = 5.0
 SAFE_PROJECT_ID = re.compile(r"^[A-Za-z0-9_-]+$")
 _LOCAL_HOSTS = {"127.0.0.1", "::1"}
 #: 写请求带回编辑租约凭据的头。
@@ -245,6 +247,16 @@ async def health():
     return {"status": "ok", "version": API_VERSION}
 
 
+def preview_should_stop(
+    last: float | None,
+    now: float,
+    *,
+    grace: float = PRESENCE_GRACE_SECONDS,
+) -> bool:
+    """True once a page has checked in and then gone quiet."""
+    return last is not None and now - last >= grace
+
+
 def stop_preview_server() -> bool:
     """Ask the running preview server to finish and exit."""
     server = getattr(app.state, "preview_server", None)
@@ -261,6 +273,38 @@ async def preview_shutdown(request: Request):
         raise HTTPException(status_code=403, detail="preview shutdown is local only")
     asyncio.get_running_loop().call_later(0.3, stop_preview_server)
     return {"status": "stopping"}
+
+
+@app.post("/api/preview/presence")
+async def preview_presence(request: Request):
+    """A preview page is still open. The last page closing stops this process."""
+    if not may_edit(request):
+        raise HTTPException(status_code=403, detail="preview presence is local only")
+    app.state.preview_presence_at = time.monotonic()
+    return {"status": "ok"}
+
+
+@app.on_event("startup")
+async def watch_preview_presence() -> None:
+    """After the first open page, exit once every page has been closed."""
+    app.state.preview_presence_at = None
+
+    async def watch() -> None:
+        while True:
+            await asyncio.sleep(1)
+            last = getattr(app.state, "preview_presence_at", None)
+            if preview_should_stop(last, time.monotonic()):
+                stop_preview_server()
+                return
+
+    asyncio.create_task(watch())
+
+
+_PRESENCE_SCRIPT = (
+    "<script>function pulsePreview(){fetch(\"/api/preview/presence\","
+    "{method:\"POST\",cache:\"no-store\",keepalive:true}).catch(function(){})}"
+    "pulsePreview();setInterval(pulsePreview,1000);</script>"
+)
 
 
 def _project_rows() -> list[dict[str, Any]]:
@@ -320,10 +364,13 @@ def _project_list_html(rows: list[dict[str, Any]]) -> str:
         "a.docs{color:#4f46e5;font-size:13px}"
         "</style></head><body><main>"
         "<h1>已经做过的项目</h1>"
-        "<p class=\"lead\">点一个项目打开那一版布局。关机后项目还在这一页。</p>"
+        "<p class=\"lead\">点一个项目打开那一版布局。关机后项目还在。"
+        "关掉最后一页后，预览服务会自己停。</p>"
         + body
         + "<p><a class=\"docs\" href=\"/docs\">API 文档</a></p>"
-        "</main></body></html>"
+        "</main>"
+        + _PRESENCE_SCRIPT
+        + "</body></html>"
     )
 
 

@@ -6,6 +6,7 @@ import os
 import shutil
 import sys
 import threading
+import time
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -378,6 +379,8 @@ class ProjectPreviewTests(unittest.TestCase):
 
         page = asyncio.run(server.project_index()).body.decode("utf-8")
         self.assertIn("已经做过的项目", page)
+        self.assertIn("关掉最后一页后，预览服务会自己停", page)
+        self.assertIn("/api/preview/presence", page)
         self.assertIn("张家卧室", page)
         self.assertIn("工作室", page)
         self.assertIn("布局已确认", page)
@@ -404,6 +407,19 @@ class ProjectPreviewTests(unittest.TestCase):
         self.assertIn("这一版布局给板件用", html)
         self.assertIn('href="/projects"', html)
         self.assertIn("function setSize(", html)
+        self.assertIn('fetch("/api/preview/presence"', html)
+
+    def test_closed_preview_page_is_what_stops_the_server(self) -> None:
+        self.assertFalse(server.preview_should_stop(None, 100))
+        self.assertFalse(server.preview_should_stop(90, 94.9))
+        self.assertTrue(server.preview_should_stop(90, 95))
+        with self.assertRaises(HTTPException) as remote:
+            asyncio.run(server.preview_presence(remote_request()))
+        self.assertEqual(remote.exception.status_code, 403)
+        before = time.monotonic()
+        body = asyncio.run(server.preview_presence(local_request()))
+        self.assertEqual(body["status"], "ok")
+        self.assertGreaterEqual(server.app.state.preview_presence_at, before)
 
     def test_local_server_entry_enables_edit_and_opens_the_list(self) -> None:
         with mock.patch.dict(os.environ, {"FURNITURE_PREVIEW_BROWSER": "1"}):
@@ -551,7 +567,7 @@ class OpenProjectPreviewTests(unittest.TestCase):
         self.assertFalse(server.may_edit(remote_request()))
         source = (SCRIPT_ROOT / "server.py").read_text(encoding="utf-8")
         self.assertEqual(source.count("_LOCAL_HOSTS"), 2)  # 定义一次 + 判据里读一次
-        self.assertEqual(source.count("if not may_edit(request):"), 9)  # 九个有副作用的端点
+        self.assertEqual(source.count("if not may_edit(request):"), 10)  # 含页面在场
         endpoints = source.split("def may_edit")[1]
         self.assertNotIn("request.client.host", endpoints)
 
