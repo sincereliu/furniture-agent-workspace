@@ -19,7 +19,8 @@
 和服务端落盘取整口径一致，预览即落盘值。
 
 拖动期间只做本地预览，松手才发**一个** edit op，由后端重算并校验——失败会显示
-原因，不回退本地已画的形状。
+原因，不回退本地已画的形状。右侧宽、深、高回车后另发一次 `resize`。沿墙铺满的
+宽度由墙的空段算出，这一页不手改。
 
 项目预览复用同一块画布，但是只读：不发 edit op，按版本号换上新的包络。
 """
@@ -70,7 +71,7 @@ _EDITOR_TIPS = (
     "选中件：紫线是四向净距，灰线是本体宽/深/高<br>"
     "橙点或旋转环拖了调朝向（Shift 1°）· 蓝点调离地高度<br>"
     "前/后/左/右视里上下拖 = 改高度<br>"
-    "右侧的距离 / 朝向 / 离地可输入，也可用 − / ＋ 走整数档<br>"
+    "右侧的距离 / 朝向 / 离地 / 宽深高可输入，回车保存；也可用 − / ＋ 走整数档<br>"
     "空白处拖拽转视角 · 右键/中键/Shift+左键拖拽平移 · 滚轮缩放 · Esc 取消选中<br>"
     "双击画面吸到最近的正视图，再双击回到自由视角"
 )
@@ -91,7 +92,7 @@ _SHARE_TIPS = (
 #: 可编辑的项目页（本机来源）——提示语要说清"什么时候要审、什么时候算数"。
 _PROJECT_EDITOR_TIPS = (
     "拖动改位置（与别的家具或障碍物干涉、越出房间或遮挡门窗洞口时停在接触处）<br>"
-    "选中件：橙点或旋转环改朝向 · 蓝点改离地高度 · 右侧也能直接输入<br>"
+    "选中件：橙点或旋转环改朝向 · 蓝点改离地高度 · 右侧宽/深/高回车后保存<br>"
     "还没跑下游时，改动就落在**这一版**上（版号不变）；改到哪一间，哪一间就要重看一眼<br>"
     "空白处拖拽转视角 · 双击吸到最近的正视图 · 滚轮缩放<br>"
     "多间房时点上方房间名切换，地址栏 ?room= 直接指向某间房"
@@ -338,6 +339,10 @@ canvas.panning{cursor:grabbing}
 .detail input.num{width:62px;border:1px solid var(--line);border-radius:7px;padding:3px 6px;font:inherit;font-size:12.5px;font-weight:600;text-align:right;color:var(--ink);font-variant-numeric:tabular-nums;background:#fff}
 .detail input.num:hover{border-color:var(--line-strong)}
 .detail input.num:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.detail input.num.size{width:52px}
+.detail dd.size-edit{flex-wrap:wrap}
+.project-index{display:inline-block;margin-top:6px;font-size:12px;font-weight:600;color:var(--accent);text-decoration:none}
+.project-index:hover{text-decoration:underline}
 .stepper{display:inline-flex;align-items:center;justify-content:flex-end;gap:6px}
 .step{appearance:none;border:1px solid var(--line);background:#fff;border-radius:6px;width:21px;height:21px;padding:0;font:inherit;font-size:13px;font-weight:700;line-height:1;color:#475569;cursor:pointer}
 .step:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
@@ -366,6 +371,7 @@ canvas.panning{cursor:grabbing}
       <h1 id="heading">__HEADING__</h1>
       <p id="room-meta"></p>
       <p class="mode-badge" id="mode-badge">__MODE_BADGE__</p>
+      <a class="project-index" href="/projects">全部项目</a>
       <p class="working-badge" id="working-badge" hidden></p>
       <p class="lease-badge" id="lease-badge" hidden></p>
     </div>
@@ -897,6 +903,9 @@ function detailValues(item){
     rotation:round(normalizeAngle(item.placement.rotation_z_deg||0)),
     front:`前朝${frontCompass(item)}`,
     height:round(item.z_start),
+    width:round(item.width),
+    depth:round(item.depth),
+    boxHeight:round(item.height),
     ceiling:round(room.height_mm-item.z_end),
     coord:coordText(item),
     gaps:{west:round(gaps.west.gap),east:round(gaps.east.gap),
@@ -925,10 +934,16 @@ function detailMarkup(item){
     ? `<p class="hint-inline">${SHARE_FORM
         ? "只读分享：这一页只能看，位置由房主那边更新。"
         : "只读预览：位置由对话更新；要自己拖，用草稿页。"}</p>`
-    : `<p class="hint-inline">可以直接输入任意毫米值，回车生效。输入框的上下箭头走 1；旁边的 − / ＋ 走整数档（净距 10 · 离地 50 · 朝向 15）。到不了就只挪到能到的地方，并在左下角说明是越界、干涉还是遮挡门窗洞口。</p>`;
+    : `<p class="hint-inline">可以直接输入任意毫米值，回车生效。宽、深、高改的是这一件的外形，保存后给板件用；改过的这间要再看一眼。输入框的上下箭头走 1；旁边的 − / ＋ 走整数档（净距 10 · 离地 50 · 朝向 15）。到不了就只挪到能到的地方，并在左下角说明是越界、干涉还是遮挡门窗洞口。</p>`;
+  const sizeReadout=`<dt>尺寸</dt><dd>${round(item.width)}×${round(item.depth)}×${round(item.height)}</dd>`;
+  const sizeRow=READ_ONLY
+    ? sizeReadout
+    : (item.placement&&item.placement.fill)
+      ? `<dt>尺寸</dt><dd>${round(item.width)}×${round(item.depth)}×${round(item.height)} · 沿墙铺满，宽度由墙算出</dd>`
+      : `<dt>尺寸</dt><dd class="size-edit"><input class="num size" type="number" step="1" min="1" data-size="width" aria-label="宽"><span class="who">×</span><input class="num size" type="number" step="1" min="1" data-size="depth" aria-label="深"><span class="who">×</span><input class="num size" type="number" step="1" min="1" data-size="height" aria-label="高"><span class="who">mm</span></dd>`;
   return `<dl class="detail">
     <dt>名称</dt><dd>${escapeHtml(item.label)}</dd>
-    <dt>尺寸</dt><dd>${round(item.width)}×${round(item.depth)}×${round(item.height)}</dd>
+    ${sizeRow}
     <dt>摆放</dt><dd data-field="mode"></dd>
     <dt>位置</dt><dd data-field="position"></dd>
     <dt>坐标</dt><dd data-field="coord"></dd>
@@ -976,6 +991,9 @@ function applyDetailValues(detail,item,force){
   set('[data-field="rotation"]',values.rotation);
   set('[data-front]',values.front);
   set('[data-field="height"]',values.height);
+  set('[data-size="width"]',values.width);
+  set('[data-size="depth"]',values.depth);
+  set('[data-size="height"]',values.boxHeight);
   set('[data-field="ceiling"]',values.ceiling);
   for(const key of ["west","east","north","south"]){
     set(`[data-gap="${key}"]`,values.gaps[key]);
@@ -1053,6 +1071,21 @@ function setHeightValue(item,value){
   }
   if(solved.value!==target)setStatus(`只到 ${solved.value} mm：${placementStop(solved.blocker)}`,"warn");
   persist(item,"move").then(()=>{render()});
+}
+function setSize(item,key,value){
+  if(READ_ONLY)return;
+  if(item.placement&&item.placement.fill){
+    setStatus("沿墙铺满的宽度由这面墙剩下的空段算出，这一页不手改","warn");
+    return;
+  }
+  const next=Math.round(value);
+  if(!Number.isFinite(next)||next<=0){
+    setStatus("宽、深、高都要大于 0","warn");
+    return;
+  }
+  if(Math.round(item[key])===next)return;
+  const sizes={};sizes[key]=next;
+  persist(item,"resize",sizes).then(()=>{render()});
 }
 let drag=null;
 canvas.addEventListener("pointerdown",event=>{
@@ -1208,18 +1241,25 @@ async function refreshProjectDocument(){
     return true;
   }catch(error){return false}
 }
-async function persist(item,kind){
+async function persist(item,kind,sizes){
   if(READ_ONLY)return false;
   if(PROJECT_EDIT_URL&&!leaseToken){
     setStatus("这一页现在只能看：编辑权不在你手上（点「收回编辑权」或等助手做完）","warn");
     return false;
   }
-  const placement=item.placement,op={op:kind==="rotate"?"rotate":"move",item_id:item.id};
-  if(kind==="rotate")op.rotation_z_deg=Math.round(normalizeAngle(placement.rotation_z_deg)*10)/10;
-  if(placement.mode==="wall"){op.offset_mm=Math.round(placement.offset_mm)}
-  else{op.mode="free";op.origin_x_mm=Math.round(placement.origin_x_mm);op.origin_y_mm=Math.round(placement.origin_y_mm)}
-  // origin_z_mm 是 move 的共享字段，平面移动时顺带带上也不会互相干扰。
-  if(kind!=="rotate")op.origin_z_mm=Math.round(placement.origin_z_mm||0);
+  let op;
+  if(kind==="resize"){
+    op={op:"resize",item_id:item.id};
+    if(sizes)Object.assign(op,sizes);
+  }else{
+    const placement=item.placement;
+    op={op:kind==="rotate"?"rotate":"move",item_id:item.id};
+    if(kind==="rotate")op.rotation_z_deg=Math.round(normalizeAngle(placement.rotation_z_deg)*10)/10;
+    if(placement.mode==="wall"){op.offset_mm=Math.round(placement.offset_mm)}
+    else{op.mode="free";op.origin_x_mm=Math.round(placement.origin_x_mm);op.origin_y_mm=Math.round(placement.origin_y_mm)}
+    // origin_z_mm 是 move 的共享字段，平面移动时顺带带上也不会互相干扰。
+    if(kind!=="rotate")op.origin_z_mm=Math.round(placement.origin_z_mm||0);
+  }
   const url=PROJECT_EDIT_URL||`/api/room-scene/${encodeURIComponent(SCENE_ID)}/edit`;
   const headers={"Content-Type":"application/json"};
   if(leaseToken)headers["X-Edit-Lease"]=leaseToken;
@@ -1234,6 +1274,10 @@ async function persist(item,kind){
     const next=await response.json();
     if(PROJECT_EDIT_URL){
       applyDocument(next);
+      if(kind==="resize"){
+        setStatus(`已保存 ${item.label}。这一版布局给板件用。改过的这间要再看一眼，看过才算确认。`);
+        return true;
+      }
       const working=next.working||{};
       setStatus(working.open===false
         ? `已保存 ${item.label}（这一版已有下游产物，改动落成了新一版）`
@@ -1478,6 +1522,7 @@ if(detailBox&&detailBox.addEventListener){
     if(input.dataset.gap)setGap(item,input.dataset.gap,value);
     else if(input.dataset.rotation!==undefined)setRotationValue(item,value);
     else if(input.dataset.heightInput!==undefined)setHeightValue(item,value);
+    else if(input.dataset.size)setSize(item,input.dataset.size,value);
     else return;
     // 落定后把输入框校正到实际达到的值（可能因为被挡住而不等于输入）
     applyDetailValues(detailBox,item,true);

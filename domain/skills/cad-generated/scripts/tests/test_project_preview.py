@@ -348,6 +348,79 @@ class ProjectPreviewTests(unittest.TestCase):
             800,
         )
 
+    def test_project_list_names_saved_layouts_and_skips_unreadable_files(self) -> None:
+        ready = self.orchestrator.create_project("张家卧室", home_layout(bed_offset_mm=200))
+        self.orchestrator.confirm_stage(ready, "layout_plan")
+        pending = self.orchestrator.create_project("工作室", home_layout(bed_offset_mm=400))
+        broken = self.root / "broken"
+        broken.mkdir()
+        (broken / "project.json").write_text("{", encoding="utf-8")
+        mismatched = self.root / "mismatch"
+        mismatched.mkdir()
+        (mismatched / "project.json").write_text(
+            json.dumps(
+                {
+                    "id": "other",
+                    "name": "错位",
+                    "created_at": "2020-01-01T00:00:00+00:00",
+                    "revisions": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        listed = self.store.list_projects()
+        self.assertEqual([row["id"] for row in listed], [pending.id, ready.id])
+        self.assertEqual(listed[0]["name"], "工作室")
+        self.assertFalse(listed[0]["layout_confirmed"])
+        self.assertEqual(listed[1]["name"], "张家卧室")
+        self.assertTrue(listed[1]["layout_confirmed"])
+
+        page = asyncio.run(server.project_index()).body.decode("utf-8")
+        self.assertIn("已经做过的项目", page)
+        self.assertIn("张家卧室", page)
+        self.assertIn("工作室", page)
+        self.assertIn("布局已确认", page)
+        self.assertIn("还没确认", page)
+        self.assertIn(f"/api/project/{ready.id}/preview", page)
+        self.assertNotIn("错位", page)
+        self.assertNotIn(">broken<", page)
+
+        payload = asyncio.run(server.project_index_json())
+        self.assertEqual(
+            [row["name"] for row in payload["projects"]],
+            ["工作室", "张家卧室"],
+        )
+
+    def test_editable_preview_can_type_width_depth_height(self) -> None:
+        project = self.orchestrator.create_project("家", home_layout(bed_offset_mm=200))
+        html = asyncio.run(
+            server.project_preview(project.id, local_request())
+        ).body.decode("utf-8")
+        self.assertIn('data-size="width"', html)
+        self.assertIn('data-size="depth"', html)
+        self.assertIn('data-size="height"', html)
+        self.assertIn("沿墙铺满，宽度由墙算出", html)
+        self.assertIn("这一版布局给板件用", html)
+        self.assertIn('href="/projects"', html)
+        self.assertIn("function setSize(", html)
+
+    def test_local_server_entry_enables_edit_and_opens_the_list(self) -> None:
+        with mock.patch.dict(os.environ, {"FURNITURE_PREVIEW_BROWSER": "1"}):
+            os.environ.pop(server.LAYOUT_EDIT_ENV, None)
+            server.enable_local_layout_edit()
+            self.assertEqual(os.environ.get(server.LAYOUT_EDIT_ENV), "1")
+            with (
+                mock.patch.object(server, "preview_server_is_up", return_value=True),
+                mock.patch.object(server.webbrowser, "open", return_value=True) as opened,
+            ):
+                server.open_project_list_when_ready()
+            opened.assert_called_once_with("http://127.0.0.1:8000/projects", new=2)
+        with mock.patch.dict(os.environ, {"FURNITURE_PREVIEW_BROWSER": "0"}):
+            with mock.patch.object(server.webbrowser, "open") as opened:
+                server.open_project_list_when_ready()
+            opened.assert_not_called()
+
 
 class OpenProjectPreviewTests(unittest.TestCase):
     def test_local_opener_reaches_localhost_when_proxy_is_set(self) -> None:

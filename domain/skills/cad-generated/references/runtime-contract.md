@@ -101,7 +101,7 @@ store/<project-id>/
 
 ## API 契约
 
-`server.py` 提供独立房间场景，以及只读的项目布局预览。房间场景请求体为 `room + items[]`；除 `GET` 外都是 JSON body。完整端点：
+`server.py` 提供独立房间场景、项目列表，以及项目布局预览。房间场景请求体为 `room + items[]`；除 `GET` 外都是 JSON body。完整端点：
 
 | 方法 | 路径 | 作用 |
 | --- | --- | --- |
@@ -120,10 +120,12 @@ store/<project-id>/
 | POST | `/api/project/{project_id}/edit-lease` | 申请 / 续租编辑权（写 · 本机） |
 | DELETE | `/api/project/{project_id}/edit-lease` | 归还编辑权（写 · 本机） |
 | POST | `/api/project/{project_id}/edit-lease/takeover` | 强制收回编辑权（写 · 本机） |
-| GET | `/api/project/{project_id}/preview` | 只读布局页，按版本号自行刷新 |
+| GET | `/api/project/{project_id}/preview` | 布局页，按版本号自行刷新。本机来源可改，其余只读 |
+| GET | `/projects` | 已有项目名单：名字、日期、布局已确认或还没确认 |
+| GET | `/api/projects` | 同一份名单的 JSON。读不动的 `project.json` 跳过 |
 | POST | `/api/preview/shutdown` | 本机请求后让预览服务干净退出（写 · 本机） |
 
-另有 `GET /health` 与 `GET /`（Swagger 入口），不是场景契约的一部分。缺场景或项目返回 404，参数或校验不通过返回 422。`project_id` 只允许英文字母、数字、`-` 和 `_`。
+另有 `GET /health` 与 `GET /`（链到项目列表和 Swagger）。直接运行 `server.py` 时浏览器打开 `/projects`，并在这个进程里打开页面写回（`FURNITURE_PROJECT_LAYOUT_EDIT=1`）。不经过这个入口时，写回仍默认关闭。缺场景或项目返回 404，参数或校验不通过返回 422。`project_id` 只允许英文字母、数字、`-` 和 `_`。
 
 写权限（`may_edit`）：**有副作用的端点只对本机来源开放**——停进程（`/api/preview/shutdown`）、保存场景（`/api/room-scene/save`）、编辑场景（`/api/room-scene/{scene_id}/edit`）、出房间 CAD（`/api/plan-room/cad`，会写源文件与 STEP）、改项目布局（`/api/project/{project_id}/layout/edit`）、编辑租约三个端点。非本机来源一律 403，且在动手之前就拒（不能先写一半再报错）。判据只有 `server.access_scope()` 一处，只看 `request.client.host`；**URL 参数不是权限**——`?mode=view` 这类只是页面表达，地址栏谁都能改，门必须在服务端。将来要给外人只读分享，在这一处多认一种凭证（新增 `shared` 来源），各端点不用动。读端点不受限（服务本来只监听 `127.0.0.1`）。外网分享的 token 形态与开门顺序见 [访问模式与外网分享](preview-access-design.md)。
 
@@ -147,7 +149,7 @@ store/<project-id>/
 
 `/api/room-scene/save`、`/api/room-scene/{scene_id}`、`/api/room-scenes`、`/api/room-scene/{scene_id}/edit`、`/api/room-scene/{scene_id}/editor` 组成场景状态（供交互编辑）：只存源（房间定义 + 多件包络及其摆放请求），**不存派生结果**——摆放坐标、footprint、净距、预览都在读取时重算；存储独立于家具主流程，不写 `stage_outputs`。
 
-编辑是**单 op、原子**：`move`（按当前 `mode` 二选一——`wall` 收 `host_wall`/`offset_mm`，`free` 收 `origin_x_mm`/`origin_y_mm`；**混给即拒**，换模式必须显式给 `mode` 并给出目标模式的坐标）、`rotate`（`rotation_z_deg`）、`resize`（`width`/`depth`/`height` 任意子集，至少一个）。每个 op 只接受自己的字段，白名单外即拒；**重算与校验通过才落盘**，失败整体拒绝，不留半成品。批量 op 留待多选拖动或场景级操作出现时再加。
+编辑是**单 op、原子**：`move`（按当前 `mode` 二选一——`wall` 收 `host_wall`/`offset_mm`，`free` 收 `origin_x_mm`/`origin_y_mm`；**混给即拒**，换模式必须显式给 `mode` 并给出目标模式的坐标）、`rotate`（`rotation_z_deg`）、`resize`（`width`/`depth`/`height` 任意子集，至少一个）。可编辑项目页的右侧用输入框提交 `resize`，一次改宽、深或高里的一项。沿墙铺满的件不显示这三个输入，宽度由墙的空段算出。每个 op 只接受自己的字段，白名单外即拒；**重算与校验通过才落盘**，失败整体拒绝，不留半成品。批量 op 留待多选拖动或场景级操作出现时再加。
 
 `rotate` 只对 `free` 摆放有定义：`wall` 的原点与 `rotation_z_deg` 都由 `host_wall` 派生（见 `placement.py`），直接转会被拒。所以 rotate 可以带 `mode: "free"` + `origin_x_mm`/`origin_y_mm`，在**同一个 op 里**把墙摆改成自由摆放并给出绕中心旋转后的原点；带 `host_wall`/`offset_mm` 的 rotate 一律拒绝（否则 `rotation_z_deg: 0` 会伪装成一次沿墙移动）。
 

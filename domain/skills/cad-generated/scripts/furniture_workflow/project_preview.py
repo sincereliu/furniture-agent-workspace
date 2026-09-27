@@ -85,6 +85,11 @@ def project_layout_document(
     }
 
 
+def project_list_url() -> str:
+    """Browser address for the list of saved projects."""
+    return f"http://127.0.0.1:{PREVIEW_PORT}/projects"
+
+
 def preview_url(project_id: str, *, mode: str | None = None) -> str:
     """Browser address for one project's live layout page.
 

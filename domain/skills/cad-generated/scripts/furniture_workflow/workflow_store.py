@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
+from typing import Any
 
 from .workflow_project import Project, Revision, StageAttempt
 from .workflow_state import WorkflowStage
+
+# 与 server.SAFE_PROJECT_ID 同一条：名单里的 id 必须能原样放进预览地址。
+_PROJECT_ID = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 def _write_json(path: Path, value: object) -> None:
@@ -67,6 +72,40 @@ class JsonProjectStore:
         if not path.is_file():
             raise ValueError(f"project not found: {project_id}")
         return Project.from_dict(json.loads(path.read_text(encoding="utf-8")))
+
+    def list_projects(self) -> list[dict[str, Any]]:
+        """Projects this store can open. Unreadable files are skipped.
+
+        Each row is ``id``, ``name``, ``created_at``, ``revision_number``,
+        and ``layout_confirmed``. Newest ``created_at`` comes first.
+        """
+        if not self.root.is_dir():
+            return []
+        rows: list[dict[str, Any]] = []
+        for path in self.root.iterdir():
+            if not path.is_dir() or not _PROJECT_ID.fullmatch(path.name):
+                continue
+            file = path / "project.json"
+            if not file.is_file():
+                continue
+            try:
+                project = Project.from_dict(json.loads(file.read_text(encoding="utf-8")))
+            except (OSError, json.JSONDecodeError, ValueError, KeyError, TypeError):
+                continue
+            if project.id != path.name or not project.revisions:
+                continue
+            latest = project.latest
+            rows.append(
+                {
+                    "id": project.id,
+                    "name": project.name,
+                    "created_at": project.created_at,
+                    "revision_number": latest.number,
+                    "layout_confirmed": bool(latest.layout.confirmed),
+                }
+            )
+        rows.sort(key=lambda row: row["created_at"], reverse=True)
+        return rows
 
     def _write_frozen_layout(self, project_id: str, revision: Revision) -> None:
         if not revision.layout.confirmed:
