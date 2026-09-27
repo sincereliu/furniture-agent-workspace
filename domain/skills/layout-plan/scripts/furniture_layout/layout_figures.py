@@ -36,7 +36,8 @@ def project_layout_dict(layout: ProjectLayout) -> dict[str, Any]:
     }
 
 
-def validate_room_scene(output: Mapping[str, Any]) -> ValidationReport:
+def check_room_figures(output: Mapping[str, Any]) -> ValidationReport:
+    """确认用：先再做一遍摆放准入，再核对 SVG 和只读页是不是当前几何画出的。"""
     report = ValidationReport(stage="layout_plan")
     try:
         scene = RoomScene.from_dict(output)
@@ -69,7 +70,8 @@ def validate_room_scene(output: Mapping[str, Any]) -> ValidationReport:
     return report
 
 
-def validate_project_layout(output: Mapping[str, Any]) -> ValidationReport:
+def check_layout_figures(output: Mapping[str, Any]) -> ValidationReport:
+    """确认用：整套房子的每一间都走 `check_room_figures`。"""
     report = ValidationReport(stage="layout_plan")
     try:
         layout = ProjectLayout.from_dict(output)
@@ -89,7 +91,7 @@ def validate_project_layout(output: Mapping[str, Any]) -> ValidationReport:
                 f"rooms[{index}]",
             )
             continue
-        room_report = validate_room_scene(raw)
+        room_report = check_room_figures(raw)
         for issue in room_report.issues:
             path = f"rooms[{index}]"
             if issue.path:

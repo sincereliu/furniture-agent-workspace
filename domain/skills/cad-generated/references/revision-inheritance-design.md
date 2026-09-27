@@ -85,5 +85,5 @@ envelope_set(layout) = { unit.id: (unit.furniture_category, unit.width, unit.dep
 2. ✅ **`revise()` 保留 `stage_inputs`**：做页面写项目（P3）时一并修掉。
 3. ✅ **R1 承认**：`workflow_stage_runner._inherit_settled_stage()`——阶段产出落定后，若更早的 Revision 上该阶段已确认且内容摘要逐字节相同，就地把本阶段记为已确认（板件同时写 `confirmed_panel_sha256`）。**不跳过重算**：重算毫秒级，短路会把隐藏依赖的风险引进来。
 4. ✅ **R2 留痕 + 契约措辞**：`Revision.approved_digests`（人当年点的哪份内容，`confirm_stage()` 写入）、`Revision.inherited`（`{sha256, from_revision, from_stage}`）、`workflow` 事件；契约在 [运行时契约](runtime-contract.md)「继承不变式」段，明确 `approved_stages` = "这份内容已被确认过"。
-5. ✅ **R3 让人看得见（工具面 + 页面）**：`project_snapshot()` 出 `inherited` / `inherited_stages`，`project_layout_document()` 也带 `inherited`；确认提示里说"沿用 rev-2 的板件（内容相同）"是下一步文案工作。
+5. ✅ **R3 让人看得见（工具面 + 页面）**：`project_snapshot()` 出 `inherited` / `inherited_stages`，`preview_page_data()` 也带 `inherited`；确认提示里说"沿用 rev-2 的板件（内容相同）"是下一步文案工作。
 6. ⬜ 制造 / 特征树接上同一条路（机制已经通用了，缺的是"这类内容值得免确认"的确认）；CAD 的内容寻址与逐柜复用另议（边界 3）。

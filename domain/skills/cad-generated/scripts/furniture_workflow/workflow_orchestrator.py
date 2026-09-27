@@ -9,7 +9,7 @@ from furniture_cad.cad_bridge import CadBridge
 from furniture_cad.validation import validate_cad
 from furniture_delivery_validation.validation import ValidationReport
 from furniture_layout.project_layout import ProjectLayout
-from furniture_layout.layout_figures import validate_project_layout
+from furniture_layout.layout_figures import check_layout_figures
 from furniture_feature_tree.validation import validate_feature_tree
 from furniture_manufacturing.validation import validate_manufacturing
 from furniture_panel_planning.validation import validate_panel_output
@@ -87,7 +87,7 @@ class FurnitureOrchestrator(
     ) -> ValidationReport:
         try:
             if stage == WorkflowStage.LAYOUT_PLAN:
-                return validate_project_layout(revision.layout.to_dict())
+                return check_layout_figures(revision.layout.to_dict())
             if stage == WorkflowStage.PANELS_PLANNED:
                 return validate_panel_output(
                     panel_envelopes_from_layout(revision.layout),

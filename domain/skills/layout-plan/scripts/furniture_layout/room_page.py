@@ -39,8 +39,8 @@ EDITOR_WIDTH_PX = 960
 EDITOR_HEIGHT_PX = 600
 
 
-def editor_scene_payload(scene: RoomScene) -> dict[str, Any]:
-    """Scene JSON the canvas already draws. Same shape after a reload."""
+def room_page_payload(scene: RoomScene) -> dict[str, Any]:
+    """房间页要画的数据。重新打开后还是这个形状。"""
     return {
         "room": scene.room.to_dict(),
         # 与服务端 PlacedItem.to_dict() 同构：编辑后用同一形状替换，不引入第二种结构。
@@ -154,9 +154,9 @@ def _render_canvas_html(
     )
 
 
-def render_editor(scene_id: str, scene: RoomScene) -> dict[str, object]:
-    """Return self-contained HTML that edits one saved room scene."""
-    payload = editor_scene_payload(scene)
+def render_draft_page(scene_id: str, scene: RoomScene) -> dict[str, object]:
+    """单间草稿页。"""
+    payload = room_page_payload(scene)
     html = _render_canvas_html(
         scene_id=scene_id,
         scene_payload=payload,
@@ -210,14 +210,14 @@ def render_editor(scene_id: str, scene: RoomScene) -> dict[str, object]:
     }
 
 
-def render_project_preview(
+def render_project_page(
     project_id: str,
     document: dict[str, Any],
     *,
     mode: str | None = None,
     read_only: bool = True,
 ) -> str:
-    """Canvas for one project. The page polls `document` replacements.
+    """项目里打开的房间页。页面按 `document` 里的版本换包络。
 
     `read_only` 由**服务端按权限**决定（本机来源可编辑；其余只读），`mode="view"` 再强制只读。
     之所以不靠 URL 参数判权限：参数谁都能改（见 runtime-contract「写权限」段）。

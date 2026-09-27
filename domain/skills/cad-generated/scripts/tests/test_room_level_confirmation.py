@@ -23,7 +23,7 @@ bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 from furniture_layout.project_layout import ProjectLayout
 from furniture_workflow.agent_tools import FurnitureToolSession, project_snapshot
-from furniture_layout.open_preview import project_layout_document
+from furniture_layout.open_preview import preview_page_data
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from furniture_workflow.workflow_project import Project, Revision
 from furniture_workflow.workflow_state import WorkflowStage
@@ -200,7 +200,7 @@ class RoomLevelConfirmationTests(unittest.TestCase):
         self.assertEqual(snapshot["approved_rooms"], ["bedroom"])
         self.assertEqual(snapshot["pending_rooms"], ["living"])
         self.assertFalse(snapshot["layout_confirmed"])
-        document = project_layout_document(project)
+        document = preview_page_data(project)
         flags = {entry["id"]: entry["approved"] for entry in document["rooms"]}
         self.assertEqual(flags, {"bedroom": True, "living": False})
         self.assertEqual(document["pending_rooms"], ["living"])

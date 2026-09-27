@@ -13,8 +13,8 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 
-from furniture_layout.room_page import render_editor
-from furniture_layout.layout_entry import generate_room_cad, plan_room_scene
+from furniture_layout.room_page import render_draft_page
+from furniture_layout.layout_entry import write_room_shell, plan_room_scene
 from furniture_layout.scene import RoomScene
 from furniture_layout.scene_edit import apply_edit
 from furniture_layout.scene_store import (
@@ -22,7 +22,7 @@ from furniture_layout.scene_store import (
     load_scene_source,
     save_scene_source,
 )
-from furniture_layout.layout_figures import validate_room_scene
+from furniture_layout.layout_figures import check_room_figures
 
 router = APIRouter()
 
@@ -167,7 +167,7 @@ def _plan_scene(req: RoomSceneRequest) -> dict[str, Any]:
     payload = req.model_dump(exclude_none=True)
     try:
         output = plan_room_scene(payload["room"], payload["items"])
-        report = validate_room_scene(output)
+        report = check_room_figures(output)
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     if not report.passed:
@@ -177,7 +177,7 @@ def _plan_scene(req: RoomSceneRequest) -> dict[str, Any]:
         )
     if req.generate_cad:
         try:
-            output = generate_room_cad(
+            output = write_room_shell(
                 output,
                 workspace_root=_host.workspace_root,
                 output_root=_output_root(),
@@ -288,7 +288,7 @@ async def edit_room_scene(scene_id: str, req: RoomSceneEditRequest, request: Req
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    report = validate_room_scene(scene)
+    report = check_room_figures(scene)
     if not report.passed:
         raise HTTPException(
             status_code=422,
@@ -322,5 +322,5 @@ async def room_scene_editor(scene_id: str) -> HTMLResponse:
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    editor = render_editor(scene_id, scene)
+    editor = render_draft_page(scene_id, scene)
     return HTMLResponse(content=str(editor["html"]))

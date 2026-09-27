@@ -295,7 +295,7 @@ class InheritanceTests(unittest.TestCase):
     def test_snapshot_and_page_document_show_the_inheritance(self) -> None:
         """R3：沿用了哪一版必须看得见（工具面快照 + 页面文档），不能悄悄少做一步。"""
         from furniture_workflow.agent_tools import project_snapshot
-        from furniture_layout.open_preview import project_layout_document
+        from furniture_layout.open_preview import preview_page_data
 
         project, first, digest = self._baseline()
         revised = self._revise_and_run_panels(project, offset_mm=1200)
@@ -305,7 +305,7 @@ class InheritanceTests(unittest.TestCase):
         self.assertEqual(
             snapshot["inherited"]["panel_plan"]["from_revision"], first.id
         )
-        document = project_layout_document(project)
+        document = preview_page_data(project)
         self.assertEqual(document["inherited"]["panel_plan"]["sha256"], digest)
         self.assertEqual(revised.inherited["panel_plan"]["from_revision"], first.id)
 

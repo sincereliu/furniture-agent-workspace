@@ -26,7 +26,7 @@ from typing import Any, Mapping
 
 from furniture_layout.project_edit import apply_layout_edit
 
-from furniture_layout.open_preview import layout_version, project_layout_document
+from furniture_layout.open_preview import layout_version, preview_page_data
 from .workflow_lease import check_write
 from .workflow_orchestrator import FurnitureOrchestrator
 from .workflow_project import Project, Revision
@@ -94,7 +94,7 @@ def edit_project_layout(
     else:
         _edit_in_place(revision, layout, op, item_id, before)
         JsonProjectStore(store_root).save(project)
-    return project_layout_document(project, store_root=store_root)
+    return preview_page_data(project, store_root=store_root)
 
 
 def undo_layout_edit(
@@ -136,7 +136,7 @@ def undo_layout_edit(
     del revision.working_ops[len(revision.working_ops) - steps:]
     revision.workflow.record(f"undo {steps} step(s) on the working copy")
     JsonProjectStore(store_root).save(project)
-    document = project_layout_document(project, store_root=store_root)
+    document = preview_page_data(project, store_root=store_root)
     document["undone"] = undone
     return document
 

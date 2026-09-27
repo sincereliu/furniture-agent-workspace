@@ -34,7 +34,7 @@ import server
 from fake_request_support import lease_request, local_request, remote_request
 from furniture_layout.project_layout import ProjectLayout
 from furniture_workflow.agent_tools import FurnitureToolSession, project_snapshot
-from furniture_layout.open_preview import project_layout_document
+from furniture_layout.open_preview import preview_page_data
 from furniture_workflow.project_layout_edit import edit_project_layout
 from furniture_workflow.workflow_lease import (
     HOLDER_AGENT,
@@ -368,7 +368,7 @@ class LeaseIsVisibleTests(unittest.TestCase):
         self._store_patch.start()
         self.addCleanup(self._store_patch.stop)
 
-    def test_layout_document_carries_the_lease_snapshot(self) -> None:
+    def test_preview_page_data_carries_the_lease_snapshot(self) -> None:
         """页面每秒轮询这个文档——"助手正在处理"不需要再多发一个请求。"""
         document = asyncio.run(server.project_layout(self.project.id))
         self.assertIsNone(document["lease"])
@@ -387,7 +387,7 @@ class LeaseIsVisibleTests(unittest.TestCase):
         self.assertNotIn("token", snapshot["lease"])
 
     def test_document_without_store_root_still_works(self) -> None:
-        document = project_layout_document(self.project)
+        document = preview_page_data(self.project)
         self.assertIsNone(document["lease"])
 
     def test_tool_calls_hand_over_and_say_so(self) -> None:

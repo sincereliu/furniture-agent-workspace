@@ -19,7 +19,7 @@ from fastapi import HTTPException
 
 import server
 from fake_request_support import local_request
-from furniture_layout.room_page import render_editor
+from furniture_layout.room_page import render_draft_page
 from furniture_layout.layout_entry import plan_room_scene
 from furniture_layout.scene import RoomScene
 
@@ -62,7 +62,7 @@ def _scene() -> RoomScene:
 
 class RoomSceneEditorTests(unittest.TestCase):
     def test_editor_is_self_contained_html(self) -> None:
-        result = render_editor("demo", _scene())
+        result = render_draft_page("demo", _scene())
         self.assertEqual(result["media_type"], "text/html")
         html = str(result["html"])
         self.assertIn("<canvas", html)
@@ -72,11 +72,11 @@ class RoomSceneEditorTests(unittest.TestCase):
         self.assertIn('"offset_mm":200', html)
 
     def test_editor_allows_same_origin_fetch(self) -> None:
-        html = str(render_editor("demo", _scene())["html"])
+        html = str(render_draft_page("demo", _scene())["html"])
         self.assertIn("connect-src 'self'", html)
 
     def test_editor_leaves_no_placeholders(self) -> None:
-        html = str(render_editor("demo", _scene())["html"])
+        html = str(render_draft_page("demo", _scene())["html"])
         self.assertIn("const READ_ONLY=false", html)
         for placeholder in (
             "__SCENE_ID__",
@@ -98,14 +98,14 @@ class RoomSceneEditorTests(unittest.TestCase):
 
     def test_editor_also_carries_room_axes_and_coordinate_readout(self) -> None:
         """坐标层长在共用画布上，可编辑页同样要有。"""
-        html = str(render_editor("demo", _scene())["html"])
+        html = str(render_draft_page("demo", _scene())["html"])
         self.assertIn('id="coord"', html)
         self.assertIn("mountLayout", html)
         self.assertIn('data-field="coord"', html)
 
     def test_editor_carries_the_draft_badge_and_no_room_band(self) -> None:
         """草稿页只有一间房：挂身份牌，房间带留空（JS 见不到第二间就保持 hidden）。"""
-        html = str(render_editor("demo", _scene())["html"])
+        html = str(render_draft_page("demo", _scene())["html"])
         self.assertIn(
             '<p class="mode-badge" id="mode-badge">草稿 · 不影响项目</p>', html
         )
@@ -114,7 +114,7 @@ class RoomSceneEditorTests(unittest.TestCase):
 
     def test_editable_panel_arm_keeps_the_input_controls(self) -> None:
         """去掉只读页的控件时别误伤可编辑页：可编辑那支的输入框与 −/＋ 必须还在。"""
-        html = str(render_editor("demo", _scene())["html"])
+        html = str(render_draft_page("demo", _scene())["html"])
         self.assertIn("const READ_ONLY=false", html)
         self.assertIn('data-gap-step="${key}"', html)
         self.assertIn("data-rotation-step", html)
@@ -122,7 +122,7 @@ class RoomSceneEditorTests(unittest.TestCase):
         self.assertIn("可以直接输入任意毫米值", html)
 
     def test_editor_declares_move_and_rotate_controls(self) -> None:
-        result = render_editor("demo", _scene())
+        result = render_draft_page("demo", _scene())
         controls = result["controls"]
         self.assertIn("select_item", controls)
         self.assertIn("drag_item", controls)
@@ -140,7 +140,7 @@ class RoomSceneEditorTests(unittest.TestCase):
         self.assertIn("离地高度", str(result["alt_text"]))
 
     def test_editor_offers_orthographic_views(self) -> None:
-        html = str(render_editor("demo", _scene())["html"])
+        html = str(render_draft_page("demo", _scene())["html"])
         # 六个正视图收进一个下拉；透视单独一个按钮（复位与它重复，已删掉）。
         for view in ("top", "bottom", "front", "back", "left", "right"):
             self.assertIn(f'<option value="{view}"', html)
@@ -158,7 +158,7 @@ class RoomSceneEditorTests(unittest.TestCase):
         self.assertIn("bottom:{yaw:Math.PI/2,pitch:-1.48}", html)
 
     def test_editor_snaps_orthographic_view_on_double_click(self) -> None:
-        result = render_editor("demo", _scene())
+        result = render_draft_page("demo", _scene())
         html = str(result["html"])
         self.assertIn('canvas.addEventListener("dblclick"', html)
         self.assertIn("function nearestOrthoView()", html)

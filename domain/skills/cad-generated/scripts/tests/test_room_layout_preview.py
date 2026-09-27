@@ -20,14 +20,14 @@ bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 from furniture_layout.room_shell import (
     _path_within,
-    room_cad_artifact_name,
-    write_room_cad_source,
+    room_shell_artifact_name,
+    write_room_shell_source,
 )
-from furniture_layout.layout_entry import generate_room_cad, plan_project_layout, plan_room_scene
+from furniture_layout.layout_entry import write_room_shell, plan_project_layout, plan_room_scene
 from furniture_layout.room_svg import _build_projector
 from furniture_layout.project_layout import ProjectLayout
 from furniture_layout.scene import RoomScene
-from furniture_layout.layout_figures import validate_room_scene
+from furniture_layout.layout_figures import check_room_figures
 from furniture_workflow.workflow_state import STAGE_SEQUENCE, WorkflowStage
 
 
@@ -88,7 +88,7 @@ def bedroom_items() -> list[dict]:
 class RoomSceneLayoutTests(unittest.TestCase):
     def test_explicit_room_cad_artifact_id_must_be_safe(self) -> None:
         self.assertEqual(
-            room_cad_artifact_name(
+            room_shell_artifact_name(
                 artifact_id="bedroom-v1",
                 room_id="ignored-room-id",
             ),
@@ -105,19 +105,19 @@ class RoomSceneLayoutTests(unittest.TestCase):
         ):
             with self.subTest(artifact_id=artifact_id):
                 with self.assertRaisesRegex(ValueError, "artifact_id"):
-                    room_cad_artifact_name(
+                    room_shell_artifact_name(
                         artifact_id=artifact_id,
                         room_id="bedroom",
                     )
 
     def test_room_id_fallback_is_stable_and_safe(self) -> None:
         self.assertEqual(
-            room_cad_artifact_name(artifact_id=None, room_id="bedroom"),
+            room_shell_artifact_name(artifact_id=None, room_id="bedroom"),
             "bedroom",
         )
-        first = room_cad_artifact_name(artifact_id=None, room_id="主卧/套房")
-        repeated = room_cad_artifact_name(artifact_id=None, room_id="主卧/套房")
-        other = room_cad_artifact_name(artifact_id=None, room_id="儿童房")
+        first = room_shell_artifact_name(artifact_id=None, room_id="主卧/套房")
+        repeated = room_shell_artifact_name(artifact_id=None, room_id="主卧/套房")
+        other = room_shell_artifact_name(artifact_id=None, room_id="儿童房")
         self.assertEqual(first, repeated)
         self.assertNotEqual(first, other)
         self.assertRegex(first, re.compile(r"^room-[0-9a-f]{16}$"))
@@ -158,7 +158,7 @@ class RoomSceneLayoutTests(unittest.TestCase):
 
     def test_bedroom_places_bed_and_fills_east_wall_around_door(self) -> None:
         output = plan_room_scene(bedroom_room(), bedroom_items())
-        report = validate_room_scene(output)
+        report = check_room_figures(output)
         self.assertTrue(report.passed, report.to_dict())
         self.assertNotIn(getattr(WorkflowStage, "LAYOUT_PLANNED", "layout_planned"), STAGE_SEQUENCE)
 
@@ -219,7 +219,7 @@ class RoomSceneLayoutTests(unittest.TestCase):
         scene = RoomScene.from_dict(output)
         with tempfile.TemporaryDirectory() as temporary_directory:
             source_path = Path(temporary_directory) / "model.step.py"
-            write_room_cad_source(scene, source_path)
+            write_room_shell_source(scene, source_path)
             source = source_path.read_text(encoding="utf-8")
         self.assertIn("cut_box", source)
         self.assertIn("4200", source)
@@ -229,7 +229,7 @@ class RoomSceneLayoutTests(unittest.TestCase):
         self.assertIn("'rotation_z_deg': 90.0", source)
         self.assertIn("'x': 1200.0", source)
 
-    def test_generate_room_cad_uses_bridge_and_records_paths(self) -> None:
+    def test_write_room_shell_uses_bridge_and_records_paths(self) -> None:
         output = plan_room_scene(bedroom_room(), bedroom_items())
 
         class FakeBridge:
@@ -261,7 +261,7 @@ class RoomSceneLayoutTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temporary_directory:
             workspace = Path(temporary_directory)
-            result = generate_room_cad(
+            result = write_room_shell(
                 output,
                 workspace_root=workspace,
                 output_root=workspace / "generated",
@@ -273,13 +273,13 @@ class RoomSceneLayoutTests(unittest.TestCase):
         self.assertTrue(result["cad"]["step_path"].endswith("room.step"))
         self.assertIn("cad", result)
 
-    def test_generate_room_cad_rejects_unsafe_id_before_side_effects(self) -> None:
+    def test_write_room_shell_rejects_unsafe_id_before_side_effects(self) -> None:
         output = plan_room_scene(bedroom_room(), bedroom_items())
         bridge = mock.Mock()
         with tempfile.TemporaryDirectory() as temporary_directory:
             workspace = Path(temporary_directory)
             with self.assertRaisesRegex(ValueError, "artifact_id"):
-                generate_room_cad(
+                write_room_shell(
                     output,
                     workspace_root=workspace,
                     output_root="generated",
@@ -290,7 +290,7 @@ class RoomSceneLayoutTests(unittest.TestCase):
             self.assertFalse((workspace / "generated").exists())
         bridge.generate_from_source.assert_not_called()
 
-    def test_generate_room_cad_contains_paths_and_hashes_unsafe_room_id(self) -> None:
+    def test_write_room_shell_contains_paths_and_hashes_unsafe_room_id(self) -> None:
         room = bedroom_room()
         room["id"] = "主卧/套房"
         output = plan_room_scene(room, bedroom_items())
@@ -316,7 +316,7 @@ class RoomSceneLayoutTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_directory:
             workspace = Path(temporary_directory)
             bridge = RecordingBridge()
-            result = generate_room_cad(
+            result = write_room_shell(
                 output,
                 workspace_root=workspace,
                 output_root="generated",

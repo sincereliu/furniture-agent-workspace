@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from .room_shell import cad_from_output
-from .layout_figures import validate_room_scene
+from .room_shell import room_shell_from_output
+from .layout_figures import check_room_figures
 from .placement import place_items
 from .room_svg import render_preview
 from .project_layout import ProjectLayout
@@ -52,7 +52,7 @@ def plan_project_layout(rooms: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     return layout.to_dict()
 
 
-def generate_room_cad(
+def write_room_shell(
     output: Mapping[str, Any],
     *,
     workspace_root: str | Path,
@@ -61,12 +61,13 @@ def generate_room_cad(
     artifact_id: str | None = None,
     force: bool = False,
 ) -> dict[str, Any]:
-    report = validate_room_scene(output)
+    """核对这一间的图，然后写房间外壳 STEP。"""
+    report = check_room_figures(output)
     if not report.passed:
         raise ValueError(
             "; ".join(issue.message for issue in report.issues)
         )
-    cad = cad_from_output(
+    shell = room_shell_from_output(
         output,
         workspace_root=workspace_root,
         output_root=output_root,
@@ -74,8 +75,8 @@ def generate_room_cad(
         artifact_id=artifact_id,
         force=force,
     )
-    if cad.get("status") != "ok":
-        raise ValueError(cad.get("message") or "room CAD generation failed")
+    if shell.get("status") != "ok":
+        raise ValueError(shell.get("message") or "room shell generation failed")
     result = dict(output)
-    result["cad"] = cad
+    result["cad"] = shell
     return result

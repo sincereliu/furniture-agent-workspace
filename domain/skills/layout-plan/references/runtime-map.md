@@ -35,7 +35,7 @@
 
 板件实际只依赖 `LayoutUnit` 的五个字段：`id`、`furniture_category`、`width`、`depth`、`height`。这五个不变，板件与制造的内容就不变，可以跨 Revision 继承（见编排层 [修订继承设计](../../cad-generated/references/revision-inheritance-design.md)）。沿墙铺满那件的 `width` 由该墙空段算出，改房间就会改它，所以这种件永远算变了，必须重算。
 
-确认时 `layout_figures.validate_project_layout` / `validate_room_scene` 再核每个房间的图是不是由当前几何画出的。建项目前的 `validation.admit_scene` 不画 SVG。
+确认时 `layout_figures.check_layout_figures` / `check_room_figures` 再核每个房间的图是不是由当前几何画出的。建项目前的 `validation.admit_scene` 不画 SVG。
 
 ## 各文件干什么
 
@@ -56,7 +56,7 @@
 | 房间的东、南、上怎么画到屏幕上 | `static/layout_frame.js` | calculation |
 | 记下移动、旋转或改尺寸，这一步先不算。全屋和单间共用这一套字段 | `scene_edit.py` | schema |
 | 把这次改动算进某一间，算出一版还没确认的摆放。版本号和落盘不在这里 | `project_edit.py` | calculation |
-| 三个入口：建全屋摆放（`plan_project_layout`）、建单间（`plan_room_scene`）、写房间外壳（`generate_room_cad`） | `layout_entry.py` | structured_protocol |
+| 三个入口：建全屋摆放（`plan_project_layout`）、建单间（`plan_room_scene`）、写房间外壳（`write_room_shell`） | `layout_entry.py` | structured_protocol |
 | 单间的保存、编辑，以及要房间外壳 | `room_http.py` | structured_protocol |
 | 单间只存客户原来写的那份，打开时再算 | `scene_store.py` | side_effect |
 | 房间外壳的 STEP：地、墙、门窗洞。不是柜体模型 | `room_shell.py` | side_effect |

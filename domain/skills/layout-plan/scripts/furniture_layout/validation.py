@@ -33,7 +33,7 @@ from .scene import (
 def admit_scene(scene: RoomScene) -> ValidationReport:
     """Admit placed geometry: schema, derived footprint, and placement checks.
 
-    预览是否由当前几何重建，在冻结时由 layout_figures.validate_room_scene 核对。
+    预览是否由当前几何重建，在冻结时由 layout_figures.check_room_figures 核对。
     """
     report = ValidationReport(stage="layout_plan")
     _validate_room(scene.room, report)

@@ -132,7 +132,7 @@ class RoomSceneApiTests(unittest.TestCase):
                 },
             }
 
-        with mock.patch.object(room_http, "generate_room_cad", side_effect=fake_generate):
+        with mock.patch.object(room_http, "write_room_shell", side_effect=fake_generate):
             response = asyncio.run(server.plan_room_cad(request, local_request()))
         self.assertEqual(response.cad["status"], "ok")
 
@@ -140,7 +140,7 @@ class RoomSceneApiTests(unittest.TestCase):
         """出 CAD 会写文件：非本机来源连生成都不该触发。"""
         saved = save_request()
         request = server.RoomSceneRequest(room=saved.room, items=saved.items)
-        with mock.patch.object(room_http, "generate_room_cad") as generator:
+        with mock.patch.object(room_http, "write_room_shell") as generator:
             with self.assertRaises(HTTPException) as ctx:
                 asyncio.run(server.plan_room_cad(request, remote_request()))
         self.assertEqual(ctx.exception.status_code, 403)

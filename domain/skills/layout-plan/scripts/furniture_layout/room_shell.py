@@ -16,7 +16,7 @@ WALL_THICKNESS_MM = 100.0
 SAFE_ARTIFACT_ID = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
-def room_cad_artifact_name(
+def room_shell_artifact_name(
     *,
     artifact_id: str | None,
     room_id: str,
@@ -45,7 +45,7 @@ def _path_within(root: Path, *parts: str) -> Path:
     return resolved_path
 
 
-def scene_to_cad_tree(scene: RoomScene) -> dict[str, Any]:
+def scene_to_shell_tree(scene: RoomScene) -> dict[str, Any]:
     room = scene.room
     thickness = WALL_THICKNESS_MM
     features: list[dict[str, Any]] = [
@@ -123,7 +123,7 @@ def scene_to_cad_tree(scene: RoomScene) -> dict[str, Any]:
     }
 
 
-def write_room_cad_source(
+def write_room_shell_source(
     scene: RoomScene,
     source_path: str | Path,
     *,
@@ -132,7 +132,7 @@ def write_room_cad_source(
     resolved_source = Path(source_path).resolve()
     resolved_source.parent.mkdir(parents=True, exist_ok=True)
     tree_literal = pprint.pformat(
-        scene_to_cad_tree(scene),
+        scene_to_shell_tree(scene),
         sort_dicts=False,
         width=100,
     )
@@ -191,7 +191,7 @@ if __name__ == "__main__":
     return resolved_source
 
 
-def generate_room_cad(
+def build_room_shell(
     scene: RoomScene,
     *,
     workspace_root: str | Path,
@@ -200,11 +200,12 @@ def generate_room_cad(
     artifact_id: str | None = None,
     force: bool = False,
 ) -> dict[str, Any]:
+    """按这一间的几何写房间外壳 STEP。"""
     workspace = Path(workspace_root).resolve()
     output = Path(output_root)
     if not output.is_absolute():
         output = workspace / output
-    name = room_cad_artifact_name(
+    name = room_shell_artifact_name(
         artifact_id=artifact_id,
         room_id=scene.room.id,
     )
@@ -221,7 +222,7 @@ def generate_room_cad(
         name,
         "room.step",
     )
-    write_room_cad_source(scene, source_path, step_path=step_path)
+    write_room_shell_source(scene, source_path, step_path=step_path)
     bridge = cad_bridge
     if bridge is None:
         from furniture_cad.cad_bridge import CadBridge
@@ -281,7 +282,7 @@ def _opening_cut(
     }
 
 
-def cad_from_output(
+def room_shell_from_output(
     output: Mapping[str, Any],
     *,
     workspace_root: str | Path,
@@ -290,7 +291,8 @@ def cad_from_output(
     artifact_id: str | None = None,
     force: bool = False,
 ) -> dict[str, Any]:
-    return generate_room_cad(
+    """从已经算好的单间结果写房间外壳。"""
+    return build_room_shell(
         RoomScene.from_dict(output),
         workspace_root=workspace_root,
         output_root=output_root,

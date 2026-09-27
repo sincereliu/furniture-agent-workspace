@@ -206,7 +206,7 @@ Feature Tree v2 支持板件 `box` 和定向 `cut_box`；发射器先建板、�
 
 ## 运行时板件与 BOM 路径
 
-- `furniture_layout/layout_entry.py::plan_project_layout()`：计算多房间定位、摆放检查和预览，产出可执行 CAD 单元；`generate_room_cad()` 发射房屋与包络 CAD。
+- `furniture_layout/layout_entry.py::plan_project_layout()`：计算多房间定位、摆放检查和预览，产出可执行 CAD 单元；`write_room_shell()` 写房间外壳。
 - `furniture_panel_planning/panel_pipeline.py::plan_panel_stage()`：从已确认 CAD 单元投影出的柜体外形尺寸物化功能数量、结构规格、精确净空、背板方案，并生成实体板件角色、尺寸和位置。
 - `furniture_manufacturing/manufacturing_bom.py::plan_manufacturing()`：材料、封边、五金、BOM、槽；`emit_drilled_holes()` 输出配合孔。
 

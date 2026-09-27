@@ -15,7 +15,7 @@ import urllib.request
 import webbrowser
 from typing import Any
 
-from furniture_layout.room_page import editor_scene_payload
+from furniture_layout.room_page import room_page_payload
 from furniture_workflow.workflow_lease import read_lease
 from furniture_workflow.workflow_project import Project, Revision
 
@@ -34,12 +34,12 @@ def layout_version(revision: Revision) -> str:
     return f"{revision.layout_sha256}:{int(bool(revision.layout.confirmed))}"
 
 
-def project_layout_document(
+def preview_page_data(
     project: Project,
     *,
     store_root: str | Path | None = None,
 ) -> dict[str, Any]:
-    """最新布局，不含预览 HTML。给了 `store_root` 就带上编辑租约快照。"""
+    """预览页要读的那份数据。不含预览 HTML。给了 `store_root` 就带上编辑租约快照。"""
     revision = project.latest
     confirmed = bool(revision.layout.confirmed)
     approved = revision.approved_room_ids()
@@ -48,7 +48,7 @@ def project_layout_document(
             "id": scene.room.id,
             "name": scene.room.name,
             "approved": scene.room.id in approved,
-            "scene": editor_scene_payload(scene),
+            "scene": room_page_payload(scene),
         }
         for scene in revision.layout.rooms
     ]

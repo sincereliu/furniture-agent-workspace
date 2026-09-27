@@ -32,11 +32,11 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
-from furniture_layout.room_page import render_project_preview
+from furniture_layout.room_page import render_project_page
 from furniture_layout.project_list import render_project_list
 from furniture_layout.open_preview import (
     preview_server_is_up,
-    project_layout_document,
+    preview_page_data,
     project_list_url,
 )
 from furniture_layout import room_http
@@ -362,8 +362,8 @@ def _load_project(project_id: str):
         raise HTTPException(status_code=status, detail=message) from exc
 
 
-def _project_layout_document(project_id: str) -> dict[str, Any]:
-    document = project_layout_document(_load_project(project_id), store_root=STORE_ROOT)
+def _preview_page_data(project_id: str) -> dict[str, Any]:
+    document = preview_page_data(_load_project(project_id), store_root=STORE_ROOT)
     if not document["rooms"]:
         raise HTTPException(status_code=422, detail="project layout has no rooms")
     return document
@@ -372,7 +372,7 @@ def _project_layout_document(project_id: str) -> dict[str, Any]:
 @app.get("/api/project/{project_id}/layout")
 async def project_layout(project_id: str):
     """最新布局：房间和已摆放的包络。不含预览 HTML。"""
-    return _project_layout_document(project_id)
+    return _preview_page_data(project_id)
 
 
 @app.get("/api/project/{project_id}/preview", response_class=HTMLResponse)
@@ -383,10 +383,10 @@ async def project_preview(project_id: str, request: Request, mode: str | None = 
     `?mode=view` 在此之上强制只读（分享形态：换牌子、去掉「退出」）——**URL 参数不是权限**：
     参数谁都能改，真正的门是 `may_edit()` 与编辑租约。
     """
-    document = _project_layout_document(project_id)
+    document = _preview_page_data(project_id)
     read_only = mode == "view" or not may_edit(request)
     try:
-        html = render_project_preview(
+        html = render_project_page(
             project_id,
             document,
             mode=mode,
