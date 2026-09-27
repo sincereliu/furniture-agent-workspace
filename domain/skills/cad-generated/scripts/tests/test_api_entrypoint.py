@@ -132,7 +132,7 @@ class ApiEntrypointTests(unittest.TestCase):
             / "runtime-contract.md"
         ).read_text(encoding="utf-8")
         documented = set(
-            re.findall(r"`(/api/[^`.]+)`", contract)
+            re.findall(r"`(/(?:api/[^`.]+|projects))`", contract)
         )
 
         served = set(server.app.openapi()["paths"])

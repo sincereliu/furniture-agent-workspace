@@ -1,7 +1,6 @@
-"""Read-only layout document for the persistent project preview.
+"""布局预览文档，以及把本机预览页打开。
 
-The next stage still reads the frozen cabinet envelope. This document is only
-the picture: rooms and placed boxes from the latest revision.
+下一阶段仍读冻结的柜体外形。这里只是那张图：最新一版的房间和已摆放的盒子。
 """
 
 from __future__ import annotations
@@ -27,13 +26,10 @@ _LOCAL_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
 def layout_version(revision: Revision) -> str:
-    """布局的**内容版本**：内容摘要 + 确认位（如 `5d28c9b6…:0`）。
+    """布局的内容版本：内容摘要 + 确认位（如 `5d28c9b6…:0`）。
 
-    两处用它，必须是同一个字符串：
-    - 页面轮询拿它判断"要不要重画"；
-    - 页面写回时把最近看到的它当 `expected_version` 回传（乐观并发）。
-    所以别在别处再拼一次，也别把 `revision.id` / `number` 编进去——
-    "同一内容换了个修订号"不该看起来像变了，而"刚被确认"必须看起来变了。
+    两处用它，必须是同一个字符串：页面轮询靠它决定要不要重画；页面写回时把它
+    当作 `expected_version`。不要把修订号编进去。
     """
     return f"{revision.layout_sha256}:{int(bool(revision.layout.confirmed))}"
 
@@ -43,11 +39,7 @@ def project_layout_document(
     *,
     store_root: str | Path | None = None,
 ) -> dict[str, Any]:
-    """Return the latest layout without preview HTML or viewer markup.
-
-    给了 `store_root` 就带上**编辑租约**的对外快照（谁在写、还有几秒）——页面每秒轮询
-    这个文档，所以"助手正在处理"不需要再多发一个请求。
-    """
+    """最新布局，不含预览 HTML。给了 `store_root` 就带上编辑租约快照。"""
     revision = project.latest
     confirmed = bool(revision.layout.confirmed)
     approved = revision.approved_room_ids()
@@ -66,37 +58,28 @@ def project_layout_document(
         "revision_id": revision.id,
         "revision_number": revision.number,
         "layout_confirmed": confirmed,
-        # 工作副本：还没下游产物时，改动原地生效（版号不变）；log 是撤销依据（不是审计）。
         "working": {
             "open": not revision.has_downstream_artifacts(),
             "ops": len(revision.working_ops),
             "can_undo": bool(revision.working_ops),
         },
         "lease": lease.snapshot() if lease is not None else None,
-        # 房间级确认：布局检查点 = 每间都审过。页面据此标"哪间还没看过"。
         "approved_rooms": list(revision.approved_rooms),
         "pending_rooms": revision.pending_room_ids(),
         "inherited_rooms": deepcopy(revision.inherited_rooms),
         "version": layout_version(revision),
-        # 哪些阶段沿用了更早那一版的内容（内容逐字节相同 → 免掉再确认一次）。
-        # 页面据此说明"这次没让你重新确认板件"，而不是悄悄少做一步。
         "inherited": deepcopy(revision.inherited),
         "rooms": rooms,
     }
 
 
 def project_list_url() -> str:
-    """Browser address for the list of saved projects."""
+    """浏览器里项目名单的地址。"""
     return f"http://127.0.0.1:{PREVIEW_PORT}/projects"
 
 
 def preview_url(project_id: str, *, mode: str | None = None) -> str:
-    """Browser address for one project's live layout page.
-
-    `mode="view"` 给出**分享形态**的链接（`?mode=view`）：牌子换成"只读分享"、
-    页面不带「退出」按钮，适合转发给别人看。它不是权限——真正的门在服务端的
-    `access_scope()`（见 references/runtime-contract.md「写权限」段）。
-    """
+    """一个项目的布局页地址。`mode="view"` 只改页面样子，不改写权限。"""
     base = f"http://127.0.0.1:{PREVIEW_PORT}/api/project/{project_id}/preview"
     return f"{base}?mode={mode}" if mode else base
 
@@ -106,7 +89,7 @@ def _preview_browser_enabled() -> bool:
 
 
 def preview_server_is_up() -> bool:
-    """True when this machine is already serving the preview."""
+    """本机预览进程是否已经在应答。"""
     try:
         with _LOCAL_OPENER.open(
             f"http://127.0.0.1:{PREVIEW_PORT}/health",
@@ -127,16 +110,16 @@ def _python_executable(workspace_root: Path) -> Path:
 
 
 def ensure_preview_server(workspace_root: Path) -> bool:
-    """Start the local preview server when it is not already up."""
+    """预览进程没起来时，用布局阶段的入口把它拉起来。"""
     if preview_server_is_up():
         return True
     server = (
         workspace_root
         / "domain"
         / "skills"
-        / "cad-generated"
+        / "layout-plan"
         / "scripts"
-        / "server.py"
+        / "open_projects.py"
     )
     popen_kwargs: dict[str, Any] = {
         "cwd": str(workspace_root),
@@ -170,10 +153,7 @@ def open_project_preview(
     workspace_root: str | Path,
     share: bool = False,
 ) -> dict[str, Any]:
-    """Open the live preview once. Later layout edits refresh that same page.
-
-    `share=True` 打开的是分享形态（`?mode=view`）：只影响页面表达，不改变权限。
-    """
+    """打开这一版布局页。之后的修改由同一页自己刷新。"""
     url = preview_url(project_id, mode="view" if share else None)
     if not _preview_browser_enabled():
         return {"url": url, "opened": False}

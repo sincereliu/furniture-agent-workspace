@@ -43,7 +43,7 @@ from .agent_tool_schema import (
     openai_tools,
     tool_names,
 )
-from .project_preview import open_project_preview
+from furniture_layout.project_preview import open_project_preview
 from .workflow_lease import LEASE_TTL_SECONDS, handover_to_agent, read_lease
 from .workflow_orchestrator import (
     RETRYABLE_STAGES,

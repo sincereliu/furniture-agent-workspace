@@ -1,7 +1,8 @@
-"""Furniture Agent 服务 — FastAPI 入口
+"""本机运行时进程。房间场景路由和布局预览在 layout-plan，这里只把它们挂上。
 
-启动: ./.venv/Scripts/python.exe domain/skills/cad-generated/scripts/server.py
-打开: http://127.0.0.1:8000/projects 查看已经做过的项目
+看已经做过的项目，从布局阶段启动，不要把这一进程当成 CAD 阶段：
+
+    .venv/Scripts/python.exe domain/skills/layout-plan/scripts/open_projects.py
 """
 
 from __future__ import annotations
@@ -13,10 +14,8 @@ import sys
 import threading
 import time
 import webbrowser
-from html import escape
 from pathlib import Path
 from typing import Any, Literal
-from uuid import uuid4
 
 SCRIPT_ROOT = Path(__file__).resolve().parent
 WORKSPACE_ROOT = Path(__file__).resolve().parents[4]
@@ -29,31 +28,24 @@ from runtime_paths import bootstrap_runtime_paths
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
-from furniture_layout.editor import render_editor, render_project_preview
-from furniture_layout.pipeline import generate_room_cad, plan_room_scene
-from furniture_layout.scene import RoomScene
-from furniture_layout.scene_edit import apply_edit
-from furniture_layout.scene_store import (
-    list_scene_ids,
-    load_scene_source,
-    save_scene_source,
+from furniture_layout.editor import render_project_preview
+from furniture_layout.project_list import render_project_list
+from furniture_layout.project_preview import (
+    preview_server_is_up,
+    project_layout_document,
+    project_list_url,
 )
-from furniture_layout.validation import validate_room_scene
+from furniture_layout import room_http
 from furniture_workflow.project_layout_edit import (
     LAYOUT_EDIT_ENV,
     LayoutEditDisabled,
     VersionConflict,
     edit_project_layout,
     undo_layout_edit,
-)
-from furniture_workflow.project_preview import (
-    preview_server_is_up,
-    project_layout_document,
-    project_list_url,
 )
 from furniture_workflow.workflow_lease import (
     LeaseHeld,
@@ -116,111 +108,36 @@ LAYOUT_PAGE = (
 app.mount("/vendor/three/0.186.0", StaticFiles(directory=str(THREE_DIST)), name="three_0_186_0")
 app.mount("/layout-view", StaticFiles(directory=str(LAYOUT_PAGE)), name="layout_view")
 
-
-class RoomOpeningRequest(BaseModel):
-    id: str = Field(default="", description="门窗标识")
-    kind: str = Field(default="opening", description="opening / door / window")
-    wall: Literal["south", "east", "north", "west"]
-    offset_mm: float = Field(default=0, ge=0, description="沿墙顺时针起点的偏移")
-    width_mm: float = Field(..., gt=0)
-    height_mm: float = Field(..., gt=0)
-    sill_height_mm: float = Field(default=0, ge=0)
+def _room_output_root() -> Path:
+    return OUTPUT_ROOT
 
 
-class RoomObstacleRequest(BaseModel):
-    id: str = Field(default="", description="障碍物标识")
-    kind: str = Field(default="obstacle", description="column / pipe / obstacle")
-    x_mm: float = Field(default=0, ge=0)
-    y_mm: float = Field(default=0, ge=0)
-    z_mm: float = Field(default=0, ge=0)
-    width_mm: float = Field(..., gt=0)
-    depth_mm: float = Field(..., gt=0)
-    height_mm: float = Field(..., gt=0)
+room_http.bind_room_host(
+    workspace_root=WORKSPACE_ROOT,
+    output_root=_room_output_root,
+    may_edit=may_edit,
+)
+app.include_router(room_http.router)
 
-
-class RoomRequest(BaseModel):
-    id: str = Field(default="room")
-    name: str = Field(default="房间")
-    width_mm: float = Field(..., gt=0)
-    depth_mm: float = Field(..., gt=0)
-    height_mm: float = Field(..., gt=0)
-    openings: list[RoomOpeningRequest] = Field(default_factory=list)
-    obstacles: list[RoomObstacleRequest] = Field(default_factory=list)
-
-
-class ItemPlacementRequest(BaseModel):
-    mode: Literal["wall", "free"] = Field(default="wall")
-    host_wall: Literal["south", "east", "north", "west"] | None = None
-    offset_mm: float | None = Field(default=None, ge=0)
-    origin_x_mm: float | None = None
-    origin_y_mm: float | None = None
-    origin_z_mm: float = Field(default=0, ge=0)
-    rotation_z_deg: float | None = None
-    fill: bool = False
-
-
-class SceneItemRequest(BaseModel):
-    id: str = Field(default="")
-    label: str = Field(default="")
-    category: str
-    width: float = Field(..., gt=0)
-    depth: float = Field(..., gt=0)
-    height: float = Field(..., gt=0)
-    placement: ItemPlacementRequest
-
-
-class RoomSceneRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    room: RoomRequest
-    items: list[SceneItemRequest] = Field(..., min_length=1)
-    generate_cad: bool = False
-    artifact_id: str | None = Field(
-        default=None,
-        description=(
-            "房间 CAD 产物标识；显式提供时仅允许英文字母、数字、'-' 和 '_'"
-        ),
-    )
-
-
-class RoomSceneResponse(BaseModel):
-    room: dict[str, Any]
-    items: list[dict[str, Any]]
-    preview: dict[str, Any] | None = None
-    viewer: dict[str, Any] | None = None
-    cad: dict[str, Any] | None = None
-
-
-class RoomSceneSaveRequest(BaseModel):
-    """保存场景的「源」：房间定义 + 多件包络及其摆放请求。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    scene_id: str = Field(default="", description="场景 id；留空则自动生成")
-    room: RoomRequest
-    items: list[SceneItemRequest] = Field(..., min_length=1)
-
-
-class RoomSceneEditRequest(BaseModel):
-    """单次编辑：move / rotate / resize 三者之一，只改目标 item。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    op: Literal["move", "rotate", "resize"]
-    item_id: str = Field(..., min_length=1)
-    # move：按当前 mode 二选一 —— wall 用 host_wall/offset_mm，free 用 origin_x_mm/origin_y_mm
-    mode: Literal["wall", "free"] | None = None
-    host_wall: Literal["south", "east", "north", "west"] | None = None
-    offset_mm: float | None = Field(default=None, ge=0)
-    origin_x_mm: float | None = None
-    origin_y_mm: float | None = None
-    origin_z_mm: float | None = Field(default=None, ge=0)
-    # rotate
-    rotation_z_deg: float | None = None
-    # resize
-    width: float | None = Field(default=None, gt=0)
-    depth: float | None = Field(default=None, gt=0)
-    height: float | None = Field(default=None, gt=0)
+# 测试和项目编辑请求仍用这些名字。实现在布局阶段。
+RoomOpeningRequest = room_http.RoomOpeningRequest
+RoomObstacleRequest = room_http.RoomObstacleRequest
+RoomRequest = room_http.RoomRequest
+ItemPlacementRequest = room_http.ItemPlacementRequest
+SceneItemRequest = room_http.SceneItemRequest
+RoomSceneRequest = room_http.RoomSceneRequest
+RoomSceneResponse = room_http.RoomSceneResponse
+RoomSceneSaveRequest = room_http.RoomSceneSaveRequest
+RoomSceneEditRequest = room_http.RoomSceneEditRequest
+plan_room = room_http.plan_room
+plan_room_preview = room_http.plan_room_preview
+plan_room_viewer = room_http.plan_room_viewer
+plan_room_cad = room_http.plan_room_cad
+save_room_scene = room_http.save_room_scene
+load_room_scene = room_http.load_room_scene
+list_room_scenes = room_http.list_room_scenes
+edit_room_scene = room_http.edit_room_scene
+room_scene_editor = room_http.room_scene_editor
 
 
 class ProjectLayoutEditRequest(RoomSceneEditRequest):
@@ -300,78 +217,8 @@ async def watch_preview_presence() -> None:
     asyncio.create_task(watch())
 
 
-_PRESENCE_SCRIPT = (
-    "<script>function pulsePreview(){fetch(\"/api/preview/presence\","
-    "{method:\"POST\",cache:\"no-store\",keepalive:true}).catch(function(){})}"
-    "pulsePreview();setInterval(pulsePreview,1000);</script>"
-)
-
-
 def _project_rows() -> list[dict[str, Any]]:
     return JsonProjectStore(STORE_ROOT).list_projects()
-
-
-def _project_status(confirmed: bool) -> str:
-    return "布局已确认" if confirmed else "还没确认"
-
-
-def _project_date(created_at: str) -> str:
-    if len(created_at) >= 10 and created_at[4] == "-" and created_at[7] == "-":
-        return created_at[:10]
-    return created_at
-
-
-def _project_list_html(rows: list[dict[str, Any]]) -> str:
-    if rows:
-        items = []
-        for row in rows:
-            href = f"/api/project/{escape(row['id'], quote=True)}/preview"
-            meta = (
-                f"{_project_date(str(row['created_at']))} · "
-                f"修订 {int(row['revision_number'])} · "
-                f"{_project_status(bool(row['layout_confirmed']))}"
-            )
-            items.append(
-                "<li><a class=\"row\" href=\""
-                + href
-                + "\"><span class=\"name\">"
-                + escape(str(row["name"]))
-                + "</span><span class=\"meta\">"
-                + escape(meta)
-                + "</span></a></li>"
-            )
-        body = "<ul class=\"projects\">" + "".join(items) + "</ul>"
-    else:
-        body = (
-            "<p class=\"empty\">还没有项目。先在对话里做完一版布局；"
-            "关机后再打开这一页，它还在。</p>"
-        )
-    return (
-        "<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\">"
-        "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
-        "<title>已经做过的项目</title><style>"
-        "body{margin:0;font-family:sans-serif;color:#0f172a;background:#f8fafc}"
-        "main{max-width:640px;margin:0 auto;padding:40px 20px}"
-        "h1{font-size:28px;margin:0 0 8px}"
-        "p.lead,p.empty{color:#64748b;line-height:1.6}"
-        "ul.projects{list-style:none;margin:24px 0;padding:0;display:flex;flex-direction:column;gap:10px}"
-        "a.row{display:flex;justify-content:space-between;gap:16px;align-items:baseline;"
-        "text-decoration:none;color:inherit;background:#fff;border:1px solid #e2e8f0;"
-        "border-radius:12px;padding:14px 16px}"
-        "a.row:hover{border-color:#4f46e5}"
-        "span.name{font-weight:700}"
-        "span.meta{color:#64748b;font-size:13px;white-space:nowrap}"
-        "a.docs{color:#4f46e5;font-size:13px}"
-        "</style></head><body><main>"
-        "<h1>已经做过的项目</h1>"
-        "<p class=\"lead\">点一个项目打开那一版布局。关机后项目还在。"
-        "关掉最后一页后，预览服务会自己停。</p>"
-        + body
-        + "<p><a class=\"docs\" href=\"/docs\">API 文档</a></p>"
-        "</main>"
-        + _PRESENCE_SCRIPT
-        + "</body></html>"
-    )
 
 
 @app.get("/api/projects")
@@ -383,7 +230,7 @@ async def project_index_json():
 @app.get("/projects", response_class=HTMLResponse)
 async def project_index():
     """List of saved projects. Each row opens that project's layout page."""
-    return HTMLResponse(content=_project_list_html(_project_rows()))
+    return HTMLResponse(content=render_project_list(_project_rows()))
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -627,168 +474,7 @@ async def undo_project_layout_edit(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-def _plan_scene(req: RoomSceneRequest) -> dict[str, Any]:
-    payload = req.model_dump(exclude_none=True)
-    try:
-        output = plan_room_scene(payload["room"], payload["items"])
-        report = validate_room_scene(output)
-    except (TypeError, ValueError) as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    if not report.passed:
-        raise HTTPException(
-            status_code=422,
-            detail="; ".join(issue.message for issue in report.issues),
-        )
-    if req.generate_cad:
-        try:
-            output = generate_room_cad(
-                output,
-                workspace_root=WORKSPACE_ROOT,
-                output_root=OUTPUT_ROOT,
-                artifact_id=req.artifact_id,
-            )
-        except (TypeError, ValueError) as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return output
-
-
-@app.post("/api/plan-room", response_model=RoomSceneResponse)
-async def plan_room(req: RoomSceneRequest):
-    """独立规划房间多件包络摆放；不进入家具生成的串联阶段。"""
-    return RoomSceneResponse(**_plan_scene(req))
-
-
-@app.post(
-    "/api/plan-room/preview",
-    response_class=Response,
-    responses={200: {"content": {"image/svg+xml": {}}}},
-)
-async def plan_room_preview(req: RoomSceneRequest) -> Response:
-    result = await plan_room(req)
-    if result.preview is None:
-        raise HTTPException(status_code=422, detail="layout preview was not generated")
-    return Response(
-        content=str(result.preview["svg"]),
-        media_type="image/svg+xml",
-    )
-
-
-@app.post(
-    "/api/plan-room/viewer",
-    response_class=HTMLResponse,
-    responses={200: {"content": {"text/html": {}}}},
-)
-async def plan_room_viewer(req: RoomSceneRequest) -> HTMLResponse:
-    result = await plan_room(req)
-    if result.viewer is None:
-        raise HTTPException(
-            status_code=422,
-            detail="interactive layout viewer was not generated",
-        )
-    return HTMLResponse(content=str(result.viewer["html"]))
-
-
-@app.post("/api/plan-room/cad", response_model=RoomSceneResponse)
-async def plan_room_cad(req: RoomSceneRequest, request: Request):
-    """出房间 CAD：会往磁盘写源文件与 STEP，所以和落盘一样要求本机来源。"""
-    if not may_edit(request):
-        raise HTTPException(status_code=403, detail="generating room CAD is local only")
-    payload = req.model_copy(update={"generate_cad": True})
-    return RoomSceneResponse(**_plan_scene(payload))
-
-
-@app.post("/api/room-scene/save")
-async def save_room_scene(req: RoomSceneSaveRequest, request: Request):
-    """保存场景的源；派生结果（摆放/预览）不落盘，读取时重算。"""
-    if not may_edit(request):
-        raise HTTPException(status_code=403, detail="saving scenes is local only")
-    scene_id = req.scene_id or f"scene-{uuid4().hex[:12]}"
-    payload = req.model_dump(exclude_none=True)
-    try:
-        path = save_scene_source(
-            scene_id,
-            payload["room"],
-            payload["items"],
-            root=OUTPUT_ROOT,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return {"scene_id": scene_id, "path": str(path)}
-
-
-@app.get("/api/room-scene/{scene_id}", response_model=RoomSceneResponse)
-async def load_room_scene(scene_id: str):
-    """读取场景的源并重算摆放、预览与 Viewer。"""
-    try:
-        source = load_scene_source(scene_id, root=OUTPUT_ROOT)
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return RoomSceneResponse(**plan_room_scene(source["room"], source["items"]))
-
-
-@app.get("/api/room-scenes")
-async def list_room_scenes():
-    return {"scene_ids": list_scene_ids(root=OUTPUT_ROOT)}
-
-
-@app.post("/api/room-scene/{scene_id}/edit", response_model=RoomSceneResponse)
-async def edit_room_scene(scene_id: str, req: RoomSceneEditRequest, request: Request):
-    """应用一次编辑：重算并校验通过才落盘，失败即整体拒绝（不留半成品）。"""
-    if not may_edit(request):
-        raise HTTPException(status_code=403, detail="editing scenes is local only")
-    try:
-        source = load_scene_source(scene_id, root=OUTPUT_ROOT)
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    op = req.model_dump(exclude_none=True)
-    try:
-        edited = apply_edit(source, op)
-        scene = plan_room_scene(edited["room"], edited["items"])
-    except (TypeError, ValueError) as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    report = validate_room_scene(scene)
-    if not report.passed:
-        raise HTTPException(
-            status_code=422,
-            detail="; ".join(issue.message for issue in report.issues),
-        )
-
-    save_scene_source(
-        scene_id,
-        edited["room"],
-        edited["items"],
-        root=OUTPUT_ROOT,
-    )
-    return RoomSceneResponse(**scene)
-
-
-@app.get("/api/room-scene/{scene_id}/editor", response_class=HTMLResponse)
-async def room_scene_editor(scene_id: str) -> HTMLResponse:
-    """可编辑视图：点选家具拖动，松手发一个 edit op。"""
-    try:
-        source = load_scene_source(scene_id, root=OUTPUT_ROOT)
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    try:
-        planned = plan_room_scene(source["room"], source["items"])
-        scene = RoomScene.from_dict(
-            {"room": planned["room"], "items": planned["items"]}
-        )
-    except (TypeError, ValueError) as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    editor = render_editor(scene_id, scene)
-    return HTMLResponse(content=str(editor["html"]))
-
 
 if __name__ == "__main__":
     main()
+

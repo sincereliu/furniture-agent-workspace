@@ -23,7 +23,7 @@ bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 from furniture_layout.project_layout import ProjectLayout
 from furniture_workflow.agent_tools import FurnitureToolSession, project_snapshot
-from furniture_workflow.project_preview import project_layout_document
+from furniture_layout.project_preview import project_layout_document
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from furniture_workflow.workflow_project import Project, Revision
 from furniture_workflow.workflow_state import WorkflowStage

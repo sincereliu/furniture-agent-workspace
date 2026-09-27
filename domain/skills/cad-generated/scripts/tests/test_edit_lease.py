@@ -34,7 +34,7 @@ import server
 from fake_request_support import lease_request, local_request, remote_request
 from furniture_layout.project_layout import ProjectLayout
 from furniture_workflow.agent_tools import FurnitureToolSession, project_snapshot
-from furniture_workflow.project_preview import project_layout_document
+from furniture_layout.project_preview import project_layout_document
 from furniture_workflow.project_layout_edit import edit_project_layout
 from furniture_workflow.workflow_lease import (
     HOLDER_AGENT,

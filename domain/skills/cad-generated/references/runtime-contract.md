@@ -126,7 +126,7 @@ store/<project-id>/
 | POST | `/api/preview/shutdown` | 本机请求后让预览服务干净退出（写 · 本机） |
 | POST | `/api/preview/presence` | 预览页每秒报一次还在。最后一页关掉约 5 秒后进程退出（写 · 本机） |
 
-另有 `GET /health` 与 `GET /`（链到项目列表和 Swagger）。直接运行 `server.py` 时浏览器打开 `/projects`，并在这个进程里打开页面写回（`FURNITURE_PROJECT_LAYOUT_EDIT=1`）。不经过这个入口时，写回仍默认关闭。缺场景或项目返回 404，参数或校验不通过返回 422。`project_id` 只允许英文字母、数字、`-` 和 `_`。
+另有 `GET /health` 与 `GET /`（链到项目列表和 Swagger）。直接运行 `domain/skills/layout-plan/scripts/open_projects.py` 时浏览器打开 `/projects`，并在这个进程里打开页面写回（`FURNITURE_PROJECT_LAYOUT_EDIT=1`）。项目名单页由布局阶段的 `furniture_layout/project_list.py` 画出。不经过这个入口时，写回仍默认关闭。缺场景或项目返回 404，参数或校验不通过返回 422。`project_id` 只允许英文字母、数字、`-` 和 `_`。
 
 写权限（`may_edit`）：**有副作用的端点只对本机来源开放**——停进程（`/api/preview/shutdown`）、页面在场（`/api/preview/presence`）、保存场景（`/api/room-scene/save`）、编辑场景（`/api/room-scene/{scene_id}/edit`）、出房间 CAD（`/api/plan-room/cad`，会写源文件与 STEP）、改项目布局（`/api/project/{project_id}/layout/edit`）、编辑租约三个端点。非本机来源一律 403，且在动手之前就拒（不能先写一半再报错）。判据只有 `server.access_scope()` 一处，只看 `request.client.host`；**URL 参数不是权限**——`?mode=view` 这类只是页面表达，地址栏谁都能改，门必须在服务端。将来要给外人只读分享，在这一处多认一种凭证（新增 `shared` 来源），各端点不用动。读端点不受限（服务本来只监听 `127.0.0.1`）。外网分享的 token 形态与开门顺序见 [访问模式与外网分享](preview-access-design.md)。
 

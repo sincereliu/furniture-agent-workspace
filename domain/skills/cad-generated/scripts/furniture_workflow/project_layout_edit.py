@@ -10,7 +10,7 @@
   "已经有东西依赖这一版了，再改就不是同一版"。
 - 原地改到某间房时，**那一间的确认作废**（内容变回了"没人看过"）——这正是"改一间只审一间"。
 - 父修订的 `stage_inputs` 原样带走：那些是柜体构造意图（门数、层板、背板安装…），摆放变了它们没变。
-- 默认关闭，靠 `FURNITURE_PROJECT_LAYOUT_EDIT=1` 灰度打开。直接运行 `server.py` 的本机预览进程会把它设成 `1`。
+- 默认关闭，靠 `FURNITURE_PROJECT_LAYOUT_EDIT=1` 灰度打开。从布局阶段的 `open_projects.py` 拉起本机预览进程时会把它设成 `1`。
 
 几何部分不在这里：op 词表、白名单、重新摆放与准入校验都在
 `furniture_layout/project_edit.py`（与房间场景编辑共用同一套）。
@@ -26,7 +26,7 @@ from typing import Any, Mapping
 
 from furniture_layout.project_edit import apply_layout_edit
 
-from .project_preview import layout_version, project_layout_document
+from furniture_layout.project_preview import layout_version, project_layout_document
 from .workflow_lease import check_write
 from .workflow_orchestrator import FurnitureOrchestrator
 from .workflow_project import Project, Revision

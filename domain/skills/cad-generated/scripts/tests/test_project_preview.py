@@ -26,7 +26,7 @@ bootstrap_runtime_paths(WORKSPACE_ROOT)
 import server
 from fake_request_support import local_request, remote_request
 from furniture_layout.project_layout import ProjectLayout
-from furniture_workflow import project_preview
+from furniture_layout import project_preview
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from furniture_workflow.workflow_store import JsonProjectStore
 
@@ -379,6 +379,9 @@ class ProjectPreviewTests(unittest.TestCase):
 
         page = asyncio.run(server.project_index()).body.decode("utf-8")
         self.assertIn("已经做过的项目", page)
+        server_source = (SCRIPT_ROOT / "server.py").read_text(encoding="utf-8")
+        self.assertNotIn("<h1>已经做过的项目</h1>", server_source)
+        self.assertIn("furniture_layout.project_list", server_source)
         self.assertIn("关掉最后一页后，预览服务会自己停", page)
         self.assertIn("/api/preview/presence", page)
         self.assertIn("张家卧室", page)
@@ -528,7 +531,7 @@ class OpenProjectPreviewTests(unittest.TestCase):
                             )
         popen.assert_called_once()
         command = popen.call_args.args[0]
-        self.assertTrue(str(command[1]).endswith("server.py"))
+        self.assertTrue(str(command[1]).endswith("open_projects.py"))
         opener.assert_called_once()
         self.assertTrue(result["opened"])
 
@@ -566,8 +569,22 @@ class OpenProjectPreviewTests(unittest.TestCase):
         self.assertTrue(server.may_edit(local_request()))
         self.assertFalse(server.may_edit(remote_request()))
         source = (SCRIPT_ROOT / "server.py").read_text(encoding="utf-8")
+        room_http = (
+            WORKSPACE_ROOT
+            / "domain"
+            / "skills"
+            / "layout-plan"
+            / "scripts"
+            / "furniture_layout"
+            / "room_http.py"
+        ).read_text(encoding="utf-8")
         self.assertEqual(source.count("_LOCAL_HOSTS"), 2)  # 定义一次 + 判据里读一次
-        self.assertEqual(source.count("if not may_edit(request):"), 10)  # 含页面在场
+        self.assertEqual(
+            source.count("if not may_edit(request):")
+            + room_http.count("if not may_edit(request):"),
+            10,
+        )
+        self.assertNotIn("def access_scope", room_http)
         endpoints = source.split("def may_edit")[1]
         self.assertNotIn("request.client.host", endpoints)
 

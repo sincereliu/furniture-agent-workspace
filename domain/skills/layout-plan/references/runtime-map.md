@@ -25,7 +25,7 @@
 | 全屋 `layout_plan` | `pipeline.plan_project_layout` / `ProjectLayout.from_source` | 越界、干涉或遮挡洞口则不创建项目 | Project Store；确认后冻成 CAD 单元 |
 | 独立房间场景 | `pipeline.plan_room_scene` | 同一套 `admit_scene` | `scene_store` → `generated/room-scenes/`；**不是**阶段检查点 |
 
-独立房间 HTTP（`cad-generated/scripts/server.py`）服务场景编辑与房间包络 CAD，不进入 `STAGE_SEQUENCE`。同一服务上的 `GET /api/project/{project_id}/preview` 只读 Project Store 里的最新布局，不写 `stage_outputs`。柜体 STEP 仍走确认布局后的 `furniture_run_next(..., generate_cad=True)`。
+布局画面在本阶段：项目名单是 `furniture_layout/project_list.py`，房间页是 `editor.py`。开机后手动打开名单，运行本阶段的 `scripts/open_projects.py`。它拉起的本机进程仍是 `cad-generated/scripts/server.py`（房间场景 API 与保存都在那里），这个进程不进入 `STAGE_SEQUENCE`，也不是柜体 CAD。同一服务上的 `GET /api/project/{project_id}/preview` 只读 Project Store 里的最新布局，不写 `stage_outputs`。柜体 STEP 仍走确认布局后的 `furniture_run_next(..., generate_cad=True)`。
 
 下游板件只读已确认的 `LayoutUnit`（`furniture_category` 为 `floor_cabinet` / `wall_cabinet`，且该件不是 `manufacture: false`）。客户点名不制造的包络留在房间里，不是 `LayoutUnit`。房间 STEP 不是柜体 CAD。
 
@@ -45,6 +45,9 @@
 | `validation.py` | `admit_scene`（规划）；dict 上再核预览（冻结） | validation |
 | `preview.py` / `viewer.py` | SVG 与只读轨道视图 | calculation |
 | `editor.py` | 可编辑 HTML，以及项目页（服务端按权限渲染成**可编辑 / 只读 / 分享**三态，复用同一画布）；原点三轴与光标坐标读数也长在这张画布上；多间房按页眉药丸切换，当前房间写进 `?room=` 深链；页眉三块牌子（身份 / 工作副本 / 编辑权）；JS 摆放检查必须与 `placement_check.py` 同步 | calculation |
+| `project_list.py` | 已经做过的项目这一页的 HTML | calculation |
+| `project_preview.py` | 预览页要读的布局文档，以及打开本机预览 | side_effect |
+| `room_http.py` | 独立房间的摆放、保存、编辑和房间包络 CAD 路由 | structured_protocol |
 | `scene_edit.py` | 源上的一次原子 op，本身不算几何；项目布局的编辑与场景编辑**共用**这一套词表与白名单 | schema |
 | `project_edit.py` | 项目布局上的一次 op：把目标房间还原成场景源 → 复用 `scene_edit` → `plan_scene` 重算并准入；返回未确认的新布局（版本/Revision/落盘不在这里） | calculation |
 | `scene_store.py` | 独立场景只存源，读取时重算 | side_effect |

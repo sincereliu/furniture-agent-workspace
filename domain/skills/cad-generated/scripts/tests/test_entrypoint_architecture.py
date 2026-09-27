@@ -35,7 +35,7 @@ class EntrypointArchitectureTests(unittest.TestCase):
         self.assertIn("class CabinetPipelineResult", pipeline)
 
         server_modules = imported_modules(SCRIPTS_ROOT / "server.py")
-        self.assertIn("furniture_layout.pipeline", server_modules)
+        self.assertIn("furniture_layout", server_modules)
         self.assertNotIn("furniture_workflow.workflow_orchestrator", server_modules)
         self.assertNotIn("furniture_feature_tree.feature_tree_emitter", server_modules)
         self.assertNotIn("furniture_cad.cad_bridge", server_modules)
@@ -48,8 +48,26 @@ class EntrypointArchitectureTests(unittest.TestCase):
         server_text = (SCRIPTS_ROOT / "server.py").read_text(encoding="utf-8")
         self.assertNotIn("/api/plan-cabinet", server_text)
         self.assertNotIn("/api/plan-layout", server_text)
-        self.assertIn("/api/plan-room", server_text)
         self.assertNotIn("execute_spec", server_text)
+        room_http = (
+            SCRIPTS_ROOT.parents[1]
+            / "layout-plan"
+            / "scripts"
+            / "furniture_layout"
+            / "room_http.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("/api/plan-room", room_http)
+        self.assertIn("include_router(room_http.router)", server_text)
+        self.assertIn(
+            "furniture_layout.pipeline",
+            imported_modules(
+                SCRIPTS_ROOT.parents[1]
+                / "layout-plan"
+                / "scripts"
+                / "furniture_layout"
+                / "room_http.py"
+            ),
+        )
 
         tool_modules = imported_modules(
             SCRIPTS_ROOT / "furniture_workflow" / "agent_tools.py"
