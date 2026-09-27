@@ -1,7 +1,6 @@
-"""把预览和只读视图挂到已经算好的布局上。
+"""给这套摆放配上每个房间的图，确认时核对图是不是刚算出来的。
 
-摆放本身在 `project_layout` / `placement`。这里只重建画面，并在冻结时核对
-画面是否由当前几何画出。房间 STEP 不在这里。
+房间外壳不在这里。
 """
 
 from __future__ import annotations
@@ -10,11 +9,11 @@ from typing import Any, Mapping
 
 from furniture_delivery_validation.validation import ValidationReport
 
-from .preview import render_preview
+from .room_svg import render_preview
 from .project_layout import ProjectLayout
 from .scene import RoomScene
 from .validation import admit_scene
-from .viewer import render_viewer
+from .stored_room_page import render_viewer
 
 
 def project_layout_dict(layout: ProjectLayout) -> dict[str, Any]:

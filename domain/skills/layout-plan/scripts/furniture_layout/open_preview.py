@@ -1,6 +1,6 @@
-"""布局预览文档，以及把本机预览页打开。
+"""把预览页打开，并准备这一页要读的数据。
 
-下一阶段仍读冻结的柜体外形。这里只是那张图：最新一版的房间和已摆放的盒子。
+这一页画的是最新一版的房间和已摆放的盒子。板件仍读确认后冻住的宽、深、高。
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ import urllib.request
 import webbrowser
 from typing import Any
 
-from furniture_layout.editor import editor_scene_payload
+from furniture_layout.room_page import editor_scene_payload
 from furniture_workflow.workflow_lease import read_lease
 from furniture_workflow.workflow_project import Project, Revision
 

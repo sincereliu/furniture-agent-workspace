@@ -12,7 +12,7 @@ from runtime_paths import bootstrap_runtime_paths
 
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
-from furniture_layout.pipeline import plan_room_scene
+from furniture_layout.layout_entry import plan_room_scene
 from furniture_layout.placement import place_items, ranges_overlap
 from furniture_layout.placement_check import placement_issues, polygons_overlap
 from furniture_layout.scene import RoomModel, RoomScene, parse_item_specs

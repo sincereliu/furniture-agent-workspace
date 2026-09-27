@@ -118,8 +118,8 @@ class ProjectLayout:
         return tuple(units)
 
     def to_dict(self) -> dict[str, Any]:
-        """检查点字典。画面由 `layout_document` 按当前几何挂上，形状与以前相同。"""
-        from .layout_document import project_layout_dict
+        """检查点字典。每个房间的图由 `layout_figures` 按当前几何挂上，形状与以前相同。"""
+        from .layout_figures import project_layout_dict
 
         return project_layout_dict(self)
 

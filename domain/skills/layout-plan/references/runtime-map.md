@@ -2,58 +2,65 @@
 
 核对实现或规划演进时再读。几何口径以 [空间布局规则](spatial-layout-rules.md) 为准；卧室/客厅清单只是 LLM 假设，见 [房间场景指南](room-scene-guide.md)。
 
+各文件先看它干什么。最后一列「代码归类」是给边界审计用的，看功能看前两列。
+
 ## 谁给意图，谁换毫米
 
 代码**不会**按「这是卧室」自动排床和衣柜。房间类型不是算法输入。
 
-- 人 / LLM 给出每件的外形尺寸和摆法意图：靠哪面墙、从哪开始、要不要沿墙铺满，或自由坐标。
-- `placement.py` 把这句话换成房间毫米（原点、转角、fill 实宽、足迹、净距）。
-- `placement_check.py` 只回答能不能站住：越界、外形干涉、遮挡门窗洞口。失败整单拒绝，**不换墙重排**。要改位置，改提案或在编辑器里拖，再走同一条算路。
+- 人 / LLM 给出每件的外形尺寸和摆法：靠哪面墙、从哪开始、要不要沿墙铺满，或自由坐标。
+- 换成毫米坐标的是 `placement.py`：原点、转角、沿墙铺满的实宽、足迹、净距。
+- 检查能不能站住的是 `placement_check.py`：越界、外形干涉、遮挡门窗洞口。失败整单拒绝，**不换墙重排**。要改位置，改提案或在房间页里拖，再走同一条算路。
 
 ## 算路
 
-读意图 → 换毫米（`wall` / `free` / `fill`）→ 摆放检查 → 通过了再画预览。
+读意图 → 换成毫米坐标（`wall` / `free` / `fill`）→ 摆放检查 → 通过了再画房间的图。
 
 `fill` 件等所有固定件摆完再算：先扣同高度上门窗、贴墙障碍、已摆家具，未给偏移取最长空段，给了则从该点铺到该空段终点。空段没有就失败。
 
 三种摆法的公式见 [空间布局规则](spatial-layout-rules.md)。贴边接触不算干涉；外形尺寸发生正体积相交、越出房间、遮挡门窗洞口才拒绝。
 
-## 两个出口，同一内核
+## 全屋摆放和单间
 
-| 表面 | 入口 | 规划时准入 | 持久化 |
+两条路用同一套换算和摆放检查。
+
+| 干什么 | 从哪进 | 过不了会怎样 | 存在哪 |
 | --- | --- | --- | --- |
-| 全屋 `layout_plan` | `pipeline.plan_project_layout` / `ProjectLayout.from_source` | 越界、干涉或遮挡洞口则不创建项目 | Project Store；确认后冻成 CAD 单元 |
-| 独立房间场景 | `pipeline.plan_room_scene` | 同一套 `admit_scene` | `scene_store` → `generated/room-scenes/`；**不是**阶段检查点 |
+| 建一整套房子的摆放 | `layout_entry.plan_project_layout` / `ProjectLayout.from_source` | 越界、干涉或遮挡洞口就不建项目 | Project Store；确认后冻成给板件的盒子 |
+| 建单独一间 | `layout_entry.plan_room_scene` | 同一套 `validation.admit_scene` | `scene_store` → `generated/room-scenes/`；这间不进六阶段 |
 
-布局画面在本阶段：项目名单是 `furniture_layout/project_list.py`，房间页是 `editor.py`。开机后手动打开名单，运行本阶段的 `scripts/open_projects.py`。它拉起的本机进程仍是 `cad-generated/scripts/server.py`（房间场景 API 与保存都在那里），这个进程不进入 `STAGE_SEQUENCE`，也不是柜体 CAD。同一服务上的 `GET /api/project/{project_id}/preview` 只读 Project Store 里的最新布局，不写 `stage_outputs`。柜体 STEP 仍走确认布局后的 `furniture_run_next(..., generate_cad=True)`。
+浏览器里的项目名单是 `project_list.py`，房间页是 `room_page.py`（模板在 `templates/room_page.html`）。开机后手动打开名单，运行本阶段的 `scripts/open_projects.py`。它拉起的本机进程仍是 `cad-generated/scripts/server.py`（单间的保存和编辑都在那里）。这个进程不进六阶段，也不是柜体 CAD。同一服务上的 `GET /api/project/{project_id}/preview` 只读 Project Store 里的最新摆放，不写 `stage_outputs`。柜体 STEP 仍走确认之后的 `furniture_run_next(..., generate_cad=True)`。
 
-下游板件只读已确认的 `LayoutUnit`（`furniture_category` 为 `floor_cabinet` / `wall_cabinet`，且该件不是 `manufacture: false`）。客户点名不制造的包络留在房间里，不是 `LayoutUnit`。房间 STEP 不是柜体 CAD。
+下游板件只读已确认的 `LayoutUnit`（`furniture_category` 为 `floor_cabinet` / `wall_cabinet`，且该件不是 `manufacture: false`）。客户点名不制造的包络留在房间里，不是 `LayoutUnit`。`room_shell.py` 写的房间外壳 STEP 不是柜体模型。
 
-`LayoutUnit` 的 `id` / `furniture_category` / `width` / `depth` / `height` 是**下游依赖面**：这五个字段不变，板件与制造的内容就不变，可以跨 Revision 继承（见编排层 [修订继承设计](../../cad-generated/references/revision-inheritance-design.md)）。**例外**：`fill` 件的 `width` 由该墙净长派生，改房间就会改它 —— 这类件永远算"变了"，必须重算。
+板件实际只依赖 `LayoutUnit` 的五个字段：`id`、`furniture_category`、`width`、`depth`、`height`。这五个不变，板件与制造的内容就不变，可以跨 Revision 继承（见编排层 [修订继承设计](../../cad-generated/references/revision-inheritance-design.md)）。沿墙铺满那件的 `width` 由该墙空段算出，改房间就会改它，所以这种件永远算变了，必须重算。
 
-冻结/确认时 `layout_document.validate_project_layout` / `validate_room_scene` 再核 preview/viewer 是否由当前几何重建。规划准入（`validation.admit_scene`）不画 SVG。
+确认时 `layout_figures.validate_project_layout` / `validate_room_scene` 再核每个房间的图是不是由当前几何画出的。建项目前的 `validation.admit_scene` 不画 SVG。
 
-## 模块
+## 各文件干什么
 
-| 模块 | 职责 | 边界理由 |
+| 干什么 | 文件 | 代码归类 |
 | --- | --- | --- |
-| `pipeline.py` | `plan_project_layout`、`plan_room_scene`、`generate_room_cad` | structured_protocol |
-| `project_layout.py` | 多房间检查点、`LayoutUnit`、工作室单柜捷径。不画页面，也不写房间 STEP | schema |
-| `layout_document.py` | 把预览和只读视图挂到检查点上；冻结时核对画面是否由当前几何重建 | calculation |
-| `scene.py` | 房间/件的 schema 与解析 | schema |
-| `placement.py` | wall / free / fill 换成毫米 | calculation |
-| `placement_check.py` | 越界、外形干涉、遮挡门窗洞口 | calculation |
-| `validation.py` | `admit_scene`：结构、派生足迹、越界、干涉、遮挡洞口。不核对预览字节 | validation |
-| `preview.py` / `viewer.py` | SVG 与只读轨道视图 | calculation |
-| `editor.py` | 读 `templates/editor_page.html`，填上当前房间后交出可编辑页或项目页（服务端按权限渲染成**可编辑 / 只读 / 分享**三态，复用同一画布）。原点三轴、光标坐标、房间药丸、`?room=` 深链、页眉牌子都在那份模板里。模板里的 JS 摆放检查必须与 `placement_check.py` 同步 | calculation |
-| `project_list.py` | 已经做过的项目这一页的 HTML | calculation |
-| `project_preview.py` | 预览页要读的布局文档，以及打开本机预览 | side_effect |
-| `room_http.py` | 独立房间的摆放、保存、编辑和房间包络 CAD 路由 | structured_protocol |
-| `scene_edit.py` | 源上的一次原子 op，本身不算几何；项目布局的编辑与场景编辑**共用**这一套词表与白名单 | schema |
-| `project_edit.py` | 项目布局上的一次 op：把目标房间还原成场景源 → 复用 `scene_edit` → `plan_scene` 重算并准入；返回未确认的新布局（版本/Revision/落盘不在这里） | calculation |
-| `scene_store.py` | 独立场景只存源，读取时重算 | side_effect |
-| `cad.py` | 房间包络树与房间 STEP，不是 `furniture_cad` | side_effect |
+| 房间、门窗、家具盒子的数据结构 | `scene.py` | schema |
+| 把靠墙、自由摆、沿墙铺满换成毫米坐标 | `placement.py` | calculation |
+| 检查盒子出不出房间、互相干涉不干涉、挡不挡门窗 | `placement_check.py` | calculation |
+| 上面几项有一项不过，就不建项目。不核对配进去的那张 SVG | `validation.py` | validation |
+| 一整套房子的摆放。确认后冻出给板件的盒子：宽、深、高和柜类。这里不画房间页，也不写房间外壳 | `project_layout.py` | schema |
+| 给这套摆放配上每个房间的图，确认时核对图是不是刚算出来的 | `layout_figures.py` | calculation |
+| 配进去的那张 SVG | `room_svg.py` | calculation |
+| 配进去的那份只读页面。它存在项目里，不是浏览器里正在打开的那一页 | `stored_room_page.py` | calculation |
+| 浏览器里打开的房间页。可拖、只读预览、分享都是这一页。Python 读 `templates/room_page.html` 填上当前房间。原点三轴、光标坐标、房间药丸、`?room=`、页眉牌子都在模板里。模板里的拖动检查必须与 `placement_check.py` 同步 | `room_page.py` | calculation |
+| 做过的项目名单 | `project_list.py` | calculation |
+| 把预览页打开，并准备这一页要读的数据 | `open_preview.py` | side_effect |
+| 房间页上的三维盒子 | `static/layout_scene.js` | calculation |
+| 房间的东、南、上怎么画到屏幕上 | `static/layout_frame.js` | calculation |
+| 记下移动、旋转或改尺寸，这一步先不算。全屋和单间共用这一套字段 | `scene_edit.py` | schema |
+| 把这次改动算进某一间，算出一版还没确认的摆放。版本号和落盘不在这里 | `project_edit.py` | calculation |
+| 三个入口：建全屋摆放（`plan_project_layout`）、建单间（`plan_room_scene`）、写房间外壳（`generate_room_cad`） | `layout_entry.py` | structured_protocol |
+| 单间的保存、编辑，以及要房间外壳 | `room_http.py` | structured_protocol |
+| 单间只存客户原来写的那份，打开时再算 | `scene_store.py` | side_effect |
+| 房间外壳的 STEP：地、墙、门窗洞。不是柜体模型 | `room_shell.py` | side_effect |
 
-编辑器拖动是服务端规则的本地预览，松手后后端再 place + 准入。改 `placement_check.py` 必须同步改 `templates/editor_page.html` 里的 JS。
+房间页上拖动只是本地先画，松手后后端再换算并检查。改 `placement_check.py` 必须同步改 `templates/room_page.html` 里的脚本。
 
-未落地与待议需求见 [backlog](backlog.md)，日常改摆放/编辑器不必读。
+未落地与待议需求见 [backlog](backlog.md)。改坐标、摆放检查或房间页时不必读。

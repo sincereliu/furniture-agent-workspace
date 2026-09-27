@@ -1,18 +1,18 @@
-"""Plan a multi-item room scene and optionally generate envelope CAD."""
+"""三个入口：建全屋摆放、建单间、写房间外壳。"""
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from .cad import cad_from_output
-from .layout_document import validate_room_scene
+from .room_shell import cad_from_output
+from .layout_figures import validate_room_scene
 from .placement import place_items
-from .preview import render_preview
+from .room_svg import render_preview
 from .project_layout import ProjectLayout
 from .scene import RoomModel, RoomScene, parse_item_specs
 from .validation import raise_unless_admitted
-from .viewer import render_viewer
+from .stored_room_page import render_viewer
 
 
 def plan_scene(

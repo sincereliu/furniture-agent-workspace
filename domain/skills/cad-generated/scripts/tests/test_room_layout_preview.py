@@ -18,16 +18,16 @@ from runtime_paths import bootstrap_runtime_paths
 
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
-from furniture_layout.cad import (
+from furniture_layout.room_shell import (
     _path_within,
     room_cad_artifact_name,
     write_room_cad_source,
 )
-from furniture_layout.pipeline import generate_room_cad, plan_project_layout, plan_room_scene
-from furniture_layout.preview import _build_projector
+from furniture_layout.layout_entry import generate_room_cad, plan_project_layout, plan_room_scene
+from furniture_layout.room_svg import _build_projector
 from furniture_layout.project_layout import ProjectLayout
 from furniture_layout.scene import RoomScene
-from furniture_layout.layout_document import validate_room_scene
+from furniture_layout.layout_figures import validate_room_scene
 from furniture_workflow.workflow_state import STAGE_SEQUENCE, WorkflowStage
 
 

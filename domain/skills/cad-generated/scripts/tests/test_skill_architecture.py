@@ -421,9 +421,9 @@ class SkillArchitectureTests(unittest.TestCase):
         layout_source = "\n".join(
             path.read_text(encoding="utf-8")
             for path in layout_package.glob("*.py")
-            if path.name != "cad.py"
+            if path.name != "room_shell.py"
         )
-        cad_source = (layout_package / "cad.py").read_text(encoding="utf-8")
+        cad_source = (layout_package / "room_shell.py").read_text(encoding="utf-8")
         self.assertNotIn("PanelPlacement", layout_source)
         self.assertNotIn("cut_box", layout_source)
         self.assertIn("cut_box", cad_source)

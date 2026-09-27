@@ -1,4 +1,4 @@
-"""独立房间场景的 HTTP：摆放、保存、编辑和房间包络 CAD。
+"""单间的保存、编辑，以及要房间外壳。
 
 这些路由属于布局。本机进程只负责把 `router` 挂上去，并注入写权限和输出目录。
 """
@@ -13,8 +13,8 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 
-from furniture_layout.editor import render_editor
-from furniture_layout.pipeline import generate_room_cad, plan_room_scene
+from furniture_layout.room_page import render_editor
+from furniture_layout.layout_entry import generate_room_cad, plan_room_scene
 from furniture_layout.scene import RoomScene
 from furniture_layout.scene_edit import apply_edit
 from furniture_layout.scene_store import (
@@ -22,7 +22,7 @@ from furniture_layout.scene_store import (
     load_scene_source,
     save_scene_source,
 )
-from furniture_layout.layout_document import validate_room_scene
+from furniture_layout.layout_figures import validate_room_scene
 
 router = APIRouter()
 

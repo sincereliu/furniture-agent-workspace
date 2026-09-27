@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any, Mapping
 
-from .pipeline import plan_scene
+from .layout_entry import plan_scene
 from .project_layout import ProjectLayout
 from .scene import RoomScene
 from .scene_edit import apply_edit

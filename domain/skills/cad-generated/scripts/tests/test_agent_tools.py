@@ -118,7 +118,7 @@ class AgentToolSurfaceTests(unittest.TestCase):
             "furniture_manufacturing.manufacturing_bom",
             "furniture_feature_tree.feature_tree_builder",
             "furniture_cad.cad_bridge",
-            "furniture_layout.pipeline",
+            "furniture_layout.layout_entry",
         ):
             self.assertNotIn(forbidden, modules)
 

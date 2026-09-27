@@ -59,7 +59,7 @@ class EntrypointArchitectureTests(unittest.TestCase):
         self.assertIn("/api/plan-room", room_http)
         self.assertIn("include_router(room_http.router)", server_text)
         self.assertIn(
-            "furniture_layout.pipeline",
+            "furniture_layout.layout_entry",
             imported_modules(
                 SCRIPTS_ROOT.parents[1]
                 / "layout-plan"

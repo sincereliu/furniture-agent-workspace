@@ -1,4 +1,4 @@
-"""Generate a self-contained orbit viewer for independent room placement."""
+"""配进摆放里的那份只读页面。它存在项目里，不是浏览器里正在打开的那一页。"""
 
 from __future__ import annotations
 

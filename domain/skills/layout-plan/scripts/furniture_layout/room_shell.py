@@ -1,4 +1,4 @@
-"""Emit a cadgen room-and-envelope model and run CadBridge."""
+"""房间外壳的 STEP：地、墙、门窗洞。不是柜体模型。"""
 
 from __future__ import annotations
 

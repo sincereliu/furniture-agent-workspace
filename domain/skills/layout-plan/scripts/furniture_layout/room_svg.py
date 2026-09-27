@@ -1,4 +1,4 @@
-"""Generate a dependency-free SVG preview for independent room placement."""
+"""配进摆放里的那张 SVG。"""
 
 from __future__ import annotations
 

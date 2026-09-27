@@ -26,7 +26,7 @@ from typing import Any, Mapping
 
 from furniture_layout.project_edit import apply_layout_edit
 
-from furniture_layout.project_preview import layout_version, project_layout_document
+from furniture_layout.open_preview import layout_version, project_layout_document
 from .workflow_lease import check_write
 from .workflow_orchestrator import FurnitureOrchestrator
 from .workflow_project import Project, Revision

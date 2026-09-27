@@ -26,7 +26,7 @@ bootstrap_runtime_paths(WORKSPACE_ROOT)
 import server
 from fake_request_support import local_request, remote_request
 from furniture_layout.project_layout import ProjectLayout
-from furniture_layout import project_preview
+from furniture_layout import open_preview
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from furniture_workflow.workflow_store import JsonProjectStore
 
@@ -258,10 +258,10 @@ class ProjectPreviewTests(unittest.TestCase):
 
     def test_share_link_is_a_plain_expression_not_a_permission(self) -> None:
         """分享链接只是地址栏表达：它没有任何办法绕过服务端的写权限。"""
-        url = project_preview.preview_url("project_abc", mode="view")
+        url = open_preview.preview_url("project_abc", mode="view")
         self.assertTrue(url.endswith("/api/project/project_abc/preview?mode=view"))
         self.assertEqual(
-            project_preview.preview_url("project_abc"),
+            open_preview.preview_url("project_abc"),
             "http://127.0.0.1:8000/api/project/project_abc/preview",
         )
         source = (SCRIPT_ROOT / "server.py").read_text(encoding="utf-8")
@@ -466,7 +466,7 @@ class OpenProjectPreviewTests(unittest.TestCase):
                 "HTTPS_PROXY": "http://127.0.0.1:10808",
             },
         ):
-            with project_preview._LOCAL_OPENER.open(
+            with open_preview._LOCAL_OPENER.open(
                 f"http://127.0.0.1:{port}/health",
                 timeout=2,
             ) as response:
@@ -474,11 +474,11 @@ class OpenProjectPreviewTests(unittest.TestCase):
                 self.assertIn(b"ok", response.read())
     def test_disabled_browser_does_not_open_or_start_a_server(self) -> None:
         with mock.patch.dict(os.environ, {"FURNITURE_PREVIEW_BROWSER": "0"}):
-            with mock.patch.object(project_preview.webbrowser, "open") as opener:
+            with mock.patch.object(open_preview.webbrowser, "open") as opener:
                 with mock.patch.object(
-                    project_preview.subprocess, "Popen"
+                    open_preview.subprocess, "Popen"
                 ) as popen:
-                    result = project_preview.open_project_preview(
+                    result = open_preview.open_project_preview(
                         "project_abc",
                         workspace_root=WORKSPACE_ROOT,
                     )
@@ -493,15 +493,15 @@ class OpenProjectPreviewTests(unittest.TestCase):
     def test_open_uses_the_server_that_is_already_up(self) -> None:
         with mock.patch.dict(os.environ, {"FURNITURE_PREVIEW_BROWSER": "1"}):
             with mock.patch.object(
-                project_preview, "preview_server_is_up", return_value=True
+                open_preview, "preview_server_is_up", return_value=True
             ):
                 with mock.patch.object(
-                    project_preview.subprocess, "Popen"
+                    open_preview.subprocess, "Popen"
                 ) as popen:
                     with mock.patch.object(
-                        project_preview.webbrowser, "open", return_value=True
+                        open_preview.webbrowser, "open", return_value=True
                     ) as opener:
-                        result = project_preview.open_project_preview(
+                        result = open_preview.open_project_preview(
                             "project_abc",
                             workspace_root=WORKSPACE_ROOT,
                         )
@@ -516,16 +516,16 @@ class OpenProjectPreviewTests(unittest.TestCase):
         checks = iter((False, True))
         with mock.patch.dict(os.environ, {"FURNITURE_PREVIEW_BROWSER": "1"}):
             with mock.patch.object(
-                project_preview,
+                open_preview,
                 "preview_server_is_up",
                 side_effect=lambda: next(checks),
             ):
-                with mock.patch.object(project_preview.subprocess, "Popen") as popen:
+                with mock.patch.object(open_preview.subprocess, "Popen") as popen:
                     with mock.patch.object(
-                        project_preview.webbrowser, "open", return_value=True
+                        open_preview.webbrowser, "open", return_value=True
                     ) as opener:
-                        with mock.patch.object(project_preview.time, "sleep"):
-                            result = project_preview.open_project_preview(
+                        with mock.patch.object(open_preview.time, "sleep"):
+                            result = open_preview.open_project_preview(
                                 "project_abc",
                                 workspace_root=WORKSPACE_ROOT,
                             )

@@ -1,4 +1,4 @@
-"""Generate an editable room-scene view.
+"""浏览器里打开的房间页。可拖、只读预览、分享都是这一页。
 
 点选一件家具后拖动：靠墙件沿墙滑动（发 `offset_mm`），自由件平面移动（发
 `origin_x_mm`/`origin_y_mm`）。选中后家具上方有两个手柄——橙色圆点拖了是旋转
@@ -13,7 +13,7 @@
 选中件的四向净距（到最近的家具/障碍物/墙）直接画在图上：先找同一高度带、垂直
 方向有重叠的最近邻，找不到才退到墙。
 
-拖动与旋转**本地就按服务端的摆放检查求解**（见 placement_check.py，脚本在 templates/editor_page.html：底面正面积
+拖动与旋转**本地就按服务端的摆放检查求解**（见 placement_check.py，脚本在 templates/room_page.html：底面正面积
 重叠且高度重叠才算干涉，贴边接触放行；另查越界和遮挡门窗洞口）。过不去就停在
 接触处，不会先穿过再回弹。求解在**整数毫米**上进行，
 和服务端落盘取整口径一致，预览即落盘值。
@@ -259,6 +259,6 @@ def render_project_preview(
 
 
 _EDITOR_HTML = (
-    Path(__file__).resolve().parent.joinpath("templates", "editor_page.html")
+    Path(__file__).resolve().parent.joinpath("templates", "room_page.html")
     .read_text(encoding="utf-8")
 )

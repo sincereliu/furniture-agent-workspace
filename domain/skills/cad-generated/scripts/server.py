@@ -32,9 +32,9 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
-from furniture_layout.editor import render_project_preview
+from furniture_layout.room_page import render_project_preview
 from furniture_layout.project_list import render_project_list
-from furniture_layout.project_preview import (
+from furniture_layout.open_preview import (
     preview_server_is_up,
     project_layout_document,
     project_list_url,
