@@ -22,7 +22,7 @@ from furniture_layout.scene_store import (
     load_scene_source,
     save_scene_source,
 )
-from furniture_layout.validation import validate_room_scene
+from furniture_layout.layout_document import validate_room_scene
 
 router = APIRouter()
 

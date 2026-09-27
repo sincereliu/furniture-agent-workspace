@@ -5,9 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Any, Mapping, Sequence
 
-from .cad import scene_to_cad_tree
 from .placement import place_items
-from .preview import render_preview
 from .scene import (
     EXECUTABLE_CATEGORIES,
     EPSILON,
@@ -17,7 +15,6 @@ from .scene import (
     RoomScene,
     parse_item_specs,
 )
-from .viewer import render_viewer
 
 
 LAYOUT_SCHEMA_VERSION = 1
@@ -120,23 +117,11 @@ class ProjectLayout:
                     units.append(LayoutUnit.from_placed(scene.room.id, item))
         return tuple(units)
 
-    def cad_trees(self) -> list[dict[str, Any]]:
-        return [scene_to_cad_tree(scene) for scene in self.rooms]
-
     def to_dict(self) -> dict[str, Any]:
-        rooms: list[dict[str, Any]] = []
-        for scene in self.rooms:
-            payload: dict[str, Any] = scene.to_dict()
-            if scene.items:
-                payload["preview"] = render_preview(scene)
-                payload["viewer"] = render_viewer(scene)
-            rooms.append(payload)
-        return {
-            "schema_version": self.schema_version,
-            "confirmed": self.confirmed,
-            "rooms": rooms,
-            "cad": {"units": [unit.to_dict() for unit in self.executable_units()]},
-        }
+        """检查点字典。画面由 `layout_document` 按当前几何挂上，形状与以前相同。"""
+        from .layout_document import project_layout_dict
+
+        return project_layout_dict(self)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ProjectLayout":

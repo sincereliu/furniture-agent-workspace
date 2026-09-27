@@ -9,7 +9,7 @@ from furniture_cad.cad_bridge import CadBridge
 from furniture_cad.validation import validate_cad
 from furniture_delivery_validation.validation import ValidationReport
 from furniture_layout.project_layout import ProjectLayout
-from furniture_layout.validation import validate_project_layout
+from furniture_layout.layout_document import validate_project_layout
 from furniture_feature_tree.validation import validate_feature_tree
 from furniture_manufacturing.validation import validate_manufacturing
 from furniture_panel_planning.validation import validate_panel_output

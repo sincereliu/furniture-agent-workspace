@@ -6,11 +6,12 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from .cad import cad_from_output
+from .layout_document import validate_room_scene
 from .placement import place_items
 from .preview import render_preview
 from .project_layout import ProjectLayout
 from .scene import RoomModel, RoomScene, parse_item_specs
-from .validation import raise_unless_admitted, validate_room_scene
+from .validation import raise_unless_admitted
 from .viewer import render_viewer
 
 

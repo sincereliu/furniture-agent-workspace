@@ -31,20 +31,21 @@
 
 `LayoutUnit` 的 `id` / `furniture_category` / `width` / `depth` / `height` 是**下游依赖面**：这五个字段不变，板件与制造的内容就不变，可以跨 Revision 继承（见编排层 [修订继承设计](../../cad-generated/references/revision-inheritance-design.md)）。**例外**：`fill` 件的 `width` 由该墙净长派生，改房间就会改它 —— 这类件永远算"变了"，必须重算。
 
-冻结/确认时 `validate_project_layout` / `validate_room_scene` 再核 preview/viewer 是否由当前几何重建。规划准入不画 SVG。
+冻结/确认时 `layout_document.validate_project_layout` / `validate_room_scene` 再核 preview/viewer 是否由当前几何重建。规划准入（`validation.admit_scene`）不画 SVG。
 
 ## 模块
 
 | 模块 | 职责 | 边界理由 |
 | --- | --- | --- |
 | `pipeline.py` | `plan_project_layout`、`plan_room_scene`、`generate_room_cad` | structured_protocol |
-| `project_layout.py` | 多房间检查点、`LayoutUnit`、工作室单柜捷径 | schema |
+| `project_layout.py` | 多房间检查点、`LayoutUnit`、工作室单柜捷径。不画页面，也不写房间 STEP | schema |
+| `layout_document.py` | 把预览和只读视图挂到检查点上；冻结时核对画面是否由当前几何重建 | calculation |
 | `scene.py` | 房间/件的 schema 与解析 | schema |
 | `placement.py` | wall / free / fill 换成毫米 | calculation |
 | `placement_check.py` | 越界、外形干涉、遮挡门窗洞口 | calculation |
-| `validation.py` | `admit_scene`（规划）；dict 上再核预览（冻结） | validation |
+| `validation.py` | `admit_scene`：结构、派生足迹、越界、干涉、遮挡洞口。不核对预览字节 | validation |
 | `preview.py` / `viewer.py` | SVG 与只读轨道视图 | calculation |
-| `editor.py` | 可编辑 HTML，以及项目页（服务端按权限渲染成**可编辑 / 只读 / 分享**三态，复用同一画布）；原点三轴与光标坐标读数也长在这张画布上；多间房按页眉药丸切换，当前房间写进 `?room=` 深链；页眉三块牌子（身份 / 工作副本 / 编辑权）；JS 摆放检查必须与 `placement_check.py` 同步 | calculation |
+| `editor.py` | 读 `templates/editor_page.html`，填上当前房间后交出可编辑页或项目页（服务端按权限渲染成**可编辑 / 只读 / 分享**三态，复用同一画布）。原点三轴、光标坐标、房间药丸、`?room=` 深链、页眉牌子都在那份模板里。模板里的 JS 摆放检查必须与 `placement_check.py` 同步 | calculation |
 | `project_list.py` | 已经做过的项目这一页的 HTML | calculation |
 | `project_preview.py` | 预览页要读的布局文档，以及打开本机预览 | side_effect |
 | `room_http.py` | 独立房间的摆放、保存、编辑和房间包络 CAD 路由 | structured_protocol |
@@ -53,6 +54,6 @@
 | `scene_store.py` | 独立场景只存源，读取时重算 | side_effect |
 | `cad.py` | 房间包络树与房间 STEP，不是 `furniture_cad` | side_effect |
 
-编辑器拖动是服务端规则的本地预览，松手后后端再 place + 准入。改 `placement_check.py` 必须同步改 `editor.py` 里的 JS。
+编辑器拖动是服务端规则的本地预览，松手后后端再 place + 准入。改 `placement_check.py` 必须同步改 `templates/editor_page.html` 里的 JS。
 
 未落地与待议需求见 [backlog](backlog.md)，日常改摆放/编辑器不必读。

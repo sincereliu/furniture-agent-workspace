@@ -26,7 +26,7 @@
 
 ### Viewer 与 Editor 能否共用部分代码（待决定）
 
-现状：两份模板各带一套相机 / 投影 / 拖拽 / 绘制（`viewer.py` 约 270 行、`editor.py` 约 2000 行），一致性靠"改两遍"维持 —— 本轮的相机镜像修正、视图控件、坐标层都是改两遍。
+现状：房间页的模板在 `templates/editor_page.html`，`editor.py` 只负责填数据。`viewer.py` 仍自带一份约 270 行的模板。两份各有一套相机 / 投影 / 拖拽 / 绘制，一致性靠"改两遍"维持。
 
 选项：① 抽一段公共 JS（在 Python 侧拼进两份模板）；② 只共享数据与契约，代码保持两份（现状）；③ 合并成一个页面、两种模式。
 
@@ -42,9 +42,9 @@
 
 ### 视图代码是否需要分割（待决定）
 
-现状：`editor.py` 一个文件里同时装着 Python 渲染入口 + HTML/CSS + 一大段画布 JS（相机、投影、摆放检查的 JS 镜像、绘制、交互），接近 2000 行；`viewer.py` 是精简的第二份。
+现状：房间页模板已经抽到 `templates/editor_page.html`（不挂到 `/layout-view`，避免把未填的占位符当页面发出去）。画布 JS 仍写在这份模板里；`viewer.py` 是精简的第二份。
 
-要决定：是否把画布 JS 拆成静态文件（例如 `scripts/furniture_layout/static/editor-canvas.js`）由服务端读入拼接。好处：能被编辑器与测试直接加载、diff 更可读、便于与 Viewer 共用。代价：CSP 要放开 `'self'`、"自包含 HTML"约定要改、`editor.py` 里的占位替换要跟着动。
+要决定：是否再把画布 JS 拆成静态文件（例如 `scripts/furniture_layout/static/editor-canvas.js`）由服务端读入拼接。好处：能被编辑器与测试直接加载、diff 更可读、便于与 Viewer 共用。代价：CSP 要放开 `'self'`、"自包含 HTML"约定要改、占位替换要跟着动。
 
 先决定上一条"能否共用代码"，再决定怎么切。
 

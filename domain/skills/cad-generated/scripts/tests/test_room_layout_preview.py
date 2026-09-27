@@ -27,7 +27,7 @@ from furniture_layout.pipeline import generate_room_cad, plan_project_layout, pl
 from furniture_layout.preview import _build_projector
 from furniture_layout.project_layout import ProjectLayout
 from furniture_layout.scene import RoomScene
-from furniture_layout.validation import validate_room_scene
+from furniture_layout.layout_document import validate_room_scene
 from furniture_workflow.workflow_state import STAGE_SEQUENCE, WorkflowStage
 
 
