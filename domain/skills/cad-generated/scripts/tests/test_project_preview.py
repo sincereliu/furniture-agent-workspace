@@ -413,9 +413,14 @@ class ProjectPreviewTests(unittest.TestCase):
         self.assertIn('fetch("/api/preview/presence"', html)
 
     def test_closed_preview_page_is_what_stops_the_server(self) -> None:
+        grace = server.PRESENCE_GRACE_SECONDS
         self.assertFalse(server.preview_should_stop(None, 100))
-        self.assertFalse(server.preview_should_stop(90, 94.9))
-        self.assertTrue(server.preview_should_stop(90, 95))
+        # 还没到宽限期：不算"页面都关了"
+        self.assertFalse(server.preview_should_stop(90, 90 + grace - 0.1))
+        # 过了宽限期：最后一页确实走了
+        self.assertTrue(server.preview_should_stop(90, 90 + grace))
+        # 宽限期要够人手开浏览器：起服务到页面发出第一次 presence 之间的余量
+        self.assertGreaterEqual(grace, 10.0)
         with self.assertRaises(HTTPException) as remote:
             asyncio.run(server.preview_presence(remote_request()))
         self.assertEqual(remote.exception.status_code, 403)
