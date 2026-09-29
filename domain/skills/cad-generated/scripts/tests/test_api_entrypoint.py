@@ -113,9 +113,10 @@ class ApiEntrypointTests(unittest.TestCase):
             / "static"
             / "layout_scene.js"
         ).read_text(encoding="utf-8")
-        self.assertIn("X 东 · 总宽", scene)
-        self.assertIn("Y 南 · 总深", scene)
-        self.assertIn("Z 上 · 总高", scene)
+        # 三条轴各一个数字标签（轴名 + 房间真尺寸），正方向由箭头表示。
+        self.assertIn("X ${Math.round(width)}", scene)
+        self.assertIn("Y ${Math.round(depth)}", scene)
+        self.assertIn("Z ${Math.round(height)}", scene)
 
     def test_plan_room_rejects_missing_room_size(self) -> None:
         with self.assertRaises(ValidationError):

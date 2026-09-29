@@ -140,6 +140,17 @@ export function mountLayout(canvas) {
   renderer.setClearColor(0xeef1f6, 1);
   const camera = new THREE.PerspectiveCamera(48, 1, 10, 500000);
   camera.up.set(0, 1, 0);
+  /**
+   * **全程只用透视相机**，六个正视图靠"把相机拉远 + 等比例收窄 fov"逼近正交。
+   *
+   * 为什么不再用正交相机：正交与透视的画面必然不同（平行投影 vs 纵向收敛），
+   * 实测同一姿态下两者有 6~7.5% 的像素差异——**只要切换投影，那一下就会被看到**
+   * （放在动画开头/中途/结尾都一样，用两遍渲染混合又会因半透明墙产生重影）。
+   * 全程一种投影就不存在"切换"，抖动从根上消失；代价是立面图有极轻微的透视收敛
+   * （实测：拉远 10× 时与真正交差 1.5%，25× 时差 1.07%）。
+   */
+  const LENS_BASE = 48;          // 自由视角的 fov（度）
+  const ELEVATION_PULL = 8;      // 正视图把相机拉远的倍数（越大越接近正交）
   const scene = new THREE.Scene();
   scene.add(new THREE.HemisphereLight(0xffffff, 0xc5d0dc, 1.2));
   const sun = new THREE.DirectionalLight(0xffffff, 0.85);
@@ -167,6 +178,18 @@ export function mountLayout(canvas) {
   let labelLayer = null;
   let labelEntries = [];
   let axisGizmo = null;
+  let axesGroup = null;      // 坐标轴的可复用容器：每帧清空重建，避免往 content 里累积
+  const WALL_FADE_MS = 150;  // 墙显隐/透明度的过渡时长：判据是二值的，靠它摊开突变
+  let wallFade = [];         // 每面墙当前的渐变透明度
+  let wallFadeFrom = [];     // 本趟渐变的起点
+  let wallFadeTargets = [];  // 本趟渐变的目标
+  let wallFadeStarted = 0;   // 本趟渐变的开始时刻（0 = 没有在跑的渐变）
+  function setLens(fovDeg) {
+    const next = Math.max(2, Math.min(90, Number(fovDeg) || LENS_BASE));
+    if (Math.abs(camera.fov - next) < 0.01) return;
+    camera.fov = next;
+    camera.updateProjectionMatrix();
+  }
 
   /** DOM 标注：每帧把锚点投影到屏幕像素，写 transform。字号恒定，不随缩放变小。 */
   function refreshLabels() {
@@ -181,7 +204,7 @@ export function mountLayout(canvas) {
       entry.el.style.display = visible ? "block" : "none";
       if (visible) entry.el.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px) translate(-50%,-50%)`;
     }
-    // 简单防重叠：同类标签挨太近就整体下推
+    // 简单防重叠：同类标签挨太近就整体下推。
     const shown = labelEntries.filter((entry) => entry.el.style.display !== "none");
     for (let i = 0; i < shown.length; i += 1) {
       for (let j = i + 1; j < shown.length; j += 1) {
@@ -195,46 +218,48 @@ export function mountLayout(canvas) {
     drawAxisGizmo();
   }
 
-  /** 右下角方位指示器：跟随视角旋转，但以固定的屏幕尺寸绘制，永远读得清。 */
+  /** 右下角方位指示器：世界方向经相机真实投影后，以固定屏幕尺寸画出。 */
   function drawAxisGizmo() {
     if (!axisGizmo) return;
     const { ctx } = axisGizmo;
     const S = 96;
+    const R = 30;
     ctx.clearRect(0, 0, S, S);
     ctx.save();
-    ctx.translate(S * 0.45, S * 0.58);
-    // 世界方向 → 屏幕方向：只取水平分量，避免俯仰把两条地面轴压成一条
+    ctx.translate(S * 0.46, S * 0.60);
     camera.updateMatrixWorld(true);
-    const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
-    const east = new THREE.Vector3(right.x, 0, right.z).normalize();           // 房间 +X（东）
-    const south = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), east).normalize(); // 房间 +Y（南）
-    const R = 30;
-    const arrows = [
-      { dir: east, up: 0, color: "#dc2626", text: "X 东" },
-      { dir: south, up: 0, color: "#047857", text: "Y 南" },
-      { dir: null, up: 1, color: "#2563eb", text: "Z 上" },
+    // 相机的屏幕基：right / up（用真实矩阵列，不手写映射）
+    const m = camera.matrixWorld;
+    const col = (i) => new THREE.Vector3(m.elements[i * 4], m.elements[i * 4 + 1], m.elements[i * 4 + 2]).normalize();
+    const right = col(0);
+    const camUp = col(1);
+    const toScreen = (dir) => ({ dx: dir.dot(right) * R, dy: -dir.dot(camUp) * R });
+    const dirs = [
+      { key: "X 宽", dir: new THREE.Vector3(1, 0, 0), color: "#dc2626", anchor: 0 },
+      { key: "Y 深", dir: new THREE.Vector3(0, 0, 1), color: "#047857", anchor: 0.42 },
+      { key: "Z 高", dir: new THREE.Vector3(0, 1, 0), color: "#2563eb", anchor: 0.82 },
     ];
-    ctx.lineWidth = 2.2;
+    ctx.lineWidth = 2.4;
     ctx.font = "700 11px Inter,Microsoft YaHei,sans-serif";
-    ctx.textAlign = "center";
+    ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    for (const a of arrows) {
-      const dx = a.up ? 0 : a.dir.x * R;
-      const dy = a.up ? -R : a.dir.z * R;
-      ctx.strokeStyle = a.color;
-      ctx.fillStyle = a.color;
+    for (const item of dirs) {
+      const { dx, dy } = toScreen(item.dir);
+      ctx.strokeStyle = item.color;
+      ctx.fillStyle = item.color;
       ctx.beginPath();
       ctx.moveTo(0, 0);
       ctx.lineTo(dx, dy);
       ctx.stroke();
       ctx.beginPath();
-      ctx.arc(dx, dy, 3.2, 0, Math.PI * 2);
+      ctx.arc(dx, dy, 3.4, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillText(a.text, dx + (dx >= 0 ? 16 : -16) * 0.2 + dx * 0.35, dy + (dy >= 0 ? 10 : -10));
+      // 标签沿箭头方向错开，避免三条挤在原点处
+      ctx.fillText(item.key, dx + item.anchor * 26 + 5, dy + item.anchor * 26);
     }
     ctx.fillStyle = "#0f172a";
     ctx.beginPath();
-    ctx.arc(0, 0, 2.6, 0, Math.PI * 2);
+    ctx.arc(0, 0, 2.8, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
@@ -246,73 +271,122 @@ export function mountLayout(canvas) {
   }
 
   /**
-   * 房间坐标三脚架：从房间原点（西北地面角）引出，**整体在房间内部**。
+   * 房间**边线**：只画地板北边（远端）一条中性灰边界线，别的一律不画。
    *
-   * 之前把轴画在"房间边界的外侧"（Y 沿西边界外墙、Z 沿东端外墙），结果那两条线在地面上
-   * 没有对应的底边，看起来就是"房间里凭空多出来的悬空线"。现在改成室内三脚架：
-   *   X → 沿北墙（东向）  Y → 沿西墙（南向）  Z → 竖直向上
-   * 三条长度相等（取短边与层高的较小值），颜色红/绿/蓝，标签贴在线中点。
+   * 走过的弯路值得记下来：地板是个**面**，把它的四条边都画出来就等于给地板勾了轮廓。
+   * 从房间外面看时，近端两条边（东、南）会投影到墙面之外——透视下甚至落在北墙顶边之上，
+   * 看起来就像"北墙上又被画了一个矩形框"。实测（5 种窗口尺寸都复现）：
+   *   #64748b  世界 [2400,0,0]->[2400,3000,0]（东边）
+   *            世界 [0,3000,0]->[2400,3000,0]（南边）
+   *            世界 [0,0,0]->[0,3000,0]（西边）
+   * 三条都落在画布上半部、越出墙面。近端边没有任何信息量（地板填充已经表达了范围），
+   * 所以直接去掉：只留北边一条做"房间尽头"的界定。
    */
   function refreshOutline() {
     const outline = content.userData.outline;
     if (!outline || !wallShells.length) return;
-    const { x0, x1, z0, z1, height } = outline;
+    const { x0, x1, z0 } = outline;
     const at = (x, y, z) => roomToThree(x, y, z);
-    const groups = { neutral: [], x: [], y: [], z: [] };
-    const edge = (bucket, a, b) => { bucket.push(...a, ...b); };
-
-    // 地板一圈：中性灰底边（房间占地轮廓）
-    edge(groups.neutral, at(x0, 0, z0), at(x1, 0, z0));
-    edge(groups.neutral, at(x1, 0, z0), at(x1, 0, z1));
-    edge(groups.neutral, at(x0, 0, z1), at(x1, 0, z1));
-    edge(groups.neutral, at(x0, 0, z0), at(x0, 0, z1));
-
-    // 三脚架：X/Y 取房间的宽与深（贴地、沿北墙与西墙），Z 取**短轴**。
-    // 为什么 Z 不取全高 2800：透视下"沿西墙向南（3000）"与"竖直向上（2800）"会被压成两条
-    // 近乎竖直、方向相反的线，几何再对也读不出来。Z 取短轴后三条轴各占一个方向，一眼可辨。
-    const zShaft = Math.max(500, height * 0.3);
-    edge(groups.x, at(x0, 0, z0), at(x1, 0, z0));              // X 东：沿北墙脚，长 = 房间宽
-    edge(groups.y, at(x0, 0, z0), at(x0, 0, z1));              // Y 南：沿西墙脚，长 = 房间深
-    edge(groups.z, at(x0, 0, z0), at(x0, zShaft, z0));         // Z 上：原点上方短轴
-
-    const palette = [["neutral", 0x64748b], ["x", 0xdc2626], ["y", 0x047857], ["z", 0x2563eb]];
-    for (const [key, color] of palette) {
-      let entry = outline.lines.find((item) => item.key === key);
-      if (!entry) {
-        entry = { key, line: lineSegments([], color) };
-        content.add(entry.line);
-        outline.lines.push(entry);
-      }
-      entry.line.geometry.dispose();
-      entry.line.geometry = new THREE.BufferGeometry();
-      entry.line.geometry.setAttribute("position", new THREE.Float32BufferAttribute(groups[key], 3));
-    }
-    // 轴端点圆点：让"这条轴到哪为止、朝哪个方向"一眼可辨（三条轴在屏幕上会被透视压得很近）
-    const tips = [
-      { key: "x", at: at(x1, 0, z0), color: 0xdc2626 },
-      { key: "y", at: at(x0, 0, z1), color: 0x047857 },
-      { key: "z", at: at(x0, zShaft, z0), color: 0x2563eb },
+    const segments = [
+      ...at(x0, 0, z0), ...at(x1, 0, z0),      // 北边（房间远端的界定线）
     ];
-    outline.tips = outline.tips || [];
-    tips.forEach((tip, index) => {
-      if (!outline.tips[index]) {
-        const dot = new THREE.Mesh(
-          new THREE.SphereGeometry(1, 12, 8),
-          new THREE.MeshBasicMaterial({ color: tip.color }),
-        );
-        content.add(dot);
-        outline.tips.push(dot);
-      }
-      const dot = outline.tips[index];
-      dot.material.color.setHex(tip.color);
-      dot.position.set(tip.at[0], tip.at[1], tip.at[2]);
-      dot.scale.setScalar(Math.max(60, Math.min(x1 - x0, z1 - z0, height) * 0.035));
-      dot.userData.kind = null;               // 端点不参与拾取
-    });
-    outline.axisLength = { x: x1 - x0, y: z1 - z0, z: zShaft };
+    let entry = outline.lines.find((item) => item.key === "neutral");
+    if (!entry) {
+      entry = { key: "neutral", line: lineSegments([], 0x64748b) };
+      content.add(entry.line);
+      outline.lines.push(entry);
+    }
+    entry.line.geometry.dispose();
+    entry.line.geometry = new THREE.BufferGeometry();
+    entry.line.geometry.setAttribute("position", new THREE.Float32BufferAttribute(segments, 3));
   }
 
-  /** 把当前的墙与相机喂给纯函数 wallVisibility()，再把结果写回材质。 */
+  /**
+   * 坐标轴。**约定对照表（房间 ↔ three.js）**：
+   *
+   * | 房间轴 | 含义 | 正方向 | 长度 | three.js 分量 |
+   * |--------|------|--------|------|----------------|
+   * | X      | 宽度 | 西 → 东 | 总宽 | three.x（东）|
+   * | Y      | 深度 | 北 → 南 | 总深 | three.z（three 的 z 指向南/屏幕外）|
+   * | Z      | 高度 | 下 → 上 | 总高 | three.y（three 的 y 就是上）|
+   *
+   * 映射只有一处：`roomToThree(x, y, z) = [x, z, y]`。
+   * 原点 = 房间 (0,0,0) = 西墙 ∩ 北墙 ∩ 地面 = `roomToThree(0,0,0) = three(0,0,0)`。
+   *
+   * 三条轴都**沿房间边界**铺设、长度**严格等于房间对应尺寸**，末端带箭头锥指明正方向。
+   */
+  function refreshAxes() {
+    const outline = content.userData.outline;
+    if (!outline || !wallShells.length) return;
+    // 轴每帧重建（相机一动就要重画），所以必须**清掉上一帧的轴**再画。
+    // 曾经直接 content.add(...) 且从不清理：动画期间每帧加 6 个网格，
+    // 实测一次切换后 content 子对象从 27 涨到 3183（真·内存泄漏 + 掉帧）。
+    // 这里用一个**可复用的组**：组本身属于 content（跟随 sync 重建），组内每次清空。
+    if (!axesGroup) {
+      axesGroup = new THREE.Group();
+      content.add(axesGroup);
+    }
+    disposeObject(axesGroup);
+    axesGroup.clear();
+    const { x1, z1, height } = outline;                 // x0 = z0 = 0（原点是房间角落）
+    const nudge = 25;                                    // 标签离轴让开的距离（mm）：贴着轴，读起来才归属明确
+    // 端点直接写 **three.js 坐标**，映射只在这一处发生，不再经 roomToThree 的参数位次：
+    //   房间 X（宽，向东）  → three.x = 0 … x1
+    //   房间 Y（深，向南）  → three.z = 0 … z1   ← 深度落在 three 的 z 上
+    //   房间 Z（高，向上）  → three.y = 0 … height ← 高度落在 three 的 y 上
+    // 曾经写成 at(0, 0, z1) / at(0, height, 0)（按 three 分量顺序传参）→
+    // 绿轴拿到了 3000 的"高度"、蓝轴拿到了 2800 的"深度"，两条轴正好互换。
+    const axes = [
+      { key: "x", from: [0, 0, 0], to: [x1, 0, 0], color: 0xdc2626 },
+      { key: "y", from: [0, 0, 0], to: [0, 0, z1], color: 0x047857 },
+      { key: "z", from: [0, 0, 0], to: [0, height, 0], color: 0x2563eb },
+    ];
+
+    // 轴杆用**实体圆柱**（细线在多数驱动上宽不出 1px，看不清），末端接同色锥形箭头。
+    const radius = Math.max(12, Math.min(x1, z1, height) * 0.006);
+    const head = Math.max(70, Math.min(x1, z1, height) * 0.032);
+    axes.forEach((axis, index) => {
+      const from = new THREE.Vector3(...axis.from);
+      const to = new THREE.Vector3(...axis.to);
+      const dir = to.clone().sub(from).normalize();
+      const material = new THREE.MeshBasicMaterial({ color: axis.color });
+      // 杆：从起点到"终点 - 箭头长度"
+      const shaftEnd = to.clone().addScaledVector(dir, -head);
+      const shaftLength = from.distanceTo(shaftEnd);
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, shaftLength, 12), material);
+      shaft.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+      shaft.position.copy(from).addScaledVector(dir, shaftLength / 2);
+      shaft.userData.kind = null;                        // 轴杆不参与拾取
+      axesGroup.add(shaft);
+      // 箭头：锥尖落在轴的终点（= 房间边界）
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(head * 0.45, head, 18), material);
+      cone.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);   // 锥尖默认朝 +Y
+      cone.position.copy(to).addScaledVector(dir, -head * 0.5);
+      cone.userData.kind = null;
+      axesGroup.add(cone);
+    });
+
+    outline.axisLength = { x: x1, y: z1, z: height };
+    // 标签锚点也用 **three.js 坐标**（与上面的轴端点同一套，不再经 roomToThree 的参数位次）：
+    //   X 轴中点 (x1/2, 0, 0)      往北墙外让开 → three.z = -nudge
+    //   Y 轴中点 (0, 0, z1/2)      往西墙外让开 → three.x = -nudge
+    //   Z 轴中点 (0, height/2, 0)  往西北外让开 → three.x = -nudge
+    outline.labelAnchors = {
+      x: [x1 / 2, 0, -nudge],
+      y: [-nudge, 0, z1 / 2],
+      z: [-nudge, height / 2, 0],
+    };
+  }
+
+  /**
+   * 把当前的墙与相机喂给纯函数 wallVisibility()，再把结果写回材质。
+   *
+   * **加一层短时渐变**（约 150ms）：判据本身是二值的（`visible: !cameraOutside`），
+   * 相机一越过阈值，墙就会在**某一帧**瞬间出现/消失，同时透明度从侧墙 0.25 跳到背景墙 0.55。
+   * 实测这一步没有掉帧（变化帧 16.4~17.0ms，与其它帧一致，着色器程序数恒为 5），
+   * 所以那个"顿"是**画面突变**而不是卡顿。把突变摊成 150ms 的过渡即可。
+   * 墙一律用 `opacity` 表达（不靠 visible 开关），这样渐变过程中不会出现"半透明突然变实"。
+   */
   function refreshWalls() {
     if (!wallShells.length) return;
     const geometry = wallShells.map((wall) => ({
@@ -329,19 +403,54 @@ export function mountLayout(canvas) {
       [wallViewDirection.x, wallViewDirection.y, wallViewDirection.z],
       { elevation: isElevation() },
     );
+    const now = Date.now();
+    const targets = result.walls.map((state) => (state.visible ? state.opacity : 0));
+    if (!wallFade.length) {
+      // 首帧：直接落到目标（否则一进页面墙会从 0 淡入）
+      wallFade = [...targets];
+      wallFadeTargets = [...targets];
+      wallFadeStarted = 0;
+    } else {
+      // 目标变了就重开一趟渐变，起点取**当前**透明度。
+      // 注意：**必须按"距开头的时间"算，不能按"距上一帧的时间"逐帧累乘**——
+      // 逐帧累乘是渐近的，永远到不了目标（实测停在 0.05），
+      // 而且相机一停 tick 就不再重绘，渐变会冻结在中间值，留下一面淡淡的墙。
+      let changed = false;
+      for (let i = 0; i < targets.length; i += 1) {
+        if (Math.abs(targets[i] - wallFadeTargets[i]) > 1e-4) changed = true;
+      }
+      if (changed || wallFadeStarted === 0) {
+        wallFadeFrom = [...wallFade];
+        wallFadeTargets = [...targets];
+        wallFadeStarted = now;
+      }
+      const t = Math.min(1, (now - wallFadeStarted) / WALL_FADE_MS);
+      for (let i = 0; i < wallFade.length; i += 1) {
+        wallFade[i] = wallFadeFrom[i] + (wallFadeTargets[i] - wallFadeFrom[i]) * t;
+      }
+      if (t >= 1) wallFadeStarted = 0;
+    }
     result.walls.forEach((state, index) => {
       const wall = wallShells[index];
-      wall.visible = state.visible;
-      wall.material.opacity = state.opacity;
+      const opacity = wallFade[index];
+      // 完全透明才真正不画；否则留着，让渐变可见
+      wall.visible = opacity > 0.002;
+      wall.material.opacity = opacity;
       // 颜色由判据一起给：背景墙用中灰。浅灰压浅色背景等于看不见。
       wall.material.color.setHex(state.color === null ? wall.userData.baseColor : state.color);
     });
   }
 
+  /** 墙的渐变是否还没跑完（tick 据此继续重绘，否则渐变会冻结在中间值）。 */
+  function wallFadeRunning() {
+    return wallFadeStarted !== 0;
+  }
+
   function resize() {
     const width = canvas.clientWidth || 960;
     const height = canvas.clientHeight || 600;
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    const ratio = Math.min(window.devicePixelRatio || 1, 2);
+    renderer.setPixelRatio(ratio);
     renderer.setSize(width, height, false);
     camera.aspect = width / Math.max(height, 1);
     camera.updateProjectionMatrix();
@@ -353,18 +462,26 @@ export function mountLayout(canvas) {
     ndc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
   }
 
+  /** 相机到目标的距离下限 = 房间对角线。低于它相机就进到房间里了——
+   *  一旦进入房间，近端的地板边会画到墙顶之上（看起来像"平面上多了一个更高的线框"），
+   *  而且随手一拖就冲进室内，视角会"不可控"。这条下限在 sync() 里按房间尺寸算一次。 */
+  function applyRoomLimits() {
+    const diagonal = content.userData.roomDiagonal || 0;
+    controls.minDistance = Math.max(200, diagonal);
+  }
+
   function setView(yaw, pitch, distance, target) {
     const position = cameraThreePosition(yaw, pitch, distance, target);
     camera.position.set(position[0], position[1], position[2]);
     controls.target.set(target[0], target[2], target[1]);
     camera.up.set(0, 1, 0);
     camera.lookAt(controls.target);
-    const span = Math.hypot(target[0], target[1], target[2]) + distance;
-    controls.minDistance = Math.max(200, span * 0.02);
     controls.maxDistance = Math.max(distance * 6, 8000);
+    applyRoomLimits();
     controls.update();
     refreshWalls();
     refreshOutline();
+    refreshAxes();
     refreshLabels();
   }
 
@@ -425,17 +542,58 @@ export function mountLayout(canvas) {
     return data && data.kind ? { kind: data.kind, itemId: data.itemId } : null;
   }
 
+  /**
+   * 绘制。**全程只有一个透视相机**，不做投影切换，也不做两遍叠加。
+   *
+   * 曾经试过"正视图换正交相机"和"两遍渲染做渐变"，都放弃了：
+   * 正交与透视的画面必然不同，只要切换那一下就会被看到；
+   * 而两遍叠加时，房间的墙是**半透明**的，会在两个略微错开的位置各混合一次、
+   * 墙面上出现两道错开的边——那是两遍混合与透视墙设计的固有冲突，调参数解决不了。
+   * 现在正视图靠"相机拉远 + fov 同比例收窄"逼近正交，没有切换，也就没有那一下。
+   */
   function draw() {
+    renderer.autoClear = true;
     renderer.render(scene, camera);
+  }
+
+  /**
+   * 设 fov。**关系只有一条**：`fov = LENS_BASE ÷ (用户缩放 × 收窄倍数)`。
+   *
+   * 为什么与距离无关：投影到屏幕的高度 = 距离 × tan(fov/2)。要让"观感尺寸"只由缩放决定，
+   * 就必须让 `距离 × tan(fov/2)` 恒定 —— 也就是 **距离拉远多少、tan(fov/2) 就同比例缩小**。
+   * 正视图把相机拉远 8 倍，fov 就按同一比例收窄（调用方传 zoom×pull），于是：
+   *   · 观感尺寸 = 基准取景 ÷ 用户缩放（切视角不改画面大小）；
+   *   · 透视收敛被压平 8 倍（立面的竖直棱线接近平行）。
+   *
+   * 曾经的错误：把"基准距离 ÷ 当前距离"当作 fov 系数（`48 × ref/dist`）。
+   * 那个式子让 fov 随距离变小，而屏幕高度 = 距离×tan(fov/2) 反而随距离**变大**，
+   * 于是切到正视图时画面暴涨 68 倍（就是"俯视图缩放比例太大、切换抖动"的根源）。
+   */
+  function setFovForZoom(zoom) {
+    const z = Math.max(0.02, Number(zoom) || 1);
+    setLens(LENS_BASE / z);
+  }
+
+  /** 正视图把相机拉远的倍数；页面用它乘取景距离。 */
+  function elevationPull() {
+    return ELEVATION_PULL;
   }
 
   function sync(data, options) {
     const room = data.room;
     const selectedId = options.selectedId;
     const readOnly = options.readOnly;
-    const showDims = options.dims !== false;
+    const dimsMode = options.dims === false ? "off" : (options.dims || "selected");
     disposeObject(content);
     content.clear();
+    axesGroup = null;            // 旧组随 content 一起被清掉，引用必须失效，否则下一帧往孤儿组里加
+    // outline.lines 里存的是复用用的线段对象；content 已清空，这些引用成了孤儿（不可见且泄漏），
+    // 所以一并清掉，让 refreshOutline() 下一帧重新建线并挂到新的 content 上。
+    if (content.userData.outline) content.userData.outline.lines = [];
+    wallFade = [];               // 墙是新对象，旧的渐变状态作废
+    wallFadeFrom = [];
+    wallFadeTargets = [];
+    wallFadeStarted = 0;
     pickables = [];
     // 标注层也要跟着重建：DOM 元素不是 three 对象，content.clear() 不会清掉它们
     for (const entry of labelEntries) entry.el.remove();
@@ -445,6 +603,10 @@ export function mountLayout(canvas) {
       axisGizmo = makeAxisGizmo();
       labelLayer.parentElement.appendChild(axisGizmo.el);
     }
+    const addDimLabel = (label) => {
+      if (!labelLayer) return;
+      labelEntries.push({ ...label, el: makeLabelElement(labelLayer, { ...label, color: 0x334155 }) });
+    };
     const width = room.width_mm;
     const depth = room.depth_mm;
     const height = room.height_mm;
@@ -469,6 +631,8 @@ export function mountLayout(canvas) {
       height,
       lines: [],
     };
+    // 相机到目标的距离下限用房间对角线：保证相机始终在房间外（见 applyRoomLimits）。
+    content.userData.roomDiagonal = Math.hypot(width, depth, height);
     const wallMaterial = new THREE.MeshStandardMaterial({
       color: 0xdbe3ee,
       transparent: true,
@@ -533,8 +697,10 @@ export function mountLayout(canvas) {
     for (const item of data.items || []) {
       const selected = item.id === selectedId;
       const blocked = selected && options.blockedId === item.id;
+      // 竖向范围统一由 itemZRange() 推导：payload 不保证带 z_start / z_end
+      const [itemZStart, itemZEnd] = itemZRange(item);
       const mesh = new THREE.Mesh(
-        prismGeometry(item.footprint, item.z_start, item.z_end),
+        prismGeometry(item.footprint, itemZStart, itemZEnd),
         new THREE.MeshStandardMaterial({
           color: blocked ? 0xdc2626 : (selected ? 0x1d4ed8 : 0x3b6fd8),
           roughness: 0.55,
@@ -545,17 +711,24 @@ export function mountLayout(canvas) {
       mesh.userData = { kind: "item", itemId: item.id };
       addMesh(content, mesh, pickables);
       if (item.footprint.length >= 4) {
-        const frontZ = (item.z_start + item.z_end) / 2;
-        const a = item.footprint[3];
-        const b = item.footprint[2];
+        const frontZ = (itemZStart + itemZEnd) / 2;
+        const a = footprintPoint(item.footprint[3]);
+        const b = footprintPoint(item.footprint[2]);
         content.add(line([
           roomToThree(a[0], a[1], frontZ),
           roomToThree(b[0], b[1], frontZ),
         ], 0x047857));
       }
+      // 标注三态：'off' 不画 / 'selected' 只画选中件 / 'all' 全部（默认 selected）。
+      // **必须放在 `if (!selected) continue` 之前**——"全部"模式正是在没选中时也要画，
+      // 原先放在其后，导致"标注·全部"永远不生效。
+      const dimMode = dimsMode === "off" ? "off" : (dimsMode === "all" ? "all" : (selected ? "selected" : "off"));
+      if (dimMode !== "off" && (dimMode === "all" || selected)) {
+        addDimensions(content, data, item, addDimLabel);
+      }
       if (!selected) continue;
       const center = footprintCenter(item.footprint);
-      const midZ = (item.z_start + item.z_end) / 2;
+      const midZ = (itemZStart + itemZEnd) / 2;
       if (!readOnly) {
         const ring = new THREE.Mesh(
           new THREE.TorusGeometry(Math.max(180, width * 0.06), 14, 8, 48),
@@ -569,34 +742,36 @@ export function mountLayout(canvas) {
           new THREE.SphereGeometry(70, 16, 12),
           new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.35, metalness: 0 }),
         );
-        rotateHandle.position.set(center[0] + 220, item.z_end + 160, center[1]);
+        rotateHandle.position.set(center[0] + 220, itemZEnd + 160, center[1]);
         rotateHandle.userData = { kind: "rotate", itemId: item.id };
         addMesh(content, rotateHandle, pickables);
         const heightHandle = new THREE.Mesh(
           new THREE.SphereGeometry(64, 16, 12),
           new THREE.MeshStandardMaterial({ color: 0x3b82f6, roughness: 0.35, metalness: 0 }),
         );
-        heightHandle.position.set(center[0] - 220, item.z_end + 160, center[1]);
+        heightHandle.position.set(center[0] - 220, itemZEnd + 160, center[1]);
         heightHandle.userData = { kind: "height", itemId: item.id };
         addMesh(content, heightHandle, pickables);
       }
-      if (showDims) addDimensions(content, data, item);
     }
     refreshWalls();
     refreshOutline();
-    // 轴标只是文字：几何（三脚架 + 地板轮廓）由 refreshOutline() 重建；
-    // 标签锚点取 outline.axisLength，所以必须放在 refreshOutline() 之后
+    refreshAxes();
+    applyRoomLimits();
+    // 轴标：几何由 refreshAxes() 重建；标签锚点直接取它交接的 three.js 坐标，
+    // 与轴端点同一套（曾经这里改用 roomToThree 的房间参数位次，正好又反一次，
+    // 表现为"颜色对了、数字落在对方轴上"）。
     if (labelLayer) {
       const addLabelAt = (anchor, text, color) => labelEntries.push({
         anchor, text, color, el: makeLabelElement(labelLayer, { text, color }),
       });
-      const len = content.userData.outline?.axisLength || { x: width, y: depth, z: height };
-      const nudge = 60;
-      // 标签：X/Y 放在各自长轴上约 62% 处；Z 短轴标签放在其端点外侧
-      addLabelAt(roomToThree(len.x * 0.62, 0, -nudge), `X 东 · 总宽 ${Math.round(width)}`, 0xdc2626);
-      addLabelAt(roomToThree(-nudge, 0, len.y * 0.62), `Y 南 · 总深 ${Math.round(depth)}`, 0x047857);
-      addLabelAt(roomToThree(-nudge * 2, len.z * 1.15, -nudge * 2), `Z 上 · 总高 ${Math.round(height)}`, 0x2563eb);
-      addLabelAt(roomToThree(-nudge * 2.2, 0, -nudge * 2.2), "O (0,0,0)", 0x0f172a);
+      const anchors = content.userData.outline?.labelAnchors;
+      if (anchors) {
+        // 三个数字标签（轴名 + 房间真尺寸），各自贴在自己那条轴上，正方向由箭头表示。
+        addLabelAt(anchors.x, `X ${Math.round(width)}`, 0xdc2626);
+        addLabelAt(anchors.y, `Y ${Math.round(depth)}`, 0x047857);
+        addLabelAt(anchors.z, `Z ${Math.round(height)}`, 0x2563eb);
+      }
     }
     refreshLabels();
     draw();
@@ -623,43 +798,137 @@ export function mountLayout(canvas) {
       lastView = key;
       refreshWalls();
       refreshOutline();
+      refreshAxes();
       refreshLabels();
+      draw();
+    } else if (wallFadeRunning()) {
+      // 相机停了但墙的渐变还没跑完：继续重绘，否则渐变会冻结在中间值（留下一面淡淡的墙）。
+      refreshWalls();
       draw();
     }
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
+
+  /**
+   * `sync` 外面套一层"载荷签名"缓存。
+   *
+   * 为什么必须套：`sync()` 第一件事就是 `disposeObject(content)` + `content.clear()`，
+   * 并把标注的 DOM 元素全部删掉重建。而**相机动画每帧都会调用 sync**——内容其实没变，
+   * 却每秒重建 60 次几何体、材质和 DOM 节点。实测后果：切视角期间频繁掉帧
+   * （真实窗口下 90 分位帧间隔 62~77ms，最大 120ms，约 14~21 次掉帧），而 WebGL 单帧只要 0.1ms。
+   *
+   * 签名只取"影响场景内容"的量（房间、家具、选中项、标注档位、只读、阻塞项），
+   * **不含相机**——相机动了只需重画，不需要重建。签名变化时照旧全量重建。
+   */
+  let lastSyncKey = null;
+  function syncCached(data, options) {
+    const key = JSON.stringify([
+      data && data.room, data && data.items, data && data.openings,
+      options.selectedId, options.dims, options.readOnly, options.blockedId,
+    ]);
+    if (key === lastSyncKey) return false;
+    lastSyncKey = key;
+    sync(data, options);
+    return true;
+  }
+
+  // 调试口：便于核对取景/绘制参数（renderer 用来统计每帧绘制次数）。
+  window.__diag = { scene, camera, controls, content, renderer, syncCached };
+  // 对外只暴露页面真正用到的接口。新增前先确认调用方存在——
+  // 之前多导出了 lensBase / setLens / syncNow，页面一个都没用；
+  // 其中 syncNow 还会绕过载荷缓存，谁用谁把每帧全量重建带回来（泄漏 + 掉帧）。
   return {
-    controls, resize, setView, readView, basis, project, ground, pick, sync, draw, setEnabled, setShiftPan,
+    controls, resize, setView, readView, basis, project, ground, pick, sync: syncCached, draw, setEnabled, setShiftPan,
+    setFovForZoom, elevationPull,
   };
+}
+
+/** footprint 的点有两种写法：`{x_mm, y_mm}`（布局阶段）或 `[x, y]`。统一成 [x, y]。 */
+function footprintPoint(point) {
+  return Array.isArray(point) ? [point[0], point[1]] : [point.x_mm, point.y_mm];
 }
 
 function footprintCenter(footprint) {
   const count = footprint.length || 1;
+  const points = footprint.map(footprintPoint);
   return [
-    footprint.reduce((sum, point) => sum + point[0], 0) / count,
-    footprint.reduce((sum, point) => sum + point[1], 0) / count,
+    points.reduce((sum, point) => sum + point[0], 0) / count,
+    points.reduce((sum, point) => sum + point[1], 0) / count,
   ];
 }
 
-function addDimensions(parent, data, item) {
-  const xs = item.footprint.map((point) => point[0]);
-  const ys = item.footprint.map((point) => point[1]);
+/**
+ * 一件家具的竖向范围 [z_start, z_end]。
+ *
+ * `room_page_payload` 给的是 `{placement, width, depth, height}`，
+ * 不保证带 `z_start` / `z_end`（那是另一个入口的形状）——两种都认，缺了就按
+ * placement.origin_z_mm + height 推，避免算出 NaN 让整段标注静默失效。
+ */
+function itemZRange(item) {
+  if (Number.isFinite(item.z_start) && Number.isFinite(item.z_end)) {
+    return [item.z_start, item.z_end];
+  }
+  const base = item.placement && Number.isFinite(item.placement.origin_z_mm)
+    ? item.placement.origin_z_mm
+    : 0;
+  return [base, base + (Number.isFinite(item.height) ? item.height : 0)];
+}
+
+/**
+ * 家具尺寸与离墙净距的标注。
+ *
+ * 线用 three 画（`parent`），**数字用 DOM 标注层**（`onLabel` 回调）——sprite 文字在缩小时
+ * 会糊成一片（实测 10px 高、汉字 7px），DOM 是屏幕空间，字号恒定。
+ * 尺寸取局部轴（跟着朝向走，不是 AABB）；净距取自摆放检查算出的六向净空。
+ */
+function addDimensions(parent, data, item, onLabel) {
+  // footprint 的元素是 {x_mm, y_mm}（布局阶段的数据结构），不是 [x, y] 数组对——
+  // 之前按数组取 point[0] 拿到 undefined，整段尺寸标注静默失效。两种格式都认。
+  const points = item.footprint.map(footprintPoint);
+  const xs = points.map((point) => point[0]);
+  const ys = points.map((point) => point[1]);
   const box = { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) };
+  const [zStart, zEnd] = itemZRange(item);
   const midX = (box.x0 + box.x1) / 2;
   const midY = (box.y0 + box.y1) / 2;
-  const z = item.z_start + 8;
+  const z = zStart + 8;
+  const zMid = (zStart + zEnd) / 2;
+  const fmt = (value) => `${Math.round(value)}`;
+
+  // 本体宽 / 深：画在 footprint 的边外侧，数字贴在线中点
+  const sizeGap = 90;
   const specs = [
-    [box.x0, midY, 0, midY],
-    [box.x1, midY, data.room.width_mm, midY],
-    [midX, box.y0, midX, 0],
-    [midX, box.y1, midX, data.room.depth_mm],
+    { label: `宽 ${fmt(box.x1 - box.x0)}`, from: [box.x0, box.y0 - sizeGap], to: [box.x1, box.y0 - sizeGap], textAt: [midX, z, box.y0 - sizeGap] },
+    { label: `深 ${fmt(box.y1 - box.y0)}`, from: [box.x0 - sizeGap, box.y0], to: [box.x0 - sizeGap, box.y1], textAt: [box.x0 - sizeGap, z, midY] },
   ];
   for (const spec of specs) {
-    if (Math.hypot(spec[2] - spec[0], spec[3] - spec[1]) < 1) continue;
-    parent.add(line([
-      roomToThree(spec[0], spec[1], z),
-      roomToThree(spec[2], spec[3], z),
-    ], 0x7c3aed));
+    parent.add(line([roomToThree(spec.from[0], spec.from[1], z), roomToThree(spec.to[0], spec.to[1], z)], 0x334155));
+    onLabel({ anchor: roomToThree(spec.textAt[0], spec.textAt[1], spec.textAt[2]), text: spec.label, color: 0x334155 });
+  }
+  // 高：画在 footprint 某个竖向棱边外侧
+  const hx = box.x1 + sizeGap;
+  parent.add(line([roomToThree(hx, box.y1, zStart), roomToThree(hx, box.y1, zEnd)], 0x334155));
+  onLabel({
+    anchor: roomToThree(hx, zMid, zEnd),
+    text: `高 ${fmt(zEnd - zStart)}`,
+    color: 0x334155,
+  });
+
+  // 离墙净距：只画选中件的四向，数字用紫色（与净距线同色）
+  const gaps = item.clearances_mm || {};
+  const gapSpecs = [
+    { key: "west", from: [0, midY], to: [box.x0, midY], at: [box.x0 / 2, z, midY] },
+    { key: "east", from: [box.x1, midY], to: [data.room.width_mm, midY], at: [(box.x1 + data.room.width_mm) / 2, z, midY] },
+    { key: "north", from: [midX, 0], to: [midX, box.y0], at: [midX, z, box.y0 / 2] },
+    { key: "south", from: [midX, box.y1], to: [midX, data.room.depth_mm], at: [midX, z, (box.y1 + data.room.depth_mm) / 2] },
+  ];
+  for (const spec of gapSpecs) {
+    // clearances_mm 的值可能是纯数字（{west: 802}），也可能是 {gap, blocker} —— 两种都认
+    const raw = gaps[spec.key];
+    const gap = typeof raw === "number" ? raw : (raw && typeof raw.gap === "number" ? raw.gap : null);
+    if (gap === null || gap <= 0.5) continue;
+    parent.add(line([roomToThree(spec.from[0], spec.from[1], z), roomToThree(spec.to[0], spec.to[1], z)], 0x7c3aed));
+    onLabel({ anchor: roomToThree(spec.at[0], spec.at[1], spec.at[2]), text: `离墙 ${fmt(gap)}`, color: 0x7c3aed });
   }
 }

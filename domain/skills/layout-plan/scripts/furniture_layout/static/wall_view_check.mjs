@@ -59,16 +59,35 @@ function expect(condition, message) {
   expect(state(result, "east").opacity === WALL_SIDE_OPACITY, "东西墙是侧墙");
 }
 
-// 4) 立面视图：只留正对相机的那面墙
+// 4) 立面视图：只留**正面对着相机**的那面墙。
+//    相机在南边往北看时，被画的是北墙（它的正面朝南、正对相机）；
+//    相机身后的南墙**不能画**——它的顶边会变成"房间上方多出来的一条水平线"。
 {
   const position = [W / 2, 1400, D + 6000];
   const result = wallVisibility(walls, position, [0, 0, -1], { elevation: true });
   expect(result.elevation === true, "应被判定为立面视图");
   expect(visibleIds(result) === "north", `立面视图应只画北墙，实际 ${visibleIds(result)}`);
+  expect(state(result, "south").visible === false, "相机身后的南墙不该画（顶边会跑到房间上方）");
   expect(
     state(result, "north").opacity === WALL_ELEVATION_OPACITY,
     `立面视图那面墙要用 ${WALL_ELEVATION_OPACITY} 的透明度，实际 ${state(result, "north").opacity}`,
   );
+}
+
+// 4b) 反方向同理：相机在北边往南看 → 只画南墙，身后的北墙不画
+{
+  const position = [W / 2, 1400, -6000];
+  const result = wallVisibility(walls, position, [0, 0, 1], { elevation: true });
+  expect(visibleIds(result) === "south", `从北往南看应只画南墙，实际 ${visibleIds(result)}`);
+  expect(state(result, "north").visible === false, "相机身后的北墙不该画");
+}
+
+// 4c) 东西两个立面：相机在东边往西看只画西墙；反之只画东墙
+{
+  const east = wallVisibility(walls, [W + 6000, 1400, D / 2], [-1, 0, 0], { elevation: true });
+  expect(visibleIds(east) === "west", `从东往西看应只画西墙，实际 ${visibleIds(east)}`);
+  const west = wallVisibility(walls, [-6000, 1400, D / 2], [1, 0, 0], { elevation: true });
+  expect(visibleIds(west) === "east", `从西往东看应只画东墙，实际 ${visibleIds(west)}`);
 }
 
 // 5) 相机绕房间一圈（房间外）：可见墙恰好是"墙不在中心与相机之间"的那些；背景墙只有一面

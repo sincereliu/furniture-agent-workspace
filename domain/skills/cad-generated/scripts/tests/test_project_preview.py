@@ -190,10 +190,10 @@ class ProjectPreviewTests(unittest.TestCase):
             / "static"
             / "layout_scene.js"
         ).read_text(encoding="utf-8")
-        self.assertIn("O (0,0,0)", scene_js)
-        self.assertIn("X 东 · 总宽", scene_js)
-        self.assertIn("Y 南 · 总深", scene_js)
-        self.assertIn("Z 上 · 总高", scene_js)
+        # 三条轴各一个数字标签（轴名 + 房间真尺寸），正方向由箭头表示。
+        self.assertIn("X ${Math.round(width)}", scene_js)
+        self.assertIn("Y ${Math.round(depth)}", scene_js)
+        self.assertIn("Z ${Math.round(height)}", scene_js)
 
     def test_preview_switches_rooms_with_chips_and_a_shareable_room_link(self) -> None:
         """房间切换是药丸不是下拉；切房间要写进地址栏 ?room=，链接能分享、能复现。"""
