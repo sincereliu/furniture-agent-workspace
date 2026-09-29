@@ -31,6 +31,8 @@
 
 浏览器里的项目名单是 `project_list.py`，房间页是 `room_page.py`（模板在 `templates/room_page.html`）。开机后手动打开名单，运行本阶段的 `scripts/open_projects.py`。它拉起的本机进程仍是 `cad-generated/scripts/server.py`（单间的保存和编辑都在那里）。这个进程不进六阶段，也不是柜体 CAD。同一服务上的 `GET /api/project/{project_id}/preview` 只读 Project Store 里的最新摆放，不写 `stage_outputs`。柜体 STEP 仍走确认之后的 `furniture_run_next(..., generate_cad=True)`。
 
+项目名单读取 `store/<id>/project.json` 时检查能否解析、工程编号是否匹配、有无修订、最新版布局格式是否受支持，以及布局结构是否有效。当前布局页无法打开的工程仍显示在不可点击的折叠列表里，并说明原因；预览路由也拒绝不可用工程。工程不会因创建时间久而自动过期；编辑租约的到期与工程存档无关。
+
 下游板件只读已确认的 `LayoutUnit`（`furniture_category` 为 `floor_cabinet` / `wall_cabinet`，且该件不是 `manufacture: false`）。客户点名不制造的包络留在房间里，不是 `LayoutUnit`。`room_shell.py` 写的房间外壳 STEP 不是柜体模型。
 
 板件实际只依赖 `LayoutUnit` 的五个字段：`id`、`furniture_category`、`width`、`depth`、`height`。这五个不变，板件与制造的内容就不变，可以跨 Revision 继承（见编排层 [修订继承设计](../../cad-generated/references/revision-inheritance-design.md)）。沿墙铺满那件的 `width` 由该墙空段算出，改房间就会改它，所以这种件永远算变了，必须重算。

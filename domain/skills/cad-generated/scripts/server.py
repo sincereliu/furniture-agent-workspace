@@ -54,7 +54,7 @@ from furniture_workflow.workflow_lease import (
     release,
     transfer,
 )
-from furniture_workflow.workflow_store import JsonProjectStore
+from furniture_workflow.workflow_store import JsonProjectStore, project_preview_status
 
 API_VERSION = "0.8.0"
 # 最后一页关掉后，超过这个秒数没有页面报「还在」，预览进程就退出。
@@ -220,19 +220,22 @@ async def watch_preview_presence() -> None:
 
 
 def _project_rows() -> list[dict[str, Any]]:
-    return JsonProjectStore(STORE_ROOT).list_projects()
+    return JsonProjectStore(STORE_ROOT).inspect_projects()
 
 
 @app.get("/api/projects")
 async def project_index_json():
-    """Saved projects. Unreadable files are omitted."""
+    """Saved projects and whether the current preview can open each one."""
     return {"projects": _project_rows()}
 
 
 @app.get("/projects", response_class=HTMLResponse)
 async def project_index():
-    """List of saved projects. Each row opens that project's layout page."""
-    return HTMLResponse(content=render_project_list(_project_rows()))
+    """List saved projects; unavailable ones remain visible without a link."""
+    return HTMLResponse(
+        content=render_project_list(_project_rows()),
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -357,11 +360,15 @@ def _load_project(project_id: str):
             detail="project_id may contain only letters, digits, '-' and '_'",
         )
     try:
-        return JsonProjectStore(STORE_ROOT).load(project_id)
-    except ValueError as exc:
+        project = JsonProjectStore(STORE_ROOT).load(project_id)
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
         message = str(exc)
         status = 404 if message.startswith("project not found") else 422
         raise HTTPException(status_code=status, detail=message) from exc
+    availability, reason = project_preview_status(project, project_id)
+    if availability != "ready":
+        raise HTTPException(status_code=422, detail=reason)
+    return project
 
 
 def _preview_page_data(project_id: str) -> dict[str, Any]:

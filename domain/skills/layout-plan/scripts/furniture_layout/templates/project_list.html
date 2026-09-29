@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>工程档案 · 家具工作台</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #18332f;
+      --muted: #61716c;
+      --line: #dce4db;
+      --paper: #f5f6f0;
+      --green: #174e44;
+      --green-light: #e8f4ed;
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      font: 15px/1.6 "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+      background:
+        radial-gradient(circle at 0 0, #e2eee3 0, transparent 36rem),
+        radial-gradient(circle at 100% 35%, #f1e9d9 0, transparent 30rem),
+        var(--paper);
+      min-height: 100vh;
+    }
+    a { color: inherit; }
+    .shell { width: min(1120px, calc(100% - 48px)); margin: 0 auto; }
+    .topbar { height: 82px; display: flex; align-items: center; justify-content: space-between; }
+    .brand { display: inline-flex; align-items: center; gap: 12px; text-decoration: none; font-weight: 800; letter-spacing: .02em; }
+    .brand-mark {
+      display: grid; place-items: center; width: 38px; height: 38px; border-radius: 11px;
+      background: var(--green); color: #fff; font: 800 19px/1 Georgia, serif;
+      box-shadow: 0 7px 14px #174e4426;
+    }
+    .brand small { display: block; margin-top: -3px; font: 600 10px/1.4 system-ui, sans-serif; letter-spacing: .2em; color: #7b9288; }
+    .top-link { color: #49695f; text-decoration: none; font-size: 13px; font-weight: 700; }
+    .top-link:hover { color: var(--green); text-decoration: underline; }
+    .hero {
+      position: relative; overflow: hidden; min-height: 292px; border-radius: 26px;
+      background: linear-gradient(115deg, #153d37 5%, #256457 58%, #397e66 100%);
+      color: #fff; box-shadow: 0 22px 48px #174e4424;
+    }
+    .hero:before {
+      content: ""; position: absolute; inset: 0; pointer-events: none;
+      background: radial-gradient(circle at 73% 4%, #ffffff27 0, transparent 28%),
+        linear-gradient(90deg, transparent 49.7%, #ffffff0b 50%, transparent 50.3%);
+      background-size: auto, 34px 34px;
+    }
+    .hero-copy { position: relative; z-index: 1; width: min(600px, 100%); padding: 42px 52px; }
+    .eyebrow { margin: 0 0 15px; font: 800 11px/1.5 system-ui, sans-serif; letter-spacing: .22em; text-transform: uppercase; }
+    .hero .eyebrow { color: #add7bf; }
+    h1 { margin: 0; font-size: clamp(32px, 4vw, 48px); line-height: 1.2; letter-spacing: -.045em; }
+    h1 em { color: #d5e9b9; font-style: normal; }
+    .hero-description { max-width: 34em; margin: 16px 0 27px; color: #d7e8df; font-size: 14px; }
+    .hero-stats { display: flex; gap: 28px; flex-wrap: wrap; }
+    .hero-stat { display: flex; align-items: baseline; gap: 7px; color: #c3ddcf; font-size: 13px; }
+    .hero-stat strong { color: #fff; font: 700 24px/1 Georgia, serif; }
+    .hero-art { position: absolute; right: 3%; top: 20px; width: 315px; height: 260px; transform: rotate(-9deg); opacity: .92; }
+    .plan { position: absolute; inset: 24px 26px 12px; border: 2px solid #daf5e87a; border-radius: 7px; box-shadow: inset 0 0 0 6px #153d3730, 0 18px 32px #10382b4d; }
+    .plan:before, .plan:after { content: ""; position: absolute; background: #daf5e87a; }
+    .plan:before { left: 55%; top: 0; bottom: 34%; width: 2px; }
+    .plan:after { left: 0; right: 45%; top: 58%; height: 2px; }
+    .plan-room { position: absolute; display: block; border: 2px solid #e6f8eb9c; border-radius: 5px; }
+    .plan-room.one { left: 16%; top: 16%; width: 26%; height: 22%; }
+    .plan-room.two { left: 68%; top: 14%; width: 18%; height: 38%; }
+    .plan-room.three { left: 15%; bottom: 14%; width: 31%; height: 13%; }
+    .plan-dot { position: absolute; right: 16%; bottom: 17%; width: 12px; height: 12px; border-radius: 50%; background: #d5e9b9; box-shadow: 0 0 0 7px #d5e9b925; }
+    .section { padding: 54px 0 24px; }
+    .section-head { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 22px; }
+    .section .eyebrow { color: #78958a; margin-bottom: 4px; }
+    h2 { margin: 0; font-size: clamp(25px, 3vw, 32px); letter-spacing: -.04em; }
+    .section-description { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
+    .search { display: block; position: relative; width: min(300px, 100%); }
+    .search:before { content: "⌕"; position: absolute; left: 15px; top: 6px; font-size: 26px; color: #7d9389; pointer-events: none; }
+    .search input {
+      width: 100%; height: 46px; padding: 0 16px 0 42px; border: 1px solid var(--line);
+      border-radius: 13px; outline: 0; background: #fff; color: var(--ink);
+      box-shadow: 0 3px 12px #254d3910; font: inherit; font-size: 13px;
+    }
+    .search input:focus { border-color: #60977d; box-shadow: 0 0 0 4px #438e6824; }
+    .projects { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+    .project-card {
+      position: relative; min-width: 0; min-height: 242px; display: flex; flex-direction: column;
+      padding: 23px 24px 19px; border: 1px solid #e3e9df; border-radius: 19px;
+      background: #fff; text-decoration: none; box-shadow: 0 8px 24px #234b3510;
+      transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    }
+    a.project-card:hover, a.project-card:focus-visible { transform: translateY(-4px); border-color: #8abda3; box-shadow: 0 16px 32px #1b513127; outline: none; }
+    .card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+    .project-icon { position: relative; display: block; width: 46px; height: 46px; border-radius: 13px; background: #edf5ec; }
+    .project-icon span { position: absolute; border: 1.5px solid #5c9475; border-radius: 2px; }
+    .project-icon span:nth-child(1) { inset: 11px 13px 11px 10px; }
+    .project-icon span:nth-child(2) { width: 1px; top: 11px; bottom: 11px; left: 23px; border-right: 0; }
+    .project-icon span:nth-child(3) { width: 11px; height: 1px; left: 11px; top: 23px; border-bottom: 0; }
+    .availability { display: inline-flex; align-items: center; gap: 7px; padding: 5px 10px; border-radius: 99px; font-size: 11px; font-weight: 800; white-space: nowrap; }
+    .availability i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .availability.ready { color: #28704b; background: #e9f6ec; }
+    .availability.issue { color: #9b642e; background: #fff0dd; }
+    .card-name { display: block; font-size: 20px; font-weight: 800; line-height: 1.35; overflow-wrap: anywhere; }
+    .card-id { display: block; color: #96a49b; font: 11px/1.5 ui-monospace, Consolas, monospace; margin-top: 5px; overflow-wrap: anywhere; }
+    .card-data { display: flex; flex-wrap: wrap; gap: 7px 17px; margin-top: 20px; color: #65766c; font-size: 12px; }
+    .card-data strong { color: var(--ink); font-weight: 800; }
+    .card-bottom { display: flex; align-items: center; gap: 12px; margin-top: auto; padding-top: 18px; }
+    .stage { padding: 4px 9px; border-radius: 6px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+    .stage.confirmed { color: #286a4a; background: #eaf5ec; }
+    .stage.pending { color: #865d27; background: #f9f0dd; }
+    .date { color: #8b9a90; font-size: 11px; margin-left: auto; white-space: nowrap; }
+    .open-arrow { display: grid; place-items: center; width: 27px; height: 27px; border-radius: 50%; background: #e9f2e9; color: #277354; font-size: 15px; font-weight: 700; }
+    .archive { margin-top: 23px; border: 1px solid #e1e4d9; border-radius: 15px; background: #fbfaf6; overflow: hidden; }
+    .archive summary { display: flex; align-items: center; gap: 10px; padding: 17px 20px; cursor: pointer; font-size: 13px; font-weight: 800; list-style: none; }
+    .archive summary::-webkit-details-marker { display: none; }
+    .archive summary strong { display: grid; place-items: center; min-width: 23px; height: 23px; padding: 0 5px; border-radius: 8px; background: #f1e8d8; color: #916f46; font-size: 11px; }
+    .summary-arrow { margin-left: auto; font-size: 20px; line-height: 1; color: #8c9a90; transition: transform .2s ease; }
+    .archive[open] .summary-arrow { transform: rotate(180deg); }
+    .archive-list { border-top: 1px solid #e7e9e0; max-height: 470px; overflow-y: auto; padding: 6px 18px; }
+    .archive-row.project-card { display: grid; grid-template-columns: minmax(150px, 1.5fr) minmax(145px, 1fr) 80px auto; align-items: center; gap: 14px; min-height: 0; padding: 13px 2px; border: 0; border-bottom: 1px solid #e8e9e1; border-radius: 0; background: transparent; box-shadow: none; }
+    .archive-row:last-child { border-bottom: 0; }
+    .archive-row .card-name { font-size: 13px; font-weight: 750; }
+    .archive-row .card-id { font-size: 10px; margin-top: 0; }
+    .archive-reason { font-size: 11px; color: #866f55; }
+    .archive-row .date { margin: 0; }
+    .archive-row .availability { justify-self: end; }
+    .empty-state { grid-column: 1 / -1; text-align: center; padding: 52px 20px; border: 1px dashed #cad9c9; border-radius: 18px; background: #ffffffb8; }
+    .empty-icon { display: block; color: #8daf98; font-size: 38px; line-height: 1; }
+    .empty-state h2 { margin: 10px 0 3px; font-size: 20px; }
+    .empty-state p { margin: 0; color: var(--muted); font-size: 13px; }
+    .note { display: flex; align-items: flex-start; gap: 12px; margin: 28px 0 48px; padding: 17px 19px; background: #eaf1e8; border: 1px solid #d8e6d7; border-radius: 13px; color: #4d6b5c; font-size: 12px; }
+    .note-symbol { display: grid; place-items: center; flex: none; width: 23px; height: 23px; border-radius: 50%; background: #d3e4d2; color: #396746; font-weight: 800; }
+    .note p { margin: 0; }
+    footer { display: flex; justify-content: space-between; gap: 12px; padding: 0 0 32px; color: #8c9a90; font-size: 11px; }
+    footer a { text-decoration: none; color: #607d6f; }
+    footer a:hover { text-decoration: underline; }
+    @media (max-width: 820px) { .hero-art { right: -86px; opacity: .26; } .hero-copy { padding: 38px; } }
+    @media (max-width: 680px) {
+      .shell { width: min(100% - 28px, 500px); }
+      .topbar { height: 70px; }
+      .hero { min-height: 0; border-radius: 19px; }
+      .hero-copy { padding: 33px 28px; }
+      .hero-art { display: none; }
+      .section { padding-top: 36px; }
+      .section-head { align-items: stretch; flex-direction: column; gap: 16px; }
+      .search { width: 100%; }
+      .projects { grid-template-columns: 1fr; gap: 13px; }
+      .project-card { min-height: 225px; padding: 20px; }
+      .archive-row.project-card { grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; }
+      .archive-row-main { grid-column: 1; }
+      .archive-row .availability { grid-column: 2; grid-row: 1; }
+      .archive-reason { grid-column: 1 / -1; }
+      .archive-row .date { grid-column: 1 / -1; }
+      footer { flex-direction: column; }
+    }
+    @media (prefers-reduced-motion: reduce) { .project-card { transition: none; } }
+  </style>
+</head>
+<body>
+  <header class="topbar shell">
+    <a class="brand" href="/projects" aria-label="家具工作台，工程档案"><span class="brand-mark">F</span><span>家具工作台<small>FURNITURE STUDIO</small></span></a>
+    <a class="top-link" href="/docs">接口文档 ↗</a>
+  </header>
+  <main class="shell">
+    <section class="hero" aria-labelledby="page-title">
+      <div class="hero-copy">
+        <p class="eyebrow">Project archive / 工程档案</p>
+        <h1 id="page-title">每个家的想法，<br><em>都可以接着做。</em></h1>
+        <p class="hero-description">从已保存的工程继续查看房间布局。选择一张卡片，就能回到这个工程的最新版本。</p>
+        <div class="hero-stats" aria-label="工程概况">
+          <span class="hero-stat"><strong>__TOTAL_COUNT__</strong> 个已保存</span>
+          <span class="hero-stat"><strong>__READY_COUNT__</strong> 个可打开</span>
+          <span class="hero-stat"><strong>__ISSUE_COUNT__</strong> 个暂不可预览</span>
+        </div>
+      </div>
+      <div class="hero-art" aria-hidden="true"><div class="plan"><span class="plan-room one"></span><span class="plan-room two"></span><span class="plan-room three"></span><span class="plan-dot"></span></div></div>
+    </section>
+    <section class="section" aria-labelledby="projects-heading">
+      <div class="section-head">
+        <div><p class="eyebrow">Your projects</p><h2 id="projects-heading">已保存的工程</h2><p class="section-description">按创建时间排列，可搜索工程名称或编号。</p></div>
+        <label class="search"><input id="project-search" type="search" placeholder="搜索工程名称或编号" aria-label="搜索工程名称或编号" autocomplete="off"></label>
+      </div>
+      <div class="projects" id="project-list">__READY_CARDS__</div>
+      __ISSUE_SECTION__
+      <p class="empty-state" id="no-results" hidden>没有找到匹配的工程，换个关键词试试。</p>
+    </section>
+    <aside class="note"><span class="note-symbol" aria-hidden="true">i</span><p>工程不会因为保存时间久而自动过期。这里会检查工程文件及最新版布局能否由当前布局页打开；旧格式不兼容或文件有问题时，会在列表里说明。</p></aside>
+  </main>
+  <footer class="shell"><span>家具工作台 · 本机工程档案</span><span>关掉最后一页后，预览服务会自己停。</span></footer>
+  <script>
+    const search = document.getElementById("project-search");
+    const cards = [...document.querySelectorAll(".project-card")];
+    const archive = document.getElementById("unavailable-projects");
+    search.addEventListener("input", () => {
+      const term = search.value.trim().toLocaleLowerCase();
+      let shown = 0;
+      for (const card of cards) {
+        card.hidden = !card.dataset.search.toLocaleLowerCase().includes(term);
+        if (!card.hidden) shown += 1;
+      }
+      if (archive) {
+        const issueMatches = [...archive.querySelectorAll(".project-card")].some(card => !card.hidden);
+        archive.hidden = Boolean(term) && !issueMatches;
+        if (term) archive.open = issueMatches;
+      }
+      document.getElementById("no-results").hidden = cards.length === 0 || shown !== 0;
+    });
+    function pulsePreview() { fetch("/api/preview/presence", {method:"POST",cache:"no-store",keepalive:true}).catch(function(){}); }
+    pulsePreview();
+    setInterval(pulsePreview, 1000);
+  </script>
+</body>
+</html>

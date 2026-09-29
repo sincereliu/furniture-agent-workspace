@@ -349,7 +349,7 @@ class ProjectPreviewTests(unittest.TestCase):
             800,
         )
 
-    def test_project_list_names_saved_layouts_and_skips_unreadable_files(self) -> None:
+    def test_project_list_shows_openable_and_unavailable_projects(self) -> None:
         ready = self.orchestrator.create_project("张家卧室", home_layout(bed_offset_mm=200))
         self.orchestrator.confirm_stage(ready, "layout_plan")
         pending = self.orchestrator.create_project("工作室", home_layout(bed_offset_mm=400))
@@ -376,27 +376,78 @@ class ProjectPreviewTests(unittest.TestCase):
         self.assertFalse(listed[0]["layout_confirmed"])
         self.assertEqual(listed[1]["name"], "张家卧室")
         self.assertTrue(listed[1]["layout_confirmed"])
+        inspected = self.store.inspect_projects()
+        self.assertEqual(
+            [row["availability"] for row in inspected],
+            ["ready", "ready", "unavailable", "unavailable"],
+        )
+        self.assertEqual(inspected[0]["room_count"], 2)
+        self.assertEqual(inspected[0]["item_count"], 2)
 
         page = asyncio.run(server.project_index()).body.decode("utf-8")
-        self.assertIn("已经做过的项目", page)
+        self.assertIn("已保存的工程", page)
         server_source = (SCRIPT_ROOT / "server.py").read_text(encoding="utf-8")
-        self.assertNotIn("<h1>已经做过的项目</h1>", server_source)
+        self.assertNotIn("<h2 id=\"projects-heading\">已保存的工程</h2>", server_source)
         self.assertIn("furniture_layout.project_list", server_source)
         self.assertIn("关掉最后一页后，预览服务会自己停", page)
         self.assertIn("/api/preview/presence", page)
+        self.assertIn('id="project-search"', page)
         self.assertIn("张家卧室", page)
         self.assertIn("工作室", page)
         self.assertIn("布局已确认", page)
-        self.assertIn("还没确认", page)
+        self.assertIn("布局待确认", page)
         self.assertIn(f"/api/project/{ready.id}/preview", page)
-        self.assertNotIn("错位", page)
-        self.assertNotIn(">broken<", page)
+        self.assertIn("错位", page)
+        self.assertIn("broken", page)
+        self.assertNotIn("/api/project/mismatch/preview", page)
+        self.assertNotIn("/api/project/broken/preview", page)
 
         payload = asyncio.run(server.project_index_json())
         self.assertEqual(
             [row["name"] for row in payload["projects"]],
-            ["工作室", "张家卧室"],
+            ["工作室", "张家卧室", "错位", "broken"],
         )
+
+    def test_old_project_does_not_expire_but_unsupported_layout_cannot_open(self) -> None:
+        old = self.orchestrator.create_project("旧工程", home_layout(bed_offset_mm=200))
+        old.created_at = "2020-01-01T00:00:00+00:00"
+        self.store.save(old)
+        self.assertEqual(self.store.inspect_projects()[0]["availability"], "ready")
+
+        file = self.store.project_dir(old.id) / "project.json"
+        payload = json.loads(file.read_text(encoding="utf-8"))
+        payload["revisions"][-1]["layout"]["schema_version"] = 999
+        file.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        row = self.store.inspect_projects()[0]
+        self.assertEqual(row["availability"], "incompatible")
+        self.assertIn("格式不兼容", asyncio.run(server.project_index()).body.decode("utf-8"))
+        with self.assertRaises(HTTPException) as blocked:
+            asyncio.run(server.project_preview(old.id, local_request()))
+        self.assertEqual(blocked.exception.status_code, 422)
+
+    def test_legacy_intent_project_keeps_its_name_in_the_unavailable_archive(self) -> None:
+        legacy = self.root / "project_legacy"
+        legacy.mkdir(parents=True)
+        (legacy / "project.json").write_text(
+            json.dumps(
+                {
+                    "id": "project_legacy",
+                    "name": "旧版书柜",
+                    "created_at": "2026-08-01T00:00:00+00:00",
+                    "revisions": [{"id": "rev_old", "number": 1, "intent": {}}],
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        row = self.store.inspect_projects()[0]
+        self.assertEqual(row["name"], "旧版书柜")
+        self.assertEqual(row["availability"], "incompatible")
+        self.assertIn("没有房间布局", row["reason"])
+        page = asyncio.run(server.project_index()).body.decode("utf-8")
+        self.assertIn("旧版书柜", page)
+        self.assertIn('id="unavailable-projects"', page)
+        self.assertNotIn("/api/project/project_legacy/preview", page)
 
     def test_editable_preview_can_type_width_depth_height(self) -> None:
         project = self.orchestrator.create_project("家", home_layout(bed_offset_mm=200))
