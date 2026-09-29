@@ -58,7 +58,9 @@ from furniture_workflow.workflow_store import JsonProjectStore
 
 API_VERSION = "0.8.0"
 # 最后一页关掉后，超过这个秒数没有页面报「还在」，预览进程就退出。
-PRESENCE_GRACE_SECONDS = 5.0
+# 取 30 秒而不是 5 秒：进程常常是"起服务 + 开浏览器"两步，5 秒内浏览器可能还没把
+# 页面加载到发第一次 presence，服务就自己关了——人看到的现象是"页面打不开"。
+PRESENCE_GRACE_SECONDS = 30.0
 SAFE_PROJECT_ID = re.compile(r"^[A-Za-z0-9_-]+$")
 _LOCAL_HOSTS = {"127.0.0.1", "::1"}
 #: 写请求带回编辑租约凭据的头。
