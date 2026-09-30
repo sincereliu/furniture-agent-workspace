@@ -7,105 +7,30 @@ description: 用于 layout_plan 阶段，也是家具流水线的入口。当用
 
 阶段：`layout_plan`
 
-**这一阶段只回答三件事：家里有哪些房间、每件家具的盒子摆在哪、哪些盒子以后要做成柜。** 交出去的是一版还没确认的全屋摆放。柜门、层板、材料、柜体模型都不在这里做。
+本阶段整理房间、家具包络和摆放，交付待确认的布局；柜门、层板、材料和柜体模型留给下游阶段。
 
-## 人要交什么
+## 输入
 
-客户的话整理成 `rooms[]`。每间房要有长、宽、高，单位毫米。缺了就问，不要编。
+- 有房间时整理成 `rooms[]`。每间房必须有 `id`、`width_mm`、`depth_mm`、`height_mm`；缺尺寸就问，不编造。家具写在该房间的 `items[]`，墙上的门窗写在 `openings[]`（`kind: door|window`）。
+- 每件家具给 `id`、`category`、深度、高度和 `placement`；固定宽度的件还要给 `width`。`category` 是给人看的种类，不决定是否制造。
+- 要做成柜的件写 `furniture_category: floor_cabinet|wall_cabinet`。`wall_cabinet` 表示吊柜，不表示靠墙摆放。只有客户点名某件不需要制造时才写 `manufacture: false`；该件仍参与摆放，但不进入板件阶段。
+- `placement.mode` 只有 `wall` 和 `free`：靠墙写 `host_wall`、可选 `offset_mm`；自由摆写局部原点坐标和转角。`fill: true` 是 `wall` 的选项，可省 `width`，由墙上空段计算。吊柜离地写 `placement.origin_z_mm`。坐标、点序和拒绝条件见[空间布局规则](references/spatial-layout-rules.md)。
+- 客户没点名家具清单时，按[房间场景指南](references/room-scene-guide.md)列出待确认假设，得到客户认可后再调用工具。
 
-每件家具是一个盒子，写在这间房的 `items[]` 里：
+只有一件柜且没有房间时，走单件捷径：传 `furniture_category`、`width_mm`、`depth_mm`、`height_mm`，可选 `origin_z_mm`；此时不要求房间尺寸。输入写法见[示例](references/input-examples.md)。
 
-- `category`：给人看的种类，例如 `bed`、`sofa`、`wardrobe`、`bookcase`。种类不决定这件做不做。
-- `furniture_category`：要做成柜的件都写。允许的值只有 `floor_cabinet`（落地柜）和 `wall_cabinet`（吊在墙上的柜）。靠墙摆仍然不写 `wall_cabinet`。
-- `manufacture`：只有客户点名某一件不需要制造时写 `false`。这件的包络仍留下，用来和要制造的家具一起摆。没写就是要制造。不制造只来自客户对这一件的点名，不来自种类。
-- 这间房墙上的门和窗写在 `openings[]`，`kind` 为 `door` 或 `window`。摆盒子时要躲开它们。
+## 操作流程
 
-每件怎么摆，写在它的 `placement` 里，三选一。局部原点、足迹点序、正面和转角遵守 [坐标约定](references/spatial-layout-rules.md#坐标约定)，完整换算规则在同一份文档：
+1. 整理客户给出的尺寸、家具和摆法；缺房间尺寸先问，猜测的清单先请客户确认。
+2. 调用 `furniture_create_project(name, rooms)`；单件捷径改传上面的单件字段。运行时换算坐标并检查越界、家具干涉和门窗遮挡；失败时说明冲突，修改提案后重试，不自行换墙重排。
+3. 成功后展示 `project.current_view`，记下 `project.id`，等待客户审看。预览页默认自动打开；只有打开失败才给 `preview.url`。预览服务的操作见[预览维护](references/preview-ops.md)。
+4. 客户认可后调用 `furniture_confirm_stage(project_id, stage="layout_plan")`；也可带 `room_id` 逐间确认，所有待审房间都确认后布局检查点才成立。已确认且未标记 `manufacture: false` 的柜体包络成为下游只读单元。
+5. 客户要改房间或家具，调用 `furniture_revise_layout(project_id, rooms)`，再展示新版 `current_view` 等待确认。
+6. 布局确认后，客户要做柜体内部时才按[板件阶段](../panel-plan/SKILL.md)准备 `stage_input` 并调用 `furniture_run_next`。每次成功调用后按 `required_tool` / `allowed_tools` 停在当前检查点；工具参数见[交互工具面](../cad-generated/references/agent-tool-contract.md)。
 
-- 靠墙：`mode: wall`，写背面贴哪面墙（`host_wall`）、沿墙从哪开始（`offset_mm`）。
-- 自由：`mode: free`，写家具局部原点在房间中的坐标及转角。
-- 沿墙铺满：靠墙再加 `fill: true`。可以不写 `width`，宽度由这面墙剩下的空段算出来。
+## 按需阅读
 
-吊柜离地写 `placement.origin_z_mm`。客户没点名有哪些家具时，按 [房间场景指南](references/room-scene-guide.md) 列出假设，等客户点头再调用工具。
-
-最小例子：一间卧室，一个要做的书柜靠北墙，一个要做的衣柜沿西墙铺满。
-
-```yaml
-rooms:
-  - id: bedroom
-    width_mm: 3600
-    depth_mm: 4200
-    height_mm: 2800
-    openings:
-      - id: door-1
-        kind: door
-        wall: south
-        offset_mm: 400
-        width_mm: 900
-        height_mm: 2100
-    items:
-      - id: bookcase
-        category: bookcase
-        furniture_category: floor_cabinet
-        width: 1200
-        depth: 400
-        height: 2100
-        placement:
-          mode: wall
-          host_wall: north
-          offset_mm: 900
-      - id: wardrobe
-        category: wardrobe
-        furniture_category: floor_cabinet
-        depth: 600
-        height: 2400
-        placement:
-          mode: wall
-          host_wall: west
-          fill: true
-```
-
-客户说房间里已经有一件、不用做时，给那一件加上 `manufacture: false`。下面这只书柜仍占位置，确认后不进板件：
-
-```yaml
-- id: bookcase
-  category: bookcase
-  furniture_category: floor_cabinet
-  manufacture: false
-  width: 900
-  depth: 350
-  height: 2100
-  placement:
-    mode: wall
-    host_wall: east
-    offset_mm: 200
-```
-
-只有一件柜、还没有房间时，可以不写 `rooms[]`，只给 `furniture_category`、宽深高，以及可选的离地 `origin_z_mm`。这是开工捷径。有房间就用上面的 `rooms[]`。
-
-## 一步一步做什么
-
-按编号往下做。第 4 步是第 3 步失败时的回头路。第 7 步是确认之后客户要改房间。
-
-1. **收齐房间尺寸。** 长、宽、高缺一个就停下来问。不要用常见户型填上。
-2. **收成上面的 `rooms[]`。** 这一步只整理客户的话，还不调用工具。清单是猜的，就先把假设给客户看。
-3. **调用 `furniture_create_project`。** 传入项目 `name` 和 `rooms`。代码先把摆法换成毫米坐标，再检查三件事：盒子出不出房间、盒子互相干涉不干涉、遮不遮挡这间房的门窗洞口。三件都过了才建出项目。
-4. **失败就改了再调。** 把返回的冲突告诉客户，改那一件的位置或尺寸，再调用一次。代码不会自己换一面墙重排。
-5. **成功就停。** 把 `project.current_view`（各房间的图）给客户看，记下 `project.id`。`furniture_create_project` 会在本机打开预览页，不要再把链接交给客户去点。打开失败时才告诉客户 `preview.url`。之后每次 `furniture_revise_layout`，这一页自己换成新的包络，不要再开一次。客户要停掉后台时，关掉项目列表或房间页，预览服务随后自己退出；也可以点房间页上的「退出」马上停。不要接着做柜体内部。关机后再看已经做过的项目，在仓库根目录运行 `domain/skills/layout-plan/scripts/open_projects.py`。这一页属于布局，不要让客户去 CAD 阶段的目录里找。
-6. **客户认这版摆放，再确认。** 调用 `furniture_confirm_stage(project_id, stage="layout_plan")`。确认后，客户没有点名不制造、并且带 `furniture_category` 的柜子冻成下游只读的盒子：宽、深、高，加上这个柜类。`manufacture: false` 的包络留在房间里，不在这批盒子中。之后做板件只读这批盒子。
-7. **客户要改房间或盒子。** 调用 `furniture_revise_layout(project_id, rooms)`，传入改过的 `rooms`。这是另起一版布局。
-8. **客户要做某一件柜的内部。** 第 6 步已经确认之后，调用 `furniture_run_next(project_id, stage_input=...)` 进入板件阶段。`stage_input` 按板件阶段准备。客户点名不制造的包络留在房间图里。工具参数见 [交互工具面](../cad-generated/references/agent-tool-contract.md)。
-
-## 本阶段不做什么
-
-- 柜门数量、层板、抽屉、板厚、背板、踢脚：板件阶段。
-- 材料、五金：制造阶段。
-- 柜体模型：布局确认之后，用 `furniture_run_next(..., generate_cad=True)`。本阶段画出的房间图不是柜体模型。
-
-## 参考导航
-
-- 靠墙、自由摆、沿墙铺满怎么换算，以及什么情况会拒绝：[空间布局规则](references/spatial-layout-rules.md)
-- 换算、摆放检查、全屋摆放、房间页、单间各由哪个文件做：[运行时映射](references/runtime-map.md)
-- 客户没给清单时的待确认假设：[房间场景指南](references/room-scene-guide.md)
-- 可执行柜类：[可执行柜类](references/intake/catalog.yaml)
-- 未落地需求与待议项（门洞编辑、view/editor 互跳、代码是否共用等）：[backlog](references/backlog.md)，日常实现不必读
+- 改坐标、靠墙/自由摆、`fill` 或摆放检查：[空间布局规则](references/spatial-layout-rules.md)；定位实现文件与测试：[运行时映射](references/runtime-map.md)。
+- 改输入示例：[输入示例](references/input-examples.md)；客户没给清单：[房间场景指南](references/room-scene-guide.md)。
+- 排查房间页、预览服务或重开项目：[预览维护](references/preview-ops.md)。
+- 改可执行柜类：[可执行柜类](references/intake/catalog.yaml)。未落地需求才读 [backlog](references/backlog.md)。

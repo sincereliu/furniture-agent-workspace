@@ -1,24 +1,6 @@
 # 运行时映射（布局阶段）
 
-核对实现或规划演进时再读。几何口径以 [空间布局规则](spatial-layout-rules.md) 为准；卧室/客厅清单只是 LLM 假设，见 [房间场景指南](room-scene-guide.md)。
-
-各文件先看它干什么。最后一列「代码归类」是给边界审计用的，看功能看前两列。
-
-## 谁给意图，谁换毫米
-
-代码**不会**按「这是卧室」自动排床和衣柜。房间类型不是算法输入。
-
-- 人 / LLM 给出每件的外形尺寸和摆法：靠哪面墙、从哪开始、要不要沿墙铺满，或自由坐标。
-- 换成毫米坐标的是 `placement.py`：原点、转角、沿墙铺满的实宽、足迹、净距。
-- 检查能不能站住的是 `placement_check.py`：越界、外形干涉、遮挡门窗洞口。失败整单拒绝，**不换墙重排**。要改位置，改提案或在房间页里拖，再走同一条算路。
-
-## 算路
-
-读意图 → 换成毫米坐标（`wall` / `free` / `fill`）→ 摆放检查 → 通过了再画房间的图。
-
-`fill` 件等所有固定件摆完再算：先扣同高度上门窗、贴墙障碍、已摆家具，未给偏移取最长空段，给了则从该点铺到该空段终点。空段没有就失败。
-
-三种摆法的公式见 [空间布局规则](spatial-layout-rules.md)。贴边接触不算干涉；外形尺寸发生正体积相交、越出房间、遮挡门窗洞口才拒绝。
+核对实现或规划演进时再读。几何口径以[空间布局规则](spatial-layout-rules.md)为准；预览服务的操作见[预览维护](preview-ops.md)。最后一列「代码归类」供边界审计使用。
 
 ## 全屋摆放和单间
 
@@ -28,10 +10,6 @@
 | --- | --- | --- | --- |
 | 建一整套房子的摆放 | `layout_entry.plan_project_layout` / `ProjectLayout.from_source` | 越界、干涉或遮挡洞口就不建项目 | Project Store；确认后冻成给板件的盒子 |
 | 建单独一间 | `layout_entry.plan_room_scene` | 同一套 `validation.admit_scene` | `scene_store` → `generated/room-scenes/`；这间不进六阶段 |
-
-浏览器里的项目名单是 `project_list.py`，房间页是 `room_page.py`（模板在 `templates/room_page.html`）。开机后手动打开名单，运行本阶段的 `scripts/open_projects.py`。它拉起的本机进程仍是 `cad-generated/scripts/server.py`（单间的保存和编辑都在那里）。这个进程不进六阶段，也不是柜体 CAD。同一服务上的 `GET /api/project/{project_id}/preview` 只读 Project Store 里的最新摆放，不写 `stage_outputs`。柜体 STEP 仍走确认之后的 `furniture_run_next(..., generate_cad=True)`。
-
-项目名单读取 `store/<id>/project.json` 时检查能否解析、工程编号是否匹配、有无修订、最新版布局格式是否受支持，以及布局结构是否有效。当前布局页无法打开的工程仍显示在不可点击的折叠列表里，并说明原因；预览路由也拒绝不可用工程。工程不会因创建时间久而自动过期；编辑租约的到期与工程存档无关。
 
 下游板件只读已确认的 `LayoutUnit`（`furniture_category` 为 `floor_cabinet` / `wall_cabinet`，且该件不是 `manufacture: false`）。客户点名不制造的包络留在房间里，不是 `LayoutUnit`。`room_shell.py` 写的房间外壳 STEP 不是柜体模型。
 
