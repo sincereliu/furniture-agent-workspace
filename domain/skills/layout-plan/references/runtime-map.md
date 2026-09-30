@@ -68,4 +68,6 @@
 
 预览几何与标签锚点统一使用房间坐标 `[x, y, z]`（宽、深、高，毫米）。进入 Three.js 时调用 `layout_frame.roomToThree()`，相机回读与拾取返回时调用 `threeToRoom()`；不在调用方手写换序。屏幕像素坐标与 Three.js 原生网格旋转仍由渲染层计算。固定轴和边线随场景内容构建，相机移动时只更新投影与墙面显示。
 
+[房间坐标行为测试](../../cad-generated/scripts/tests/test_room_coordinate_contract.py) 固定局部原点、足迹点序、正负转角、四面靠墙的正面方向、离地高度以及对称包络的序列化。通过 `run_tests.py -p test_room_coordinate_contract.py` 单独选择。前端的 [frame_check.mjs](../scripts/furniture_layout/static/frame_check.mjs) 检查三轴映射和标注；立方体占用空间相同但点序不同，也必须保留各自局部宽深方向。在仓库根目录运行 `node domain/skills/layout-plan/scripts/furniture_layout/static/frame_check.mjs`。
+
 未落地与待议需求见 [backlog](backlog.md)。改坐标、摆放检查或房间页时不必读。

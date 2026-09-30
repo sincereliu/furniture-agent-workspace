@@ -78,3 +78,27 @@ for (const angle of [Math.PI / 2, Math.PI / 6]) {
 }
 assert.deepEqual(dimensionAnnotations(room, { ...item, clearances_mm: { west: 0, north: { gap: 0 } } }).map((spec) => spec.text), ["宽 1200", "深 500", "高 1700"]);
 console.log("room axes and dimension anchors ok (0°, 90°, 30°)");
+
+// 两个立方体占用同一空间，但 P0 与正面不同；标注必须沿各自局部边，不能按包围框重排。
+const cube = {
+  height: 600, placement: { origin_z_mm: 300 },
+  footprint: [[2000, 1800], [2600, 1800], [2600, 2400], [2000, 2400]],
+};
+const turnedCube = {
+  ...cube,
+  footprint: [[2600, 1800], [2600, 2400], [2000, 2400], [2000, 1800]],
+};
+const cubeAnnotations = dimensionAnnotations(room, cube);
+const turnedAnnotations = dimensionAnnotations(room, turnedCube);
+assert.deepEqual(cubeAnnotations.map((spec) => spec.text), ["宽 600", "深 600", "高 600"]);
+assert.deepEqual(turnedAnnotations.map((spec) => spec.text), ["宽 600", "深 600", "高 600"]);
+assert.deepEqual(cubeAnnotations.map((spec) => spec.anchor), [
+  [2300, 1710, 308], [1910, 2100, 308], [2690, 2400, 600],
+]);
+assert.deepEqual(turnedAnnotations.map((spec) => spec.anchor), [
+  [2690, 2100, 308], [2300, 1710, 308], [2000, 2490, 600],
+]);
+assert.deepEqual(dimensionAnnotations(room, {
+  ...turnedCube, footprint: turnedCube.footprint.map(([x_mm, y_mm]) => ({ x_mm, y_mm })),
+}), turnedAnnotations);
+console.log("symmetric envelopes retain local axes and ordered footprint");

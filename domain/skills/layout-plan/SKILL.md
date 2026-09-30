@@ -20,10 +20,10 @@ description: 用于 layout_plan 阶段，也是家具流水线的入口。当用
 - `manufacture`：只有客户点名某一件不需要制造时写 `false`。这件的包络仍留下，用来和要制造的家具一起摆。没写就是要制造。不制造只来自客户对这一件的点名，不来自种类。
 - 这间房墙上的门和窗写在 `openings[]`，`kind` 为 `door` 或 `window`。摆盒子时要躲开它们。
 
-每件怎么摆，写在它的 `placement` 里，三选一。换算公式在 [空间布局规则](references/spatial-layout-rules.md)：
+每件怎么摆，写在它的 `placement` 里，三选一。局部原点、足迹点序、正面和转角遵守 [坐标约定](references/spatial-layout-rules.md#坐标约定)，完整换算规则在同一份文档：
 
 - 靠墙：`mode: wall`，写背面贴哪面墙（`host_wall`）、沿墙从哪开始（`offset_mm`）。
-- 自由：`mode: free`，直接写房间里的坐标。
+- 自由：`mode: free`，写家具局部原点在房间中的坐标及转角。
 - 沿墙铺满：靠墙再加 `fill: true`。可以不写 `width`，宽度由这面墙剩下的空段算出来。
 
 吊柜离地写 `placement.origin_z_mm`。客户没点名有哪些家具时，按 [房间场景指南](references/room-scene-guide.md) 列出假设，等客户点头再调用工具。
