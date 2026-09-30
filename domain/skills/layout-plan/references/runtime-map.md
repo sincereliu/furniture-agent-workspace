@@ -56,6 +56,7 @@
 | 把预览页打开，并准备这一页要读的数据 | `open_preview.py` | side_effect |
 | 房间页上的三维盒子 | `static/layout_scene.js` | calculation |
 | 房间的东、南、上怎么画到屏幕上 | `static/layout_frame.js` | calculation |
+| 房间轴、家具尺寸线和标签锚点；全部用房间坐标计算 | `static/layout_annotations.js` | calculation |
 | 记下移动、旋转或改尺寸，这一步先不算。全屋和单间共用这一套字段 | `scene_edit.py` | schema |
 | 把这次改动算进某一间，算出一版还没确认的摆放。版本号和落盘不在这里 | `project_edit.py` | calculation |
 | 三个入口：建全屋摆放（`plan_project_layout`）、建单间（`plan_room_scene`）、写房间外壳（`write_room_shell`） | `layout_entry.py` | structured_protocol |
@@ -64,5 +65,7 @@
 | 房间外壳的 STEP：地、墙、门窗洞。不是柜体模型 | `room_shell.py` | side_effect |
 
 房间页上拖动只是本地先画，松手后后端再换算并检查。改 `placement_check.py` 必须同步改 `templates/room_page.html` 里的脚本。
+
+预览几何与标签锚点统一使用房间坐标 `[x, y, z]`（宽、深、高，毫米）。进入 Three.js 时调用 `layout_frame.roomToThree()`，相机回读与拾取返回时调用 `threeToRoom()`；不在调用方手写换序。屏幕像素坐标与 Three.js 原生网格旋转仍由渲染层计算。固定轴和边线随场景内容构建，相机移动时只更新投影与墙面显示。
 
 未落地与待议需求见 [backlog](backlog.md)。改坐标、摆放检查或房间页时不必读。

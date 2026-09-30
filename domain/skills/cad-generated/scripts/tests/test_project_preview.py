@@ -180,7 +180,7 @@ class ProjectPreviewTests(unittest.TestCase):
         self.assertIn("mountLayout", html)
         self.assertIn('data-field="coord"', html)
         self.assertIn("unprojectToGround(sx,sy)", html)
-        scene_js = (
+        scene_path = (
             WORKSPACE_ROOT
             / "domain"
             / "skills"
@@ -189,11 +189,11 @@ class ProjectPreviewTests(unittest.TestCase):
             / "furniture_layout"
             / "static"
             / "layout_scene.js"
-        ).read_text(encoding="utf-8")
-        # 三条轴各一个数字标签（轴名 + 房间真尺寸），正方向由箭头表示。
-        self.assertIn("X ${Math.round(width)}", scene_js)
-        self.assertIn("Y ${Math.round(depth)}", scene_js)
-        self.assertIn("Z ${Math.round(height)}", scene_js)
+        )
+        scene_js = scene_path.read_text(encoding="utf-8")
+        # 场景引用同源的房间轴与标注；数值行为由 frame_check.mjs 检查。
+        self.assertIn('./layout_annotations.js', scene_js)
+        self.assertTrue(scene_path.with_name("layout_annotations.js").is_file())
 
     def test_preview_switches_rooms_with_chips_and_a_shareable_room_link(self) -> None:
         """房间切换是药丸不是下拉；切房间要写进地址栏 ?room=，链接能分享、能复现。"""

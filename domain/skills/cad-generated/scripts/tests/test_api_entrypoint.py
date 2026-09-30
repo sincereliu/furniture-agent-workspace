@@ -103,7 +103,7 @@ class ApiEntrypointTests(unittest.TestCase):
         self.assertIn(b'id="coord"', viewer_response.body)
         self.assertNotIn(b'getContext("2d")', viewer_response.body)
         self.assertNotIn(b"function drawAxis()", viewer_response.body)
-        scene = (
+        scene_path = (
             WORKSPACE_ROOT
             / "domain"
             / "skills"
@@ -112,11 +112,11 @@ class ApiEntrypointTests(unittest.TestCase):
             / "furniture_layout"
             / "static"
             / "layout_scene.js"
-        ).read_text(encoding="utf-8")
-        # 三条轴各一个数字标签（轴名 + 房间真尺寸），正方向由箭头表示。
-        self.assertIn("X ${Math.round(width)}", scene)
-        self.assertIn("Y ${Math.round(depth)}", scene)
-        self.assertIn("Z ${Math.round(height)}", scene)
+        )
+        scene = scene_path.read_text(encoding="utf-8")
+        # 场景引用同源的房间轴与标注；数值行为由 frame_check.mjs 检查。
+        self.assertIn('./layout_annotations.js', scene)
+        self.assertTrue(scene_path.with_name("layout_annotations.js").is_file())
 
     def test_plan_room_rejects_missing_room_size(self) -> None:
         with self.assertRaises(ValidationError):

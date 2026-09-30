@@ -1,6 +1,10 @@
-// 房间坐标：X 东、Y 南、Z 上。three.js 是 Y 朝上的右手系。
-// 对应关系只有这一处：three (x, y, z) = 房间 (东, 上, 南)。
+// 房间点和方向统一为 [x, y, z]：X 宽/向东、Y 深/向南、Z 高/向上；点以毫米为单位。
+// Three.js 点和方向为 [x, y, z]：Y 向上。只在渲染/API 边界转换一次。
 export function roomToThree(x, y, z) {
+  return [x, z, y];
+}
+
+export function threeToRoom(x, y, z) {
   return [x, z, y];
 }
 
