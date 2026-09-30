@@ -37,8 +37,10 @@ export function wallVisibility(walls, cameraPosition, viewDirection, options = {
       cameraPosition[2] - wall.center[2],
     ];
     const cameraOutside = dot(wall.normal, rel) > 0;      // 相机在这面墙的外侧
-    // 立面视图里要画的是**对面**那面墙（窗和门在它上面）：法线与视线同向，
-    // 也就是"墙不在相机与房间中心之间"的严格版。
+    // 立面视图要画的是**墙的正面朝向相机**的那面（也就是窗和门所在的那面）：
+    // 它的朝外法线与"相机看出去的方向"同向——相机正对着墙的正面。
+    //   · 相机在南边看北：北墙法线 (0,0,-1)、视线 (0,0,-1) → 点积 +1 → 画北墙
+    //   · 同一视角下南墙法线 (0,0,+1) → 点积 -1 → 不画（它在相机身后）
     const facingAway = dot(wall.normal, [viewDirection[0], 0, viewDirection[2]]) > 0.7;
     return {
       id: wall.id,
