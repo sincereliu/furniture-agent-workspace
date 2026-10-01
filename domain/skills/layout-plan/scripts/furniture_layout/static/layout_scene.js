@@ -1,7 +1,8 @@
 import * as THREE from "three";
 import { OrbitControls } from "/vendor/three/0.186.0/OrbitControls.js";
-import { cameraThreePosition, roomToThree, threeToRoom } from "./layout_frame.js";
+import { cameraFov, cameraThreePosition, roomToThree, threeToRoom } from "./layout_frame.js";
 import { ROOM_AXES, roomAxes, dimensionAnnotations } from "./layout_annotations.js";
+import { placeLabels } from "./layout_labels.js";
 import { ELEVATION_PITCH, wallVisibility } from "./wall_view.js";
 
 export { cameraThreePosition, roomToThree };
@@ -157,6 +158,8 @@ export function mountLayout(canvas) {
   scene.add(content);
   const controls = new OrbitControls(camera, canvas);
   controls.enableDamping = false;
+  // 滚轮倍率由页面统一维护，避免 OrbitControls 距离与页面倍率各算一次。
+  controls.enableZoom = false;
   controls.screenSpacePanning = true;
   controls.mouseButtons = {
     LEFT: THREE.MOUSE.ROTATE,
@@ -173,6 +176,7 @@ export function mountLayout(canvas) {
   let pickables = [];
   let wallShells = [];
   let labelLayer = null;
+  let labelLeaders = null;
   let labelEntries = [];
   let axisGizmo = null;
   const WALL_FADE_MS = 150;  // 墙显隐/透明度的过渡时长：判据是二值的，靠它摊开突变
@@ -181,8 +185,8 @@ export function mountLayout(canvas) {
   let wallFadeTargets = [];  // 本趟渐变的目标
   let wallFadeStarted = 0;   // 本趟渐变的开始时刻（0 = 没有在跑的渐变）
   function setLens(fovDeg) {
-    const next = Math.max(2, Math.min(90, Number(fovDeg) || LENS_BASE));
-    if (Math.abs(camera.fov - next) < 0.01) return;
+    const next = Math.max(0.1, Math.min(150, Number(fovDeg) || LENS_BASE));
+    if (Math.abs(camera.fov - next) < 1e-6) return;
     camera.fov = next;
     camera.updateProjectionMatrix();
   }
@@ -190,7 +194,12 @@ export function mountLayout(canvas) {
   // 标注锚点始终是房间坐标，只在 refreshLabels() 的投影边界转为 Three.js 坐标。
   function addLabel(label) {
     if (!labelLayer) return;
-    labelEntries.push({ ...label, el: makeLabelElement(labelLayer, label) });
+    const leader = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    leader.setAttribute("stroke", `#${label.color.toString(16).padStart(6, "0")}`);
+    leader.setAttribute("stroke-width", "1");
+    leader.setAttribute("opacity", ".65");
+    labelLeaders.appendChild(leader);
+    labelEntries.push({ ...label, leader, el: makeLabelElement(labelLayer, label) });
   }
 
   /** DOM 标注：每帧把房间锚点投影到屏幕像素。字号恒定。 */
@@ -198,23 +207,29 @@ export function mountLayout(canvas) {
     if (!labelLayer || !labelEntries.length) return;
     const rect = canvas.getBoundingClientRect();
     camera.updateMatrixWorld(true);
-    for (const entry of labelEntries) {
+    const shown = [];
+    // 先摆房间标尺，再摆家具标注，使方位标尺位置稳定。
+    const entries = [...labelEntries].sort((a, b) => Number(Boolean(b.key)) - Number(Boolean(a.key)));
+    for (const entry of entries) {
       const projected = new THREE.Vector3(...roomToThree(...entry.anchor)).project(camera);
       const x = (projected.x * 0.5 + 0.5) * rect.width;
       const y = (-projected.y * 0.5 + 0.5) * rect.height;
-      const visible = projected.z < 1 && x > -80 && y > -20 && x < rect.width + 80 && y < rect.height + 20;
+      const visible = projected.z >= -1 && projected.z < 1 && x >= 0 && y >= 0 && x <= rect.width && y <= rect.height;
       entry.el.style.display = visible ? "block" : "none";
-      if (visible) entry.el.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px) translate(-50%,-50%)`;
+      entry.leader.style.display = "none";
+      if (visible) shown.push({ entry, x, y, width: entry.el.offsetWidth, height: entry.el.offsetHeight, offset: entry.offset });
     }
-    // 简单防重叠：同类标签挨太近就整体下推。
-    const shown = labelEntries.filter((entry) => entry.el.style.display !== "none");
-    for (let i = 0; i < shown.length; i += 1) {
-      for (let j = i + 1; j < shown.length; j += 1) {
-        const a = shown[i].el.getBoundingClientRect();
-        const b = shown[j].el.getBoundingClientRect();
-        if (Math.abs(a.top - b.top) < 16 && a.left < b.right && b.left < a.right) {
-          shown[j].el.style.transform += " translateY(16px)";
-        }
+    const positions = placeLabels(shown, rect.width, rect.height);
+    for (const [i, position] of positions.entries()) {
+      const { entry, x, y } = shown[i];
+      entry.offset = position.offset;
+      entry.el.style.transform = `translate(${Math.round(position.x)}px, ${Math.round(position.y)}px) translate(-50%,-50%)`;
+      if (Math.hypot(...position.offset) > 6) {
+        entry.leader.style.display = "block";
+        entry.leader.setAttribute("x1", x);
+        entry.leader.setAttribute("y1", y);
+        entry.leader.setAttribute("x2", position.x);
+        entry.leader.setAttribute("y2", position.y);
       }
     }
     drawAxisGizmo();
@@ -427,6 +442,7 @@ export function mountLayout(canvas) {
     camera.getWorldDirection(forward);
     return {
       position: threeToRoom(...camera.position.toArray()),
+      fov: camera.fov,
       forward: threeToRoom(...forward.toArray()),
       right: threeToRoom(...right.toArray()),
       up: threeToRoom(...up.toArray()),
@@ -474,22 +490,10 @@ export function mountLayout(canvas) {
     renderer.render(scene, camera);
   }
 
-  /**
-   * 设 fov。**关系只有一条**：`fov = LENS_BASE ÷ (用户缩放 × 收窄倍数)`。
-   *
-   * 为什么与距离无关：投影到屏幕的高度 = 距离 × tan(fov/2)。要让"观感尺寸"只由缩放决定，
-   * 就必须让 `距离 × tan(fov/2)` 恒定 —— 也就是 **距离拉远多少、tan(fov/2) 就同比例缩小**。
-   * 正视图把相机拉远 8 倍，fov 就按同一比例收窄（调用方传 zoom×pull），于是：
-   *   · 观感尺寸 = 基准取景 ÷ 用户缩放（切视角不改画面大小）；
-   *   · 透视收敛被压平 8 倍（立面的竖直棱线接近平行）。
-   *
-   * 曾经的错误：把"基准距离 ÷ 当前距离"当作 fov 系数（`48 × ref/dist`）。
-   * 那个式子让 fov 随距离变小，而屏幕高度 = 距离×tan(fov/2) 反而随距离**变大**，
-   * 于是切到正视图时画面暴涨 68 倍（就是"俯视图缩放比例太大、切换抖动"的根源）。
-   */
+  /** 倍率控制视场角；相机距离只随透视收窄倍数改变，不随滚轮进入房间。 */
   function setFovForZoom(zoom) {
     const z = Math.max(0.02, Number(zoom) || 1);
-    setLens(LENS_BASE / z);
+    setLens(cameraFov(z));
   }
 
   /** 正视图把相机拉远的倍数；页面用它乘取景距离。 */
@@ -513,6 +517,13 @@ export function mountLayout(canvas) {
     for (const entry of labelEntries) entry.el.remove();
     labelEntries = [];
     labelLayer = labelLayer || ensureLabelLayer(canvas);
+    if (!labelLeaders && labelLayer) {
+      labelLeaders = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      labelLeaders.setAttribute("aria-hidden", "true");
+      labelLeaders.style.cssText = "position:absolute;inset:0;width:100%;height:100%;overflow:hidden";
+      labelLayer.prepend(labelLeaders);
+    }
+    if (labelLeaders) labelLeaders.replaceChildren();
     if (!axisGizmo && labelLayer) {
       axisGizmo = makeAxisGizmo();
       labelLayer.parentElement.appendChild(axisGizmo.el);
@@ -744,9 +755,16 @@ function footprintCenter(footprint) {
 /** 尺寸线进入 Three.js 时转换；标签仍交接房间坐标。 */
 function addDimensions(parent, data, item, onLabel) {
   for (const annotation of dimensionAnnotations(data.room, item)) {
-    parent.add(line([
+    const dimension = line([
       roomToThree(...annotation.from), roomToThree(...annotation.to),
-    ], annotation.color));
+    ], annotation.color);
+    // 标注覆盖家具表面，文字与量线始终能对应；仅影响标注，不改变实体遮挡。
+    dimension.material.depthTest = false;
+    dimension.material.depthWrite = false;
+    dimension.material.transparent = true;
+    dimension.material.opacity = .8;
+    dimension.renderOrder = 10;
+    parent.add(dimension);
     onLabel(annotation);
   }
 }

@@ -1,6 +1,6 @@
 import * as THREE from "../../../../../../vendor/three/0.186.0/three.module.js";
 import assert from "node:assert/strict";
-import { cameraThreePosition, roomToThree, threeToRoom } from "./layout_frame.js";
+import { cameraFov, cameraThreePosition, roomToThree, threeToRoom } from "./layout_frame.js";
 import { roomAxes, dimensionAnnotations } from "./layout_annotations.js";
 import { normalizeItems } from "./layout_payload.js";
 
@@ -28,12 +28,21 @@ if (right.x < 0.99 || Math.abs(right.y) > 0.02 || Math.abs(right.z) > 0.02) {
 }
 console.log("frame ok");
 
+// 相机拉远与视场角收窄在过渡中的每一帧抵消，缩放倍率只生效一次。
+for (const zoom of [.15, 1, 1.8, 12]) {
+  const spans = [1, 1.5, 3, 5.5, 8].map((pull) =>
+    9000 * pull * Math.tan(cameraFov(zoom * pull) * Math.PI / 360));
+  const expected = 9000 * Math.tan(48 * Math.PI / 360) / zoom;
+  for (const span of spans) assert.ok(Math.abs(span - expected) < 1e-8);
+}
+console.log("zoom scale is preserved through perspective transitions");
+
 assert.deepEqual(threeToRoom(...mapped), [1000, 200, 300]);
 const room = { width_mm: 4200, depth_mm: 3600, height_mm: 2800 };
 const axes = roomAxes(room);
 assert.deepEqual(axes.map((axis) => axis.to), [[4200, 0, 0], [0, 3600, 0], [0, 0, 2800]]);
 assert.deepEqual(axes.map((axis) => roomToThree(...axis.to)), [[4200, 0, 0], [0, 0, 3600], [0, 2800, 0]]);
-assert.deepEqual(axes.map((axis) => axis.text), ["X 4200", "Y 3600", "Z 2800"]);
+assert.deepEqual(axes.map((axis) => axis.text), ["X 西→东 4200", "Y 北→南 3600", "Z 2800"]);
 assert.deepEqual(axes.map((axis) => axis.anchor), [[2100, -25, 0], [-25, 1800, 0], [-25, 0, 1400]]);
 
 const item = {
@@ -42,7 +51,7 @@ const item = {
   clearances_mm: { west: 600, east: 2400, north: 800, south: 2300 },
 };
 const annotations = dimensionAnnotations(room, item);
-assert.deepEqual(annotations.map((spec) => spec.text), ["宽 1200", "深 500", "高 1700", "离墙 600", "离墙 2400", "离墙 800", "离墙 2300"]);
+assert.deepEqual(annotations.map((spec) => spec.text), ["宽 1200", "深 500", "高 1700", "离西墙 600", "离东墙 2400", "离北墙 800", "离南墙 2300"]);
 assert.deepEqual(annotations.map((spec) => spec.anchor), [
   [1200, 710, 308], [510, 1050, 308], [1890, 1300, 1150],
   [300, 1050, 308], [3000, 1050, 308], [1200, 400, 308], [1200, 2450, 308],

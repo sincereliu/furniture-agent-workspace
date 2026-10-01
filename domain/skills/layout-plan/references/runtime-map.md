@@ -37,6 +37,7 @@
 | 页面入口将规范布局输出一次转换为画布模型；渲染层只读取该模型 | `static/layout_payload.js` | calculation |
 | 房间的东、南、上怎么画到屏幕上 | `static/layout_frame.js` | calculation |
 | 房间轴、家具尺寸线和标签锚点；全部用房间坐标计算 | `static/layout_annotations.js` | calculation |
+| 屏幕标注矩形避让、画布边界与稳定偏移 | `static/layout_labels.js` | calculation |
 | 记下移动、旋转或改尺寸，这一步先不算。全屋和单间共用这一套字段 | `scene_edit.py` | schema |
 | 把这次改动算进某一间，算出一版还没确认的摆放。版本号和落盘不在这里 | `project_edit.py` | calculation |
 | 三个入口：建全屋摆放（`plan_project_layout`）、建单间（`plan_room_scene`）、写房间外壳（`write_room_shell`） | `layout_entry.py` | structured_protocol |

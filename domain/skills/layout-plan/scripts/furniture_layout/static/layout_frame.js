@@ -8,6 +8,11 @@ export function threeToRoom(x, y, z) {
   return [x, z, y];
 }
 
+// 倍率作用于 tan(fov/2)，使屏幕尺寸与倍率成正比。
+export function cameraFov(magnification) {
+  return 2 * Math.atan(Math.tan(48 * Math.PI / 360) / magnification) * 180 / Math.PI;
+}
+
 export function cameraThreePosition(yaw, pitch, distance, target) {
   const cp = Math.cos(pitch);
   const sp = Math.sin(pitch);

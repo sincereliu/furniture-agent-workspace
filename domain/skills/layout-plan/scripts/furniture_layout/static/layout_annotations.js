@@ -1,7 +1,7 @@
 // 本模块只计算房间坐标 [x, y, z]，不依赖 Three.js 或屏幕投影。
 export const ROOM_AXES = [
-  { key: "x", label: "X 宽", color: 0xdc2626, direction: [1, 0, 0] },
-  { key: "y", label: "Y 深", color: 0x047857, direction: [0, 1, 0] },
+  { key: "x", label: "X 宽", spanLabel: "西→东", color: 0xdc2626, direction: [1, 0, 0] },
+  { key: "y", label: "Y 深", spanLabel: "北→南", color: 0x047857, direction: [0, 1, 0] },
   { key: "z", label: "Z 高", color: 0x2563eb, direction: [0, 0, 1] },
 ];
 
@@ -18,7 +18,7 @@ export function roomAxes(room) {
     from: [0, 0, 0],
     to: axis.direction.map((value) => value * lengths[index]),
     anchor: anchors[index],
-    text: `${axis.key.toUpperCase()} ${Math.round(lengths[index])}`,
+    text: `${axis.key.toUpperCase()} ${axis.spanLabel ? `${axis.spanLabel} ` : ""}${Math.round(lengths[index])}`,
   }));
 }
 
@@ -52,16 +52,16 @@ export function dimensionAnnotations(room, item) {
   const midX = (x0 + x1) / 2, midY = (y0 + y1) / 2;
   const gaps = item.clearances_mm || {};
   const gapSpecs = [
-    { key: "west", from: [0, midY, z], to: [x0, midY, z] },
-    { key: "east", from: [x1, midY, z], to: [room.width_mm, midY, z] },
-    { key: "north", from: [midX, 0, z], to: [midX, y0, z] },
-    { key: "south", from: [midX, y1, z], to: [midX, room.depth_mm, z] },
+    { key: "west", label: "西", from: [0, midY, z], to: [x0, midY, z] },
+    { key: "east", label: "东", from: [x1, midY, z], to: [room.width_mm, midY, z] },
+    { key: "north", label: "北", from: [midX, 0, z], to: [midX, y0, z] },
+    { key: "south", label: "南", from: [midX, y1, z], to: [midX, room.depth_mm, z] },
   ];
   for (const spec of gapSpecs) {
     const raw = gaps[spec.key];
     const gap = raw;
     if (!Number.isFinite(gap) || gap <= 0.5) continue;
-    add(`离墙 ${fmt(gap)}`, spec.from, spec.to, 0x7c3aed);
+    add(`离${spec.label}墙 ${fmt(gap)}`, spec.from, spec.to, 0x7c3aed);
   }
   return specs;
 }

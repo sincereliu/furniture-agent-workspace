@@ -20,7 +20,7 @@ const canvas=document.getElementById("scene"),status=document.getElementById("st
 const view=mountLayout(canvas);
 let placing=false;
 let room=scene.room;
-// 视图中心。平移是就地改它（相机的一切都相对它算）；切视角时动画回 HOME_TARGET。
+// 视图中心跟随平移；切角度保留它，只有「复位」回 HOME_TARGET。
 let HOME_TARGET=[room.width_mm/2,room.depth_mm/2,room.height_mm*.42];
 const target=[...HOME_TARGET];
 let diagonal=Math.hypot(room.width_mm,room.depth_mm,room.height_mm);
@@ -74,17 +74,12 @@ function verticalPlaneScale(point){
   const cam=camera();
   const rel=[point[0]-cam.position[0],point[1]-cam.position[1],(point[2]||0)-cam.position[2]];
   const depth=rel[0]*cam.forward[0]+rel[1]*cam.forward[1]+rel[2]*cam.forward[2];
-  const fov=48*Math.PI/180;
+  const fov=cam.fov*Math.PI/180;
   return 2*Math.tan(fov/2)*Math.max(depth,1)/(canvas.clientHeight||600);
 }
 function screenPoint(event){
   const rect=canvas.getBoundingClientRect();
   return [event.clientX-rect.left,event.clientY-rect.top];
-}
-function withHomeCentre(run){
-  const saved=[target[0],target[1],target[2]];
-  target[0]=HOME_TARGET[0];target[1]=HOME_TARGET[1];target[2]=HOME_TARGET[2];
-  try{return run()}finally{target[0]=saved[0];target[1]=saved[1];target[2]=saved[2]}
 }
 
 /* ---------- 摆放检查：与 placement_check.py / placement.py 逐条对应 ---------- */
@@ -216,7 +211,7 @@ function render(){
   // 基准取景：房间刚好装满画面（不含收窄、不含用户缩放）。
   const fit=baseFit(state.pitch,state.yaw);
   // 距离 ×收窄倍数、fov ÷收窄倍数 —— **互为倒数，观感尺寸不变**，只是透视被压平。
-  state.distance=fit*pullNow/state.zoom;
+  state.distance=fit*pullNow;
   view.setFovForZoom(state.zoom*pullNow);
   view.setView(state.yaw,state.pitch,state.distance,target);
   placing=false;
@@ -702,8 +697,7 @@ canvas.addEventListener("pointerdown",event=>{
   const pickedItem=picked?scene.items.find(item=>item.id===picked.itemId):null;
   if(READ_ONLY){
     if(pickedItem){selectItem(pickedItem.id);return}
-    state.selectedId=null;state.blocked=null;
-    render();
+    // 空白处用于观察视角，保留选中与标注；Esc 可取消选中。
     return;
   }
   if(picked&&picked.kind==="height"&&pickedItem){
@@ -754,8 +748,7 @@ canvas.addEventListener("pointerdown",event=>{
     canvas.setPointerCapture(event.pointerId);
     return;
   }
-  state.selectedId=null;state.blocked=null;
-  render();
+  // 空白处拖动和双击都保留选中项，不与相机手势争抢。
 },true);
 canvas.addEventListener("pointermove",event=>{
   if(drag){
@@ -993,28 +986,28 @@ let viewAnimation=0;
 function animateView(goal,duration){
   cancelFrame(viewAnimation);viewAnimation=0;
   const reduce=typeof matchMedia==="function"&&matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const from={yaw:state.yaw,pitch:state.pitch,distance:state.distance,
+  const from={yaw:state.yaw,pitch:state.pitch,zoom:state.zoom,
     centre:[target[0],target[1],target[2]]};
   const to=goal.target||from.centre;
+  const toZoom=goal.zoom===undefined?from.zoom:goal.zoom;
   // 动画结束时的回调：**必须在最后一帧就执行**。
   // 曾经用 setTimeout(520) 延后更新 state.active，结果恢复自由视图后仍有约半秒停留在
   // 正交投影里——正交下竖直方向看起来"不够垂直"，等定时器切回透视时画面就抖一下。
   const done=typeof goal.onDone==="function"?goal.onDone:null;
   if(reduce||duration<=0){
     state.yaw=goal.yaw;state.pitch=goal.pitch;
+    state.zoom=toZoom;
     for(let i=0;i<3;i++)target[i]=to[i];
     // 直接跳到位时也要把收窄倍数归到终点（一律按 goal.active 判定，因为 state.active 可能还没改）。
     pullFrom=pullEnd=isOrthoView(goal.active)?view.elevationPull():1;
     pullNow=pullEnd;
-    state.distance=baseFit(state.pitch,state.yaw)*pullNow/state.zoom;
+    state.distance=baseFit(state.pitch,state.yaw)*pullNow;
     render();
     if(done)done();
     return;
   }
-  // **起点与终点都显式传入**：调用方（setView / restoreFreeView）会先改 state.active，
-  // 到了这里已经看不出"从哪个视角来"。少了 from，"从正视图回自由"就会被算成 8→8，
-  // 距离在动画结束时跳变（末尾一顿）。
-  pullFrom=isOrthoView(goal.from)?view.elevationPull():1;
+  // 从实际收窄倍数接续，连续双击或手动打断动画时也不跳回旧端点。
+  pullFrom=pullNow;
   pullEnd=isOrthoView(goal.active)?view.elevationPull():1;
   pullNow=pullFrom;
   let deltaYaw=goal.yaw-from.yaw;
@@ -1028,7 +1021,7 @@ function animateView(goal,duration){
     setPullProgress(k);
     state.yaw=from.yaw+deltaYaw*k;
     state.pitch=from.pitch+(goal.pitch-from.pitch)*k;
-    state.distance=from.distance+(goal.distance-from.distance)*k;
+    state.zoom=from.zoom+(toZoom-from.zoom)*k;
     for(let i=0;i<3;i++)target[i]=from.centre[i]+(to[i]-from.centre[i])*k;
     render();
     if(t<1){viewAnimation=nextFrame(step);return}
@@ -1061,26 +1054,20 @@ function nearestOrthoView(){
   return best;
 }
 // 落定视角标识：正好回到默认透视位时标成 default_view，否则就是自由视角。
-// **这个函数被 restoreFreeView() 依赖**（它决定投影切回透视），不能少。
-function updateActiveAfterRestore(){
-  state.active=(Math.abs(state.yaw-VIEWS.default_view.yaw)<1e-3&&
-    Math.abs(state.pitch-VIEWS.default_view.pitch)<1e-3)?"default_view":"free";
+function updateActiveAfterRestore(pose){
+  state.active=(nearAngle(pose.yaw-VIEWS.default_view.yaw)<1e-3&&
+    Math.abs(pose.pitch-VIEWS.default_view.pitch)<1e-3)?"default_view":"free";
 }
 // 回到「进正视图之前那一眼」的相机；没记过就回默认透视。
 function restoreFreeView(){
   const remembered=state.freeView;
   if(!remembered){setView("default_view");return}
-  // **起点必须在改 state.active 之前抓下来**：改成 free 之后再看就分不清从哪来了，
-  // 收窄倍数会被算成 1→1，距离从第一帧就到终点（现象正是"末尾一顿然后加速跑完"）。
-  const fromView=state.active;
-  // 先切回自由（投影随 render 立刻回到透视），再动画：切换发生在姿态还没动的时刻，
-  // 看不到画面变化；随后只有一次连贯的位姿动画，结尾没有第二次变化。
-  updateActiveAfterRestore();
+  updateActiveAfterRestore(remembered);
   syncViewControls();
   animateView({
-    yaw:remembered.yaw,pitch:remembered.pitch,distance:remembered.distance,
+    yaw:remembered.yaw,pitch:remembered.pitch,
     target:[...remembered.target],
-    from:fromView,active:state.active,     // 从正视图回自由：收窄倍数 8→1 必须显式给出
+    active:state.active,
   },500);
 }
 function setView(name){
@@ -1090,16 +1077,14 @@ function setView(name){
   if(isOrthoView(name)&&!isOrthoView(state.active)){
     state.freeView={yaw:state.yaw,pitch:state.pitch,distance:state.distance,target:[...target]};
   }
-  // 起点要**在改 state.active 之前**记下来（改完就看不出从哪来了）。
-  const fromView=state.active;
-  // **先落到目标视角标识**（下一帧 render 就把投影切过去，此时姿态还没动，切换不可见），
-  // 然后再做一次连贯的位姿动画。投影不在动画中途改，结尾也不会再变一次。
+  // 倍率与观察中心沿用当前取景，相机只平滑切换角度和透视收窄倍数。
   state.active=name;
   syncViewControls();
-  // 取景按房间中心算，然后连中心一起动画回去——平移过的视角也能干净复位。
-  const distance=withHomeCentre(()=>fitDistance(preset.pitch,preset.yaw,name));
-  state.zoom=1;                    // 每次切视角都回到基准取景
-  animateView({yaw:preset.yaw,pitch:preset.pitch,distance,target:HOME_TARGET,from:fromView,active:name},500);
+  // 只有复位改变观察中心和倍率；正视图与双击只切角度。
+  const reset=name==="default_view";
+  animateView({yaw:preset.yaw,pitch:preset.pitch,
+    target:reset?HOME_TARGET:[...target],zoom:reset?1:state.zoom,
+    active:name},500);
   syncViewControls();
 }
 document.querySelectorAll("[data-view]").forEach(button=>button.addEventListener("click",()=>setView(button.dataset.view)));
@@ -1176,16 +1161,17 @@ const defaults={yaw:DEFAULT_YAW,pitch:DEFAULT_PITCH,distance:fitDistance(DEFAULT
 const state={...defaults,orbiting:false,panning:false,active:"default_view",selectedId:null,
   freeView:null,zoom:1,blocked:null,dims:"selected"};
 
-// 用户缩放：OrbitControls 的滚轮直接改相机距离，这里折算成显式的 state.zoom。
-// 监听器在**它自己的 wheel 处理之前**跑（同事件先注册的先执行），先记旧距离，
-// 再用 queueMicrotask 读新距离——不依赖 OrbitControls 的内部字段，也不靠距离比反推。
-canvas.addEventListener("wheel",()=>{
-  const before=view.readView().distance;
-  queueMicrotask(()=>{
-    const after=view.readView().distance;
-    if(before>1&&after>1)state.zoom=Math.max(0.05,Math.min(50,state.zoom*after/before));
-  });
-},{passive:true});
+// 滚轮只维护这一份倍率；点选、重画、正视图切换都复用同一个值。
+canvas.addEventListener("wheel",event=>{
+  event.preventDefault();
+  cancelFrame(viewAnimation);viewAnimation=0;
+  const pose=view.readView();
+  state.yaw=pose.yaw;state.pitch=pose.pitch;
+  for(let i=0;i<3;i++)target[i]=pose.target[i];
+  const pixels=event.deltaY*(event.deltaMode===1?16:event.deltaMode===2?canvas.clientHeight:1);
+  state.zoom=Math.max(.15,Math.min(12,state.zoom*Math.exp(-pixels*.002)));
+  render();
+},{passive:false});
 if(dimsButton){
   dimsButton.addEventListener("click",()=>{
     const index=DIMS_CYCLE.findIndex(([value])=>value===state.dims);
@@ -1196,6 +1182,7 @@ if(dimsButton){
   syncDimsButton();
 }
 view.controls.addEventListener("start",()=>{
+  cancelFrame(viewAnimation);viewAnimation=0;
   state.orbiting=true;
   state._pose=view.readView();
   canvas.classList.add("orbiting");
@@ -1277,6 +1264,8 @@ function showRoom(index,keepCamera){
   scene.openings=next.openings||[];
   bindRoom();
   if(!keepCamera){
+    cancelFrame(viewAnimation);viewAnimation=0;
+    pullNow=pullFrom=pullEnd=1;state.zoom=1;state.freeView=null;
     target[0]=HOME_TARGET[0];target[1]=HOME_TARGET[1];target[2]=HOME_TARGET[2];
       state.yaw=DEFAULT_YAW;state.pitch=DEFAULT_PITCH;
     state.distance=fitDistance(DEFAULT_PITCH,DEFAULT_YAW,"default_view");
