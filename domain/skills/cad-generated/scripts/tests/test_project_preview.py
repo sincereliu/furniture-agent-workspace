@@ -425,29 +425,24 @@ class ProjectPreviewTests(unittest.TestCase):
             asyncio.run(server.project_preview(old.id, local_request()))
         self.assertEqual(blocked.exception.status_code, 422)
 
-    def test_legacy_intent_project_keeps_its_name_in_the_unavailable_archive(self) -> None:
-        legacy = self.root / "project_legacy"
-        legacy.mkdir(parents=True)
-        (legacy / "project.json").write_text(
-            json.dumps(
-                {
-                    "id": "project_legacy",
-                    "name": "旧版书柜",
-                    "created_at": "2026-08-01T00:00:00+00:00",
-                    "revisions": [{"id": "rev_old", "number": 1, "intent": {}}],
-                },
-                ensure_ascii=False,
-            ),
-            encoding="utf-8",
-        )
+    def test_project_missing_layout_is_unavailable(self) -> None:
+        project = self.orchestrator.create_project("缺布局的项目", home_layout(bed_offset_mm=200))
+        file = self.store.project_dir(project.id) / "project.json"
+        payload = json.loads(file.read_text(encoding="utf-8"))
+        del payload["revisions"][-1]["layout"]
+        file.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "requires layout"):
+            self.store.load(project.id)
         row = self.store.inspect_projects()[0]
-        self.assertEqual(row["name"], "旧版书柜")
-        self.assertEqual(row["availability"], "incompatible")
-        self.assertIn("没有房间布局", row["reason"])
+        self.assertEqual(row["name"], "缺布局的项目")
+        self.assertEqual(row["availability"], "unavailable")
         page = asyncio.run(server.project_index()).body.decode("utf-8")
-        self.assertIn("旧版书柜", page)
+        self.assertIn("缺布局的项目", page)
         self.assertIn('id="unavailable-projects"', page)
-        self.assertNotIn("/api/project/project_legacy/preview", page)
+        self.assertNotIn(f"/api/project/{project.id}/preview", page)
+        with self.assertRaises(HTTPException) as blocked:
+            asyncio.run(server.project_preview(project.id, local_request()))
+        self.assertEqual(blocked.exception.status_code, 422)
 
     def test_editable_preview_can_type_width_depth_height(self) -> None:
         project = self.orchestrator.create_project("家", home_layout(bed_offset_mm=200))

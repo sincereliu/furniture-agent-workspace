@@ -54,13 +54,3 @@ rooms:
     host_wall: east
     offset_mm: 200
 ```
-
-没有房间、只有一件柜时，可给 `furniture_create_project` 传单件快捷字段：
-
-```yaml
-name: single-cabinet
-furniture_category: floor_cabinet
-width_mm: 900
-depth_mm: 350
-height_mm: 2100
-```

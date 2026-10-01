@@ -21,7 +21,7 @@ bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 from furniture_cad.cad_bridge import CadBridge
 from furniture_delivery_validation.validation import validate_delivery
-from furniture_layout.project_layout import ProjectLayout, single_cabinet_layout
+from furniture_layout.project_layout import ProjectLayout
 from furniture_workflow.input_adapter import (
     panel_envelopes_from_layout,
     stage_inputs_from_spec,
@@ -32,9 +32,9 @@ from furniture_workflow.workflow_project import Project
 from furniture_workflow.workflow_state import STAGE_SEQUENCE, WorkflowStage, parse_stage
 from furniture_workflow.workflow_store import JsonProjectStore
 from furniture_panel_planning.panel_pipeline import plan_panel_stage
-from panel_fixtures import cabinet_data, panel_parameters
+from panel_fixtures import cabinet_data, cabinet_layout, layout_rooms, panel_parameters
 from furniture_orchestrator_test_support import (
-    cabinet_intent,
+    layout_proposal,
     fake_orchestrator,
     first_cabinet_spec,
 )
@@ -48,7 +48,7 @@ class FurnitureOrchestratorAdmissionTests(unittest.TestCase):
         )
     def test_runtime_requires_llm_to_normalize_natural_language_type(self) -> None:
         with self.assertRaisesRegex(ValueError, "furniture_category must be one of"):
-            cabinet_intent(furniture_category="地柜").confirm()
+            layout_proposal(furniture_category="地柜").confirm()
 
     def test_unsupported_layout_decision_is_rejected_by_independent_input(self) -> None:
         with self.assertRaisesRegex(ValueError, "layout input does not accept"):
@@ -81,7 +81,7 @@ class FurnitureOrchestratorAdmissionTests(unittest.TestCase):
     def test_unsupported_structure_decision_fails_at_panel_stage(self) -> None:
         project = self.orchestrator.create_project(
             "未知连接柜体",
-            cabinet_intent(),
+            layout_proposal(),
             stage_inputs=stage_inputs_from_spec(
                 {"structure": {"mystery_joint": "unknown"}}
             ),
@@ -162,20 +162,17 @@ class FurnitureOrchestratorAdmissionTests(unittest.TestCase):
 
     def test_unsupported_family_fails_before_layout_is_created(self) -> None:
         with self.assertRaisesRegex(ValueError, "furniture_category must be one of"):
-            cabinet_intent(furniture_category="bed")
+            layout_proposal(furniture_category="bed")
 
-    def test_layout_from_spec_contains_only_category_and_envelope(self) -> None:
+    def test_room_layout_contains_only_category_and_envelope(self) -> None:
         request = {
-            "furniture_category": "wall_cabinet",
-            "width": 800,
-            "depth": 350,
-            "height": 900,
+            "rooms": layout_rooms(furniture_category="wall_cabinet", depth=350, height=900, origin_z_mm=2000),
             "n_doors": 2,
             "shelves": [{"shelf_type": "fixed", "gap_below_mm": None}],
             "top_gap_mm": 300,
             "back_mount": "cover",
         }
-        layout = self.orchestrator.layout_from_spec(request)
+        layout = ProjectLayout.from_source({"rooms": request["rooms"]})
         unit = layout.executable_units()[0]
         self.assertEqual(unit.width, 800)
         self.assertEqual(unit.depth, 350)
@@ -197,10 +194,6 @@ class FurnitureOrchestratorAdmissionTests(unittest.TestCase):
     def test_flat_request_routes_edge_banding_to_manufacturing(self) -> None:
         inputs = stage_inputs_from_spec(
             {
-                "furniture_category": "floor_cabinet",
-                "width": 800,
-                "depth": 600,
-                "height": 1000,
                 "edge_banding": {"material": "abs", "thickness": "t1_0"},
             }
         )
@@ -209,50 +202,16 @@ class FurnitureOrchestratorAdmissionTests(unittest.TestCase):
             {"material": "abs", "thickness": "t1_0"},
         )
 
-    def test_flat_requests_reject_legacy_type_field(self) -> None:
-        for alias in (
-            {"type": "wall_cabinet"},
-            {"furniture_type": "wall_cabinet"},
-            {"overall_size": {"width_mm": 800, "depth_mm": 350, "height_mm": 900}},
-            {"mounting_height_mm": 1800},
-            {"mounting_height": 1800},
-            {"hanging_height": 1800},
-            {"mount_mode": "flush_ceiling"},
+    def test_stage_inputs_reject_removed_layout_shortcut_fields(self) -> None:
+        for field in (
+            "furniture_category", "width", "depth", "height", "finished_envelope",
+            "origin_z_mm", "hanging_height_mm", "hanging_mode", "type",
+            "furniture_type", "overall_size", "mounting_height_mm",
+            "mounting_height", "hanging_height", "mount_mode",
         ):
-            payload = {
-                "furniture_category": "wall_cabinet",
-                "width": 800,
-                "depth": 350,
-                "height": 900,
-                **alias,
-            }
-            with self.assertRaisesRegex(ValueError, "no longer accepted"):
-                self.orchestrator.layout_from_spec(payload)
-            with self.assertRaisesRegex(ValueError, "no longer accepted"):
-                stage_inputs_from_spec(payload)
-
-    def test_layout_from_spec_keeps_canonical_hanging_fields(self) -> None:
-        layout = self.orchestrator.layout_from_spec(
-            {
-                "furniture_category": "wall_cabinet",
-                "width": 800,
-                "depth": 350,
-                "height": 900,
-                "hanging_height_mm": 1800,
-            }
-        )
-        self.assertEqual(layout.executable_units()[0].origin_z_mm, 1800)
-        flush = self.orchestrator.layout_from_spec(
-            {
-                "furniture_category": "wall_cabinet",
-                "width": 800,
-                "depth": 350,
-                "height": 900,
-                "hanging_height_mm": 1800,
-                "hanging_mode": "flush_ceiling",
-            }
-        )
-        self.assertEqual(flush.executable_units()[0].origin_z_mm, 2300)
+            with self.subTest(field=field):
+                with self.assertRaisesRegex(ValueError, "no owning stage"):
+                    stage_inputs_from_spec({field: 1800})
 
     def test_three_door_request_fails_at_panel_admission(self) -> None:
         result = confirm_through(self.orchestrator, 
@@ -274,7 +233,7 @@ class FurnitureOrchestratorAdmissionTests(unittest.TestCase):
         )
 
     def test_wall_cabinet_hanging_is_origin_z(self) -> None:
-        free = single_cabinet_layout(
+        free = cabinet_layout(
             furniture_category="wall_cabinet",
             width=800,
             depth=350,
@@ -283,19 +242,20 @@ class FurnitureOrchestratorAdmissionTests(unittest.TestCase):
             confirmed=True,
         )
         self.assertEqual(free.executable_units()[0].origin_z_mm, 1800)
-        flush = single_cabinet_layout(
+        flush = cabinet_layout(
             furniture_category="wall_cabinet",
             width=800,
             depth=350,
             height=900,
+            origin_z_mm=2300,
             confirmed=True,
         )
-        self.assertGreater(flush.executable_units()[0].origin_z_mm, 0)
+        self.assertEqual(flush.executable_units()[0].origin_z_mm, 2300)
 
     def test_panel_stage_admits_complete_structured_parameters(self) -> None:
         project = self.orchestrator.create_project(
             "直接意图柜体",
-            cabinet_intent(),
+            layout_proposal(),
             stage_inputs=stage_inputs_from_spec(
                 panel_parameters()
             ),

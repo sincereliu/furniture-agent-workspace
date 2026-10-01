@@ -146,13 +146,6 @@ class JsonProjectStore:
                     if isinstance(latest_payload, dict):
                         if isinstance(latest_payload.get("number"), int):
                             row["revision_number"] = latest_payload["number"]
-                        if "layout" not in latest_payload and "intent" in latest_payload:
-                            row.update(
-                                availability="incompatible",
-                                reason="历史格式没有房间布局，当前预览暂不支持",
-                            )
-                            rows.append(row)
-                            continue
                         layout_payload = latest_payload.get("layout")
                         if isinstance(layout_payload, dict):
                             schema_version = layout_payload.get("schema_version")

@@ -21,7 +21,7 @@ bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 from furniture_cad.cad_bridge import CadBridge
 from furniture_delivery_validation.validation import validate_delivery
-from furniture_layout.project_layout import ProjectLayout, single_cabinet_layout
+from furniture_layout.project_layout import ProjectLayout
 from furniture_workflow.input_adapter import (
     panel_envelopes_from_layout,
     stage_inputs_from_spec,
@@ -32,9 +32,9 @@ from furniture_workflow.workflow_project import Project
 from furniture_workflow.workflow_state import STAGE_SEQUENCE, WorkflowStage, parse_stage
 from furniture_workflow.workflow_store import JsonProjectStore
 from furniture_panel_planning.panel_pipeline import plan_panel_stage
-from panel_fixtures import cabinet_data, panel_parameters
+from panel_fixtures import cabinet_data, cabinet_layout, layout_rooms, panel_parameters
 from furniture_orchestrator_test_support import (
-    cabinet_intent,
+    layout_proposal,
     fake_orchestrator,
     first_cabinet_spec,
 )
@@ -50,7 +50,7 @@ class FurnitureOrchestratorLifecycleTests(unittest.TestCase):
     def test_interactive_workflow_pauses_at_every_stage(self) -> None:
         project = self.orchestrator.create_project(
             "玄关柜",
-            cabinet_intent(),
+            layout_proposal(),
             stage_inputs=stage_inputs_from_spec(
                 panel_parameters()
             ),
@@ -87,7 +87,7 @@ class FurnitureOrchestratorLifecycleTests(unittest.TestCase):
     def test_manufacturing_reads_cabinet_tree(self) -> None:
         project = self.orchestrator.create_project(
             "只读柜体树",
-            cabinet_intent(),
+            layout_proposal(),
             stage_inputs=stage_inputs_from_spec(panel_parameters()),
         )
         self.orchestrator.confirm_layout(project)
@@ -361,7 +361,7 @@ class FurnitureOrchestratorLifecycleTests(unittest.TestCase):
             {issue.code for issue in revision.validations[-1].issues},
         )
 
-    def test_new_intent_revision_marks_parent_artifacts_stale(self) -> None:
+    def test_new_layout_revision_marks_parent_artifacts_stale(self) -> None:
         artifact_name = f"revision-test-{uuid4().hex}"
         source_dir = WORKSPACE_ROOT / "temp" / "cad-source" / artifact_name
         try:
@@ -379,7 +379,7 @@ class FurnitureOrchestratorLifecycleTests(unittest.TestCase):
 
                 revised = orchestrator.revise(
                     result.project,
-                    single_cabinet_layout(furniture_category="wall_cabinet", width=900, depth=350, height=900, origin_z_mm=2000, confirmed=True),
+                    cabinet_layout(furniture_category="wall_cabinet", width=900, depth=350, height=900, origin_z_mm=2000, confirmed=True),
                 )
 
                 self.assertEqual(revised.parent_revision_id, parent.id)
@@ -391,8 +391,8 @@ class FurnitureOrchestratorLifecycleTests(unittest.TestCase):
         finally:
             shutil.rmtree(source_dir, ignore_errors=True)
 
-    def test_unconfirmed_intent_pauses_without_executing_panels(self) -> None:
-        project = self.orchestrator.create_project("未确认", cabinet_intent())
+    def test_unconfirmed_layout_pauses_without_executing_panels(self) -> None:
+        project = self.orchestrator.create_project("未确认", layout_proposal())
         result = self.orchestrator.run_until(
             project,
             WorkflowStage.FEATURE_TREE_PLANNED,
@@ -427,14 +427,10 @@ class FurnitureOrchestratorLifecycleTests(unittest.TestCase):
             )
 
     def test_missing_item_dimension_fails_before_layout_is_created(self) -> None:
-        with self.assertRaisesRegex(ValueError, "width, depth and height"):
-            self.orchestrator.layout_from_spec(
-                {
-                    "furniture_category": "floor_cabinet",
-                    "width": 800,
-                    "height": 1000,
-                }
-            )
+        rooms = layout_rooms()
+        del rooms[0]["items"][0]["depth"]
+        with self.assertRaisesRegex(ValueError, "depth"):
+            ProjectLayout.from_source({"rooms": rooms})
 
 
 if __name__ == "__main__":

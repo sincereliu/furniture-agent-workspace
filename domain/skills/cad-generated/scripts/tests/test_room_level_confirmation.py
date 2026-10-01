@@ -163,19 +163,46 @@ class RoomLevelConfirmationTests(unittest.TestCase):
         self.assertNotIn("living", project.latest.inherited_rooms)
         self.assertNotIn("living", project.latest.approved_rooms)
 
-    def test_old_revision_without_room_marks_reads_as_fully_reviewed(self) -> None:
-        """老项目文件没有 `approved_rooms`：`confirmed: true` 等价于"每间都审过"。"""
+    def test_saved_revision_requires_explicit_room_marks(self) -> None:
         project = self._project()
         self.orchestrator.confirm_layout(project)
+        for marks in (None, {}, "bedroom", ["unknown"], ["bedroom", "bedroom"], [1]):
+            with self.subTest(marks=marks):
+                payload = project.to_dict()
+                payload["revisions"][-1]["approved_rooms"] = marks
+                with self.assertRaisesRegex(ValueError, "approved_rooms"):
+                    Project.from_dict(payload)
         payload = project.to_dict()
-        for stored in payload["revisions"]:
-            stored.pop("approved_rooms", None)
-            stored.pop("inherited_rooms", None)
-        restored = Project.from_dict(payload)
-        revision = restored.latest
-        self.assertTrue(revision.layout.confirmed)
-        self.assertEqual(revision.pending_room_ids(), [])
-        self.assertEqual(sorted(revision.approved_room_ids()), ["bedroom", "living"])
+        del payload["revisions"][-1]["approved_rooms"]
+        with self.assertRaisesRegex(ValueError, "approved_rooms"):
+            Project.from_dict(payload)
+
+    def test_confirmed_flag_does_not_create_room_marks(self) -> None:
+        project = self._project()
+        project.latest.layout = project.latest.layout.confirm()
+        self.assertEqual(project.latest.approved_room_ids(), set())
+        self.assertEqual(project.latest.pending_room_ids(), ["bedroom", "living"])
+        self.orchestrator.revise(project, two_room_layout())
+        self.assertEqual(project.latest.approved_rooms, [])
+        self.assertEqual(project.latest.inherited_rooms, {})
+        self.assertFalse(project.latest.layout.confirmed)
+
+    def test_saved_confirmed_layout_requires_all_room_marks(self) -> None:
+        project = self._project()
+        self.orchestrator.confirm_layout(project)
+        for marks in ([], ["bedroom"]):
+            with self.subTest(marks=marks):
+                payload = project.to_dict()
+                payload["revisions"][-1]["approved_rooms"] = marks
+                with self.assertRaisesRegex(ValueError, "approval marks for all rooms"):
+                    Project.from_dict(payload)
+
+    def test_panel_file_hash_does_not_create_confirmation_digest(self) -> None:
+        revision = self._project().latest
+        revision.confirmed_panel_sha256 = "file_hash"
+        self.assertIsNone(revision.confirmed_digest(WorkflowStage.PANELS_PLANNED))
+        revision.approved_digests[WorkflowStage.PANELS_PLANNED.value] = "approved_hash"
+        self.assertEqual(revision.confirmed_digest(WorkflowStage.PANELS_PLANNED), "approved_hash")
 
     def test_room_marks_survive_a_store_round_trip(self) -> None:
         project = self._project()

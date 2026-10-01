@@ -12,12 +12,7 @@ from copy import deepcopy
 import json
 from typing import Any, Mapping
 
-from furniture_layout.project_layout import (
-    DEFAULT_STUDIO_DEPTH_MM,
-    DEFAULT_STUDIO_HEIGHT_MM,
-    DEFAULT_STUDIO_WIDTH_MM,
-    ProjectLayout,
-)
+from furniture_layout.project_layout import ProjectLayout
 
 from .agent_tool_schema import (
     TOOL_CONFIRM_STAGE,
@@ -31,9 +26,7 @@ from .agent_tool_schema import (
     _CONFIRM_KEYS,
     _CREATE_KEYS,
     _DEFAULT_CAD_OUTPUT_ROOT,
-    _ENVELOPE_KEYS,
     _GET_KEYS,
-    _INTENT_FLAT_KEYS,
     _RETRYABLE_VALUES,
     _STAGE_VALUES,
     _RETRY_KEYS,
@@ -508,77 +501,12 @@ def _latest_validation(
 
 def _layout_from_payload(payload: Mapping[str, Any]) -> ProjectLayout:
     rooms = payload.get("rooms")
-    if rooms is not None:
-        if not isinstance(rooms, list) or not rooms:
-            raise ToolProtocolError(
-                "INVALID_ARGUMENT",
-                "rooms must be a non-empty list",
-            )
-        try:
-            return ProjectLayout.from_source({"rooms": rooms})
-        except (TypeError, ValueError) as exc:
-            raise ToolProtocolError("INVALID_ARGUMENT", str(exc)) from exc
-    category = payload.get("furniture_category")
-    if not isinstance(category, str) or not category.strip():
-        raise ToolProtocolError(
-            "INVALID_ARGUMENT",
-            "rooms or furniture_category is required",
-        )
-    envelope = payload.get("finished_envelope")
-    if envelope is None:
-        envelope_data: dict[str, Any] = {}
-    elif isinstance(envelope, Mapping):
-        _reject_unknown_keys(dict(envelope), _ENVELOPE_KEYS, prefix="finished_envelope")
-        envelope_data = dict(envelope)
-    else:
-        raise ToolProtocolError(
-            "INVALID_ARGUMENT",
-            "finished_envelope must be an object",
-        )
-    for key in _INTENT_FLAT_KEYS:
-        if key not in payload:
-            continue
-        if key in envelope_data and envelope_data[key] != payload[key]:
-            raise ToolProtocolError(
-                "INVALID_ARGUMENT",
-                f"{key} conflicts with finished_envelope.{key}",
-            )
-        envelope_data[key] = payload[key]
-    from furniture_workflow.input_adapter import layout_from_spec
-
+    if not isinstance(rooms, list) or not rooms:
+        raise ToolProtocolError("INVALID_ARGUMENT", "rooms must be a non-empty list")
     try:
-        return layout_from_spec(
-            {
-                "furniture_category": category.strip(),
-                "finished_envelope": {
-                    key: envelope_data.get(key) for key in _INTENT_FLAT_KEYS
-                },
-                "origin_z_mm": payload.get("origin_z_mm"),
-                "hanging_mode": payload.get("hanging_mode"),
-                "hanging_height_mm": payload.get("hanging_height_mm"),
-            }
-        )
+        return ProjectLayout.from_source({"rooms": rooms})
     except (TypeError, ValueError) as exc:
-        _raise_layout_shortcut_error(str(exc))
-
-
-def _raise_layout_shortcut_error(message: str) -> None:
-    """Stop and ask for real room dimensions when the placeholder room rejects the cabinet.
-
-    The shortcut validates against ``single_cabinet_layout``'s placeholder studio
-    room. When the cabinet cannot fit that placeholder, the only useful next step
-    is a real room; reporting the raw geometry error would name a room the caller
-    never supplied.
-    """
-    if "inside the room" not in message:
-        raise ToolProtocolError("INVALID_ARGUMENT", message)
-    raise ToolProtocolError(
-        "ROOM_DIMENSIONS_REQUIRED",
-        "cabinet does not fit the placeholder room used by the size-only shortcut "
-        f"({DEFAULT_STUDIO_WIDTH_MM:g}x{DEFAULT_STUDIO_DEPTH_MM:g}"
-        f"x{DEFAULT_STUDIO_HEIGHT_MM:g} mm); provide rooms[] with the real room "
-        "dimensions",
-    )
+        raise ToolProtocolError("INVALID_ARGUMENT", str(exc)) from exc
 
 
 def _cad_options(

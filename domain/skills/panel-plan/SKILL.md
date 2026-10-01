@@ -26,10 +26,10 @@ description: 用于 panel_plan 阶段。当用户说“几扇门”“几层板�
 
 1. **确认布局已经冻结。** 没有已确认的 `layout_plan` 就停。不要回布局里改外形尺寸。
 2. **把客户的话收成整份板件方案。** 这一步只整理，还不调用工具。没说清的构造值写成假设给客户看。不要在脚本里做关键词识别、同义词映射或开放方案排序。
-3. **写入参数并调用 `furniture_run_next`。** `FurnitureSpec.from_intent()` 校验意图已经确认、字段完整和类型、以及客观结构冲突，并按工艺卡展开省略的料档，首次物化完整规范。
+3. **写入参数并调用 `furniture_run_next`。** 编排层从已确认布局读取柜体包络；`FurnitureSpec.from_envelope()` 校验提案字段完整、类型及客观结构冲突，并按工艺卡展开省略的料档，首次物化完整规范。
 4. **代码生成柜体。** 依据 [背板结构规则](references/back-construction-rules.md)、[板件定义规则](references/panel-definition-rules.md)、[抽屉尺寸链](references/drawer-dimension-chain.md) 和 `references/cabinet-topologies/` 生成柜体实例及其 `spec` / `interior` / `back_mount_resolution` / `assemblies`。背板模式需要背拉条时，同一阶段把背拉条物化并纳入校验。运行时统一校验柜体身份、子装配归属、结构规格、精确净空、板件标识、尺寸、位置、依赖和背板几何。
 5. **展示后停。** 先给客户一份假设清单。代码准入后，展示工具快照 `current_view` 的确认审查清单：柜体、背板安装、内部净空、板件一行一条、接触去重。不要展开完整 `cabinets` 树。清单由运行时从检查点派生，见 [运行时映射](references/runtime-map.md)。每次规划是一次 attempt。
-6. **客户要另一版。** 调用 `retry_stage("panel_plan")`，可带新的 `stage_inputs.panels`。不要 `revise()` 意图。失败只记录该次，冻结意图仍在。客户选定某次通过的尝试后，用 `select_stage_attempt()` 选用，再确认。
+6. **客户要另一版。** 调用 `retry_stage("panel_plan")`，可带新的 `stage_inputs.panels`。保持已冻结布局；失败只记录该次 attempt。客户选定某次通过的尝试后，用 `select_stage_attempt()` 选用，再确认。
 7. **客户认这版板件，再确认。** `confirm_stage(panel_plan)` 把当前候选冻成 `store/<project-id>/panels/<sha256>.json`。制造只读这份冻结文件，重试制造不会重跑板件。未确认不得进入后续阶段。直接改已经生成的板件结果用 `revise_stage_output()`。
 
 按当前任务读对应 reference，不要一次加载全部规则。

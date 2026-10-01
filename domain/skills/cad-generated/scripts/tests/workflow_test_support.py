@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from furniture_layout.project_layout import ProjectLayout
 from furniture_workflow.input_adapter import stage_inputs_from_spec
 from furniture_workflow.workflow_orchestrator import (
     FurnitureOrchestrator,
@@ -33,7 +34,7 @@ def confirm_through(
     generate_cad: bool = False,
     force: bool = False,
 ) -> OrchestrationResult:
-    layout = orchestrator.layout_from_spec(spec)
+    layout = ProjectLayout.from_source({"rooms": spec["rooms"]})
     project = orchestrator.create_project(
         name,
         layout,

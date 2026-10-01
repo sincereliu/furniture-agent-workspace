@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from furniture_layout.project_layout import ProjectLayout, single_cabinet_layout
+from furniture_layout.project_layout import ProjectLayout
 from furniture_panel_planning.cabinet_envelope import CabinetEnvelope
 from furniture_panel_planning.cabinet_identity import index_by_role
 from furniture_panel_planning.panel_spec import FurnitureSpec
@@ -58,7 +58,7 @@ def panel_parameters(furniture_category: str = "floor_cabinet", **overrides: Any
 
 
 def _fill_shelves(overrides: dict[str, Any], *, wall: bool, height: float) -> None:
-    """把 shelf_count 兼容地转成 shelves + top_gap_mm（测试夹具便利）。"""
+    """根据测试指定的层数生成均分层板与顶格净高。"""
     if "shelves" in overrides or "top_gap_mm" in overrides:
         return
     count = overrides.pop("shelf_count", 1 if wall else 4)
@@ -72,21 +72,46 @@ def _fill_shelves(overrides: dict[str, Any], *, wall: bool, height: float) -> No
     overrides["top_gap_mm"] = top_gap
 
 
+def layout_rooms(
+    *, furniture_category: str = "floor_cabinet", width: float = 800,
+    depth: float = 600, height: float = 1000, origin_z_mm: float = 0,
+) -> list[dict[str, Any]]:
+    """Explicit room proposal used only by tests; no production defaults."""
+    return [{
+        "id": "room", "name": "测试房间",
+        "width_mm": 4000, "depth_mm": 3000, "height_mm": 3200,
+        "items": [{
+            "id": "cabinet_1", "label": "cabinet_1", "category": "柜体",
+            "furniture_category": furniture_category,
+            "width": width, "depth": depth, "height": height,
+            "placement": {"mode": "wall", "host_wall": "north",
+                          "offset_mm": 0, "origin_z_mm": origin_z_mm},
+        }],
+    }]
+
+
+def cabinet_layout(*, confirmed: bool = False, **dimensions: Any) -> ProjectLayout:
+    layout = ProjectLayout.from_source({"rooms": layout_rooms(**dimensions)})
+    return layout.confirm() if confirmed else layout
+
+
 def cabinet_data(furniture_category: str = "floor_cabinet", **overrides: Any) -> dict[str, Any]:
     wall = furniture_category == "wall_cabinet"
     overrides = dict(overrides)
     height = overrides.get("height", 900 if wall else 1000)
     _fill_shelves(overrides, wall=wall, height=height)
     values = {
-        "furniture_category": furniture_category, "width": 800, "depth": 350 if wall else 600,
-        "height": height,
+        "rooms": layout_rooms(
+            furniture_category=furniture_category,
+            width=overrides.pop("width", 800),
+            depth=overrides.pop("depth", 350 if wall else 600),
+            height=overrides.pop("height", height),
+            origin_z_mm=2000 if wall else 0,
+        ),
         "movable_shelf_connector": "two_in_one",
         "door_hinge_side": None,
         **panel_parameters(furniture_category),
     }
-    if wall:
-        values["hanging_mode"] = "free_hanging_height"
-        values["hanging_height_mm"] = 2000
     values.update(overrides)
     _bind_inherited_stock(values, overrides)
     return values
@@ -115,9 +140,9 @@ def confirmed_layout(
     width: float = 800,
     depth: float = 600,
     height: float = 1000,
-    origin_z_mm: float | None = None,
+    origin_z_mm: float = 0,
 ) -> ProjectLayout:
-    return single_cabinet_layout(
+    return cabinet_layout(
         furniture_category=furniture_category,
         width=width,
         depth=depth,

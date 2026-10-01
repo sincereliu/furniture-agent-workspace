@@ -233,7 +233,6 @@ class SkillArchitectureTests(unittest.TestCase):
 
         cad_references = SKILLS_ROOT / "cad-generated" / "references"
         for moved_reference in (
-            "intent-capture-rules.md",
             "spatial-layout-rules.md",
             "panel-definition-rules.md",
             "manufacturing-rules.md",
@@ -253,21 +252,13 @@ class SkillArchitectureTests(unittest.TestCase):
         self.assertFalse(
             (
                 SKILLS_ROOT
-                / "design-intent"
-                / "references"
-                / "cabinet_topologies"
-            ).exists()
-        )
-        self.assertFalse(
-            (
-                SKILLS_ROOT
                 / "panel-plan"
                 / "references"
                 / "connection-contact-defaults.md"
             ).exists()
         )
 
-    def test_intent_catalog_executable_families_match_runtime_supported_types(
+    def test_layout_catalog_executable_families_match_runtime_supported_types(
         self,
     ) -> None:
         catalog_path = (
@@ -338,7 +329,6 @@ class SkillArchitectureTests(unittest.TestCase):
             for path in sorted(workflow_package.glob("*.py"))
         )
         for forbidden_definition in (
-            "def _validate_intent(",
             "def _validate_layout(",
             "def _validate_panels(",
             "def _validate_manufacturing(",
@@ -469,20 +459,12 @@ class SkillArchitectureTests(unittest.TestCase):
         self.assertNotIn("furniture_manufacturing", layout_imports)
 
     def test_geometric_rules_live_in_their_owning_stages(self) -> None:
-        intent_package = (
-            SKILLS_ROOT
-            / "design-intent"
-            / "scripts"
-            / "furniture_design_intent"
-        )
         panel_package = (
             SKILLS_ROOT
             / "panel-plan"
             / "scripts"
             / "furniture_panel_planning"
         )
-        self.assertFalse((intent_package / "design_spec.py").exists())
-        self.assertFalse((intent_package / "translation.py").exists())
 
         input_adapter = (
             SKILLS_ROOT

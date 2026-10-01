@@ -5,8 +5,6 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from furniture_layout.scene import EXECUTABLE_CATEGORIES
-
 from .workflow_constants import RETRYABLE_STAGES
 from .workflow_state import STAGE_SEQUENCE
 
@@ -30,21 +28,8 @@ TOOL_NAMES = (
 
 _STAGE_VALUES = tuple(stage.value for stage in STAGE_SEQUENCE)
 _RETRYABLE_VALUES = tuple(stage.value for stage in RETRYABLE_STAGES)
-_INTENT_FLAT_KEYS = ("width_mm", "depth_mm", "height_mm")
-_CREATE_KEYS = frozenset(
-    {
-        "name",
-        "rooms",
-        "furniture_category",
-        "finished_envelope",
-        "origin_z_mm",
-        "hanging_mode",
-        "hanging_height_mm",
-        *_INTENT_FLAT_KEYS,
-    }
-)
-_REVISE_KEYS = frozenset({"project_id"}) | (_CREATE_KEYS - {"name"})
-_ENVELOPE_KEYS = frozenset(_INTENT_FLAT_KEYS)
+_CREATE_KEYS = frozenset({"name", "rooms"})
+_REVISE_KEYS = frozenset({"project_id", "rooms"})
 _GET_KEYS = frozenset({"project_id", "include_view"})
 _CONFIRM_KEYS = frozenset({"project_id", "stage", "room_id"})
 _RUN_NEXT_KEYS = frozenset(
@@ -98,7 +83,6 @@ def tool_names() -> tuple[str, ...]:
 
 
 _STAGE_LIST_TEXT = ", ".join(_STAGE_VALUES)
-_EXECUTABLE_TEXT = ", ".join(sorted(EXECUTABLE_CATEGORIES))
 _RETRYABLE_TEXT = ", ".join(_RETRYABLE_VALUES)
 
 _OPENAI_TOOLS: list[dict[str, Any]] = [
@@ -107,10 +91,8 @@ _OPENAI_TOOLS: list[dict[str, Any]] = [
         "function": {
             "name": TOOL_CREATE_PROJECT,
             "description": (
-                "Start a home furniture project at layout_plan. Prefer rooms[] "
-                "(each room has dimensions and furniture envelopes). A single "
-                f"cabinet shortcut still accepts furniture_category "
-                f"({_EXECUTABLE_TEXT}) plus envelope in mm. Room doors/windows "
+                "Start a home furniture project at layout_plan. Require rooms[] "
+                "with explicit room dimensions and furniture envelopes. Room doors/windows "
                 "belong in rooms[].openings[] (kind=door|window). Do not send "
                 "cabinet n_doors, shelves, thickness, or hardware. After create, "
                 "confirm layout before generating later stages. Serial stages: "
@@ -126,38 +108,15 @@ _OPENAI_TOOLS: list[dict[str, Any]] = [
                     },
                     "rooms": {
                         "type": "array",
+                        "minItems": 1,
+                        "items": {"type": "object"},
                         "description": (
                             "Rooms in the home project, each with items[] and "
                             "optional openings[] for room doors and windows."
                         ),
                     },
-                    "furniture_category": {
-                        "type": "string",
-                        "description": (
-                            "Single-cabinet shortcut. Executable values: "
-                            f"{_EXECUTABLE_TEXT}."
-                        ),
-                    },
-                    "width_mm": {"type": ["number", "null"]},
-                    "depth_mm": {"type": ["number", "null"]},
-                    "height_mm": {"type": ["number", "null"]},
-                    "finished_envelope": {
-                        "type": "object",
-                        "additionalProperties": False,
-                        "properties": {
-                            "width_mm": {"type": ["number", "null"]},
-                            "depth_mm": {"type": ["number", "null"]},
-                            "height_mm": {"type": ["number", "null"]},
-                        },
-                    },
-                    "origin_z_mm": {
-                        "type": ["number", "null"],
-                        "description": "Bottom-edge height from floor for the shortcut cabinet.",
-                    },
-                    "hanging_mode": {"type": "string"},
-                    "hanging_height_mm": {"type": ["number", "null"]},
                 },
-                "required": ["name"],
+                "required": ["name", "rooms"],
             },
         },
     },
@@ -330,25 +289,13 @@ _OPENAI_TOOLS: list[dict[str, Any]] = [
                 "additionalProperties": False,
                 "properties": {
                     "project_id": {"type": "string"},
-                    "rooms": {"type": "array"},
-                    "furniture_category": {"type": "string"},
-                    "width_mm": {"type": ["number", "null"]},
-                    "depth_mm": {"type": ["number", "null"]},
-                    "height_mm": {"type": ["number", "null"]},
-                    "finished_envelope": {
-                        "type": "object",
-                        "additionalProperties": False,
-                        "properties": {
-                            "width_mm": {"type": ["number", "null"]},
-                            "depth_mm": {"type": ["number", "null"]},
-                            "height_mm": {"type": ["number", "null"]},
-                        },
+                    "rooms": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {"type": "object"},
                     },
-                    "origin_z_mm": {"type": ["number", "null"]},
-                    "hanging_mode": {"type": "string"},
-                    "hanging_height_mm": {"type": ["number", "null"]},
                 },
-                "required": ["project_id"],
+                "required": ["project_id", "rooms"],
             },
         },
     },

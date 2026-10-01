@@ -86,8 +86,6 @@ class PanelRuleContractTests(unittest.TestCase):
                 "origin_y_mm": 34,
                 "origin_z_mm": 56,
                 "rotation_z_deg": 90,
-                "hanging_mode": "flush_ceiling",
-                "hanging_height_mm": 1800,
             }
         )
         spec = FurnitureSpec.from_envelope(envelope, panel_parameters())

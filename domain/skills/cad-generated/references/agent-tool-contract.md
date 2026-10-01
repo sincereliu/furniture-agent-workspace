@@ -27,9 +27,9 @@ result = session.call(name, arguments)  # arguments 为对象或 JSON 字符串
 
 | 工具 | 作用 |
 | --- | --- |
-| `furniture_create_project` | 用房间布局或单件快捷字段开工，停在未确认的 `layout_plan`。成功后在本机打开该项目的预览页（环境变量 `FURNITURE_PREVIEW_BROWSER=0` 时不开） |
+| `furniture_create_project` | 用明确的房间布局开工，停在未确认的 `layout_plan`。成功后在本机打开该项目的预览页（环境变量 `FURNITURE_PREVIEW_BROWSER=0` 时不开） |
 | `furniture_get_project` | 读当前 Revision 快照 |
-| `furniture_confirm_stage` | 确认当前检查点；意图/板件确认时冻结 JSON。带 `room_id` 时只审那一间房（仅 `layout_plan`）：每间都审过，布局检查点才成立 |
+| `furniture_confirm_stage` | 确认当前检查点；布局/板件确认时冻结 JSON。带 `room_id` 时只审那一间房（仅 `layout_plan`）：每间都审过，布局检查点才成立 |
 | `furniture_run_next` | 在已确认检查点上生成下一阶段的第一次 attempt |
 | `furniture_retry_stage` | 对同一冻结上游再试 `panel_plan` / `manufacture_plan` / `feature_tree_planned` |
 | `furniture_select_stage_attempt` | 选用某次通过的 attempt，再确认 |
@@ -48,7 +48,7 @@ result = session.call(name, arguments)  # arguments 为对象或 JSON 字符串
 
 ## 调用结果
 
-外层：`ok`、`tool`、`error`、`progressed`、`project`。`progressed` 表示这次调用是否把流程往前推进（新建、确认、生成下一步、改意图为真；只查状态或只换已有尝试为假）。
+外层：`ok`、`tool`、`error`、`progressed`、`project`。`progressed` 表示这次调用是否把流程往前推进（新建、确认、生成下一步、改布局为真；只查状态或只换已有尝试为假）。
 
 ## 快照字段
 
@@ -65,12 +65,12 @@ result = session.call(name, arguments)  # arguments 为对象或 JSON 字符串
 
 `allowed_tools` 是当前合法的 `furniture_*` 工具名，不是方案推荐。`required_tool` 是下一步必须调用的那个工具。
 
-## 意图与阶段输入
+## 布局与阶段输入
 
 `furniture_create_project` / `furniture_revise_layout` 只接受：
 
-- `rooms[]`（全屋布局）
-- 或单件快捷：`furniture_category`、`width_mm` / `depth_mm` / `height_mm`（或 `finished_envelope`）、可选 `origin_z_mm`
+- 必填的非空 `rooms[]`，每间房明确提供 `id`、`width_mm`、`depth_mm`、`height_mm`；家具包络和摆放放在所属房间的 `items[]`。
+- 创建时另传 `name`，修改时另传 `project_id`。即使只有一件家具，也使用同一份房间契约；房间尺寸缺失时先询问客户。
 
 柜门（`n_doors`）、层板、抽屉、料厚、背板、踢脚、五金不得进入布局，它们属于 `stage_input`。房间门窗写在 `rooms[].openings[]`（`kind=door|window`），这是 layout 输入，不是柜门。
 

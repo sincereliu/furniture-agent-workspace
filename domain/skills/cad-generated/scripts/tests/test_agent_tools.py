@@ -35,7 +35,7 @@ from furniture_workflow.agent_tools import (
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from furniture_workflow.workflow_state import STAGE_SEQUENCE, WorkflowStage
 from furniture_workflow.workflow_store import JsonProjectStore
-from panel_fixtures import panel_parameters
+from panel_fixtures import cabinet_layout, layout_rooms, panel_parameters
 
 
 def imported_modules(path: Path) -> set[str]:
@@ -105,6 +105,15 @@ class AgentToolSurfaceTests(unittest.TestCase):
             self.assertFalse(parameters.get("additionalProperties", True))
             self.assertEqual(item["type"], "function")
 
+    def test_layout_tool_schemas_require_rooms_only(self) -> None:
+        schemas = {tool["function"]["name"]: tool["function"]["parameters"] for tool in openai_tools()}
+        for name, identity in ((TOOL_CREATE_PROJECT, "name"), (TOOL_REVISE_LAYOUT, "project_id")):
+            with self.subTest(tool=name):
+                schema = schemas[name]
+                self.assertEqual(set(schema["properties"]), {identity, "rooms"})
+                self.assertEqual(set(schema["required"]), {identity, "rooms"})
+                self.assertEqual(schema["properties"]["rooms"]["minItems"], 1)
+
     def test_tool_module_does_not_import_planners_or_cad(self) -> None:
         path = SCRIPT_ROOT / "furniture_workflow" / "agent_tools.py"
         modules = imported_modules(path)
@@ -127,10 +136,7 @@ class AgentToolSurfaceTests(unittest.TestCase):
             TOOL_CREATE_PROJECT,
             {
                 "name": "工具面柜",
-                "furniture_category": "floor_cabinet",
-                "width_mm": 800,
-                "depth_mm": 600,
-                "height_mm": 1000,
+                "rooms": layout_rooms(),
             },
         )
         self.assertTrue(created["ok"], created)
@@ -180,8 +186,8 @@ class AgentToolSurfaceTests(unittest.TestCase):
         self.assertFalse(paused["ok"])
         self.assertEqual(paused["error"]["code"], "STAGE_NOT_CONFIRMED")
 
-    def test_retry_and_select_attempt_use_frozen_intent(self) -> None:
-        project_id = self._confirmed_intent()
+    def test_retry_and_select_attempt_use_frozen_layout(self) -> None:
+        project_id = self._confirmed_layout()
         first = self.session.call(
             TOOL_RUN_NEXT,
             {
@@ -189,7 +195,7 @@ class AgentToolSurfaceTests(unittest.TestCase):
                 "stage_input": panel_parameters(n_doors=2),
             },
         )
-        intent_sha = first["project"]["layout_sha256"]
+        layout_sha = first["project"]["layout_sha256"]
         second = self.session.call(
             TOOL_RETRY_STAGE,
             {
@@ -199,7 +205,7 @@ class AgentToolSurfaceTests(unittest.TestCase):
             },
         )
         self.assertTrue(second["ok"], second)
-        self.assertEqual(second["project"]["layout_sha256"], intent_sha)
+        self.assertEqual(second["project"]["layout_sha256"], layout_sha)
         self.assertEqual(len(second["project"]["attempts"]["panel_plan"]), 2)
         self.assertEqual(
             second["project"]["current_view"]["cabinets"][0]["n_doors"],
@@ -224,7 +230,7 @@ class AgentToolSurfaceTests(unittest.TestCase):
         )
 
     def test_failed_first_attempt_requires_retry_not_run_next(self) -> None:
-        project_id = self._confirmed_intent()
+        project_id = self._confirmed_layout()
         failed = self.session.call(
             TOOL_RUN_NEXT,
             {"project_id": project_id, "stage_input": {"n_doors": 2}},
@@ -254,8 +260,8 @@ class AgentToolSurfaceTests(unittest.TestCase):
         self.assertEqual(recovered["project"]["current_stage"], "panel_plan")
         self.assertTrue(recovered["project"]["attempts"]["panel_plan"][1]["passed"])
 
-    def test_revise_intent_starts_a_new_revision(self) -> None:
-        project_id = self._confirmed_intent()
+    def test_revise_layout_starts_a_new_revision(self) -> None:
+        project_id = self._confirmed_layout()
         self.session.call(
             TOOL_RUN_NEXT,
             {"project_id": project_id, "stage_input": panel_parameters()},
@@ -264,11 +270,8 @@ class AgentToolSurfaceTests(unittest.TestCase):
             TOOL_REVISE_LAYOUT,
             {
                 "project_id": project_id,
-                "furniture_category": "wall_cabinet",
-                "width_mm": 900,
-                "depth_mm": 350,
-                "height_mm": 800,
-                "hanging_mode": "flush_ceiling",
+                "rooms": layout_rooms(furniture_category="wall_cabinet", width=900,
+                                      depth=350, height=800, origin_z_mm=2400),
             },
         )
         self.assertTrue(revised["ok"], revised)
@@ -289,36 +292,51 @@ class AgentToolSurfaceTests(unittest.TestCase):
         self.assertEqual(refused["project"]["current_stage"], "feature_tree_planned")
         self.assertTrue(refused["project"]["cad_generation_required"])
 
-    def test_size_only_shortcut_fit_uses_placeholder_room(self) -> None:
-        created = self.session.call(
-            TOOL_CREATE_PROJECT,
-            {
-                "name": "单件快捷",
-                "furniture_category": "floor_cabinet",
-                "width_mm": 800,
-                "depth_mm": 600,
-                "height_mm": 2000,
-            },
-        )
-        self.assertTrue(created["ok"], created)
+    def test_create_and_revise_reject_single_cabinet_arguments(self) -> None:
+        project_id = self._confirmed_layout()
+        old_fields = {
+            "furniture_category": "floor_cabinet", "width_mm": 800,
+            "depth_mm": 600, "height_mm": 2000,
+            "finished_envelope": {"width_mm": 800, "depth_mm": 600, "height_mm": 2000},
+            "origin_z_mm": 0, "hanging_height_mm": 1800, "hanging_mode": "flush_ceiling",
+        }
+        for tool, identity in (
+            (TOOL_CREATE_PROJECT, {"name": "已删除入口"}),
+            (TOOL_REVISE_LAYOUT, {"project_id": project_id}),
+        ):
+            for field, value in old_fields.items():
+                with self.subTest(tool=tool, field=field):
+                    result = self.session.call(tool, {**identity, "rooms": layout_rooms(), field: value})
+                    self.assertFalse(result["ok"], result)
+                    self.assertEqual(result["error"]["code"], "UNKNOWN_ARGUMENT")
+            result = self.session.call(tool, {**identity, **old_fields})
+            self.assertFalse(result["ok"], result)
+            self.assertEqual(result["error"]["code"], "UNKNOWN_ARGUMENT")
+        stored = self.store.load(project_id)
+        self.assertEqual(stored.latest.number, 1)
+        self.assertEqual(len(self.store.list_projects()), 1)
 
-    def test_size_only_shortcut_asks_for_real_room_dimensions(self) -> None:
-        """越界时点名占位房间并改问房间尺寸，不把虚构房间当作 caller 的输入。"""
-        created = self.session.call(
-            TOOL_CREATE_PROJECT,
-            {
-                "name": "放不进占位房间",
-                "furniture_category": "floor_cabinet",
-                "width_mm": 800,
-                "depth_mm": 600,
-                "height_mm": 5000,
-            },
-        )
-        self.assertFalse(created["ok"])
-        self.assertEqual(created["error"]["code"], "ROOM_DIMENSIONS_REQUIRED")
-        self.assertIsNone(created["project"])
-        self.assertIn("rooms[]", created["error"]["message"])
+    def test_create_and_revise_require_nonempty_rooms(self) -> None:
+        project_id = self._confirmed_layout()
+        for tool, identity in (
+            (TOOL_CREATE_PROJECT, {"name": "缺少房间"}),
+            (TOOL_REVISE_LAYOUT, {"project_id": project_id}),
+        ):
+            for extra in ({}, {"rooms": None}, {"rooms": []}, {"rooms": {}}, {"rooms": [None]}):
+                with self.subTest(tool=tool, extra=extra):
+                    result = self.session.call(tool, {**identity, **extra})
+                    self.assertFalse(result["ok"], result)
+                    self.assertEqual(result["error"]["code"], "INVALID_ARGUMENT")
+            for dimension in ("width_mm", "depth_mm", "height_mm"):
+                rooms = layout_rooms()
+                del rooms[0][dimension]
+                result = self.session.call(tool, {**identity, "rooms": rooms})
+                self.assertFalse(result["ok"], result)
+                self.assertEqual(result["error"]["code"], "INVALID_ARGUMENT")
+        self.assertEqual(self.store.load(project_id).latest.number, 1)
+        self.assertEqual(len(self.store.list_projects()), 1)
 
+    def test_explicit_room_dimensions_allow_tall_cabinet(self) -> None:
         explicit_rooms = self.session.call(
             TOOL_CREATE_PROJECT,
             {
@@ -371,10 +389,7 @@ class AgentToolSurfaceTests(unittest.TestCase):
             TOOL_CREATE_PROJECT,
             {
                 "name": "规范",
-                "furniture_category": "floor_cabinet",
-                "width_mm": 800,
-                "depth_mm": 600,
-                "height_mm": 1000,
+                "rooms": layout_rooms(),
             },
         )
         unknown_tool = self.session.call("execute_spec", {"project_id": created["project"]["id"]})
@@ -401,10 +416,7 @@ class AgentToolSurfaceTests(unittest.TestCase):
             json.dumps(
                 {
                     "name": "重载",
-                    "furniture_category": "floor_cabinet",
-                    "width_mm": 800,
-                    "depth_mm": 600,
-                    "height_mm": 1000,
+                    "rooms": layout_rooms(),
                 }
             ),
         )
@@ -423,7 +435,7 @@ class AgentToolSurfaceTests(unittest.TestCase):
         ])
 
     def test_panel_plan_snapshot_is_confirmation_review(self) -> None:
-        project_id = self._confirmed_intent()
+        project_id = self._confirmed_layout()
         generated = self.session.call(
             TOOL_RUN_NEXT,
             {
@@ -467,10 +479,7 @@ class AgentToolSurfaceTests(unittest.TestCase):
             TOOL_CREATE_PROJECT,
             {
                 "name": "摘要",
-                "furniture_category": "floor_cabinet",
-                "width_mm": 800,
-                "depth_mm": 600,
-                "height_mm": 1000,
+                "rooms": layout_rooms(),
             },
         )
         summary = self.session.call(
@@ -517,15 +526,12 @@ class AgentToolSurfaceTests(unittest.TestCase):
         self.assertEqual(view["requested_options"]["door_hinge_side"], "right")
         self.assertEqual(view["appearance"], _appearance_valid())
 
-    def _confirmed_intent(self) -> str:
+    def _confirmed_layout(self) -> str:
         created = self.session.call(
             TOOL_CREATE_PROJECT,
             {
                 "name": "已确认意图",
-                "furniture_category": "floor_cabinet",
-                "width_mm": 800,
-                "depth_mm": 600,
-                "height_mm": 1000,
+                "rooms": layout_rooms(),
             },
         )
         project_id = created["project"]["id"]
@@ -537,7 +543,7 @@ class AgentToolSurfaceTests(unittest.TestCase):
         return project_id
 
     def _confirmed_panels(self, **panel_overrides: object) -> str:
-        project_id = self._confirmed_intent()
+        project_id = self._confirmed_layout()
         generated = self.session.call(
             TOOL_RUN_NEXT,
             {
@@ -554,7 +560,7 @@ class AgentToolSurfaceTests(unittest.TestCase):
         return project_id
 
     def _through_feature_tree(self) -> str:
-        project_id = self._confirmed_intent()
+        project_id = self._confirmed_layout()
         for stage_input in (panel_parameters(), None, None):
             payload: dict = {"project_id": project_id}
             if stage_input is not None:
@@ -579,11 +585,9 @@ class AgentToolSurfaceTests(unittest.TestCase):
 class OrchestratorRunNextStageInputTests(unittest.TestCase):
     def test_run_next_accepts_first_panel_stage_input(self) -> None:
         orchestrator = FurnitureOrchestrator(workspace_root=WORKSPACE_ROOT)
-        from furniture_layout.project_layout import ProjectLayout, single_cabinet_layout
-
         project = orchestrator.create_project(
             "首次板件输入",
-            single_cabinet_layout(furniture_category="floor_cabinet", width=800, depth=600, height=1000, confirmed=True),
+            cabinet_layout(furniture_category="floor_cabinet", width=800, depth=600, height=1000, confirmed=True),
         )
         orchestrator.confirm_stage(project)
         result = orchestrator.run_next(
@@ -594,12 +598,10 @@ class OrchestratorRunNextStageInputTests(unittest.TestCase):
         self.assertEqual(spec["n_doors"], 1)
 
     def test_run_next_wraps_flat_manufacturing_stage_input(self) -> None:
-        from furniture_layout.project_layout import ProjectLayout, single_cabinet_layout
-
         orchestrator = FurnitureOrchestrator(workspace_root=WORKSPACE_ROOT)
         project = orchestrator.create_project(
             "扁平制造输入",
-            single_cabinet_layout(furniture_category="floor_cabinet", width=800, depth=600, height=1000, confirmed=True),
+            cabinet_layout(furniture_category="floor_cabinet", width=800, depth=600, height=1000, confirmed=True),
         )
         orchestrator.confirm_stage(project)
         orchestrator.run_next(project, stage_input=panel_parameters(n_doors=1))

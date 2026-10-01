@@ -134,16 +134,8 @@ class Revision:
         return None
 
     def approved_room_ids(self) -> set[str]:
-        """已经审过的房间。
-
-        老项目文件里没有 `approved_rooms`——那时 `layout.confirmed` 是唯一记号，
-        它为真就等价于"每一间都审过了"。
-        """
-        if self.approved_rooms:
-            return set(self.approved_rooms)
-        if self.layout.confirmed:
-            return {scene.room.id for scene in self.layout.rooms}
-        return set()
+        """只读取显式记录的房间确认。"""
+        return set(self.approved_rooms)
 
     def pending_room_ids(self) -> list[str]:
         """还没审的房间，按布局顺序——"还差哪间"要能直接说出来。"""
@@ -155,16 +147,8 @@ class Revision:
         ]
 
     def confirmed_digest(self, stage: str | WorkflowStage) -> str | None:
-        """这个阶段**已确认的那份内容**的摘要；没确认过就是 `None`。
-
-        板件另有一条历史字段 `confirmed_panel_sha256`（下游按它读冻结板件），
-        老项目文件里只有它、没有 `approved_digests`，所以这里做一次回退。
-        """
-        key = _stage_key(stage)
-        digest = self.approved_digests.get(key)
-        if digest is None and key == WorkflowStage.PANELS_PLANNED.value:
-            digest = self.confirmed_panel_sha256
-        return digest
+        """读取显式阶段确认摘要；没确认过就是 `None`。"""
+        return self.approved_digests.get(_stage_key(stage))
 
     def __post_init__(self) -> None:
         if self.manifest is None:
@@ -251,6 +235,23 @@ class Revision:
         if not isinstance(raw_layout, dict):
             raise ValueError("revision requires layout")
         layout = ProjectLayout.from_dict(raw_layout)
+        approved_rooms = data.get("approved_rooms")
+        if not isinstance(approved_rooms, list):
+            raise ValueError("revision.approved_rooms must be a list")
+        room_ids = {scene.room.id for scene in layout.rooms}
+        if any(
+            not isinstance(room_id, str) or room_id not in room_ids
+            for room_id in approved_rooms
+        ):
+            raise ValueError("revision.approved_rooms must contain known room ids")
+        if len(approved_rooms) != len(set(approved_rooms)):
+            raise ValueError("revision.approved_rooms must not contain duplicates")
+        if (
+            layout.confirmed
+            and WorkflowStage.LAYOUT_PLAN.value in data.get("approved_stages", [])
+            and set(approved_rooms) != room_ids
+        ):
+            raise ValueError("confirmed layout requires approval marks for all rooms")
         stage_inputs = data.get("stage_inputs")
         if not isinstance(stage_inputs, dict):
             stage_inputs = {}
@@ -318,7 +319,7 @@ class Revision:
                 parse_stage(str(stage)).value: dict(record)
                 for stage, record in dict(data.get("inherited", {})).items()
             },
-            approved_rooms=[str(room_id) for room_id in data.get("approved_rooms", [])],
+            approved_rooms=list(approved_rooms),
             inherited_rooms={
                 str(room_id): dict(record)
                 for room_id, record in dict(data.get("inherited_rooms", {})).items()

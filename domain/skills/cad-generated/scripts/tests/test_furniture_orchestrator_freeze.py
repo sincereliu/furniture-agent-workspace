@@ -21,7 +21,7 @@ bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 from furniture_cad.cad_bridge import CadBridge
 from furniture_delivery_validation.validation import validate_delivery
-from furniture_layout.project_layout import ProjectLayout, single_cabinet_layout
+from furniture_layout.project_layout import ProjectLayout
 from furniture_workflow.input_adapter import stage_inputs_from_spec
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from workflow_test_support import confirm_through, confirm_until
@@ -29,9 +29,9 @@ from furniture_workflow.workflow_project import Project
 from furniture_workflow.workflow_state import STAGE_SEQUENCE, WorkflowStage, parse_stage
 from furniture_workflow.workflow_store import JsonProjectStore
 from furniture_panel_planning.panel_pipeline import plan_panel_stage
-from panel_fixtures import cabinet_data, panel_parameters
+from panel_fixtures import cabinet_data, cabinet_layout, panel_parameters
 from furniture_orchestrator_test_support import (
-    cabinet_intent,
+    layout_proposal,
     fake_orchestrator,
     first_cabinet_spec,
 )
@@ -65,7 +65,7 @@ class FurnitureOrchestratorFreezeTests(unittest.TestCase):
             WorkflowStage.FEATURE_TREE_PLANNED,
         )
 
-    def test_confirming_intent_freezes_json_and_panel_retries_reuse_it(self) -> None:
+    def test_confirming_layout_freezes_json_and_panel_retries_reuse_it(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             store = JsonProjectStore(temporary_directory)
             orchestrator = FurnitureOrchestrator(
@@ -74,7 +74,7 @@ class FurnitureOrchestratorFreezeTests(unittest.TestCase):
             )
             project = orchestrator.create_project(
                 "可重试柜体",
-                cabinet_intent(),
+                layout_proposal(),
                 stage_inputs=stage_inputs_from_spec(panel_parameters(n_doors=2)),
             )
             orchestrator.confirm_layout(project)
@@ -89,7 +89,7 @@ class FurnitureOrchestratorFreezeTests(unittest.TestCase):
                 frozen["cad"]["units"][0]["furniture_category"],
                 "floor_cabinet",
             )
-            intent_sha = project.latest.layout_sha256
+            layout_sha = project.latest.layout_sha256
 
             first = orchestrator.run_next(project)
             self.assertEqual(
@@ -104,7 +104,7 @@ class FurnitureOrchestratorFreezeTests(unittest.TestCase):
                 stage_input={"parameters": panel_parameters(n_doors=1)},
             )
             self.assertEqual(second.revision.id, first.revision.id)
-            self.assertEqual(second.revision.layout_sha256, intent_sha)
+            self.assertEqual(second.revision.layout_sha256, layout_sha)
             self.assertEqual(len(second.revision.attempts_for("panel_plan")), 2)
             self.assertEqual(
                 first_cabinet_spec(second.revision.stage_outputs["panel_plan"])[
@@ -146,7 +146,7 @@ class FurnitureOrchestratorFreezeTests(unittest.TestCase):
             )
             project = orchestrator.create_project(
                 "可复用板件",
-                cabinet_intent(),
+                layout_proposal(),
                 stage_inputs=stage_inputs_from_spec(panel_parameters()),
             )
             orchestrator.confirm_layout(project)
@@ -263,10 +263,10 @@ class FurnitureOrchestratorFreezeTests(unittest.TestCase):
             )
             self.assertEqual(cad.bridge.status, "ok")
 
-    def test_failed_panel_attempt_can_be_retried_without_new_intent(self) -> None:
+    def test_failed_panel_attempt_can_be_retried_without_new_layout(self) -> None:
         project = self.orchestrator.create_project(
             "失败后重试",
-            cabinet_intent(),
+            layout_proposal(),
             stage_inputs=stage_inputs_from_spec(
                 {"structure": {"mystery_joint": "unknown"}}
             ),
@@ -286,10 +286,10 @@ class FurnitureOrchestratorFreezeTests(unittest.TestCase):
         self.assertTrue(recovered.latest_attempt("panel_plan").passed)
         self.assertIn("panel_plan", recovered.stage_outputs)
 
-    def test_new_intent_revision_does_not_keep_panel_attempts(self) -> None:
+    def test_new_layout_revision_does_not_keep_panel_attempts(self) -> None:
         project = self.orchestrator.create_project(
             "改意图",
-            cabinet_intent(),
+            layout_proposal(),
             stage_inputs=stage_inputs_from_spec(panel_parameters()),
         )
         self.orchestrator.confirm_layout(project)
@@ -299,7 +299,7 @@ class FurnitureOrchestratorFreezeTests(unittest.TestCase):
 
         revised = self.orchestrator.revise(
             project,
-            single_cabinet_layout(furniture_category="floor_cabinet", width=900, depth=600, height=1000, confirmed=True),
+            cabinet_layout(furniture_category="floor_cabinet", width=900, depth=600, height=1000, confirmed=True),
         )
         self.assertEqual(revised.parent_revision_id, parent.id)
         self.assertEqual(revised.attempts_for("panel_plan"), [])
@@ -315,7 +315,7 @@ class FurnitureOrchestratorFreezeTests(unittest.TestCase):
 
         project = self.orchestrator.create_project(
             "旧阶段名",
-            cabinet_intent(),
+            layout_proposal(),
             stage_inputs=stage_inputs_from_spec(panel_parameters()),
         )
         self.orchestrator.confirm_layout(project)

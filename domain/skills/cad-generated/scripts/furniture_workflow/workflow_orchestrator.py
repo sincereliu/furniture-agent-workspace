@@ -1,4 +1,4 @@
-"""Single deterministic orchestrator for the first cabinet vertical slice."""
+"""Deterministic orchestrator for the project furniture stages."""
 
 from __future__ import annotations
 
@@ -14,10 +14,7 @@ from furniture_feature_tree.validation import validate_feature_tree
 from furniture_manufacturing.validation import validate_manufacturing
 from furniture_panel_planning.validation import validate_panel_output
 
-from .input_adapter import (
-    layout_from_spec as translate_layout_from_spec,
-    panel_envelopes_from_layout,
-)
+from .input_adapter import panel_envelopes_from_layout
 from .workflow_analyses import AnalysisMixin
 from .workflow_constants import (
     ANALYSIS_METHOD_SKILLS,
@@ -67,11 +64,6 @@ class FurnitureOrchestrator(
         project.add_revision(layout, stage_inputs=stage_inputs)
         self._persist(project)
         return project
-
-    @staticmethod
-    def layout_from_spec(spec: dict[str, Any]) -> ProjectLayout:
-        """Compatibility facade for the layout translation API."""
-        return translate_layout_from_spec(spec)
 
     def _persist(self, project: Project) -> None:
         if self.project_store is None:

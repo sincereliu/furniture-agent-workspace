@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from furniture_layout.project_layout import ProjectLayout, single_cabinet_layout
+from furniture_layout.project_layout import ProjectLayout
 from furniture_panel_planning.cabinet_envelope import CabinetEnvelope
 from furniture_panel_planning.panel_spec import PANEL_SPEC_FIELDS
 
@@ -19,15 +19,7 @@ MANUFACTURING_SPEC_FIELDS = frozenset(
 )
 PROTOCOL_FIELDS = frozenset(
     {
-        "furniture_category",
-        "width",
-        "depth",
-        "height",
-        "finished_envelope",
         "rooms",
-        "origin_z_mm",
-        "hanging_height_mm",
-        "hanging_mode",
         "purpose",
         "layout",
         "appearance",
@@ -39,49 +31,11 @@ PROTOCOL_FIELDS = frozenset(
         *MANUFACTURING_SPEC_FIELDS,
     }
 )
-_ENVELOPE_TARGETS = frozenset({"furniture_category"})
-_ENVELOPE_PREFIXES = ("finished_envelope.",)
-_LEGACY_PROTOCOL_ALIASES = {
-    "type": "furniture_category",
-    "furniture_type": "furniture_category",
-    "overall_size": "finished_envelope",
-    "hanging_height": "hanging_height_mm",
-    "mounting_height": "origin_z_mm",
-    "mounting_height_mm": "origin_z_mm",
-    "mount_mode": "hanging_mode",
-}
-
-
-def layout_from_spec(spec: Mapping[str, Any]) -> ProjectLayout:
-    """Expand a flat cabinet request into a one-room layout."""
-    data = _reject_legacy_protocol_aliases(dict(spec))
-    if isinstance(data.get("rooms"), list):
-        return ProjectLayout.from_source({"rooms": data["rooms"]})
-    furniture_category = str(data.get("furniture_category") or "").strip().lower()
-    size = data.get("finished_envelope") or {}
-    if not isinstance(size, Mapping):
-        raise ValueError("finished_envelope must be an object")
-    width = size.get("width_mm", data.get("width"))
-    depth = size.get("depth_mm", data.get("depth"))
-    height = size.get("height_mm", data.get("height"))
-    origin_z = _first_present(data, "origin_z_mm", "hanging_height_mm")
-    hanging_mode = data.get("hanging_mode")
-    if hanging_mode is not None and str(hanging_mode).strip().lower() == "flush_ceiling":
-        origin_z = None
-    if width is None or depth is None or height is None:
-        raise ValueError("width, depth and height are required")
-    return single_cabinet_layout(
-        furniture_category=furniture_category,
-        width=float(width),
-        depth=float(depth),
-        height=float(height),
-        origin_z_mm=None if origin_z is None else float(origin_z),
-    )
 
 
 def stage_inputs_from_spec(spec: Mapping[str, Any]) -> dict[str, Any]:
     """Route panel/manufacturing fields; nested layout cannot carry construction."""
-    data = _reject_legacy_protocol_aliases(dict(spec))
+    data = dict(spec)
     unknown = sorted(set(data) - PROTOCOL_FIELDS)
     if unknown:
         raise ValueError("request field has no owning stage: " + ", ".join(unknown))
@@ -133,7 +87,6 @@ def _route_constraints(data: Mapping[str, Any], output: dict[str, Any]) -> None:
     if not isinstance(mappings, Mapping):
         raise ValueError("constraint_mappings must be an object")
     informational: list[str] = []
-    envelope: list[dict[str, str]] = []
     for constraint in constraints:
         if not isinstance(constraint, str) or not constraint.strip():
             raise ValueError("constraints must contain non-empty strings")
@@ -145,11 +98,7 @@ def _route_constraints(data: Mapping[str, Any], output: dict[str, Any]) -> None:
             informational.append(constraint)
             continue
         record = {"text": constraint, "target": target}
-        if target in _ENVELOPE_TARGETS or target.startswith(_ENVELOPE_PREFIXES):
-            if not _envelope_target_is_explicit(data, target):
-                raise ValueError(f"constraint target is not explicit: {target}")
-            envelope.append(record)
-        elif target.startswith("layout."):
+        if target.startswith("layout."):
             raise ValueError(f"constraint target has no owning stage: {target}")
         elif target.startswith(("structure.", "panels.")):
             field = target.split(".", 1)[1]
@@ -171,24 +120,6 @@ def _route_constraints(data: Mapping[str, Any], output: dict[str, Any]) -> None:
         )
     if informational:
         output["informational_constraints"] = informational
-    if envelope:
-        output["envelope_constraints"] = envelope
-
-
-def _envelope_target_is_explicit(data: Mapping[str, Any], target: str) -> bool:
-    if target in _ENVELOPE_TARGETS:
-        return bool(str(data.get("furniture_category") or "").strip())
-    field = target.split(".", 1)[1]
-    size = data.get("finished_envelope") or {}
-    flat_name = {
-        "width_mm": "width",
-        "depth_mm": "depth",
-        "height_mm": "height",
-    }.get(field)
-    return (
-        isinstance(size, Mapping)
-        and size.get(field) is not None
-    ) or (flat_name is not None and data.get(flat_name) is not None)
 
 
 def panel_envelopes_from_layout(layout: ProjectLayout) -> tuple[CabinetEnvelope, ...]:
@@ -213,23 +144,3 @@ def panel_stage_input(stage_inputs: Mapping[str, Any]) -> dict[str, Any]:
 def manufacturing_stage_input(stage_inputs: Mapping[str, Any]) -> dict[str, Any]:
     value = stage_inputs.get("manufacturing", {})
     return dict(value) if isinstance(value, Mapping) else {}
-
-
-def _first_present(data: Mapping[str, Any], *keys: str) -> Any:
-    for key in keys:
-        if key in data:
-            return data[key]
-    return None
-
-
-def _reject_legacy_protocol_aliases(data: dict[str, Any]) -> dict[str, Any]:
-    """Reject historical flat-request names. Canonical fields stay on the protocol."""
-    found = [name for name in sorted(_LEGACY_PROTOCOL_ALIASES) if name in data]
-    if not found:
-        return data
-    details = ", ".join(
-        f"{name} (use {_LEGACY_PROTOCOL_ALIASES[name]})" for name in found
-    )
-    raise ValueError(
-        "flat requests must use canonical names; no longer accepted: " + details
-    )

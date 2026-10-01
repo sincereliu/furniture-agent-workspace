@@ -60,7 +60,7 @@
 
 - **内容逐字节相同的第二版照样重跑 5.37 s**，产出的 STEP 与第一版**逐字节相同**（`e63ff928dfdaecba` 两次一致）→ 这次重跑纯属白跑。
 - **耗时与柜数无关**：1 件 4.75 s、3 件 4.80 s、6 件 4.90 s；STEP 大小也几乎不变（200 / 200 / 200 KB，小柜 184 KB）。→ 这 4.8 秒基本是**固定开销**（起 Python 进程 + 导入 build123d + 初始化发射器），不是几何计算。
-- **前置缺口**：`require_primary_handoff()` 只取 `cabinets[0]`，所以制造 / 特征树 / CAD **目前只处理主柜**（见 [板件运行时映射](../../panel-plan/references/runtime-map.md)第 13 行与"交互主流程一份意图一台柜"）。这解释了上面的形状数据，也意味着：**"逐柜复用"的前提是"逐柜 CAD"**——多柜下游没做之前，内容寻址只能省下"整份没变还要重跑"的 4.8 秒。
+- **前置缺口**：`require_primary_handoff()` 只取 `cabinets[0]`，所以制造 / 特征树 / CAD **目前只处理主柜**（板件已支持布局中的多个柜体；制造 / 特征树 / CAD 的主柜读取限制见 [板件运行时映射](../../panel-plan/references/runtime-map.md)的交接部分）。这解释了上面的形状数据，也意味着：**"逐柜复用"的前提是"逐柜 CAD"**——多柜下游没做之前，内容寻址只能省下"整份没变还要重跑"的 4.8 秒。
 - **结论（2026-09-24 决定：暂缓，等时机）**：4.8 秒/次不值得为它动血缘（谱系校验 + stale 标记 + 混合来源）。**但有明确的唤醒条件——满足任一条就回来重估方向 3**：
   1. **孔位/加工计算变重之后**：现在每次 4.8 秒几乎全是固定开销（起进程 + 导入 build123d），几何几乎不计时。孔位建模一旦细化（每块板的孔都要真实建模、多柜要各出 STEP），单次会明显上涨——**重算越贵，内容寻址越值**。
   2. **多柜下游落地之后**（制造/特征树/CAD 覆盖每件柜子，见下条前置缺口）：那时"改一件只重跑一件"才有地方可省。
@@ -74,4 +74,4 @@
 
 1. ~~**`revise()` 会清空 `stage_inputs`。**~~ **已修（P3）**：`revise()`/`revise_layout()` 现在带走父修订的 `stage_inputs`（与 `revise_stage_output()` 一致）。页面写项目让它变成硬需求——改摆放不该顺带丢掉柜体构造参数。落点：`workflow_revision_ops.py::revise()`，测试 `tests/test_project_layout_edit.py::test_new_revision_keeps_the_cabinet_stage_inputs`。
 2. **板件参数无法凭记忆重建。** 层板间距必须严格填满内部净空（实测报 `explicit shelf gaps and top gap do not fill the internal height (sum=1982, internal_height=1964)`），内部净空又是从外形尺寸推出来的。所以"重跑板件"不能假设参数可原样搬运，必须完整重放上一版输入。
-3. **`store/` 里 79/84 份 revision 是旧格式**（`stage_outputs` 用 `design_intent` / `panels_planned` / `manufacturing_planned`）。实测加载报 `ValueError: revision requires layout`（`Revision.from_dict` 第一步就要求顶层 `layout` 键）。属历史残留，当前代码读不了；`store/` 已忽略，不必清理，但翻 store 排查时先确认格式。
+3. 项目加载只接受当前房间布局与确认记录。缺少 `layout` 或 `approved_rooms` 的文件拒绝加载，项目列表按通用不可读文件展示；运行时不迁移旧数据。

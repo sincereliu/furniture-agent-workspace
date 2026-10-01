@@ -38,12 +38,11 @@
 
 - `Revision.approved_rooms` 记"人看过哪几间"；`confirm_room(project, room_id)` 审一间，
   `pending_room_ids()` 说还差哪几间；全审齐时布局才 `confirmed` 并进 `approved_stages`。
-- `confirm_stage(layout_plan)` 保留"一次确认全部"的老语义（等价于把剩下的房间一次审完）——
-  工具面、老流程、老测试都不用改。
+- `confirm_stage(layout_plan)` 一次确认整份布局，等价于把剩下的房间一次审完。
 - **没动过的房间，确认跟着走**：新 Revision 里某间房的内容与父修订**逐字节相同**且父修订审过它，
   就自动记入 `approved_rooms`，并在 `inherited_rooms[room_id] = {sha256, from_revision}` 留痕
   （R2 的同一条规矩：沿用要回指到真正点头的那一版）。若这样凑齐每一间，布局检查点当场成立。
-- 老项目文件没有 `approved_rooms`：那时 `confirmed: true` 是唯一记号，等价于"每间都审过"。
+- 持久化修订必须明确保存 `approved_rooms`；缺失时拒绝加载，不从 `layout.confirmed` 补造确认。
 
 于是两种改动的代价分开了：**改一间 → 只审那一间**；**一间都没动（例如只改了 `stage_inputs`）→
 一间都不用审**。"改动落在哪一间"的判据是逐字节比较，不看人的描述。

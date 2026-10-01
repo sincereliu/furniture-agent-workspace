@@ -3,22 +3,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping
 
 from .input_fields import boolean
 from .scene_planning import plan_scene
 from .scene import (
     EXECUTABLE_CATEGORIES,
-    EPSILON,
     PlacedItem,
     RoomScene,
 )
 
 
 LAYOUT_SCHEMA_VERSION = 1
-DEFAULT_STUDIO_WIDTH_MM = 4000.0
-DEFAULT_STUDIO_DEPTH_MM = 3000.0
-DEFAULT_STUDIO_HEIGHT_MM = 3200.0
 
 
 @dataclass(frozen=True)
@@ -159,58 +155,3 @@ class ProjectLayout:
         if errors:
             raise ValueError("; ".join(errors))
         return layout
-
-
-def single_cabinet_layout(
-    *,
-    furniture_category: str = "floor_cabinet",
-    width: float = 800.0,
-    depth: float = 600.0,
-    height: float = 1000.0,
-    origin_z_mm: float | None = None,
-    room_height_mm: float = DEFAULT_STUDIO_HEIGHT_MM,
-    cabinet_id: str = "cabinet_1",
-    room_id: str = "room",
-    confirmed: bool = False,
-) -> ProjectLayout:
-    """Studio-room shortcut: one executable cabinet on the north wall."""
-    if furniture_category not in EXECUTABLE_CATEGORIES:
-        raise ValueError(
-            "furniture_category must be one of: "
-            + ", ".join(sorted(EXECUTABLE_CATEGORIES))
-        )
-    z_mm = 0.0 if origin_z_mm is None else float(origin_z_mm)
-    if furniture_category == "wall_cabinet" and origin_z_mm is None:
-        z_mm = max(0.0, room_height_mm - height)
-        if z_mm <= EPSILON:
-            z_mm = 0.0
-    spec: dict[str, Any] = {
-        "id": cabinet_id,
-        "label": cabinet_id,
-        "category": furniture_category,
-        "furniture_category": furniture_category,
-        "width": width,
-        "depth": depth,
-        "height": height,
-        "placement": {
-            "mode": "wall",
-            "host_wall": "north",
-            "offset_mm": 0,
-            "origin_z_mm": z_mm,
-        },
-    }
-    layout = ProjectLayout.from_source(
-        {
-            "rooms": [
-                {
-                    "id": room_id,
-                    "name": "房间",
-                    "width_mm": DEFAULT_STUDIO_WIDTH_MM,
-                    "depth_mm": DEFAULT_STUDIO_DEPTH_MM,
-                    "height_mm": room_height_mm,
-                    "items": [spec],
-                }
-            ]
-        }
-    )
-    return replace(layout, confirmed=confirmed) if confirmed else layout

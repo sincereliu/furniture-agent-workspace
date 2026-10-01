@@ -171,9 +171,6 @@ class RevisionOpsMixin:
         self._persist(project)
         return revision
 
-    def confirm_intent(self, project: Project) -> Revision:
-        return self.confirm_stage(project, WorkflowStage.LAYOUT_PLAN)
-
     def confirm_layout(self, project: Project) -> Revision:
         return self.confirm_stage(project, WorkflowStage.LAYOUT_PLAN)
 

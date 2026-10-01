@@ -13,9 +13,9 @@
 | 概念 | 规范名 | 单位/类型 | 说明 |
 | --- | --- | --- | --- |
 | 家具类别 | `furniture_category` | 枚举 | 板件柜型，来自已确认外形尺寸；本阶段不接受 `furniture_type` 或 `type`，也不读房间或摆放字段。 |
-| 外形尺寸宽 | `width` | mm | 已确认外形尺寸。扁平协议可用 `finished_envelope.width_mm`，本阶段序列化 `FurnitureSpec` 只写 `width`。 |
-| 外形尺寸深 | `depth` | mm | 已确认外形尺寸。扁平协议可用 `finished_envelope.depth_mm`，本阶段序列化 `FurnitureSpec` 只写 `depth`。 |
-| 外形尺寸高 | `height` | mm | 已确认外形尺寸。扁平协议可用 `finished_envelope.height_mm`，本阶段序列化 `FurnitureSpec` 只写 `height`。 |
+| 外形尺寸宽 | `width` | mm | 已确认外形尺寸。布局 `rooms[].items[]` 写 `width`，本阶段序列化 `FurnitureSpec` 只写 `width`。 |
+| 外形尺寸深 | `depth` | mm | 已确认外形尺寸。布局 `rooms[].items[]` 写 `depth`，本阶段序列化 `FurnitureSpec` 只写 `depth`。 |
+| 外形尺寸高 | `height` | mm | 已确认外形尺寸。布局 `rooms[].items[]` 写 `height`，本阶段序列化 `FurnitureSpec` 只写 `height`。 |
 | 柜门数量 | `n_doors` | 整数 | 柜体前脸门板数。本阶段不接受 `door_count`。房间门洞是 layout 的 `openings[].kind=door`，不是本字段。 |
 | 前脸四周边距 | `front_face_margin` | mm | 门板与抽屉前板共用的前脸边距。本阶段不接受 `door_margin`。 |
 | 层板列表 | `shelves` | 列表 | 从上到下排列的结构化层板列表。 |
@@ -76,7 +76,7 @@
 - `furniture_type`、`type`：用 `furniture_category`。
 - `door_margin`：用 `front_face_margin`。
 - `door_count`：柜门数量用 `n_doors`。房间门洞是 layout 的 `openings[]`（`kind=door`），不是本阶段字段。
-- `hanging_mode`、`hanging_height_mm`、`origin_x_mm`、`origin_y_mm`、`origin_z_mm`、`rotation_z_deg`、`room_id`：布局摆放字段。CAD 单元上出现时本阶段忽略，不得写入板件提案。
+- `origin_x_mm`、`origin_y_mm`、`origin_z_mm`、`rotation_z_deg`、`room_id`：布局摆放字段。CAD 单元上出现时本阶段忽略，不得写入板件提案。
 - `movable_shelf_connector`、`door_hinge_side`：制造阶段输入，不是板件 spec 字段。
 - `back_mount=auto`、`gap_below_mm="auto"`：不再接受；背板必须写 `groove`/`insert`/`cover`，计算层只写 `null`。
 - `toe_kick_support_count=null`：不再接受；必须写非负整数。

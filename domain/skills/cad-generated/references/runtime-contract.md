@@ -1,6 +1,6 @@
 # 家具运行时契约
 
-改编排、产物路径、扁平协议或 store 布局时读本文。做家具或改某一阶段规则时不要读；用当前阶段 Skill。这里只定义运行时契约、命令、路径和限制。
+改编排、产物路径、结构化协议或 store 布局时读本文。做家具或改某一阶段规则时不要读；用当前阶段 Skill。这里只定义运行时契约、命令、路径和限制。
 
 ## 当前能力
 
@@ -21,12 +21,12 @@
 5. `cad_generated`
 6. `delivery_validated`
 
-输出在 `revision.stage_outputs[stage.value]`，待后续处理的参数在 `revision.stage_inputs`，确认在 `approved_stages`，规划尝试在 `stage_attempts`，历史在 `workflow.history`。`JsonProjectStore` 把 Project 写到 `store/<project-id>/project.json`，确认意图时额外写出冻结文件，每次规划尝试写出独立 attempt 目录。
+输出在 `revision.stage_outputs[stage.value]`，待后续处理的参数在 `revision.stage_inputs`，确认在 `approved_stages`，规划尝试在 `stage_attempts`，历史在 `workflow.history`。`JsonProjectStore` 把 Project 写到 `store/<project-id>/project.json`，确认布局时额外写出冻结文件，每次规划尝试写出独立 attempt 目录。
 
 交互调用（Python）：
 
 ```python
-orchestrator.confirm_stage(project)          # 确认当前检查点；意图确认后冻结 JSON
+orchestrator.confirm_stage(project)          # 确认当前检查点；布局确认后冻结 JSON
 result = orchestrator.run_next(project, stage_input={...})  # 生成下一阶段的第一次尝试
 orchestrator.retry_stage(project, "panel_plan", stage_input={"parameters": ...})
 orchestrator.select_stage_attempt(project, "panel_plan", 1)
@@ -47,7 +47,7 @@ result = orchestrator.run_next(
 `run_next()`/`run_until()` 不越过未确认检查点。返回当前输出后等待确认。
 
 - 布局确认：`confirm_stage(project, "layout_plan")` 把确认后的布局冻成 `store/<project-id>/layouts/<layout-sha256>.json`。之后板件只读这份冻结布局里的可执行 CAD 单元。
-- **房间级确认**：布局检查点是"**每间都审过**"的派生值——`confirm_room(project, room_id)` 审一间，`pending_room_ids()` 说还差哪几间，全部审过时布局才 `confirmed` 并进 `approved_stages`（下游仍只认这一个闸门，panel / 制造 / CAD 的契约没改）。`confirm_stage(layout_plan)` 保留"一次确认全部"的老语义，等价于把剩下的房间一次审完。**没动过的房间，确认跟着走**：新 Revision 里某间房的内容与父修订**逐字节相同**且父修订审过它，就自动记入 `approved_rooms` 并在 `inherited_rooms[room_id] = {sha256, from_revision}` 留痕；若这样凑齐了每一间，布局检查点当场成立（不必再让人点一次头）。所以"改一间只审一间"成立，而"改的是没审过的那间"仍要人看。老项目文件没有 `approved_rooms`：`confirmed: true` 等价于"每间都审过"。
+- **房间级确认**：布局检查点是"**每间都审过**"的派生值——`confirm_room(project, room_id)` 审一间，`pending_room_ids()` 说还差哪几间，全部审过时布局才 `confirmed` 并进 `approved_stages`（下游仍只认这一个闸门，panel / 制造 / CAD 的契约没改）。`confirm_stage(layout_plan)` 一次确认全部，等价于把剩下的房间一次审完。**没动过的房间，确认跟着走**：新 Revision 里某间房的内容与父修订**逐字节相同**且父修订审过它，就自动记入 `approved_rooms` 并在 `inherited_rooms[room_id] = {sha256, from_revision}` 留痕；若这样凑齐了每一间，布局检查点当场成立（不必再让人点一次头）。所以"改一间只审一间"成立，而"改的是没审过的那间"仍要人看。持久化修订必须明确保存 `approved_rooms`；`layout.confirmed` 不用于补造房间确认记录。
 - 内容指纹只有一个实现：`furniture_workflow/workflow_digest.py::stable_digest`——对 `json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",",":"))` 取 sha256。`layout_sha256`、`panel_sha256`、`source_sha256`、`stage_output_sha256` 都走它；**别再各写一份**，否则同一份内容在两个模块里算出两个指纹，冻结文件会互相认不出。交付验证的 `validation._stable_digest` 是同一套算法在独立包里的副本，有测试盯着两者一致。
 - 板件确认：`confirm_stage(project, "panel_plan")` 把已确认板件冻成 `store/<project-id>/panels/<panel-sha256>.json`，并记下 `confirmed_panel_sha256`。有 Store 时制造、板件旁路分析、CAD `panel-plan.json` 和交付分析哈希都按该哈希读冻结文件，文件缺失则失败；无 Store 时读内存中已确认输出。`retry_stage(project, "manufacture_plan")` 不重跑板件。
 - 同一冻结上游再试规划：`retry_stage(project, stage, stage_input=...)`。适用于未确认或需作废下游的 `panel_plan`、`manufacture_plan`、`feature_tree_planned`。失败只记录该次 attempt，不把 Revision 标为 `FAILED`。
@@ -56,7 +56,7 @@ result = orchestrator.run_next(
 - 直接改已有规划结果：`revise_stage_output(project, stage, edited_output)`。
 - 新 Revision 仅复制修改点前的已确认输出；修改阶段和下游重做。旧产物标为 stale，不手改 STEP、GLB、BOM 或源码。
 
-冻结意图、冻结板件与 attempt 文件：
+冻结布局、冻结板件与 attempt 文件：
 
 ```text
 store/<project-id>/
@@ -78,7 +78,14 @@ store/<project-id>/
 
 ```json
 {
-  "furniture_category": "floor_cabinet", "width": 800, "depth": 600, "height": 2000,
+  "rooms": [{
+    "id": "living_room", "width_mm": 4000, "depth_mm": 3000, "height_mm": 2800,
+    "items": [{
+      "id": "cabinet_1", "category": "柜体", "furniture_category": "floor_cabinet",
+      "width": 800, "depth": 600, "height": 2000,
+      "placement": {"mode": "wall", "host_wall": "north", "offset_mm": 0, "origin_z_mm": 0}
+    }]
+  }],
   "board_thickness": 18, "back_thickness": 9, "door_thickness": 18,
   "toe_kick_height": 50, "back_offset": 18,
   "front_face_margin": 1.5, "front_gap": 2,
@@ -91,11 +98,11 @@ store/<project-id>/
 }
 ```
 
-`width/depth/height` 必须在意图确认前明确提供；不再用类别预设替代客户确认的外形尺寸。板件必填字段必须完整提交；料档字段（`board_thickness` / `back_thickness` / `door_thickness` / `drawer_bottom_thickness` / `drawer_back_thickness`）可省略，由车间工艺卡展开（柜体板 18、9 厘背板 9、门与抽屉盒同柜体板）。代码不按柜型静默补其他默认方案。完整值经确定性准入后才写入 `panel_plan.cabinets[].spec`。
+`rooms[]` 必须非空，房间的 `width_mm/depth_mm/height_mm` 和家具的 `width/depth/height` 必须在布局确认前明确提供（沿墙 `fill` 件的宽度由空段计算）；不再用类别预设替代客户确认的外形尺寸。板件必填字段必须完整提交；料档字段（`board_thickness` / `back_thickness` / `door_thickness` / `drawer_bottom_thickness` / `drawer_back_thickness`）可省略，由车间工艺卡展开（柜体板 18、9 厘背板 9、门与抽屉盒同柜体板）。代码不按柜型静默补其他默认方案。完整值经确定性准入后才写入 `panel_plan.cabinets[].spec`。
 
-契约为扁平 JSON。规范字段使用 `furniture_category/width/depth/height` 或 `rooms[]`；适配器把单件快捷写法展开成一间工作室房间 + 一个 CAD 单元，把板件规范字段路由到 `stage_inputs.panels`，把制造选项（含 `door_hinge_side`、`movable_shelf_connector`、`edge_banding`）和外观路由到 `stage_inputs.manufacturing`。扁平请求不接受历史名 `type`、`furniture_type`、`overall_size`、`hanging_height`、`mounting_height`、`mounting_height_mm`、`mount_mode`。吊柜离地用 `origin_z_mm` 或 `hanging_height_mm`，贴顶用 `hanging_mode=flush_ceiling`。可选 `constraints` 必须有阶段映射；未分类约束在协议路由时拒绝。扁平示例里的 `door_hinge_side` 是制造选项，不是板件规范字段。
+项目布局只接受明确的 `rooms[]`，由 `ProjectLayout.from_source` 规划。上述 JSON 展示布局和后续阶段的数据归属：创建项目只提交 `name` 和 `rooms`；板件与制造参数分别经 `furniture_run_next` 的 `stage_input` 提交。`stage_inputs_from_spec` 可将同一份结构化数据的板件规范字段路由到 `stage_inputs.panels`，将制造选项（含 `door_hinge_side`、`movable_shelf_connector`、`edge_banding`）和外观路由到 `stage_inputs.manufacturing`。吊柜离地写在 `rooms[].items[].placement.origin_z_mm`；贴顶位置由 LLM 根据明确的房间净高与柜高提出，再由运行时检查。可选 `constraints` 必须有阶段映射；未分类约束在协议路由时拒绝。示例里的 `door_hinge_side` 是制造选项。
 
-`back_mount` 接受 `groove/insert/cover`，但不进入意图或布局输出。板件阶段不从板厚推断模式；`back_rail_height/groove_depth/groove_clearance` 仅对 `groove` 生效，`back_rail_height=0` 关闭背拉条。
+`back_mount` 接受 `groove/insert/cover`，但不进入布局输出。板件阶段不从板厚推断模式；`back_rail_height/groove_depth/groove_clearance` 仅对 `groove` 生效，`back_rail_height=0` 关闭背拉条。
 
 仅总体尺寸为数值且变体匹配实时模板时执行；否则停在相应规划层并说明边界。
 
@@ -156,7 +163,7 @@ store/<project-id>/
 
 可编辑视图：`GET /api/room-scene/{scene_id}/editor` 返回自包含 HTML。**点包络任意位置**都能选中（命中判定用凸盒 6 个面投影的并集，外加 5px 容差，免得点描边穿透去转视角）。选中后家具上方出现两个手柄：**橙色圆点**拖了旋转（角度绕包络中心算，默认吸附 15°、按住 Shift 精细到 1°，`wall` 家具会在同一次 op 里转成 `free`），**蓝色圆点**拖了改**离地高度**（发 `origin_z_mm`，范围 0 到「层高 − 自身高」，同样按摆放检查求解）。选中件还会画一圈**旋转环**（15° 刻度 + 朝向指针），**整圈都是可抓区域**，拖动时就地显示当前角度——比去点一个小圆点好抓得多。拖动改位置：靠墙件沿墙滑动（发 `offset_mm`），往房间内拖过 26px 阈值就转成自由摆放（发 `mode: "free"` + 自由坐标）；自由件平面移动（发 `origin_x_mm`/`origin_y_mm`）。**只读的项目预览页不画这两个手柄，也不画旋转环**（保留"正面朝哪"的绿箭头与「前」）：只读时它们拖不动，画出来只会让人以为能拖。**4px 死区**——纯点击只选中、不发 op。空白处拖拽转视角，Esc 取消选中，PageUp/PageDown 按 50mm 调离地高度。
 
-视角：工具栏一个**正视图下拉**（俯视 / 仰视 / 前视 / 后视 / 左视 / 右视）加一个**「复位」按钮**（回默认视角，同时把平移和缩放复位；内部预设名 `default_view`，旧的 `#view=perspective` 链接仍兼容——视角名与动作名分开，别把 reset 焊进预设名）。默认视角是**正南偏东 15°**（`yaw=5π/12`，北墙几乎正对、仍留一点纵深）、俯仰压低（`pitch=0.35` ≈ 20°，站在门口往里看的角度；再低就接近 `ELEVATION_MAX_PITCH=0.12`，会变成"平视/立面"）。独立房间 Viewer（`/api/plan-room/viewer`）用同一套控件与预设、同一组键名，也带同一套原点三轴（总宽/总深/总高）与光标坐标读数，只是它的取景距离按对角线固定倍数算、没有标注开关。仰视 `pitch=-1.48`，与俯视对称；俯视按平面图习惯**北在上、东在右**；四个立面 `pitch=0`，前视=站在南边往北看，东在右手边。相机不在任何正视图上时下拉显示**「自由视角」**（转过视角之后标识就变成它，不会还挂着上一个正视图）；平移和缩放不算离开正视图，只有绕竖轴的转动算。**双击画面**：自由/复位位时吸到最近的正视图（`|pitch| > 0.35` 取俯视/仰视，否则按方位角取最近的立面）；已经站在正视图上时，回到进它之前那一眼的自由视角。画面左右与真实方位一致：房间坐标系是 X 东 / Y 南 / Z 上，相机右向量取 `cross(up, forward)`；取反会让整幅画面左右镜像，转视角的符号也必须跟着翻。空白处拖拽转视角是**跟手**的：往右拖，画面里靠近你的那一侧就往右走（相机绕竖轴朝反方向转）；往下拖，近端往下走（相机抬高、更俯视）。相机接近水平（pitch < 0.12）时地面射线求交会退化，所以那种角度下拖动**在竖直平面里走**：横向 = 该视图的水平轴（由相机右向量决定正负号），纵向 = 高度。也就是在前/后视里上下拖就是改高度。**视图可以平移**：右键 / 中键拖动，或空白处 Shift+左键拖动（普通左键仍是转视角）。平移只改视图中心（相机的一切都相对它算），沿相机的右/上方向按屏幕像素换算成毫米，所以任何视角下都是「往哪拖、画面往哪走」且 1:1 跟手；它**不改** yaw/pitch/distance，也不发任何 op。切换视角时中心会一起动画回房间中心——取景也必须按房间中心算（`withHomeCentre`），否则平移过之后会把房间框到画外。整个切换带 500ms 插值过渡——只插值 `yaw`/`pitch`/`distance` 和视图中心，跑完即停，不留常驻动画循环，所以只有切换那一瞬间在重画；系统开了 `prefers-reduced-motion` 就直接跳到位。深链 `#view=front&item=desk` 可以直接打开某个视角并选中某件；`?room=<id>`（写成 `#room=<id>` 也认）直接打开某间房；三者叠在一条链接里也认，先落房间、再定视角、最后选中件。只改 `#` 后面的部分浏览器不重载页面，于是深链不会重新生效——要发深链就用整条新地址。
+视角：工具栏一个**正视图下拉**（俯视 / 仰视 / 前视 / 后视 / 左视 / 右视）加一个**「复位」按钮**（回默认视角，同时把平移和缩放复位；内部预设名 `default_view`——视角名与动作名分开，别把 reset 焊进预设名）。默认视角是**正南偏东 15°**（`yaw=5π/12`，北墙几乎正对、仍留一点纵深）、俯仰压低（`pitch=0.35` ≈ 20°，站在门口往里看的角度；再低就接近 `ELEVATION_MAX_PITCH=0.12`，会变成"平视/立面"）。独立房间 Viewer（`/api/plan-room/viewer`）用同一套控件与预设、同一组键名，也带同一套原点三轴（总宽/总深/总高）与光标坐标读数，只是它的取景距离按对角线固定倍数算、没有标注开关。仰视 `pitch=-1.48`，与俯视对称；俯视按平面图习惯**北在上、东在右**；四个立面 `pitch=0`，前视=站在南边往北看，东在右手边。相机不在任何正视图上时下拉显示**「自由视角」**（转过视角之后标识就变成它，不会还挂着上一个正视图）；平移和缩放不算离开正视图，只有绕竖轴的转动算。**双击画面**：自由/复位位时吸到最近的正视图（`|pitch| > 0.35` 取俯视/仰视，否则按方位角取最近的立面）；已经站在正视图上时，回到进它之前那一眼的自由视角。画面左右与真实方位一致：房间坐标系是 X 东 / Y 南 / Z 上，相机右向量取 `cross(up, forward)`；取反会让整幅画面左右镜像，转视角的符号也必须跟着翻。空白处拖拽转视角是**跟手**的：往右拖，画面里靠近你的那一侧就往右走（相机绕竖轴朝反方向转）；往下拖，近端往下走（相机抬高、更俯视）。相机接近水平（pitch < 0.12）时地面射线求交会退化，所以那种角度下拖动**在竖直平面里走**：横向 = 该视图的水平轴（由相机右向量决定正负号），纵向 = 高度。也就是在前/后视里上下拖就是改高度。**视图可以平移**：右键 / 中键拖动，或空白处 Shift+左键拖动（普通左键仍是转视角）。平移只改视图中心（相机的一切都相对它算），沿相机的右/上方向按屏幕像素换算成毫米，所以任何视角下都是「往哪拖、画面往哪走」且 1:1 跟手；它**不改** yaw/pitch/distance，也不发任何 op。切换视角时中心会一起动画回房间中心——取景也必须按房间中心算（`withHomeCentre`），否则平移过之后会把房间框到画外。整个切换带 500ms 插值过渡——只插值 `yaw`/`pitch`/`distance` 和视图中心，跑完即停，不留常驻动画循环，所以只有切换那一瞬间在重画；系统开了 `prefers-reduced-motion` 就直接跳到位。深链 `#view=front&item=desk` 可以直接打开某个视角并选中某件；`?room=<id>`（写成 `#room=<id>` 也认）直接打开某间房；三者叠在一条链接里也认，先落房间、再定视角、最后选中件。只改 `#` 后面的部分浏览器不重载页面，于是深链不会重新生效——要发深链就用整条新地址。
 
 净距标注：选中件四周画出**到最近邻**的四向距离（同一高度带、垂直方向有重叠才算邻居，找不到才退到墙），数值画在图上、来源写在右侧栏（如「900 衣柜」）。同时沿选中件**自身的局部轴**画出本体尺寸：宽（局部 +X）、深（局部 +Y）、高（竖直），三条都从原点角出发，量的是 `width`/`depth`/`height` 本身——所以转了角度也跟着转，**不是量世界包围盒**。宽深两条朝包络内让开一段，免得和外圈净距线撞在一起。右侧栏另有尺寸/摆放/位置/朝向/离地/离顶。可用工具栏「标注」开关。**只读的项目预览页只显示这些读数，不生成输入框与 − / ＋ 按钮**（要改就去草稿页，或让助手改）；读数钩子挂在 `<span>` 上，值照旧刷新。
 
