@@ -13,7 +13,7 @@
 选中件的四向净距（到最近的家具/障碍物/墙）直接画在图上：先找同一高度带、垂直
 方向有重叠的最近邻，找不到才退到墙。
 
-拖动与旋转**本地就按服务端的摆放检查求解**（见 placement_check.py，脚本在 templates/room_page.html：底面正面积
+拖动与旋转**本地就按服务端的摆放检查求解**（见 placement_check.py，脚本在 templates/room_page.js：底面正面积
 重叠且高度重叠才算干涉，贴边接触放行；另查越界和遮挡门窗洞口）。过不去就停在
 接触处，不会先穿过再回弹。求解在**整数毫米**上进行，
 和服务端落盘取整口径一致，预览即落盘值。
@@ -90,6 +90,12 @@ _SHARE_TIPS = (
     "双击画面吸到最近的正视图，再双击回到自由视角<br>"
     "有多间房时点上方房间名切换，地址栏 ?room= 直接指向某间房"
 )
+_STORED_VIEWER_TIPS = (
+    "只读布局预览。<br>"
+    "点击家具查看尺寸与净距；标注可切换为全部、选中或关闭。<br>"
+    "空白处拖拽转视角 · 右键/中键/Shift+左键拖拽平移 · 滚轮缩放<br>"
+    "双击画面吸到最近的正视图，再双击回到自由视角"
+)
 #: 可编辑的项目页（本机来源）——提示语要说清"什么时候要审、什么时候算数"。
 _PROJECT_EDITOR_TIPS = (
     "拖动改位置（与别的家具或障碍物干涉、越出房间或遮挡门窗洞口时停在接触处）<br>"
@@ -128,6 +134,7 @@ def _render_canvas_html(
     share_form: bool = False,
     edit_url: str = "",
     undo_url: str = "",
+    presence: bool = True,
 ) -> str:
     room_name = str(scene_payload["room"]["name"])
     heading = f"{room_name} · {heading_suffix}"
@@ -142,6 +149,7 @@ def _render_canvas_html(
         .replace("__MODE_BADGE__", escape(mode_badge, quote=True))
         .replace("__READ_ONLY__", "true" if read_only else "false")
         .replace("__SHARE_FORM__", "true" if share_form else "false")
+        .replace("__PRESENCE__", "true" if presence else "false")
         .replace("__POLL_URL__", _json_for_script(poll_url))
         .replace("__EDIT_URL__", _json_for_script(edit_url))
         .replace("__UNDO_URL__", _json_for_script(undo_url))
@@ -210,6 +218,35 @@ def render_draft_page(scene_id: str, scene: RoomScene) -> dict[str, object]:
     }
 
 
+def render_viewer(scene: RoomScene) -> dict[str, object]:
+    """Stored read-only preview, rendered with the same room template as live pages."""
+    return {
+        "media_type": "text/html",
+        "view_kind": "interactive_orbit_envelope",
+        "width_px": EDITOR_WIDTH_PX,
+        "height_px": EDITOR_HEIGHT_PX,
+        "controls": [
+            "drag_orbit", "drag_pan", "wheel_zoom", "orthographic_view_select",
+            "double_click_snap", "reset",
+        ],
+        "alt_text": f"{scene.room.name}的只读三维布局；拖拽旋转、平移、滚轮缩放并切换正视图",
+        "html": _render_canvas_html(
+            scene_id=scene.room.id,
+            scene_payload=room_page_payload(scene),
+            rooms=[],
+            version="",
+            read_only=True,
+            poll_url="",
+            heading_suffix="布局预览",
+            tips=_STORED_VIEWER_TIPS,
+            app_label="只读家具布局",
+            mode_badge="只读布局",
+            shutdown_button="",
+            presence=False,
+        ),
+    }
+
+
 def render_project_page(
     project_id: str,
     document: dict[str, Any],
@@ -258,7 +295,7 @@ def render_project_page(
     )
 
 
-_EDITOR_HTML = (
-    Path(__file__).resolve().parent.joinpath("templates", "room_page.html")
-    .read_text(encoding="utf-8")
+_TEMPLATES = Path(__file__).resolve().parent / "templates"
+_EDITOR_HTML = (_TEMPLATES / "room_page.html").read_text(encoding="utf-8").replace(
+    "__ROOM_SCRIPT__", (_TEMPLATES / "room_page.js").read_text(encoding="utf-8")
 )

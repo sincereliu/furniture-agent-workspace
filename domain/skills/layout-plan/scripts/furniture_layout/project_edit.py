@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any, Mapping
 
-from .layout_entry import plan_scene
+from .scene_planning import plan_scene
 from .project_layout import ProjectLayout
 from .scene import RoomScene
 from .scene_edit import apply_edit
@@ -22,12 +22,11 @@ from .scene_edit import apply_edit
 def room_scene_source(scene: RoomScene) -> dict[str, Any]:
     """把一间已摆放的房间还原成场景源（房间定义 + 每件的摆放请求）。
 
-    `PlacedItem.to_dict()` 里的 `footprint` / `clearances_mm` 是派生字段，
-    `parse_item_specs` 根本不读它们，所以重算后不会留下过期值。
+    只保留输入字段；footprint、净距和墙摆变换在下次规划时重算。
     """
     return {
         "room": scene.room.to_dict(),
-        "items": [item.to_dict() for item in scene.items],
+        "items": [item.to_source() for item in scene.items],
     }
 
 

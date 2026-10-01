@@ -153,6 +153,16 @@ class JsonProjectStore:
                             )
                             rows.append(row)
                             continue
+                        layout_payload = latest_payload.get("layout")
+                        if isinstance(layout_payload, dict):
+                            schema_version = layout_payload.get("schema_version")
+                            if type(schema_version) is not int or schema_version != LAYOUT_SCHEMA_VERSION:
+                                row.update(
+                                    availability="incompatible",
+                                    reason="布局格式与当前版本不兼容",
+                                )
+                                rows.append(row)
+                                continue
             try:
                 project = Project.from_dict(payload)
             except (ValueError, KeyError, TypeError, AttributeError):

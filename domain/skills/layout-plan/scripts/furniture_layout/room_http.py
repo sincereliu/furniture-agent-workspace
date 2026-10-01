@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from furniture_layout.room_page import render_draft_page
 from furniture_layout.layout_entry import write_room_shell, plan_room_scene
 from furniture_layout.scene import RoomScene
+from furniture_layout.scene_planning import plan_scene
 from furniture_layout.scene_edit import apply_edit
 from furniture_layout.scene_store import (
     list_scene_ids,
@@ -61,8 +62,10 @@ def _output_root() -> Path:
 
 
 class RoomOpeningRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
     id: str = Field(default="", description="门窗标识")
-    kind: str = Field(default="opening", description="opening / door / window")
+    kind: Literal["door", "window"]
     wall: Literal["south", "east", "north", "west"]
     offset_mm: float = Field(default=0, ge=0, description="沿墙顺时针起点的偏移")
     width_mm: float = Field(..., gt=0)
@@ -71,6 +74,8 @@ class RoomOpeningRequest(BaseModel):
 
 
 class RoomObstacleRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
     id: str = Field(default="", description="障碍物标识")
     kind: str = Field(default="obstacle", description="column / pipe / obstacle")
     x_mm: float = Field(default=0, ge=0)
@@ -82,6 +87,8 @@ class RoomObstacleRequest(BaseModel):
 
 
 class RoomRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
     id: str = Field(default="room")
     name: str = Field(default="房间")
     width_mm: float = Field(..., gt=0)
@@ -92,24 +99,30 @@ class RoomRequest(BaseModel):
 
 
 class ItemPlacementRequest(BaseModel):
-    mode: Literal["wall", "free"] = Field(default="wall")
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    mode: Literal["wall", "free"]
     host_wall: Literal["south", "east", "north", "west"] | None = None
     offset_mm: float | None = Field(default=None, ge=0)
     origin_x_mm: float | None = None
     origin_y_mm: float | None = None
     origin_z_mm: float = Field(default=0, ge=0)
     rotation_z_deg: float | None = None
-    fill: bool = False
+    fill: bool = Field(default=False, strict=True)
 
 
 class SceneItemRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
     id: str = Field(default="")
     label: str = Field(default="")
     category: str
-    width: float = Field(..., gt=0)
+    width: float | None = Field(default=None, gt=0)
     depth: float = Field(..., gt=0)
     height: float = Field(..., gt=0)
     placement: ItemPlacementRequest
+    furniture_category: Literal["floor_cabinet", "wall_cabinet"] | None = None
+    manufacture: bool = Field(default=True, strict=True)
 
 
 class RoomSceneRequest(BaseModel):
@@ -241,6 +254,7 @@ async def save_room_scene(req: RoomSceneSaveRequest, request: Request):
     scene_id = req.scene_id or f"scene-{uuid4().hex[:12]}"
     payload = req.model_dump(exclude_none=True)
     try:
+        plan_scene(payload["room"], payload["items"])
         path = save_scene_source(
             scene_id,
             payload["room"],
@@ -257,11 +271,12 @@ async def load_room_scene(scene_id: str):
     """读取场景的源并重算摆放、预览与 Viewer。"""
     try:
         source = load_scene_source(scene_id, root=_output_root())
+        planned = plan_room_scene(source["room"], source["items"])
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return RoomSceneResponse(**plan_room_scene(source["room"], source["items"]))
+    return RoomSceneResponse(**planned)
 
 
 @router.get("/api/room-scenes")

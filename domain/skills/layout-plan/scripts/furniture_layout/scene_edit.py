@@ -8,8 +8,9 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+from .scene import PLACEMENT_MODES
+
 EDIT_OPERATIONS = frozenset({"move", "rotate", "resize"})
-PLACEMENT_MODES = frozenset({"wall", "free"})
 
 WALL_ONLY_FIELDS = frozenset({"host_wall", "offset_mm"})
 FREE_ONLY_FIELDS = frozenset({"origin_x_mm", "origin_y_mm"})
@@ -56,8 +57,8 @@ def _placement_after(
     item: dict[str, Any], op: Mapping[str, Any], fields: set[str], *, name: str
 ) -> dict[str, Any]:
     """按 op 里的摆放字段算出新的 placement；不涉及旋转。"""
-    placement = dict(item.get("placement") or {})
-    current_mode = placement.get("mode", "wall")
+    placement = dict(item["placement"])
+    current_mode = placement["mode"]
     mode = op.get("mode", current_mode)
     if mode not in PLACEMENT_MODES:
         raise ValueError("placement mode must be 'wall' or 'free'")
@@ -100,7 +101,7 @@ def _placement_after(
 def _apply_move(item: dict[str, Any], op: Mapping[str, Any], fields: set[str]) -> None:
     _reject_unknown("move", fields, MOVE_FIELDS)
 
-    current_mode = (item.get("placement") or {}).get("mode", "wall")
+    current_mode = item["placement"]["mode"]
     if op.get("mode", current_mode) == current_mode and not (
         fields & (POSITION_FIELDS | {"origin_z_mm"})
     ):

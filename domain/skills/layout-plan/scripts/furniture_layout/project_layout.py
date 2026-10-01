@@ -5,15 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Any, Mapping, Sequence
 
-from .placement import place_items
+from .input_fields import boolean
+from .scene_planning import plan_scene
 from .scene import (
     EXECUTABLE_CATEGORIES,
     EPSILON,
-    ItemSpec,
     PlacedItem,
-    RoomModel,
     RoomScene,
-    parse_item_specs,
 )
 
 
@@ -118,7 +116,7 @@ class ProjectLayout:
         return tuple(units)
 
     def to_dict(self) -> dict[str, Any]:
-        """检查点字典。每个房间的图由 `layout_figures` 按当前几何挂上，形状与以前相同。"""
+        """检查点字典。每个房间的图由 `layout_figures` 按当前几何挂上，按当前输入契约序列化。"""
         from .layout_figures import project_layout_dict
 
         return project_layout_dict(self)
@@ -130,14 +128,13 @@ class ProjectLayout:
         raw_rooms = data.get("rooms")
         if not isinstance(raw_rooms, list) or not raw_rooms:
             raise ValueError("layout.rooms must be a non-empty list")
-        rooms = tuple(
-            RoomScene.from_dict(_room_scene_payload(item))
-            for item in raw_rooms
-        )
-        schema_version = int(data.get("schema_version", LAYOUT_SCHEMA_VERSION))
+        rooms = tuple(RoomScene.from_dict(item) for item in raw_rooms)
+        schema_version = data.get("schema_version")
+        if type(schema_version) is not int or schema_version != LAYOUT_SCHEMA_VERSION:
+            raise ValueError(f"unsupported ProjectLayout schema_version: {schema_version!r}")
         return cls(
             rooms=rooms,
-            confirmed=bool(data.get("confirmed", False)),
+            confirmed=boolean(data, "confirmed"),
             schema_version=schema_version,
         )
 
@@ -154,26 +151,13 @@ class ProjectLayout:
             room_fields = {
                 key: value for key, value in raw.items() if key != "items"
             }
-            room = RoomModel.from_dict(room_fields)
-            specs = parse_item_specs(raw.get("items"), allow_empty=True)
             planned.append(
-                RoomScene(room=room, items=place_items(room, specs) if specs else ())
+                plan_scene(room_fields, raw.get("items", []), allow_empty=True)
             )
         layout = cls(rooms=tuple(planned), confirmed=False)
         errors = layout.validate()
         if errors:
             raise ValueError("; ".join(errors))
-        # The project tool and the pure planner both enter through from_source.
-        # Reject invalid geometry before it becomes a draft revision.
-        from .validation import admit_scene
-
-        messages: list[str] = []
-        for scene in layout.rooms:
-            report = admit_scene(scene)
-            if not report.passed:
-                messages.extend(issue.message for issue in report.issues)
-        if messages:
-            raise ValueError("; ".join(messages))
         return layout
 
 
@@ -230,13 +214,3 @@ def single_cabinet_layout(
         }
     )
     return replace(layout, confirmed=confirmed) if confirmed else layout
-
-
-def _room_scene_payload(raw: Mapping[str, Any]) -> dict[str, Any]:
-    if "room" in raw:
-        return {
-            "room": raw["room"],
-            "items": raw.get("items", []),
-        }
-    room_fields = {key: value for key, value in raw.items() if key != "items"}
-    return {"room": room_fields, "items": raw.get("items", [])}

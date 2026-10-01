@@ -85,6 +85,7 @@ class RoomSceneEditorTests(unittest.TestCase):
             "__HEADING_SUFFIX__",
             "__MODE_BADGE__",
             "__READ_ONLY__",
+            "__PRESENCE__",
             "__POLL_URL__",
             "__ROOMS_JSON__",
             "__VERSION_JSON__",
@@ -147,8 +148,6 @@ class RoomSceneEditorTests(unittest.TestCase):
         self.assertIn('id="view-select"', html)
         # 回默认视角的那个按钮叫「复位」；内部预设名是 default_view（视角名 ≠ 动作名）。
         self.assertIn('data-view="default_view" aria-pressed="true">复位</button>', html)
-        # 旧的 #view=perspective 链接仍然能用。
-        self.assertIn('VIEW_ALIASES={perspective:"default_view"}', html)
         self.assertNotIn('data-view="reset"', html)
         # 默认视角：正南偏东 15°、俯仰压低。
         self.assertIn("const DEFAULT_YAW=Math.PI*5/12,DEFAULT_PITCH=.35", html)

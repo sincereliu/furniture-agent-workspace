@@ -2,6 +2,7 @@ import * as THREE from "../../../../../../vendor/three/0.186.0/three.module.js";
 import assert from "node:assert/strict";
 import { cameraThreePosition, roomToThree, threeToRoom } from "./layout_frame.js";
 import { roomAxes, dimensionAnnotations } from "./layout_annotations.js";
+import { normalizeItems } from "./layout_payload.js";
 
 const mapped = roomToThree(1000, 200, 300);
 if (mapped[0] !== 1000 || mapped[1] !== 300 || mapped[2] !== 200) {
@@ -37,8 +38,8 @@ assert.deepEqual(axes.map((axis) => axis.anchor), [[2100, -25, 0], [-25, 1800, 0
 
 const item = {
   footprint: [[600, 800], [1800, 800], [1800, 1300], [600, 1300]],
-  placement: { origin_z_mm: 300 }, height: 1700,
-  clearances_mm: { west: 600, east: { gap: 2400 }, north: 800, south: 2300 },
+  z_start: 300, z_end: 2000, height: 1700,
+  clearances_mm: { west: 600, east: 2400, north: 800, south: 2300 },
 };
 const annotations = dimensionAnnotations(room, item);
 assert.deepEqual(annotations.map((spec) => spec.text), ["宽 1200", "深 500", "高 1700", "离墙 600", "离墙 2400", "离墙 800", "离墙 2300"]);
@@ -49,10 +50,7 @@ assert.deepEqual(annotations.map((spec) => spec.anchor), [
 assert.deepEqual(annotations.slice(0, 3).map((spec) => roomToThree(...spec.anchor)), [
   [1200, 308, 710], [510, 308, 1050], [1890, 1150, 1300],
 ]);
-assert.deepEqual(dimensionAnnotations(room, {
-  ...item, footprint: item.footprint.map(([x_mm, y_mm]) => ({ x_mm, y_mm })),
-  z_start: 300, z_end: 2000,
-}), annotations);
+
 
 // 旋转后宽深仍是件的局部尺寸，标签必须在线中点；吊柜高度不依赖地面为零。
 for (const angle of [Math.PI / 2, Math.PI / 6]) {
@@ -76,12 +74,12 @@ for (const angle of [Math.PI / 2, Math.PI / 6]) {
     assert.deepEqual(spec.anchor, spec.from.map((value, i) => (value + spec.to[i]) / 2));
   }
 }
-assert.deepEqual(dimensionAnnotations(room, { ...item, clearances_mm: { west: 0, north: { gap: 0 } } }).map((spec) => spec.text), ["宽 1200", "深 500", "高 1700"]);
+assert.deepEqual(dimensionAnnotations(room, { ...item, clearances_mm: { west: 0, north: 0 } }).map((spec) => spec.text), ["宽 1200", "深 500", "高 1700"]);
 console.log("room axes and dimension anchors ok (0°, 90°, 30°)");
 
 // 两个立方体占用同一空间，但 P0 与正面不同；标注必须沿各自局部边，不能按包围框重排。
 const cube = {
-  height: 600, placement: { origin_z_mm: 300 },
+  height: 600, z_start: 300, z_end: 900,
   footprint: [[2000, 1800], [2600, 1800], [2600, 2400], [2000, 2400]],
 };
 const turnedCube = {
@@ -98,7 +96,23 @@ assert.deepEqual(cubeAnnotations.map((spec) => spec.anchor), [
 assert.deepEqual(turnedAnnotations.map((spec) => spec.anchor), [
   [2690, 2100, 308], [2300, 1710, 308], [2000, 2490, 600],
 ]);
-assert.deepEqual(dimensionAnnotations(room, {
-  ...turnedCube, footprint: turnedCube.footprint.map(([x_mm, y_mm]) => ({ x_mm, y_mm })),
-}), turnedAnnotations);
+
 console.log("symmetric envelopes retain local axes and ordered footprint");
+
+// The page accepts the canonical serialized layout, then converts it once.
+const canonical = {
+  id: "cabinet", placement: { origin_z_mm: 300 }, height: 1700,
+  footprint: item.footprint.map(([x_mm, y_mm]) => ({ x_mm, y_mm })),
+  clearances_mm: { ...item.clearances_mm },
+};
+const [canvasItem] = normalizeItems([canonical]);
+assert.deepEqual(canvasItem.footprint, item.footprint);
+assert.equal(canvasItem.z_start, 300);
+assert.equal(canvasItem.z_end, 2000);
+assert.deepEqual(dimensionAnnotations(room, canvasItem), annotations);
+canvasItem.placement.origin_z_mm = 400;
+canvasItem.footprint[0][0] = 700;
+assert.equal(canonical.placement.origin_z_mm, 300);
+assert.equal(canonical.footprint[0].x_mm, 600);
+assert.equal(dimensionAnnotations(room, { ...item, z_start: 400, z_end: 2100 })[2].text, "高 1700");
+console.log("canonical layout payload converted without mutating source");

@@ -61,6 +61,8 @@ z_room = oz + z_local
 - `room`：`id`、`width_mm`/`depth_mm`/`height_mm`（矩形），可选 `name`、`openings[]`、`obstacles[]`。`openings[]` 是墙上的房间门洞/窗洞（`kind=door|window`），用来挡柜、扣 fill 空段；不是柜门 `n_doors`。
 - `items[]`：每件 `id`、`category`、`depth`/`height`、`placement`；固定宽度的件还要给 `width`，`fill=true` 可省略 `width`。不猜默认卧室，不猜默认家具。
 
+结构化接口只接受这里列出的规范字段和精确枚举，未知字段直接拒绝。房间、门窗和障碍物尺寸带 `_mm`；家具尺寸用 `width/depth/height`。`placement.mode` 必须明确提供，不从 `host_wall` 或坐标猜测。门窗 `kind` 必须为 `door` 或 `window`。数值必须有限，`fill` 和 `manufacture` 必须是布尔值。历史字段名不再转换。
+
 沿墙偏移按房间边界顺时针：
 
 - `north`：西 → 东
@@ -79,7 +81,7 @@ z_room = oz + z_local
 - 与障碍物或另一件家具正体积相交
 - 沿宿主墙遮挡垂直范围相交的门窗
 
-边界接触不算干涉。可编辑视图的拖动按同一套摆放检查求解，干涉、越界或遮挡洞口就停在接触处（JS 侧镜像的判定在 `templates/room_page.html`，改 `placement_check.py` 要同步改它）。项目布局在创建待确认 Revision 前校验；缺房间尺寸或 fill 没有空段均失败。独立房间场景接口还要求非空 `items[]`。
+边界接触不算干涉。可编辑视图的拖动按同一套摆放检查求解，干涉、越界或遮挡洞口就停在接触处（JS 侧镜像的判定在 `templates/room_page.js`，改 `placement_check.py` 要同步改它）。项目布局在创建待确认 Revision 前校验；缺房间尺寸或 fill 没有空段均失败。独立房间场景接口还要求非空 `items[]`。
 
 ## 输出
 
@@ -88,6 +90,8 @@ z_room = oz + z_local
 - `items[]` 中有 placement、footprint 和六向净距；fill 后的 width 为沿墙实宽。
 
 预览、Viewer 和房间 CAD 必须由当前房间和全部包络重建。
+
+保存布局的 `rooms[]` 每项固定为 `{room, items, preview?, viewer?}`，必须带当前 `schema_version`。不接受旧的扁平房间输出或缺失版本。Viewer 与实时房间页共用模板；视角链接只使用 `default_view/top/bottom/front/back/left/right`。
 
 ## 房间 CAD
 

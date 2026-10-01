@@ -22,24 +22,10 @@ export function roomAxes(room) {
   }));
 }
 
-/** 布局足迹兼容毫米字段对象与 [x, y]，两者都属于房间平面坐标。 */
-export function footprintPoint(point) {
-  return Array.isArray(point) ? [point[0], point[1]] : [point.x_mm, point.y_mm];
-}
-
-export function itemZRange(item) {
-  if (Number.isFinite(item.z_start) && Number.isFinite(item.z_end)) {
-    return [item.z_start, item.z_end];
-  }
-  const base = item.placement && Number.isFinite(item.placement.origin_z_mm)
-    ? item.placement.origin_z_mm : 0;
-  return [base, base + (Number.isFinite(item.height) ? item.height : 0)];
-}
-
 /** 尺寸线跟随件的局部宽/深方向；四向净距线沿房间轴。标签统一取线中点。 */
 export function dimensionAnnotations(room, item) {
-  const points = item.footprint.map(footprintPoint);
-  const [zStart, zEnd] = itemZRange(item);
+  const points = item.footprint;
+  const zStart = item.z_start, zEnd = item.z_end;
   const z = zStart + 8;
   const specs = [];
   const add = (text, from, to, color) => specs.push({
@@ -73,8 +59,8 @@ export function dimensionAnnotations(room, item) {
   ];
   for (const spec of gapSpecs) {
     const raw = gaps[spec.key];
-    const gap = typeof raw === "number" ? raw : (raw && typeof raw.gap === "number" ? raw.gap : null);
-    if (gap === null || gap <= 0.5) continue;
+    const gap = raw;
+    if (!Number.isFinite(gap) || gap <= 0.5) continue;
     add(`离墙 ${fmt(gap)}`, spec.from, spec.to, 0x7c3aed);
   }
   return specs;

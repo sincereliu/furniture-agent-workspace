@@ -13,7 +13,16 @@ from .room_svg import render_preview
 from .project_layout import ProjectLayout
 from .scene import RoomScene
 from .validation import admit_scene
-from .stored_room_page import render_viewer
+from .room_page import render_viewer
+
+
+def room_scene_dict(scene: RoomScene) -> dict[str, Any]:
+    """Canonical room checkpoint with figures rebuilt from its placed geometry."""
+    payload = scene.to_dict()
+    if scene.items:
+        payload["preview"] = render_preview(scene)
+        payload["viewer"] = render_viewer(scene)
+    return payload
 
 
 def project_layout_dict(layout: ProjectLayout) -> dict[str, Any]:
@@ -21,17 +30,10 @@ def project_layout_dict(layout: ProjectLayout) -> dict[str, Any]:
 
     项目文件和 `layout_sha256` 用的就是这个形状。
     """
-    rooms: list[dict[str, Any]] = []
-    for scene in layout.rooms:
-        payload: dict[str, Any] = scene.to_dict()
-        if scene.items:
-            payload["preview"] = render_preview(scene)
-            payload["viewer"] = render_viewer(scene)
-        rooms.append(payload)
     return {
         "schema_version": layout.schema_version,
         "confirmed": layout.confirmed,
-        "rooms": rooms,
+        "rooms": [room_scene_dict(scene) for scene in layout.rooms],
         "cad": {"units": [unit.to_dict() for unit in layout.executable_units()]},
     }
 

@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "/vendor/three/0.186.0/OrbitControls.js";
 import { cameraThreePosition, roomToThree, threeToRoom } from "./layout_frame.js";
-import { ROOM_AXES, roomAxes, footprintPoint, itemZRange, dimensionAnnotations } from "./layout_annotations.js";
+import { ROOM_AXES, roomAxes, dimensionAnnotations } from "./layout_annotations.js";
 import { ELEVATION_PITCH, wallVisibility } from "./wall_view.js";
 
 export { cameraThreePosition, roomToThree };
@@ -24,7 +24,7 @@ function disposeObject(object) {
 function prismGeometry(footprint, z0, z1) {
   const positions = [];
   const n = footprint.length;
-  const points = footprint.map(footprintPoint);
+  const points = footprint;
   const bottom = points.map(([x, y]) => roomToThree(x, y, z0));
   const top = points.map(([x, y]) => roomToThree(x, y, z1));
   const push = (a, b, c) => positions.push(...a, ...b, ...c);
@@ -602,8 +602,8 @@ export function mountLayout(canvas) {
     for (const item of data.items || []) {
       const selected = item.id === selectedId;
       const blocked = selected && options.blockedId === item.id;
-      // 竖向范围统一由 itemZRange() 推导：payload 不保证带 z_start / z_end
-      const [itemZStart, itemZEnd] = itemZRange(item);
+      // 页面边界已把规范字段转换成画布模型。
+      const itemZStart = item.z_start, itemZEnd = item.z_end;
       const mesh = new THREE.Mesh(
         prismGeometry(item.footprint, itemZStart, itemZEnd),
         new THREE.MeshStandardMaterial({
@@ -617,8 +617,8 @@ export function mountLayout(canvas) {
       addMesh(content, mesh, pickables);
       if (item.footprint.length >= 4) {
         const frontZ = (itemZStart + itemZEnd) / 2;
-        const a = footprintPoint(item.footprint[3]);
-        const b = footprintPoint(item.footprint[2]);
+        const a = item.footprint[3];
+        const b = item.footprint[2];
         content.add(line([
           roomToThree(a[0], a[1], frontZ),
           roomToThree(b[0], b[1], frontZ),
@@ -734,7 +734,7 @@ export function mountLayout(canvas) {
 
 function footprintCenter(footprint) {
   const count = footprint.length || 1;
-  const points = footprint.map(footprintPoint);
+  const points = footprint;
   return [
     points.reduce((sum, point) => sum + point[0], 0) / count,
     points.reduce((sum, point) => sum + point[1], 0) / count,

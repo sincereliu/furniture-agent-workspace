@@ -22,17 +22,19 @@
 | 干什么 | 文件 | 代码归类 |
 | --- | --- | --- |
 | 房间、门窗、家具盒子的数据结构 | `scene.py` | schema |
+| 只读取规范字段；拒绝未知字段、非法布尔值和非有限数值 | `input_fields.py` | schema / validation |
+| 全屋、单间和编辑共用的规划入口：解析 → 摆放 → 几何准入 | `scene_planning.py` | calculation / validation |
 | 把靠墙、自由摆、沿墙铺满换成毫米坐标 | `placement.py` | calculation |
 | 检查盒子出不出房间、互相干涉不干涉、挡不挡门窗 | `placement_check.py` | calculation |
 | 上面几项有一项不过，就不建项目。不核对配进去的那张 SVG | `validation.py` | validation |
 | 一整套房子的摆放。确认后冻出给板件的盒子：宽、深、高和柜类。这里不画房间页，也不写房间外壳 | `project_layout.py` | schema |
 | 给这套摆放配上每个房间的图，确认时核对图是不是刚算出来的 | `layout_figures.py` | calculation |
 | 配进去的那张 SVG | `room_svg.py` | calculation |
-| 配进去的那份只读页面。它存在项目里，不是浏览器里正在打开的那一页 | `stored_room_page.py` | calculation |
-| 浏览器里打开的房间页。可拖、只读预览、分享都是这一页。Python 读 `templates/room_page.html` 填上当前房间。原点三轴、光标坐标、房间药丸、`?room=`、页眉牌子都在模板里。模板里的拖动检查必须与 `placement_check.py` 同步 | `room_page.py` | calculation |
+| 保存的只读预览、单间草稿、项目预览和分享共用一个模板。Python 读 `templates/room_page.html` 填上当前房间。原点三轴、光标坐标、房间药丸、`?room=`、页眉牌子都在模板里。`templates/room_page.js` 里的拖动检查必须与 `placement_check.py` 同步 | `room_page.py` | calculation |
 | 做过的项目名单 | `project_list.py` | calculation |
 | 把预览页打开，并准备这一页要读的数据 | `open_preview.py` | side_effect |
 | 房间页上的三维盒子 | `static/layout_scene.js` | calculation |
+| 页面入口将规范布局输出一次转换为画布模型；渲染层只读取该模型 | `static/layout_payload.js` | calculation |
 | 房间的东、南、上怎么画到屏幕上 | `static/layout_frame.js` | calculation |
 | 房间轴、家具尺寸线和标签锚点；全部用房间坐标计算 | `static/layout_annotations.js` | calculation |
 | 记下移动、旋转或改尺寸，这一步先不算。全屋和单间共用这一套字段 | `scene_edit.py` | schema |
@@ -42,7 +44,11 @@
 | 单间只存客户原来写的那份，打开时再算 | `scene_store.py` | side_effect |
 | 房间外壳的 STEP：地、墙、门窗洞。不是柜体模型 | `room_shell.py` | side_effect |
 
-房间页上拖动只是本地先画，松手后后端再换算并检查。改 `placement_check.py` 必须同步改 `templates/room_page.html` 里的脚本。
+页面结构在 `templates/room_page.html`，交互脚本在 `templates/room_page.js`。`room_page.py` 读入两份模板后填充参数，保存预览与实时页面使用同一份组装结果；模板不作为静态资源直接发布。
+
+房间页上拖动只是本地先画，松手后后端再换算并检查。改 `placement_check.py` 必须同步改 `templates/room_page.js` 里的脚本。
+
+数据链路为 `规范请求 → scene_planning.plan_scene → RoomScene → layout_figures / room_page`。项目读取只接受带明确 `schema_version` 的当前检查点；房间源与已摆放输出是两份明确契约。编辑通过 `PlacedItem.to_source()` 去掉派生字段，重算后才交给项目编排层保存。没有历史字段别名、自动推断摆放模式、扁平房间输出或旧预览页面分支。
 
 预览几何与标签锚点统一使用房间坐标 `[x, y, z]`（宽、深、高，毫米）。进入 Three.js 时调用 `layout_frame.roomToThree()`，相机回读与拾取返回时调用 `threeToRoom()`；不在调用方手写换序。屏幕像素坐标与 Three.js 原生网格旋转仍由渲染层计算。固定轴和边线随场景内容构建，相机移动时只更新投影与墙面显示。
 

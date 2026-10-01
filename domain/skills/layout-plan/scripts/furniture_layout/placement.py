@@ -175,6 +175,8 @@ def _place_fill(
     spec: ItemSpec,
     already_placed: tuple[PlacedItem, ...],
 ) -> PlacedItem:
+    # Validate the original request before replacing its computed offset.
+    resolve_placement(room, spec.placement)
     wall = spec.placement.host_wall
     if wall not in WALLS:
         raise ValueError(f"item {spec.id!r} fill requires host_wall")

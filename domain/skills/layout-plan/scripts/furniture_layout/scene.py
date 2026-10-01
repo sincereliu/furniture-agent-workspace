@@ -1,4 +1,4 @@
-"""Room-scene inputs and placed-item records for independent room layout."""
+"""Canonical inputs and placed geometry shared by project and standalone rooms."""
 
 from __future__ import annotations
 
@@ -6,51 +6,32 @@ from dataclasses import dataclass
 from math import isfinite
 from typing import Any, Mapping
 
+from .input_fields import boolean, fields, mapping, number, optional_number, text
+
 
 WALLS = frozenset({"south", "east", "north", "west"})
 PLACEMENT_MODES = frozenset({"wall", "free"})
 EXECUTABLE_CATEGORIES = frozenset({"floor_cabinet", "wall_cabinet"})
 EPSILON = 1e-6
 
-
-def number(
-    data: Mapping[str, Any],
-    *keys: str,
-    default: float | None = None,
-) -> float:
-    for key in keys:
-        if key in data and data[key] is not None:
-            value = data[key]
-            if isinstance(value, bool):
-                raise ValueError(f"{key} must be numeric")
-            try:
-                return float(value)
-            except (TypeError, ValueError) as exc:
-                raise ValueError(f"{key} must be numeric") from exc
-    if default is not None:
-        return float(default)
-    raise ValueError(f"missing numeric field: {keys[0]}")
-
-
-def optional_number(data: Mapping[str, Any], *keys: str) -> float | None:
-    for key in keys:
-        if key in data and data[key] is not None:
-            return number(data, key)
-    return None
-
-
-def text(data: Mapping[str, Any], *keys: str, default: str = "") -> str:
-    for key in keys:
-        if key in data and data[key] is not None:
-            return str(data[key]).strip()
-    return default
-
-
-def mapping(data: Mapping[str, Any], key: str) -> Mapping[str, Any]:
-    value = data.get(key)
-    if not isinstance(value, Mapping):
-        raise ValueError(f"{key} must be an object")
-    return value
+ROOM_FIELDS = frozenset({
+    "id", "name", "width_mm", "depth_mm", "height_mm", "openings", "obstacles",
+})
+OPENING_FIELDS = frozenset({
+    "id", "kind", "wall", "offset_mm", "width_mm", "height_mm", "sill_height_mm",
+})
+OBSTACLE_FIELDS = frozenset({
+    "id", "kind", "x_mm", "y_mm", "z_mm", "width_mm", "depth_mm", "height_mm",
+})
+PLACEMENT_FIELDS = frozenset({
+    "mode", "host_wall", "offset_mm", "origin_x_mm", "origin_y_mm",
+    "origin_z_mm", "rotation_z_deg", "fill",
+})
+ITEM_FIELDS = frozenset({
+    "id", "label", "category", "width", "depth", "height", "placement",
+    "furniture_category", "manufacture",
+})
+PLACED_ITEM_FIELDS = ITEM_FIELDS | {"footprint", "clearances_mm"}
 
 
 def clean(value: float) -> float:
@@ -76,7 +57,11 @@ class RoomOpening:
     def from_dict(cls, data: Mapping[str, Any], *, index: int = 0) -> "RoomOpening":
         if not isinstance(data, Mapping):
             raise ValueError(f"room.openings[{index}] must be an object")
-        wall = text(data, "wall", default="").lower()
+        fields(data, OPENING_FIELDS, f"room.openings[{index}]")
+        wall = text(data, "wall")
+        kind = text(data, "kind")
+        if kind not in {"door", "window"}:
+            raise ValueError("opening.kind must be door or window")
         if wall not in WALLS:
             raise ValueError(
                 f"room.openings[{index}].wall must be one of: "
@@ -84,15 +69,14 @@ class RoomOpening:
             )
         return cls(
             id=text(data, "id") or f"opening_{index + 1}",
-            kind=(text(data, "kind") or "opening").lower(),
+            kind=kind,
             wall=wall,
-            offset_mm=number(data, "offset_mm", "offset", default=0.0),
-            width_mm=number(data, "width_mm", "width"),
-            height_mm=number(data, "height_mm", "height"),
+            offset_mm=number(data, "offset_mm", default=0.0),
+            width_mm=number(data, "width_mm"),
+            height_mm=number(data, "height_mm"),
             sill_height_mm=number(
                 data,
                 "sill_height_mm",
-                "sill_height",
                 default=0.0,
             ),
         )
@@ -124,15 +108,16 @@ class RoomObstacle:
     def from_dict(cls, data: Mapping[str, Any], *, index: int = 0) -> "RoomObstacle":
         if not isinstance(data, Mapping):
             raise ValueError(f"room.obstacles[{index}] must be an object")
+        fields(data, OBSTACLE_FIELDS, f"room.obstacles[{index}]")
         return cls(
             id=text(data, "id") or f"obstacle_{index + 1}",
-            kind=(text(data, "kind") or "obstacle").lower(),
-            x_mm=number(data, "x_mm", "x", default=0.0),
-            y_mm=number(data, "y_mm", "y", default=0.0),
-            z_mm=number(data, "z_mm", "z", default=0.0),
-            width_mm=number(data, "width_mm", "width"),
-            depth_mm=number(data, "depth_mm", "depth"),
-            height_mm=number(data, "height_mm", "height"),
+            kind=text(data, "kind") or "obstacle",
+            x_mm=number(data, "x_mm", default=0.0),
+            y_mm=number(data, "y_mm", default=0.0),
+            z_mm=number(data, "z_mm", default=0.0),
+            width_mm=number(data, "width_mm"),
+            depth_mm=number(data, "depth_mm"),
+            height_mm=number(data, "height_mm"),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -171,18 +156,19 @@ class RoomModel:
     def from_dict(cls, data: Mapping[str, Any]) -> "RoomModel":
         if not isinstance(data, Mapping):
             raise ValueError("room must be an object")
+        fields(data, ROOM_FIELDS, "room")
         raw_openings = data.get("openings", [])
         raw_obstacles = data.get("obstacles", [])
         if not isinstance(raw_openings, list):
             raise ValueError("room.openings must be a list")
         if not isinstance(raw_obstacles, list):
             raise ValueError("room.obstacles must be a list")
-        width_mm = number(data, "width_mm", "width")
-        depth_mm = number(data, "depth_mm", "depth")
-        height_mm = number(data, "height_mm", "height")
+        width_mm = number(data, "width_mm")
+        depth_mm = number(data, "depth_mm")
+        height_mm = number(data, "height_mm")
         require_positive(width_mm, depth_mm, height_mm)
         return cls(
-            id=text(data, "id", "room_id") or "room",
+            id=text(data, "id") or "room",
             name=text(data, "name") or "房间",
             width_mm=width_mm,
             depth_mm=depth_mm,
@@ -227,33 +213,19 @@ class PlacementRequest:
     def from_dict(cls, data: Mapping[str, Any]) -> "PlacementRequest":
         if not isinstance(data, Mapping):
             raise ValueError("placement must be an object")
-        host_wall = text(data, "host_wall", "wall", default="").lower() or None
-        explicit_mode = text(data, "mode", default="").lower()
-        mode = explicit_mode or ("wall" if host_wall else "free")
-        fill = data.get("fill", False)
-        if fill not in {True, False}:
-            raise ValueError("placement.fill must be a boolean")
+        fields(data, PLACEMENT_FIELDS, "placement")
+        mode = text(data, "mode")
+        if mode not in PLACEMENT_MODES:
+            raise ValueError("placement.mode must be wall or free")
         return cls(
             mode=mode,
-            host_wall=host_wall,
-            offset_mm=optional_number(data, "offset_mm", "offset"),
-            origin_x_mm=optional_number(data, "origin_x_mm", "x_mm", "x"),
-            origin_y_mm=optional_number(data, "origin_y_mm", "y_mm", "y"),
-            origin_z_mm=number(
-                data,
-                "origin_z_mm",
-                "elevation_mm",
-                "z_mm",
-                "z",
-                default=0.0,
-            ),
-            rotation_z_deg=optional_number(
-                data,
-                "rotation_z_deg",
-                "rotation_deg",
-                "rotation",
-            ),
-            fill=bool(fill),
+            host_wall=text(data, "host_wall") or None,
+            offset_mm=optional_number(data, "offset_mm"),
+            origin_x_mm=optional_number(data, "origin_x_mm"),
+            origin_y_mm=optional_number(data, "origin_y_mm"),
+            origin_z_mm=number(data, "origin_z_mm", default=0.0),
+            rotation_z_deg=optional_number(data, "rotation_z_deg"),
+            fill=boolean(data, "fill"),
         )
 
 
@@ -270,15 +242,21 @@ class ResolvedPlacement:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ResolvedPlacement":
+        if not isinstance(data, Mapping):
+            raise ValueError("placement must be an object")
+        fields(data, PLACEMENT_FIELDS, "placement")
+        mode = text(data, "mode")
+        if mode not in PLACEMENT_MODES:
+            raise ValueError("placement.mode must be wall or free")
         return cls(
-            mode=text(data, "mode", default="free").lower(),
-            host_wall=text(data, "host_wall", default="").lower() or None,
+            mode=mode,
+            host_wall=text(data, "host_wall") or None,
             offset_mm=optional_number(data, "offset_mm"),
             origin_x_mm=number(data, "origin_x_mm"),
             origin_y_mm=number(data, "origin_y_mm"),
             origin_z_mm=number(data, "origin_z_mm", default=0.0),
             rotation_z_deg=number(data, "rotation_z_deg", default=0.0),
-            fill=bool(data.get("fill", False)),
+            fill=boolean(data, "fill"),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -310,11 +288,12 @@ class ItemSpec:
     def from_dict(cls, data: Mapping[str, Any], *, index: int = 0) -> "ItemSpec":
         if not isinstance(data, Mapping):
             raise ValueError(f"items[{index}] must be an object")
+        fields(data, ITEM_FIELDS, f"items[{index}]")
         item_id = text(data, "id") or f"item_{index + 1}"
         placement = PlacementRequest.from_dict(mapping(data, "placement"))
-        width = optional_number(data, "width", "width_mm")
-        depth = number(data, "depth", "depth_mm")
-        height = number(data, "height", "height_mm")
+        width = optional_number(data, "width")
+        depth = number(data, "depth")
+        height = number(data, "height")
         if width is None and not placement.fill:
             raise ValueError("missing numeric field: width")
         require_positive(depth, height)
@@ -332,7 +311,7 @@ class ItemSpec:
             height=height,
             placement=placement,
             furniture_category=_optional_furniture_category(data, index),
-            manufacture=_manufacture_flag(data, index),
+            manufacture=boolean(data, "manufacture", default=True),
         )
 
 
@@ -354,6 +333,7 @@ class PlacedItem:
     def from_dict(cls, data: Mapping[str, Any], *, index: int = 0) -> "PlacedItem":
         if not isinstance(data, Mapping):
             raise ValueError(f"items[{index}] must be an object")
+        fields(data, PLACED_ITEM_FIELDS, f"items[{index}]")
         raw_footprint = data.get("footprint", [])
         if not isinstance(raw_footprint, list) or len(raw_footprint) != 4:
             raise ValueError(f"items[{index}].footprint must contain 4 points")
@@ -363,6 +343,7 @@ class PlacedItem:
                 raise ValueError(
                     f"items[{index}].footprint[{point_index}] must be an object"
                 )
+            fields(point, {"x_mm", "y_mm"}, f"items[{index}].footprint[{point_index}]")
             footprint.append((number(point, "x_mm"), number(point, "y_mm")))
         raw_clearances = data.get("clearances_mm", {})
         if not isinstance(raw_clearances, Mapping):
@@ -371,9 +352,9 @@ class PlacedItem:
             id=text(data, "id") or f"item_{index + 1}",
             label=text(data, "label") or text(data, "id") or f"item_{index + 1}",
             category=text(data, "category"),
-            width=number(data, "width", "width_mm"),
-            depth=number(data, "depth", "depth_mm"),
-            height=number(data, "height", "height_mm"),
+            width=number(data, "width"),
+            depth=number(data, "depth"),
+            height=number(data, "height"),
             placement=ResolvedPlacement.from_dict(mapping(data, "placement")),
             footprint=tuple(footprint),
             clearances_mm={
@@ -388,7 +369,7 @@ class PlacedItem:
                 )
             },
             furniture_category=_optional_furniture_category(data, index),
-            manufacture=_manufacture_flag(data, index),
+            manufacture=boolean(data, "manufacture", default=True),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -407,6 +388,20 @@ class PlacedItem:
             payload["furniture_category"] = self.furniture_category
         if not self.manufacture:
             payload["manufacture"] = False
+        return payload
+
+    def to_source(self) -> dict[str, Any]:
+        """Editable request fields; wall origins and angles are derived again."""
+        payload = self.to_dict()
+        del payload["footprint"]
+        del payload["clearances_mm"]
+        placement = payload["placement"]
+        if self.placement.mode == "wall":
+            for key in ("origin_x_mm", "origin_y_mm", "rotation_z_deg"):
+                del placement[key]
+        else:
+            for key in ("host_wall", "offset_mm"):
+                del placement[key]
         return payload
 
     @property
@@ -428,8 +423,6 @@ class RoomScene:
         if not isinstance(data, Mapping):
             raise ValueError("scene must be an object")
         raw_items = data.get("items", [])
-        if raw_items is None:
-            raw_items = []
         if not isinstance(raw_items, list):
             raise ValueError("items must be a list")
         return cls(
@@ -450,8 +443,6 @@ class RoomScene:
 def parse_item_specs(
     raw_items: Any, *, allow_empty: bool = False
 ) -> tuple[ItemSpec, ...]:
-    if raw_items is None:
-        raw_items = []
     if not isinstance(raw_items, list):
         raise ValueError("items must be a list")
     if not raw_items and not allow_empty:
@@ -468,29 +459,15 @@ def parse_item_specs(
     return specs
 
 
-def _manufacture_flag(data: Mapping[str, Any], index: int) -> bool:
-    """True unless the caller already set manufacture to false.
-
-    Absence means the piece is to be manufactured. Category names are not read.
-    """
-    if "manufacture" not in data or data["manufacture"] is None:
-        return True
-    value = data["manufacture"]
-    if not isinstance(value, bool):
-        raise ValueError(f"items[{index}].manufacture must be a boolean")
-    return value
-
-
 def _optional_furniture_category(
     data: Mapping[str, Any], index: int
 ) -> str | None:
     value = text(data, "furniture_category")
     if not value:
         return None
-    category = value.lower()
-    if category not in EXECUTABLE_CATEGORIES:
+    if value not in EXECUTABLE_CATEGORIES:
         raise ValueError(
             f"items[{index}].furniture_category must be one of: "
             + ", ".join(sorted(EXECUTABLE_CATEGORIES))
         )
-    return category
+    return value

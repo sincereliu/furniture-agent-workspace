@@ -6,44 +6,17 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from .room_shell import room_shell_from_output
-from .layout_figures import check_room_figures
-from .placement import place_items
-from .room_svg import render_preview
+from .layout_figures import check_room_figures, room_scene_dict
 from .project_layout import ProjectLayout
-from .scene import RoomModel, RoomScene, parse_item_specs
-from .validation import raise_unless_admitted
-from .stored_room_page import render_viewer
-
-
-def plan_scene(
-    room: Mapping[str, Any],
-    items: Sequence[Mapping[str, Any]],
-) -> RoomScene:
-    """Place every item and admit the result; geometry only, no preview.
-
-    项目布局的编辑走这里重算被改的那一间（见 `project_edit.py`）：场景源进来，
-    摆放坐标、footprint、净距都是算出来的，所以改完不会留下过期的派生字段。
-    """
-    room_model = RoomModel.from_dict(room)
-    specs = parse_item_specs(items)
-    placed = place_items(room_model, specs)
-    scene = RoomScene(room=room_model, items=placed)
-    raise_unless_admitted(scene)
-    return scene
+from .scene_planning import plan_scene
 
 
 def plan_room_scene(
     room: Mapping[str, Any],
-    items: Sequence[Mapping[str, Any]],
+    items: list[Mapping[str, Any]],
 ) -> dict[str, Any]:
     """Place every item, admit the placement, then emit preview and viewer."""
-    scene = plan_scene(room, items)
-    return {
-        "room": scene.room.to_dict(),
-        "items": [item.to_dict() for item in scene.items],
-        "preview": render_preview(scene),
-        "viewer": render_viewer(scene),
-    }
+    return room_scene_dict(plan_scene(room, items))
 
 
 def plan_project_layout(rooms: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
