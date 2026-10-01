@@ -23,6 +23,7 @@ from .workflow_constants import (
     STAGE_INPUT_KEYS,
     OrchestrationResult,
 )
+from .workflow_decisions import append_decisions
 from .workflow_digest import stable_digest
 from .workflow_project import Project, Revision, StageAttempt
 from .workflow_state import (
@@ -72,6 +73,30 @@ class RevisionOpsMixin:
 
     def revise_layout(self, project: Project, layout: ProjectLayout) -> Revision:
         return self.revise(project, layout)
+
+    def record_decisions(
+        self,
+        project: Project,
+        admitted: list[dict[str, Any]],
+        *,
+        actor: Mapping[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        """把这次对话里的说法记进**项目台账**（只追加），有新增才落盘。
+
+        台账挂在项目上而不是修订上：一句"客户说要通顶"不会因为换了版号就失效，
+        跨修订也仍然要读得到。条目由调用方先过 `admit_decisions()`——
+        校验必须在改项目之前完成，免得留下半成品。`actor` 由运行时给（谁记的这条）。
+        """
+        if not admitted:
+            return []
+        added = append_decisions(
+            project.decisions,
+            admitted,
+            revision_number=project.latest.number,
+            actor=actor,
+        )
+        self._persist(project)
+        return added
 
     def revise_stage_output(
         self,

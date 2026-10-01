@@ -1,5 +1,6 @@
 import { mountLayout } from "/layout-view/layout_scene.js";
 import { normalizeItems } from "/layout-view/layout_payload.js";
+import { groundDragDelta, wallSnap } from "/layout-view/layout_drag.js";
 const SCENE_ID="__SCENE_ID__";
 const READ_ONLY=__READ_ONLY__;
 // 分享形态（预览页 ?mode=view）：只影响文案，不改权限。
@@ -372,6 +373,15 @@ function applyLocalDrag(item,dx,dy){
   const solvedY=resolveInteger(anchor[1],anchor[1]+Math.round(dy),(y)=>probe(solvedX.value,y));
   placement.origin_x_mm=solvedX.value;placement.origin_y_mm=solvedY.value;
   item.footprint=at(solvedX.value,solvedY.value);
+  // 贴回墙边就认回"靠墙"：不认的话，离开过墙面的件只能顶在墙上不动（滑不动、
+  // 也不再显示靠墙），用户看到的就是"拖完之后离墙的距离不对了"。
+  const snap=wallSnap({footprint:item.footprint,rotation,
+    room:{width_mm:room.width_mm,depth_mm:room.depth_mm}});
+  if(snap){
+    placement.mode="wall";placement.host_wall=snap.host_wall;placement.offset_mm=snap.offset_mm;
+    // 换了模式，之后的每一帧走的是"沿墙滑动"那条路，起点必须跟着换，否则会跳。
+    if(drag){drag.startOffset=snap.offset_mm;drag.startFootprint=item.footprint.map(point=>[...point])}
+  }
   return solvedX.blocker||solvedY.blocker;
 }
 // 立面视图的拖动：横向走该视图的水平轴，纵向走高度。求解顺序仍是先水平后高度。
@@ -728,7 +738,7 @@ canvas.addEventListener("pointerdown",event=>{
     view.setEnabled(false);
     const placement=pickedItem.placement;
     state.selectedId=pickedItem.id;state.blocked=null;
-    drag={kind:"move",item:pickedItem,ground,startScreen:[sx,sy],moved:false,
+    drag={kind:"move",item:pickedItem,startScreen:[sx,sy],moved:false,
       startOrigin:[placement.origin_x_mm||0,placement.origin_y_mm||0],
       startOffset:placement.offset_mm||0,startZ:placement.origin_z_mm||0,
       horizontal:horizontalAxis(),elevation:isElevation(),
@@ -801,13 +811,20 @@ canvas.addEventListener("pointermove",event=>{
       const away=(sx-drag.startScreen[0])*drag.perpScreen.x+(sy-drag.startScreen[1])*drag.perpScreen.y;
       if(away>px(26))detachToFree(drag);
     }
-    const ground=unprojectToGround(sx,sy);
-    if(!ground)return;
-    const moveX=ground[0]-drag.ground[0],moveY=ground[1]-drag.ground[1];
-    const blocker=applyLocalDrag(drag.item,moveX,moveY);
+    // 跟手：按**家具脚下那一点**的比例换算，不用光标自己的地面交点——
+    // 抓在家具上半身时那条射线打到地面已在很远处，几个像素就能换出好几米。
+    const cam=camera();
+    const scale=verticalPlaneScale([...footprintCenter(drag.item),drag.item.z_start||0]);
+    const delta=groundDragDelta({dx:sx-drag.startScreen[0],dy:sy-drag.startScreen[1],scale,
+      right:cam.right,forward:cam.forward});
+    const modeBefore=drag.item.placement.mode;
+    const blocker=applyLocalDrag(drag.item,delta[0],delta[1]);
+    // 刚才的那段位移已经落在吸附后的位置上；屏幕起点跟着归零，
+    // 不然下一帧会把同一段手部位移再算一遍（表现为"吸附那一下多走一截"）。
+    if(modeBefore==="free"&&drag.item.placement.mode==="wall")drag.startScreen=[sx,sy];
     state.blocked=blocker?blocker.id:null;
     if(blocker)setStatus(contactStop(blocker),"warn");
-    else setStatus(`拖动 ${drag.item.label}… 位移 ${Math.round(Math.hypot(moveX,moveY))} mm`);
+    else setStatus(`拖动 ${drag.item.label}… 位移 ${Math.round(Math.hypot(delta[0],delta[1]))} mm`);
     render();
     return;
   }
@@ -826,6 +843,7 @@ function applyDocument(payload){
   if(payload.version!==undefined)layoutVersion=String(payload.version);
   if(payload.lease!==undefined)applyLease(payload.lease||null);
   if(payload.working)applyWorking(payload);
+  if(payload.decisions)applyDecisions(payload);
   if(!payload.rooms)return;
   rooms=payload.rooms;
   const currentId=scene.room&&scene.room.id;
@@ -855,7 +873,11 @@ async function persist(item,kind,sizes){
     const placement=item.placement;
     op={op:kind==="rotate"?"rotate":"move",item_id:item.id};
     if(kind==="rotate")op.rotation_z_deg=Math.round(normalizeAngle(placement.rotation_z_deg)*10)/10;
-    if(placement.mode==="wall"){op.offset_mm=Math.round(placement.offset_mm)}
+    // mode 一律显式发：拖回墙边会从 free 变回 wall（反之亦然），不显式说，
+    // 服务端会按它那边的旧模式解释这次 op——那正是"改完位置不对"的经典来源。
+    if(placement.mode==="wall"){
+      op.mode="wall";op.host_wall=placement.host_wall;op.offset_mm=Math.round(placement.offset_mm);
+    }
     else{op.mode="free";op.origin_x_mm=Math.round(placement.origin_x_mm);op.origin_y_mm=Math.round(placement.origin_y_mm)}
     // origin_z_mm 是 move 的共享字段，平面移动时顺带带上也不会互相干扰。
     if(kind!=="rotate")op.origin_z_mm=Math.round(placement.origin_z_mm||0);
@@ -1288,6 +1310,8 @@ function layoutVersionOf(payload){
 // **看得见**（谁在写）与**抢回来**（人永远抢得回来）。裁定在服务端，
 // 见 references/runtime-contract.md「编辑租约」段。
 const LEASE_URL=POLL_URL?POLL_URL.replace(/\/layout$/,"/edit-lease"):"";
+// 对一条待确认的说法表态（确认 / 划掉）：与布局编辑同一套门。
+const DECISIONS_URL=POLL_URL?POLL_URL.replace(/\/layout$/,"/decisions"):"";
 const LEASE_TOKEN_KEY="dsh-edit-lease:"+SCENE_ID;
 const LEASE_ID_KEY=LEASE_TOKEN_KEY+":id";
 const LEASE_LABEL_KEY=LEASE_TOKEN_KEY+":label";
@@ -1298,6 +1322,52 @@ if(PROJECT_EDIT_URL&&!sessionStorage.getItem(LEASE_LABEL_KEY)){
 }
 const leaseLabel=PROJECT_EDIT_URL?sessionStorage.getItem(LEASE_LABEL_KEY):"";
 // 工作副本：没有下游产物时改动原地生效（版号不变）——这句必须一直挂着，别让人以为版号变了。
+// 点开能看到**改动记录**：什么时间、谁改的（哪个窗口 / 助手 / 不知道谁）、改成了什么。
+const round1=value=>Math.round(value);
+// 时间一律按**看页面这台机器**的本地时间显示。日志里存的是 UTC（ISO 8601，带 +00:00），
+// 直接把字符串切一刀显示出来就是 UTC——"时间不是我这边的时间"就是这么来的。
+function localTime(iso){
+  const date=new Date(iso);
+  if(!iso||Number.isNaN(date.getTime()))return String(iso||"").replace("T"," ").slice(0,16);
+  const pad=value=>String(value).padStart(2,"0");
+  return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())} `
+    +`${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+function describeOp(op,itemId){
+  const entry=op||{};
+  if(entry.op==="move"&&entry.offset_mm!==undefined)return `沿墙挪到 ${round1(entry.offset_mm)} mm`;
+  if(entry.op==="move"&&entry.origin_x_mm!==undefined)
+    return `挪到 X ${round1(entry.origin_x_mm)} · Y ${round1(entry.origin_y_mm)} mm`;
+  if(entry.op==="resize")return "改了外形尺寸";
+  if(entry.op==="rotate")return `转到 ${round1(entry.rotation_z_deg||0)}°`;
+  if(entry.op==="undo")return "撤销一步";
+  return `${entry.op||"改动"} ${itemId||""}`.trim();
+}
+function describeActor(actor){
+  const holder=actor&&actor.holder;
+  if(holder==="page")return `页面 ${(actor.label||"").trim()}`.trim();
+  if(holder==="agent")return "助手";
+  return "不知道谁";
+}
+function renderWorkingPanel(){
+  const panel=document.getElementById("working-panel");
+  if(!panel)return;
+  const recent=(window.__workingRecent)||[];
+  if(!recent.length){panel.innerHTML="";return}
+  panel.innerHTML="<ol>"+recent.slice().reverse().map(entry=>
+    `<li>${escapeHtml(localTime(entry.at))} · `
+    +`<span class="who">${escapeHtml(describeActor(entry.actor))}</span> · `
+    +`${escapeHtml(describeOp(entry.op,entry.item_id))}</li>`).join("")+"</ol>";
+}
+function toggleWorkingPanel(){
+  const badge=document.getElementById("working-badge");
+  const panel=document.getElementById("working-panel");
+  if(!badge||!panel||badge.hidden)return;
+  const recent=(window.__workingRecent)||[];
+  if(!recent.length)return;
+  if(panel.hidden)renderWorkingPanel();
+  panel.hidden=!panel.hidden;
+}
 function applyWorking(payload){
   const badge=document.getElementById("working-badge");
   if(!badge)return;
@@ -1309,6 +1379,84 @@ function applyWorking(payload){
   badge.textContent=working.open===false
     ?`${revision}已有下游产物：改动会落成新一版`
     :`${revision}草稿中 · 同一版${working.ops?` · 已调整 ${working.ops} 次`:""}${READ_ONLY?"（只读）":""}`;
+  // 改动记录（最近三次）：悬停先看得见，点开是完整列表。
+  const recent=(working&&working.recent)||[];
+  window.__workingRecent=recent;
+  badge.title=recent.slice().reverse().map(entry=>
+    `${localTime(entry.at)} · ${describeActor(entry.actor)} · ${describeOp(entry.op,entry.item_id)}`
+  ).join("\n");
+  const panel=document.getElementById("working-panel");
+  if(panel&&!panel.hidden)renderWorkingPanel();
+}
+// 决策台账：把"助手替你定的、还没人确认"的那几条摆到牌子上——谁说的要看得见，
+// 别让助手替他说话还看不出来。可编辑页上每条还配「确认 / 划掉」两个按钮：
+// 客户自己表态，比让助手转述"客户同意了"可靠得多。
+let pendingDecisions=[];
+function basisCanDecide(){
+  return Boolean(PROJECT_EDIT_URL)&&!READ_ONLY&&!SHARE_FORM;
+}
+function renderBasisPanel(){
+  const panel=document.getElementById("basis-panel");
+  const badge=document.getElementById("basis-badge");
+  if(!panel||!badge)return;
+  const canDecide=basisCanDecide();
+  panel.innerHTML=pendingDecisions.map(entry=>{
+    const quote=entry.utterance?`<p class="quote">「${escapeHtml(entry.utterance)}」</p>`:"";
+    const who=entry.speaker==="relay"?"（别人转达的客户话）":(entry.speaker==="customer"?"":"（助手记的）");
+    const actions=canDecide
+      ?`<div class="basis-actions">
+          <button type="button" data-basis="confirm" data-target="${escapeHtml(entry.id)}">确认</button>
+          <button type="button" data-basis="withdraw" data-target="${escapeHtml(entry.id)}">划掉</button>
+        </div>`
+      :"";
+    return `<div class="basis-item">${quote}
+      <p class="reading">${escapeHtml(entry.interpretation)}${who}</p>${actions}</div>`;
+  }).join("")+(canDecide?"":`<p class="basis-note">这一页不能改：确认 / 划掉要在可编辑的页面上按。</p>`);
+}
+function applyDecisions(payload){
+  const badge=document.getElementById("basis-badge");
+  const panel=document.getElementById("basis-panel");
+  if(!badge)return;
+  pendingDecisions=(payload&&payload.decisions&&payload.decisions.pending)||[];
+  if(!pendingDecisions.length){
+    badge.hidden=true;badge.removeAttribute("title");badge.setAttribute("aria-expanded","false");
+    if(panel)panel.hidden=true;
+    return;
+  }
+  badge.hidden=false;
+  badge.textContent=`助手假设 ${pendingDecisions.length} 条 · 点开确认`;
+  badge.title=pendingDecisions.map(entry=>`${entry.utterance} → ${entry.interpretation}`).join("\n");
+  renderBasisPanel();
+}
+function toggleBasisPanel(){
+  const badge=document.getElementById("basis-badge");
+  const panel=document.getElementById("basis-panel");
+  if(!badge||!panel||badge.hidden)return;
+  panel.hidden=!panel.hidden;
+  badge.setAttribute("aria-expanded",String(!panel.hidden));
+}
+async function decideBasis(target,action){
+  if(!DECISIONS_URL)return;
+  const answer=await leasePost(DECISIONS_URL,{expected_version:layoutVersion,action,target});
+  if(answer.status===423){
+    const detail=await answer.json().catch(()=>({}));
+    applyLease((detail&&detail.detail)||null);
+    setStatus("编辑权在别人手里 · 先点「收回编辑权」再确认","warn");
+    return;
+  }
+  if(answer.status===409){
+    setStatus("页面上的内容已经过期 · 刷新后再确认","warn");
+    return;
+  }
+  if(!answer.ok){
+    const detail=await answer.json().catch(()=>({}));
+    setStatus("没记上："+((detail&&detail.detail)||answer.status),"error");
+    return;
+  }
+  const document=await answer.json();
+  if(document.version!==undefined)layoutVersion=String(document.version);
+  applyDecisions(document);
+  setStatus(action==="confirm"?"已记下：客户确认了这条":"已记下：客户划掉了这条");
 }
 function applyLease(lease){
   const badge=document.getElementById("lease-badge");
@@ -1331,6 +1479,24 @@ async function leasePost(path,body){
   return fetch(path,{method:"POST",cache:"no-store",headers,body:JSON.stringify(body)});
 }
 const takeLeaseButton=document.getElementById("take-lease");
+const workingBadge=document.getElementById("working-badge");
+if(workingBadge)workingBadge.addEventListener("click",toggleWorkingPanel);
+const basisBadge=document.getElementById("basis-badge");
+if(basisBadge){
+  basisBadge.addEventListener("click",toggleBasisPanel);
+  basisBadge.addEventListener("keydown",event=>{
+    if(event.key==="Enter"||event.key===" "){event.preventDefault();toggleBasisPanel()}
+  });
+}
+const basisPanel=document.getElementById("basis-panel");
+if(basisPanel){
+  basisPanel.addEventListener("click",event=>{
+    const button=event.target&&event.target.closest?event.target.closest("button[data-basis]"):null;
+    if(!button)return;
+    button.disabled=true;
+    decideBasis(button.dataset.target,button.dataset.basis).finally(()=>{button.disabled=false});
+  });
+}
 if(takeLeaseButton){
   takeLeaseButton.addEventListener("click",async()=>{
     takeLeaseButton.disabled=true;
@@ -1386,6 +1552,7 @@ async function pollLayout(){
     // 租约与版本无关：助手接管或让出时布局一个字没变，也必须立刻显示出来。
     applyLease(payload.lease||null);
     applyWorking(payload);
+    applyDecisions(payload);
     if(layoutVersionOf(payload)===layoutVersion)return;
     if(drag||state.orbiting||state.panning)return;
     layoutVersion=layoutVersionOf(payload);

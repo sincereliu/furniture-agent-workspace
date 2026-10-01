@@ -609,6 +609,67 @@ class OpenProjectPreviewTests(unittest.TestCase):
         server.app.state.preview_server = None
         self.assertFalse(server.stop_preview_server())
 
+    def test_room_page_drag_follows_the_item_and_sends_its_mode(self) -> None:
+        """拖动换算按**家具脚下**的比例，而且摆放模式一律显式发。
+
+        旧算法用"光标射线的地面交点"：抓在家具上半身时那条射线打到地面已在很远处，
+        几个像素就能换出好几米（实测一次拖动把 2.4m 的柜子从北墙甩到 y=2777）。
+        换算本身在 static/layout_drag.js 里由 drag_check.mjs 断言，这里盯的是页面用没用它、
+        以及 mode 有没有显式发——不显式发，服务端会按它那边的旧模式解释这次 op。
+        """
+        script = (
+            WORKSPACE_ROOT
+            / "domain"
+            / "skills"
+            / "layout-plan"
+            / "scripts"
+            / "furniture_layout"
+            / "templates"
+            / "room_page.js"
+        ).read_text(encoding="utf-8")
+        self.assertIn('from "/layout-view/layout_drag.js"', script)
+        self.assertIn("groundDragDelta(", script)
+        # 贴回墙边要认回"靠墙"，否则离开过墙面的件只能顶在墙上不动。
+        self.assertIn("wallSnap(", script)
+        self.assertIn('op.mode="wall"', script)
+        self.assertIn('op.mode="free"', script)
+
+    def test_room_page_shows_the_ledger_and_the_change_log(self) -> None:
+        """页面上要看得见"哪几条是助手替你定的"，也要看得见"谁改的、改了什么"。"""
+        page = (
+            WORKSPACE_ROOT
+            / "domain"
+            / "skills"
+            / "layout-plan"
+            / "scripts"
+            / "furniture_layout"
+            / "templates"
+            / "room_page.html"
+        ).read_text(encoding="utf-8")
+        script = (
+            WORKSPACE_ROOT
+            / "domain"
+            / "skills"
+            / "layout-plan"
+            / "scripts"
+            / "furniture_layout"
+            / "templates"
+            / "room_page.js"
+        ).read_text(encoding="utf-8")
+        self.assertIn('id="basis-badge"', page)
+        self.assertIn('id="working-panel"', page)
+        # `hidden` 必须真的能藏住：牌子自己设了 display，会盖掉浏览器默认的
+        # `[hidden]{display:none}`——划过假设之后就会留一个空气泡。
+        self.assertIn("[hidden]{display:none", page)
+        self.assertIn("localTime(", script)
+        self.assertIn("点开确认", script)
+        self.assertIn("toggleWorkingPanel", script)
+        self.assertIn("describeActor", script)
+        # 时间按看页面这台机器的本地时间显示：日志里存的是 UTC，
+        # 直接切字符串就会显示 UTC（"时间不对"就是这么来的）。
+        self.assertEqual(script.count("localTime("), 3)  # 定义一次 + 牌子悬停 + 面板列表
+        self.assertEqual(script.count('.replace("T"," ").slice(0,16)'), 1)  # 只留兜底那一处
+
     def test_write_permission_has_exactly_one_judgement(self) -> None:
         """写权限只有 `access_scope` 一个判据；停进程、落盘、出 CAD 共用它。
 
@@ -630,10 +691,11 @@ class OpenProjectPreviewTests(unittest.TestCase):
             / "room_http.py"
         ).read_text(encoding="utf-8")
         self.assertEqual(source.count("_LOCAL_HOSTS"), 2)  # 定义一次 + 判据里读一次
+        # 数一遍"每个写端点都走同一道门"：端点加一个，这里就加一。
         self.assertEqual(
             source.count("if not may_edit(request):")
             + room_http.count("if not may_edit(request):"),
-            10,
+            11,
         )
         self.assertNotIn("def access_scope", room_http)
         endpoints = source.split("def may_edit")[1]

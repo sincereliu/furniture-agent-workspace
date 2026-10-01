@@ -44,6 +44,7 @@ from furniture_workflow.project_layout_edit import (
     LAYOUT_EDIT_ENV,
     LayoutEditDisabled,
     VersionConflict,
+    edit_project_decisions,
     edit_project_layout,
     undo_layout_edit,
 )
@@ -165,6 +166,20 @@ class ProjectLayoutUndoRequest(BaseModel):
 
     expected_version: str = Field(..., min_length=1, description="页面最近看到的 version")
     steps: int = Field(default=1, ge=1, le=50)
+
+
+class ProjectDecisionRequest(BaseModel):
+    """页面上对**一条待确认的说法**表态：确认它，或者划掉它。
+
+    页面只递"动作 + 目标"：措辞由服务端写死，所以页面上按的按钮**没有原话**——
+    也就没有"页面替客户编话"的余地。只追加，被表态的那条一个字不动。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_version: str = Field(..., min_length=1, description="页面最近看到的 version")
+    action: str = Field(..., pattern="^(confirm|withdraw)$")
+    target: str = Field(..., min_length=1, description="要表态的那条 decision id")
 
 
 @app.get("/health")
@@ -435,6 +450,45 @@ async def edit_project_layout_endpoint(
             payload,
             expected_version=expected_version,
             workspace_root=WORKSPACE_ROOT,
+            store_root=STORE_ROOT,
+            lease_token=request.headers.get(_LEASE_HEADER) or None,
+        )
+    except LeaseHeld as exc:
+        raise HTTPException(status_code=423, detail=_lease_held_detail(exc)) from exc
+    except LayoutEditDisabled as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except VersionConflict as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": str(exc),
+                "current_version": exc.current_version,
+            },
+        ) from exc
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/api/project/{project_id}/decisions")
+async def project_decisions_endpoint(
+    project_id: str,
+    req: ProjectDecisionRequest,
+    request: Request,
+):
+    """页面上对一条**待确认**的说法表态：确认 / 划掉。
+
+    与布局编辑同一套门：本机来源 → 灰度开关 → 版本对得上 → 编辑租约。只追加：
+    这次表态是新的一条，被它确认/撤回的那条一个字不动（见 references/decision-log-design.md）。
+    """
+    if not may_edit(request):
+        raise HTTPException(status_code=403, detail="deciding a project is local only")
+    project = _load_project(project_id)
+    try:
+        return edit_project_decisions(
+            project,
+            action=req.action,
+            target=req.target,
+            expected_version=req.expected_version,
             store_root=STORE_ROOT,
             lease_token=request.headers.get(_LEASE_HEADER) or None,
         )

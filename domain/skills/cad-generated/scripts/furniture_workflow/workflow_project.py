@@ -334,6 +334,10 @@ class Project:
     id: str = field(default_factory=lambda: _id("project"))
     created_at: str = field(default_factory=utc_now)
     revisions: list[Revision] = field(default_factory=list)
+    #: **决策台账**：客户说过的话（原话）、我们的翻译，以及它有没有被确认。
+    #: 只追加、跨修订一直留着——"这句是谁说的"不该随版号重来。读写规则与派生口径
+    #: 在 `workflow_decisions.py`；设计口径见 references/decision-log-design.md。
+    decisions: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def latest(self) -> Revision:
@@ -366,6 +370,7 @@ class Project:
             "name": self.name,
             "created_at": self.created_at,
             "revisions": [revision.to_dict() for revision in self.revisions],
+            "decisions": deepcopy(self.decisions),
         }
 
     @classmethod
@@ -375,7 +380,22 @@ class Project:
             name=str(data["name"]),
             created_at=str(data["created_at"]),
             revisions=[Revision.from_dict(item) for item in data.get("revisions", [])],
+            decisions=_read_decisions(data.get("decisions")),
         )
+
+
+def _read_decisions(value: Any) -> list[dict[str, Any]]:
+    """台账只读成"字典的列表"；形状不对就拒——宁可打不开，也不装作读懂了。"""
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ValueError("project.decisions must be a list")
+    entries: list[dict[str, Any]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            raise ValueError("project.decisions entries must be objects")
+        entries.append(deepcopy(item))
+    return entries
 
 
 def _carry_room_approvals(parent: "Revision", revision: "Revision") -> None:

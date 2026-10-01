@@ -19,6 +19,7 @@ from .agent_tool_schema import (
     TOOL_CREATE_PROJECT,
     TOOL_GET_PROJECT,
     TOOL_NAMES,
+    TOOL_RECORD_DECISION,
     TOOL_RETRY_STAGE,
     TOOL_REVISE_LAYOUT,
     TOOL_RUN_NEXT,
@@ -29,6 +30,7 @@ from .agent_tool_schema import (
     _GET_KEYS,
     _RETRYABLE_VALUES,
     _STAGE_VALUES,
+    _RECORD_DECISION_KEYS,
     _RETRY_KEYS,
     _REVISE_KEYS,
     _RUN_NEXT_KEYS,
@@ -37,6 +39,11 @@ from .agent_tool_schema import (
     tool_names,
 )
 from furniture_layout.open_preview import open_project_preview
+from .workflow_decisions import (
+    admit_decisions,
+    decision_views,
+    pending_decision_ids,
+)
 from .workflow_lease import LEASE_TTL_SECONDS, handover_to_agent, read_lease
 from .workflow_orchestrator import (
     RETRYABLE_STAGES,
@@ -129,6 +136,8 @@ class FurnitureToolSession:
             return self._select_attempt(project, payload)
         if tool == TOOL_REVISE_LAYOUT:
             return self._revise_layout(project, payload)
+        if tool == TOOL_RECORD_DECISION:
+            return self._record_decision(project, payload)
         raise ToolProtocolError("UNKNOWN_TOOL", f"unknown tool: {tool}")
 
     def _take_edit_lease(self, project: Project) -> dict[str, Any] | None:
@@ -156,10 +165,37 @@ class FurnitureToolSession:
     def _create_project(self, payload: dict[str, Any]) -> Project:
         _reject_unknown_keys(payload, _CREATE_KEYS)
         name = _require_string(payload.get("name"), "name")
+        # 说法先过准入，再动项目：校验不过就整体拒绝，不留一个开了一半的工程。
+        admitted = admit_decisions(payload.get("decisions"))
         layout = _layout_from_payload(payload)
         project = self.orchestrator.create_project(name, layout)
         self._projects[project.id] = project
+        self._record_decisions(project, admitted)
         return project
+
+    def _record_decisions(
+        self,
+        project: Project,
+        admitted: list[dict[str, Any]],
+    ) -> None:
+        """把这次调用带来的说法记进项目台账（只追加）。空批不动磁盘。
+
+        `actor` 从编辑租约读——写动作前工具面已经接管过租约，所以这里读到的就是
+        "助手在写"。读不出来（没有存储）就不写 actor，而不是自称。
+        """
+        if not admitted:
+            return
+        store = self.orchestrator.project_store
+        actor = None
+        if store is not None:
+            lease = read_lease(store.root, project.id)
+            if lease is not None:
+                actor = {
+                    "holder": lease.holder,
+                    "label": lease.label,
+                    "lease_id": lease.id,
+                }
+        self.orchestrator.record_decisions(project, admitted, actor=actor)
 
     def _confirm_stage(
         self, project: Project, payload: dict[str, Any]
@@ -278,10 +314,38 @@ class FurnitureToolSession:
         self, project: Project, payload: dict[str, Any]
     ) -> dict[str, Any]:
         _reject_unknown_keys(payload, _REVISE_KEYS)
+        admitted = admit_decisions(
+            payload.get("decisions"),
+            existing_ids=[str(entry.get("id") or "") for entry in project.decisions],
+        )
         layout = _layout_from_payload(payload)
         self.orchestrator.revise(project, layout)
         self._remember(project)
+        self._record_decisions(project, admitted)
         return self._ok(TOOL_REVISE_LAYOUT, project, progressed=True)
+
+    def _record_decision(
+        self, project: Project, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        """只记说法，不动布局、不动阶段：`progressed` 因此是假。
+
+        "客户后来说了一句、但还没到改布局的时候"必须有地方落——不然那句话要么丢，
+        要么被塞进一次没必要的改版里。
+        """
+        _reject_unknown_keys(payload, _RECORD_DECISION_KEYS)
+        _reject_failed(project.latest)
+        raw = payload.get("decisions")
+        if not isinstance(raw, list) or not raw:
+            raise ToolProtocolError(
+                "INVALID_ARGUMENT", "decisions must be a non-empty list"
+            )
+        admitted = admit_decisions(
+            raw,
+            existing_ids=[str(entry.get("id") or "") for entry in project.decisions],
+        )
+        self._remember(project)
+        self._record_decisions(project, admitted)
+        return self._ok(TOOL_RECORD_DECISION, project, progressed=False)
 
     def _load_project(self, project_id: str) -> Project:
         store = self.orchestrator.project_store
@@ -391,6 +455,11 @@ def project_snapshot(
         "next_stage": next_stage.value if next_stage is not None else None,
         "layout": deepcopy(revision.layout.to_dict()),
         "layout_confirmed": bool(revision.layout.confirmed),
+        # 决策台账：哪几句是客户说的、我们翻译成了什么、还有哪几条是**助手假设待人确认**
+        # （`pending_decisions` 就是"还差哪几条要问客户"）。只追加，跨修订一直留着。
+        # 口径与读写规则见 workflow_decisions.py 与 references/decision-log-design.md。
+        "decisions": decision_views(project.decisions),
+        "pending_decisions": pending_decision_ids(project.decisions),
         # 房间级确认：布局检查点是"每间都审过"的派生值。改一间只审一间，
         # 没动过的房间确认跟着走过来（见 `inherited_rooms`）。
         "approved_rooms": list(revision.approved_rooms),
@@ -424,7 +493,7 @@ def _lease_snapshot(project: Project, store: Any | None) -> dict[str, Any] | Non
 
 
 def allowed_tools(revision: Revision) -> list[str]:
-    tools = [TOOL_GET_PROJECT, TOOL_REVISE_LAYOUT]
+    tools = [TOOL_GET_PROJECT, TOOL_REVISE_LAYOUT, TOOL_RECORD_DECISION]
     current = revision.workflow.current
     if current == WorkflowStage.FAILED or current not in STAGE_SEQUENCE:
         return tools
@@ -670,6 +739,7 @@ __all__ = [
     "TOOL_CREATE_PROJECT",
     "TOOL_GET_PROJECT",
     "TOOL_NAMES",
+    "TOOL_RECORD_DECISION",
     "TOOL_RETRY_STAGE",
     "TOOL_REVISE_LAYOUT",
     "TOOL_RUN_NEXT",

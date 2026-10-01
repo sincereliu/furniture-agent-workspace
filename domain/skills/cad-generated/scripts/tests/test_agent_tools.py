@@ -110,7 +110,9 @@ class AgentToolSurfaceTests(unittest.TestCase):
         for name, identity in ((TOOL_CREATE_PROJECT, "name"), (TOOL_REVISE_LAYOUT, "project_id")):
             with self.subTest(tool=name):
                 schema = schemas[name]
-                self.assertEqual(set(schema["properties"]), {identity, "rooms"})
+                # 布局写入只收"身份 + rooms"；`decisions` 是唯一的例外，而且**必须可选**——
+                # 决策台账记的是客户说过的话，没有新说法时不能逼调用方编一条出来。
+                self.assertEqual(set(schema["properties"]), {identity, "rooms", "decisions"})
                 self.assertEqual(set(schema["required"]), {identity, "rooms"})
                 self.assertEqual(schema["properties"]["rooms"]["minItems"], 1)
 

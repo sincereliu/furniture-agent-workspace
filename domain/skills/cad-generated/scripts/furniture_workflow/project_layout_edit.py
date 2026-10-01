@@ -1,4 +1,4 @@
-"""页面改项目布局的写路径：一次 op → 同一版（工作副本）或一个新 Revision。
+"""页面改项目的写路径：布局 op，以及对一条决策表态。
 
 契约（见 `references/runtime-contract.md`「页面写项目」段）：
 
@@ -6,11 +6,14 @@
 - 必须带 `expected_version`（页面最近一次看到的 `version`）：对不上就拒绝，
   绝不拿旧画面去覆盖新内容。
 - **工作副本**（方案 H）：这一版**还没有下游产物**时，改动**原地生效**——版号不变、内容摘要变，
-  并往 `working_ops` 记一条（改动前的旧值）供撤销。一旦有下游产物，再改就**追加新 Revision**：
+  并往 `working_ops` 记一条（改动前的旧值 + 谁改的）供撤销与追溯。一旦有下游产物，再改就**追加新 Revision**：
   "已经有东西依赖这一版了，再改就不是同一版"。
 - 原地改到某间房时，**那一间的确认作废**（内容变回了"没人看过"）——这正是"改一间只审一间"。
 - 父修订的 `stage_inputs` 原样带走：那些是柜体构造意图（门数、层板、背板安装…），摆放变了它们没变。
 - 默认关闭，靠 `FURNITURE_PROJECT_LAYOUT_EDIT=1` 灰度打开。从布局阶段的 `open_projects.py` 拉起本机预览进程时会把它设成 `1`。
+- 页面上还能对**一条待确认的说法**表态（确认 / 划掉，`edit_project_decisions()`）：同一套门，
+  另加"只能动还待确认的那一条"，措辞由服务端写死——页面递不进自由文本。见
+  [决策台账设计](references/decision-log-design.md)。
 
 几何部分不在这里：op 词表、白名单、重新摆放与准入校验都在
 `furniture_layout/project_edit.py`（与房间场景编辑共用同一套）。
@@ -27,7 +30,12 @@ from typing import Any, Mapping
 from furniture_layout.project_edit import apply_layout_edit
 
 from furniture_layout.open_preview import layout_version, preview_page_data
-from .workflow_lease import check_write
+from .workflow_decisions import (
+    admit_decisions,
+    append_decisions,
+    pending_decision_ids,
+)
+from .workflow_lease import check_write, read_lease
 from .workflow_orchestrator import FurnitureOrchestrator
 from .workflow_project import Project, Revision
 from .workflow_state import WorkflowStage
@@ -36,6 +44,8 @@ from .workflow_store import JsonProjectStore
 LAYOUT_EDIT_ENV = "FURNITURE_PROJECT_LAYOUT_EDIT"
 #: 撤销日志的上限。超出丢**最旧的**——因为每条记的是旧值，丢最旧只意味着"撤不到那么远"。
 WORKING_OP_LIMIT = 500
+#: 页面上能对一条待确认说法做的两件事。措辞由服务端写死，页面只递动作与目标。
+DECISION_ACTIONS = ("confirm", "withdraw")
 
 
 def layout_edit_enabled() -> bool:
@@ -82,6 +92,8 @@ def edit_project_layout(
 
     item_id = str(op.get("item_id") or "")
     before = _item_snapshot(revision, item_id)
+    # 谁改的：从编辑租约读。读不出持有者就写 `unknown`——**不猜**。
+    actor = _working_actor(store_root, project.id, lease_token)
     layout = apply_layout_edit(revision.layout, op)
 
     if revision.has_downstream_artifacts():
@@ -89,12 +101,80 @@ def edit_project_layout(
         _store_document(project, layout, workspace_root, store_root)
         # 触发新版的那一次改动也是新工作副本的第一步：同样进日志，否则它撤不回来。
         if item_id and before is not None:
-            _log_working_op(project.latest, op, item_id, before)
+            _log_working_op(project.latest, op, item_id, before, actor)
             JsonProjectStore(store_root).save(project)
     else:
-        _edit_in_place(revision, layout, op, item_id, before)
+        _edit_in_place(revision, layout, op, item_id, before, actor)
         JsonProjectStore(store_root).save(project)
     return preview_page_data(project, store_root=store_root)
+
+
+def edit_project_decisions(
+    project: Project,
+    *,
+    action: str,
+    target: str,
+    expected_version: str,
+    store_root: str | Path,
+    lease_token: str | None = None,
+) -> dict[str, Any]:
+    """页面上对一条**待确认**的说法表态：确认它，或者划掉它。
+
+    和布局 op 同一套门（灰度开关 → 编辑租约 → 版本对得上），另加两条自己的规矩：
+
+    - **只能动还待确认的那一条**：已经确认/撤回过的再表态就是"页面上的画面过期了"，
+      直接拒绝并让它刷新——版本号管不到这件事（台账追加不改布局摘要）。
+    - **措辞由服务端写**：页面递不进自由文本，所以页面上按的按钮**没有"原话"**
+      （`source=page`），也就不存在"页面替客户编话"的余地。
+
+    只追加：这条表态本身就是新的一条，被它确认/撤回的那条一个字不动。
+    """
+    if not layout_edit_enabled():
+        raise LayoutEditDisabled(f"{LAYOUT_EDIT_ENV} is not set to 1")
+    check_write(store_root, project.id, token=lease_token)
+    revision = project.latest
+    current = layout_version(revision)
+    if expected_version != current:
+        raise VersionConflict(current)
+    if action not in DECISION_ACTIONS:
+        raise ValueError(
+            "action must be one of: " + ", ".join(DECISION_ACTIONS)
+        )
+    decision_id = str(target or "").strip()
+    if not decision_id:
+        raise ValueError("target is required")
+    if not any(str(entry.get("id") or "") == decision_id for entry in project.decisions):
+        raise ValueError(f"unknown decision: {decision_id}")
+    if decision_id not in pending_decision_ids(project.decisions):
+        raise ValueError(
+            f"{decision_id} is already settled; refresh the page before deciding again"
+        )
+    admitted = admit_decisions(
+        [
+            {
+                "interpretation": (
+                    "客户在页面上确认了这条假设"
+                    if action == "confirm"
+                    else "客户在页面上划掉了这条假设"
+                ),
+                "speaker": "customer",
+                "status": "confirmed" if action == "confirm" else "withdrawn",
+                "targets": [decision_id],
+                "source": "page",
+            }
+        ],
+        existing_ids=[str(entry.get("id") or "") for entry in project.decisions],
+    )
+    added = append_decisions(
+        project.decisions,
+        admitted,
+        revision_number=revision.number,
+        actor=_working_actor(store_root, project.id, lease_token),
+    )
+    JsonProjectStore(store_root).save(project)
+    document = preview_page_data(project, store_root=store_root)
+    document["decided"] = added
+    return document
 
 
 def undo_layout_edit(
@@ -160,6 +240,7 @@ def _edit_in_place(
     op: Mapping[str, Any],
     item_id: str | None,
     before: dict[str, Any] | None,
+    actor: Mapping[str, Any] | None = None,
 ) -> None:
     """把改动落到**这一版**上：内容变、版号不变，并处理确认作废与撤销日志。"""
     changed_rooms = _changed_room_ids(revision.layout, layout)
@@ -168,7 +249,24 @@ def _edit_in_place(
     for room_id in changed_rooms:
         _revoke_room_review(revision, room_id)
     if item_id and before is not None:
-        _log_working_op(revision, op, item_id, before)
+        _log_working_op(revision, op, item_id, before, actor)
+
+
+def _working_actor(
+    store_root: str | Path,
+    project_id: str,
+    lease_token: str | None,
+) -> dict[str, Any]:
+    """这条改动是谁做的——从**编辑租约**读，读不出持有者就写 `unknown`。
+
+    改动的动作本身是原始证据，所以"谁做的"必须跟着它一起落盘：
+    之前的日志只记了"改了什么、改前是多少"，三天后没人知道是谁拖的。
+    只有带对 token 的那位才算持有者；租约已过期（没人持有）时如实写 `unknown`。
+    """
+    lease = read_lease(store_root, project_id)
+    if lease is None or not lease_token or lease.token != lease_token:
+        return {"holder": "unknown", "label": "", "lease_id": ""}
+    return {"holder": lease.holder, "label": lease.label, "lease_id": lease.id}
 
 
 def _log_working_op(
@@ -176,6 +274,7 @@ def _log_working_op(
     op: Mapping[str, Any],
     item_id: str,
     before: dict[str, Any],
+    actor: Mapping[str, Any] | None = None,
 ) -> None:
     revision.working_ops.append(
         {
@@ -183,6 +282,7 @@ def _log_working_op(
             "op": dict(op),
             "item_id": item_id,
             "before": before,
+            "actor": dict(actor or {"holder": "unknown", "label": "", "lease_id": ""}),
         }
     )
     if len(revision.working_ops) > WORKING_OP_LIMIT:

@@ -34,6 +34,7 @@ result = session.call(name, arguments)  # arguments 为对象或 JSON 字符串
 | `furniture_retry_stage` | 对同一冻结上游再试 `panel_plan` / `manufacture_plan` / `feature_tree_planned` |
 | `furniture_select_stage_attempt` | 选用某次通过的 attempt，再确认 |
 | `furniture_revise_layout` | 新 Revision，从 `layout_plan` 重来 |
+| `furniture_record_decision` | 只把客户说的话记进**决策台账**（追加）：不动布局、不动阶段，`progressed=false`。客户后来说了一句、但还不用改布局时用它 |
 
 不提供：`CadBridge`、特征树发射器、一次性自动确认、压扁检查点的入口。房间编辑器仍可走 `layout-plan` HTTP，真源是 Project 的 `layout_plan`。
 
@@ -43,6 +44,14 @@ result = session.call(name, arguments)  # arguments 为对象或 JSON 字符串
 - 下一阶段已有 attempt 时，必须 `furniture_retry_stage`，否则 `USE_RETRY_STAGE`。
 - 进入 `cad_generated` 必须 `generate_cad=true`；省略 `output_root` 时使用工作区约定路径 `generated`。
 - 未知字段、历史别名（`furniture_type` / `type` / `overall_size` / `mounting_height` / `mounting_height_mm` / `hanging_height` / `mount_mode`）返回 `UNKNOWN_ARGUMENT`。
+- **决策台账**：`furniture_create_project` / `furniture_revise_layout` 可带 `decisions`（可选，只这两个工具收），
+  `furniture_record_decision` 则**必须**带（它就是为"只记一句话"存在的）；
+  每条是 `{utterance, interpretation, speaker?, status?, targets?, applies_to?}`：`utterance` 是**客户原话**
+  （`speaker` 为 `customer`/`relay` 时必填——**助手自己的假设不要编引语**），`interpretation` 是我们把它落成了什么。
+  缺省 `speaker=agent`、`status=assumption`——**只有客户真说了才写
+  `speaker=customer`，只有客户认了才写 `status=confirmed`（且只有 `customer`/`relay` 能确认，助手不能自己点头）**。
+  只追加：改主意是加一条并用 `targets` 指回被改的那几条，绝不改写旧条目。校验在动项目之前完成，
+  不合法整批拒绝、不留半成品。口径见 [决策台账设计](decision-log-design.md)。
 - 失败 Revision 只能 `furniture_revise_layout`。
 - 每次成功调用后展示 `project.current_view`，按 `required_tool` / `allowed_tools` 停，不要连跳。`panel_plan` 展示审查清单的 `markdown` 或板件/接触表，不要把冻结 `cabinets[]` 树当确认界面。
 
@@ -57,6 +66,9 @@ result = session.call(name, arguments)  # arguments 为对象或 JSON 字符串
 - `id` / `revision_id` / `current_stage` / `approved_stages` / `next_stage`
 - `approved_rooms` / `pending_rooms` / `inherited_rooms`：布局的房间级确认。**每间都审过，布局检查点才成立**；`furniture_confirm_stage` 带 `room_id`（只对 `layout_plan`，一次审一间）或整份确认都行。没动过的房间，确认自动沿用父修订（`inherited_rooms` 回指真正点头的那一版）——所以 `pending_rooms` 就是"还差人看的哪几间"
 - `lease`：编辑租约（谁此刻在写这个项目，含 `holder` / `label` / `expires_in`，**不含 token**）。写动作前工具面会**自动接管**租约，并把 `handover`（`taken_over` + 一句 `message`）放进结果里——模型要把那句话转告人："页面已切成只读，我做完还给你"
+- `decisions` / `pending_decisions`：决策台账全量条目与**还没人确认**的那些 id。
+  客户说的话、我们翻译成什么、谁确认过都在这里；`pending_decisions` 就是"还差哪几条要问客户"。
+  见 [决策台账设计](decision-log-design.md)
 - `inherited`（哪些阶段沿用了更早那一版的内容，附 `sha256` 与 `from_revision`）与 `inherited_stages`。摆动摆放或改房间后板件内容没变时，系统会**承认**上一版的确认而不是让人再点一次头——快照必须把它显示出来，别让"少做了一步"变得看不见（见 [修订继承设计](revision-inheritance-design.md)）
 - `allowed_tools`、`required_tool`、`cad_generation_required`
 - `attempts`（编号、是否通过、错误；不含整份输出）

@@ -16,6 +16,7 @@ import webbrowser
 from typing import Any
 
 from furniture_layout.room_page import room_page_payload
+from furniture_workflow.workflow_decisions import pending_decision_views
 from furniture_workflow.workflow_lease import read_lease
 from furniture_workflow.workflow_project import Project, Revision
 
@@ -62,8 +63,25 @@ def preview_page_data(
             "open": not revision.has_downstream_artifacts(),
             "ops": len(revision.working_ops),
             "can_undo": bool(revision.working_ops),
+            # 最近几次改动**是谁做的、改成了什么**：日志里本来就记着，
+            # 但页面得让人看得见才算数（牌子点开就是这份列表）。
+            "recent": [
+                {
+                    "at": str(entry.get("at") or ""),
+                    "item_id": str(entry.get("item_id") or ""),
+                    "op": deepcopy(entry.get("op") or {}),
+                    "actor": deepcopy(entry.get("actor") or {}),
+                }
+                for entry in revision.working_ops[-3:]
+            ],
         },
         "lease": lease.snapshot() if lease is not None else None,
+        # 决策台账里**还没人确认**的那几条：页面上要看得见"哪些是助手替你定的"。
+        # 全量台账在 `store/<id>/project.json`；页面只需要待确认的那一小撮。
+        "decisions": {
+            "pending": pending_decision_views(project.decisions),
+            "total": len(project.decisions),
+        },
         "approved_rooms": list(revision.approved_rooms),
         "pending_rooms": revision.pending_room_ids(),
         "inherited_rooms": deepcopy(revision.inherited_rooms),

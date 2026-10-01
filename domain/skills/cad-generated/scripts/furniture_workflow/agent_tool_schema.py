@@ -15,6 +15,7 @@ TOOL_RUN_NEXT = "furniture_run_next"
 TOOL_RETRY_STAGE = "furniture_retry_stage"
 TOOL_SELECT_ATTEMPT = "furniture_select_stage_attempt"
 TOOL_REVISE_LAYOUT = "furniture_revise_layout"
+TOOL_RECORD_DECISION = "furniture_record_decision"
 
 TOOL_NAMES = (
     TOOL_CREATE_PROJECT,
@@ -24,12 +25,14 @@ TOOL_NAMES = (
     TOOL_RETRY_STAGE,
     TOOL_SELECT_ATTEMPT,
     TOOL_REVISE_LAYOUT,
+    TOOL_RECORD_DECISION,
 )
 
 _STAGE_VALUES = tuple(stage.value for stage in STAGE_SEQUENCE)
 _RETRYABLE_VALUES = tuple(stage.value for stage in RETRYABLE_STAGES)
-_CREATE_KEYS = frozenset({"name", "rooms"})
-_REVISE_KEYS = frozenset({"project_id", "rooms"})
+_CREATE_KEYS = frozenset({"name", "rooms", "decisions"})
+_REVISE_KEYS = frozenset({"project_id", "rooms", "decisions"})
+_RECORD_DECISION_KEYS = frozenset({"project_id", "decisions"})
 _GET_KEYS = frozenset({"project_id", "include_view"})
 _CONFIRM_KEYS = frozenset({"project_id", "stage", "room_id"})
 _RUN_NEXT_KEYS = frozenset(
@@ -72,6 +75,23 @@ _MANUFACTURING_STAGE_INPUT_HINT = (
     "{substrate, surface}} with keys from materials_catalog.yaml."
 )
 
+_DECISIONS_PROPERTY = {
+    "type": "array",
+    "items": {"type": "object"},
+    "description": (
+        "What the customer actually said that shaped this layout, recorded in the "
+        "customer's own words. Each entry is {utterance, interpretation, speaker?, "
+        "status?, targets?, applies_to?}: utterance keeps the original words "
+        "(required when speaker is customer/relay — never invent a quote for an "
+        "assumption of your own), interpretation is what we made of them. Defaults "
+        "are speaker=agent and status=assumption — only write speaker=customer for "
+        "words the customer said, and status=confirmed when the customer accepted it "
+        "(targets names the assumption ids it settles; only customer/relay may "
+        "confirm). Append-only: never rewrite an earlier entry, append a new one. "
+        "Optional; omit when there is nothing new from the customer."
+    ),
+}
+
 
 def openai_tools() -> list[dict[str, Any]]:
     """OpenAI-compatible tool definitions. Other function-calling hosts map this."""
@@ -95,7 +115,8 @@ _OPENAI_TOOLS: list[dict[str, Any]] = [
                 "with explicit room dimensions and furniture envelopes. Room doors/windows "
                 "belong in rooms[].openings[] (kind=door|window). Do not send "
                 "cabinet n_doors, shelves, thickness, or hardware. After create, "
-                "confirm layout before generating later stages. Serial stages: "
+                "confirm layout before generating later stages. Optional decisions "
+                "records what the customer said (append-only). Serial stages: "
                 f"{_STAGE_LIST_TEXT}."
             ),
             "parameters": {
@@ -115,6 +136,7 @@ _OPENAI_TOOLS: list[dict[str, Any]] = [
                             "optional openings[] for room doors and windows."
                         ),
                     },
+                    "decisions": deepcopy(_DECISIONS_PROPERTY),
                 },
                 "required": ["name", "rooms"],
             },
@@ -282,7 +304,8 @@ _OPENAI_TOOLS: list[dict[str, Any]] = [
             "description": (
                 "Replace the home layout and start a new revision at layout_plan. "
                 "Downstream attempts become stale. Use this for room or envelope "
-                "changes, not for retrying panels or manufacturing."
+                "changes, not for retrying panels or manufacturing. Optional decisions "
+                "records what the customer just said (append-only)."
             ),
             "parameters": {
                 "type": "object",
@@ -294,8 +317,42 @@ _OPENAI_TOOLS: list[dict[str, Any]] = [
                         "minItems": 1,
                         "items": {"type": "object"},
                     },
+                    "decisions": deepcopy(_DECISIONS_PROPERTY),
                 },
                 "required": ["project_id", "rooms"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": TOOL_RECORD_DECISION,
+            "description": (
+                "Record what the customer said, without changing the layout or the "
+                "stage. Use it when the customer says something that matters but does "
+                "not need a layout revision yet (a preference, a rejection, a "
+                "confirmation of an earlier assumption). Append-only, same entry shape "
+                "and same defaults as the decisions argument of "
+                f"{TOOL_CREATE_PROJECT}/{TOOL_REVISE_LAYOUT}. Does not advance the flow."
+            ),
+            "parameters": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "project_id": {"type": "string"},
+                    "decisions": {
+                        **deepcopy(_DECISIONS_PROPERTY),
+                        "minItems": 1,
+                        "description": (
+                            "One or more entries to append. Same shape as elsewhere: "
+                            "{utterance, interpretation, speaker?, status?, targets?, "
+                            "applies_to?}. Defaults are speaker=agent and "
+                            "status=assumption; only customer/relay may confirm, and "
+                            "speaker=customer requires the customer's own words."
+                        ),
+                    },
+                },
+                "required": ["project_id", "decisions"],
             },
         },
     },
