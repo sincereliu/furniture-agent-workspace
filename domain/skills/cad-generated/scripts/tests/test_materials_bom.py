@@ -23,7 +23,7 @@ from furniture_panel_planning.panel_planning import plan_panels
 from furniture_panel_planning.structure_planning import CabinetStructure
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from furniture_workflow.workflow_state import WorkflowStage
-from workflow_test_support import confirm_through
+from workflow_test_support import confirm_through, primary_manufactured_bom
 
 
 def _appearance():
@@ -101,15 +101,13 @@ class MaterialsBomTests(unittest.TestCase):
         edited = deepcopy(
             result.revision.stage_outputs[WorkflowStage.MANUFACTURING_PLANNED.value]
         )
-        edited["panels"][0]["substrate"] = "eco_board"
+        edited["cabinets"][0]["bom"]["panels"][0]["substrate"] = "eco_board"
         revision = orchestrator.revise_stage_output(
             result.project,
             WorkflowStage.MANUFACTURING_PLANNED,
             edited,
         )
-        materials = revision.stage_outputs[
-            WorkflowStage.MANUFACTURING_PLANNED.value
-        ]["materials"]
+        materials = primary_manufactured_bom(revision)["materials"]
         substrate_keys = {
             item["key"] for item in materials if item["category"] == "substrate"
         }

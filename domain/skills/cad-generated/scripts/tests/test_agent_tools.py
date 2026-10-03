@@ -36,6 +36,7 @@ from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from furniture_workflow.workflow_state import STAGE_SEQUENCE, WorkflowStage
 from furniture_workflow.workflow_store import JsonProjectStore
 from panel_fixtures import cabinet_layout, layout_rooms, panel_parameters
+from workflow_test_support import primary_manufactured_bom
 
 
 def imported_modules(path: Path) -> set[str]:
@@ -507,9 +508,12 @@ class AgentToolSurfaceTests(unittest.TestCase):
         self.assertTrue(generated["ok"], generated)
         self.assertEqual(generated["project"]["current_stage"], "manufacture_plan")
         view = generated["project"]["current_view"]
-        self.assertEqual(view["requested_options"]["door_hinge_side"], "left")
-        self.assertEqual(view["appearance"], _appearance_valid())
-        self.assertNotIn("appearance", view["requested_options"])
+        self.assertEqual(
+            view["cabinets"][0]["bom"]["requested_options"]["door_hinge_side"],
+            "left",
+        )
+        self.assertEqual(view["cabinets"][0]["bom"]["appearance"], _appearance_valid())
+        self.assertNotIn("appearance", view["cabinets"][0]["bom"]["requested_options"])
 
     def test_nested_manufacturing_stage_input_still_works(self) -> None:
         project_id = self._confirmed_panels(n_doors=1)
@@ -525,8 +529,8 @@ class AgentToolSurfaceTests(unittest.TestCase):
         )
         self.assertTrue(generated["ok"], generated)
         view = generated["project"]["current_view"]
-        self.assertEqual(view["requested_options"]["door_hinge_side"], "right")
-        self.assertEqual(view["appearance"], _appearance_valid())
+        self.assertEqual(view["cabinets"][0]["bom"]["requested_options"]["door_hinge_side"], "right")
+        self.assertEqual(view["cabinets"][0]["bom"]["appearance"], _appearance_valid())
 
     def _confirmed_layout(self) -> str:
         created = self.session.call(
@@ -620,7 +624,7 @@ class OrchestratorRunNextStageInputTests(unittest.TestCase):
         self.assertNotIn("door_hinge_side", stored)
         self.assertEqual(stored["appearance"], _appearance_valid())
         self.assertEqual(
-            result.revision.stage_outputs["manufacture_plan"]["requested_options"][
+            primary_manufactured_bom(result.revision)["requested_options"][
                 "door_hinge_side"
             ],
             "left",

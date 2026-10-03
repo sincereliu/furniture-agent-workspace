@@ -23,6 +23,21 @@ from furniture_workflow.workflow_state import (
 )
 
 
+def manufactured_boms(revision: Any) -> list[dict[str, Any]]:
+    """制造产物是**逐柜**的：`{"cabinets": [{"id", "bom"}]}`。
+
+    测试要断言"每台柜都算到了"就读这个；只关心一台时用 `primary_manufactured_bom()`。
+    要**改**产物做反例测试时别用这两个（它们返回的是里面的那份 dict）——
+    照原样 `edited["cabinets"][0]["bom"][…]` 改，才是在验真实形状。
+    """
+    output = revision.stage_outputs[WorkflowStage.MANUFACTURING_PLANNED.value]
+    return [entry["bom"] for entry in output["cabinets"]]
+
+
+def primary_manufactured_bom(revision: Any) -> dict[str, Any]:
+    return manufactured_boms(revision)[0]
+
+
 def confirm_through(
     orchestrator: FurnitureOrchestrator,
     name: str,

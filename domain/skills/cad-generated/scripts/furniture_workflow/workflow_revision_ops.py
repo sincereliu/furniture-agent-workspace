@@ -15,7 +15,8 @@ from furniture_manufacturing.manufacturing_models import (
     MachiningOperation,
     PanelRecord,
 )
-from furniture_panel_planning.cabinet_identity import primary_cabinet
+from furniture_panel_planning.cabinet_identity import cabinets_from_output
+from furniture_panel_planning.panel_pipeline import ENVELOPE_OWNED_FIELDS
 
 from .workflow_constants import (
     EDITABLE_STAGE_OUTPUTS,
@@ -38,17 +39,28 @@ from .workflow_state import (
 def _canonicalize_stage_input(
     key: str, stage_input: Mapping[str, Any]
 ) -> dict[str, Any]:
-    """Wrap a flat parameters object; keep manufacturing appearance as a sibling."""
+    """Wrap a flat parameters object; keep manufacturing appearance as a sibling.
+
+    板件阶段还允许一个兄弟键 `cabinets`（**逐柜覆盖**）：平铺进来时不能把它当成一个参数
+    塞进 `parameters`，否则它会变成柜体参数里一个不认识的字段。
+    """
     payload = deepcopy(dict(stage_input))
     if "parameters" in payload:
         return payload
     if key == "panels":
-        return {"parameters": payload}
+        cabinets = payload.pop("cabinets", None)
+        wrapped: dict[str, Any] = {"parameters": payload}
+        if cabinets is not None:
+            wrapped["cabinets"] = cabinets
+        return wrapped
     if key == "manufacturing":
+        cabinets = payload.pop("cabinets", None)
         appearance = payload.pop("appearance", None)
         wrapped = {"parameters": payload}
         if appearance is not None:
             wrapped["appearance"] = appearance
+        if cabinets is not None:
+            wrapped["cabinets"] = cabinets
         return wrapped
     return payload
 
@@ -129,43 +141,32 @@ class RevisionOpsMixin:
         )
         if changed_stage == WorkflowStage.MANUFACTURING_PLANNED:
             # 直接编辑制造输出后，重算派生快照（features/connection_points/materials），
-            # 避免它们与 panels/operations 漂移。
-            revised_panels = [
-                PanelRecord.from_dict(item)
-                for item in output.get("panels", [])
-            ]
-            revised_operations = [
-                MachiningOperation(**item)
-                for item in output.get("operations", [])
-            ]
-            features, connection_points = recompute_features(
-                revised_panels, revised_operations
-            )
+            # 避免它们与 panels/operations 漂移。**逐柜**各算各的。
             output = {
                 **output,
-                "features": [asdict(feature) for feature in features],
-                "connection_points": [
-                    asdict(point) for point in connection_points
-                ],
-                "materials": [
-                    asdict(record) for record in estimate_materials(revised_panels)
+                "cabinets": [
+                    self._recompute_manufactured_cabinet(entry)
+                    for entry in output.get("cabinets", [])
                 ],
             }
         revision.stage_outputs[changed_stage.value] = deepcopy(output)
         if changed_stage == WorkflowStage.PANELS_PLANNED:
-            revised_spec = primary_cabinet(output).get("spec", {})
+            # 改过板件产物之后，把**每台柜**自己的 spec 写成**它自己**的逐柜覆盖——
+            # 下一次规划才不会把第一台的参数套到所有柜上（旧做法就是这么错的）。
             panel_input = revision.stage_inputs.setdefault("panels", {})
             parameters = panel_input.setdefault("parameters", {})
-            if isinstance(revised_spec, dict) and isinstance(parameters, dict):
-                for key, value in revised_spec.items():
-                    if key in {
-                        "furniture_category",
-                        "width",
-                        "depth",
-                        "height",
-                    }:
+            cabinets = panel_input.setdefault("cabinets", {})
+            if isinstance(parameters, dict) and isinstance(cabinets, dict):
+                for cabinet in cabinets_from_output(output):
+                    cabinet_id = str(cabinet.get("id") or "")
+                    spec = cabinet.get("spec")
+                    if not cabinet_id or not isinstance(spec, Mapping):
                         continue
-                    parameters[key] = value
+                    cabinets[cabinet_id] = {
+                        key: value
+                        for key, value in spec.items()
+                        if key not in ENVELOPE_OWNED_FIELDS
+                    }
         revision.approved_stages = [
             value
             for value in parent.approved_stages
@@ -178,8 +179,6 @@ class RevisionOpsMixin:
                 changed_stage,
                 f"{changed_stage.value} revised; downstream outputs invalidated",
             )
-        if changed_stage == WorkflowStage.FEATURE_TREE_PLANNED:
-            revision.feature_tree = deepcopy(output)
         revision.stage_attempts[changed_stage.value] = [
             StageAttempt(
                 number=1,
@@ -195,6 +194,34 @@ class RevisionOpsMixin:
             revision.confirmed_panel_sha256 = parent.confirmed_panel_sha256
         self._persist(project)
         return revision
+
+    @staticmethod
+    def _recompute_manufactured_cabinet(entry: Mapping[str, Any]) -> dict[str, Any]:
+        """改过某台柜的板件/加工后，重算**这台柜**的派生快照（特征、连接点、材料）。
+
+        逐柜各算各的：一台的板件改了不该动另一台的派生值。
+        """
+        bom = dict(entry.get("bom") or {})
+        revised_panels = [
+            PanelRecord.from_dict(item) for item in bom.get("panels", [])
+        ]
+        revised_operations = [
+            MachiningOperation(**item) for item in bom.get("operations", [])
+        ]
+        features, connection_points = recompute_features(
+            revised_panels, revised_operations
+        )
+        return {
+            **entry,
+            "bom": {
+                **bom,
+                "features": [asdict(feature) for feature in features],
+                "connection_points": [asdict(point) for point in connection_points],
+                "materials": [
+                    asdict(record) for record in estimate_materials(revised_panels)
+                ],
+            },
+        }
 
     def confirm_layout(self, project: Project) -> Revision:
         return self.confirm_stage(project, WorkflowStage.LAYOUT_PLAN)
@@ -350,8 +377,6 @@ class RevisionOpsMixin:
             self._invalidate_from(revision, requested)
         revision.selected_attempts[requested.value] = attempt.number
         revision.stage_outputs[requested.value] = deepcopy(attempt.output)
-        if requested == WorkflowStage.FEATURE_TREE_PLANNED:
-            revision.feature_tree = deepcopy(attempt.output)
         if revision.workflow.current != requested:
             revision.workflow.move_to(
                 requested,
@@ -391,8 +416,6 @@ class RevisionOpsMixin:
         }
         if index <= stage_index(WorkflowStage.PANELS_PLANNED):
             revision.confirmed_panel_sha256 = None
-        if index <= stage_index(WorkflowStage.FEATURE_TREE_PLANNED):
-            revision.feature_tree = None
         predecessor = STAGE_SEQUENCE[index - 1]
         if (
             revision.workflow.current != WorkflowStage.FAILED

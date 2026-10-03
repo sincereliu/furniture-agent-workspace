@@ -31,6 +31,39 @@ from .workflow_project import Project, Revision, StageAttempt
 from .workflow_state import STAGE_SEQUENCE, WorkflowStage, parse_stage, stage_index
 
 
+def _cabinet_option_overrides(
+    raw: Any, planned_ids: list[str]
+) -> dict[str, dict[str, Any]]:
+    """校验制造阶段的逐柜选项：柜名必须认识、只认 `parameters` / `appearance`。
+
+    不认识的柜名直接拒（不静默忽略）——否则"给 2 号柜设的铰链方向"会悄悄丢掉，
+    再跑到制造阶段才炸（实测撞到过：单门没给铰链方向）。
+    """
+    if raw is None:
+        return {}
+    if not isinstance(raw, Mapping):
+        raise ValueError("manufacturing stage cabinets must be an object")
+    known = set(planned_ids)
+    overrides: dict[str, dict[str, Any]] = {}
+    for cabinet_id, override in raw.items():
+        name = str(cabinet_id)
+        if name not in known:
+            raise ValueError(f"manufacturing stage has an unknown cabinet id: {name}")
+        if not isinstance(override, Mapping):
+            raise ValueError(f"manufacturing options for {name} must be an object")
+        unknown = sorted(set(override) - {"parameters", "appearance"})
+        if unknown:
+            raise ValueError(
+                f"manufacturing options for {name} do not support: "
+                + ", ".join(unknown)
+            )
+        for part in ("parameters", "appearance"):
+            if part in override and not isinstance(override[part], Mapping):
+                raise ValueError(f"manufacturing {part} for {name} must be an object")
+        overrides[name] = dict(override)
+    return overrides
+
+
 class StageRunnerMixin:
     def run_next(
         self,
@@ -153,9 +186,11 @@ class StageRunnerMixin:
         if stage == WorkflowStage.PANELS_PLANNED:
             stage_input = panel_stage_input(revision.stage_inputs)
             try:
+                # 整份阶段输入都传下去：`{"parameters": …共享…, "cabinets": {…逐柜覆盖…}}`。
+                # 只取 `parameters` 会把逐柜覆盖丢掉。
                 output = plan_panel_stage(
                     panel_envelopes_from_layout(revision.layout),
-                    stage_input.get("parameters", {}),
+                    stage_input,
                 )
             except (TypeError, ValueError) as exc:
                 self._fail_retryable_stage(revision, stage, stage_input, str(exc))
@@ -171,15 +206,12 @@ class StageRunnerMixin:
             return
 
         if stage == WorkflowStage.MANUFACTURING_PLANNED:
-            spec = self._spec_from_revision(revision, project_id=project.id)
             stage_input = manufacturing_stage_input(revision.stage_inputs)
+            # 读输入放在 try 外（与改前一致）：冻结的板件缺失这类**输入**问题要直接抛出来，
+            # 而不是记成"这次计划失败了"。
+            handoffs = self._cabinet_handoffs(revision, project_id=project.id)
             try:
-                bom = plan_manufacturing(
-                    spec,
-                    self._placements_from_revision(revision, project_id=project.id),
-                    requested_options=stage_input.get("parameters", {}),
-                    appearance=stage_input.get("appearance", {}),
-                )
+                output = self._plan_every_cabinet(handoffs, stage_input)
             except (TypeError, ValueError) as exc:
                 self._fail_retryable_stage(revision, stage, stage_input, str(exc))
                 return
@@ -187,26 +219,17 @@ class StageRunnerMixin:
                 project,
                 revision,
                 stage,
-                asdict(bom),
+                output,
                 stage_input,
-                "materials, hardware, and preliminary BOM planned",
+                f"materials, hardware, and preliminary BOM planned for "
+                f"{len(output['cabinets'])} cabinet(s)",
             )
             return
 
         if stage == WorkflowStage.FEATURE_TREE_PLANNED:
-            manufacturing = self._bom_from_revision(revision)
+            boms = self._cabinet_boms(revision)
             try:
-                feature_tree = panels_to_feature_tree(
-                    manufacturing.panels,
-                    manufacturing.operations,
-                    furniture_category=manufacturing.furniture_category,
-                    parameters={
-                        "width": manufacturing.width,
-                        "depth": manufacturing.depth,
-                        "height": manufacturing.height,
-                        "board_thickness": manufacturing.board_thickness,
-                    },
-                )
+                feature_trees = self._feature_trees_from(boms)
             except (TypeError, ValueError) as exc:
                 self._fail_retryable_stage(revision, stage, {}, str(exc))
                 return
@@ -214,9 +237,10 @@ class StageRunnerMixin:
                 project,
                 revision,
                 stage,
-                feature_tree,
+                feature_trees,
                 {},
-                "Feature Tree v2 with target-specific machining cuts planned",
+                f"Feature Tree v2 with target-specific machining cuts planned for "
+                f"{len(feature_trees['cabinets'])} cabinet(s)",
             )
             return
 
@@ -225,10 +249,10 @@ class StageRunnerMixin:
                 raise ValueError("CAD generation requires output_root")
             if not generate_cad:
                 raise ValueError("CAD generation requires generate_cad=True")
-            pipeline = self._pipeline_from_revision(
+            pipelines = self._pipelines_from_revision(
                 revision, project_id=project.id
             )
-            if pipeline is None:
+            if not pipelines:
                 raise ValueError("manufacturing stage must exist before CAD generation")
             artifact_dir = prepare_artifact_dir(
                 self.workspace_root,
@@ -237,39 +261,54 @@ class StageRunnerMixin:
                 revision,
                 artifact_name=artifact_name,
             )
-            source_path, step_path = write_artifacts(
+            plans = write_artifacts(
                 self.workspace_root,
                 revision,
-                pipeline,
+                pipelines,
                 artifact_dir,
                 artifact_name=artifact_name,
                 panel_output=self._confirmed_panel_output(
                     revision, project_id=project.id
                 ),
             )
-            bridge = self.cad_bridge.generate_from_source(
-                source_path,
-                step_path,
-                force=force,
-            )
-            revision.stage_outputs[stage.value] = asdict(bridge)
-            if bridge.status == "ok":
+            # **逐柜**生成：每一台各自一个 CAD 源文件与一份 STEP（桥一个源文件起一个进程）。
+            cabinets: list[dict[str, Any]] = []
+            failures: list[str] = []
+            for plan in plans:
+                bridge = self.cad_bridge.generate_from_source(
+                    plan["source_path"],
+                    plan["step_path"],
+                    force=force,
+                )
+                cabinets.append({"id": plan["id"], "bridge": asdict(bridge)})
+                if bridge.status != "ok":
+                    failures.append(f"{plan['id']}: {bridge.message}")
+                    continue
                 if bridge.step_path:
-                    revision.manifest.add_file("step", bridge.step_path)
+                    revision.manifest.add_file(
+                        "step", bridge.step_path, cabinet_id=plan["id"]
+                    )
                 if bridge.topology_path:
                     revision.manifest.add_file(
                         "viewer_topology",
                         bridge.topology_path,
                         package_path=bridge.viewer_package_path,
+                        cabinet_id=plan["id"],
                     )
+            revision.stage_outputs[stage.value] = {"cabinets": cabinets}
             report = self._validate_stage_output(
                 revision, stage, project_id=project.id
             )
             revision.validations.append(report)
             if not report.passed:
-                revision.workflow.fail(bridge.message)
+                revision.workflow.fail(
+                    "; ".join(failures) or "CAD validation failed"
+                )
                 return
-            revision.workflow.advance(stage, "STEP and Viewer topology generated")
+            revision.workflow.advance(
+                stage,
+                f"STEP and Viewer topology generated for {len(cabinets)} cabinet(s)",
+            )
             return
 
         if stage == WorkflowStage.DELIVERY_VALIDATED:
@@ -292,6 +331,61 @@ class StageRunnerMixin:
             return
 
         raise ValueError(f"stage is not executable: {stage.value}")
+
+    def _plan_every_cabinet(
+        self,
+        handoffs: list[tuple[str, Any, list[Any]]],
+        stage_input: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        """**逐柜**做制造计划：布局里有几台，就出几份 BOM。
+
+        以前只对主柜算一次，所以拆成三台只有一台能走到车间。柜的**身份与顺序**
+        都来自板件阶段（布局决定的），这里不挑、不排、不漏。
+
+        **逐柜选项**：`stage_input["cabinets"][柜名]` 可以覆盖 `parameters` / `appearance`——
+        铰链方向、活动层板连接方式这些本来就是**按柜**定的（一台单门、一台双门时，
+        共享一份 `door_hinge_side` 根本表达不了：实测撞到过）。
+        """
+        shared_options = dict(stage_input.get("parameters", {}))
+        shared_appearance = dict(stage_input.get("appearance", {}))
+        overrides = _cabinet_option_overrides(
+            stage_input.get("cabinets"), [cabinet_id for cabinet_id, _, _ in handoffs]
+        )
+        cabinets = []
+        for cabinet_id, spec, placements in handoffs:
+            override = overrides.get(cabinet_id, {})
+            bom = plan_manufacturing(
+                spec,
+                placements,
+                requested_options={
+                    **shared_options,
+                    **dict(override.get("parameters", {})),
+                },
+                appearance={
+                    **shared_appearance,
+                    **dict(override.get("appearance", {})),
+                },
+            )
+            cabinets.append({"id": cabinet_id, "bom": asdict(bom)})
+        return {"cabinets": cabinets}
+
+    def _feature_trees_from(self, boms: list[tuple[str, Any]]) -> dict[str, Any]:
+        """**逐柜**出特征树，与制造产物一一对应、顺序一致。"""
+        cabinets = []
+        for cabinet_id, bom in boms:
+            tree = panels_to_feature_tree(
+                bom.panels,
+                bom.operations,
+                furniture_category=bom.furniture_category,
+                parameters={
+                    "width": bom.width,
+                    "depth": bom.depth,
+                    "height": bom.height,
+                    "board_thickness": bom.board_thickness,
+                },
+            )
+            cabinets.append({"id": cabinet_id, "tree": tree})
+        return {"cabinets": cabinets}
 
     def _complete_retryable_stage(
         self,
@@ -318,18 +412,12 @@ class StageRunnerMixin:
             selected = revision.selected_attempt(stage)
             if selected is None or selected.output is None:
                 revision.stage_outputs.pop(stage.value, None)
-                if stage == WorkflowStage.FEATURE_TREE_PLANNED:
-                    revision.feature_tree = None
             else:
                 revision.stage_outputs[stage.value] = deepcopy(selected.output)
-                if stage == WorkflowStage.FEATURE_TREE_PLANNED:
-                    revision.feature_tree = deepcopy(selected.output)
             revision.workflow.record(
                 f"{stage.value} attempt {attempt.number} failed"
             )
             return
-        if stage == WorkflowStage.FEATURE_TREE_PLANNED:
-            revision.feature_tree = deepcopy(output)
         revision.workflow.advance(stage, note)
         # 下游一产出，工作副本就关门：再改已经不是同一版了，撤销日志留着也没有意义。
         revision.close_working_copy(reason=f"{stage.value} produced")

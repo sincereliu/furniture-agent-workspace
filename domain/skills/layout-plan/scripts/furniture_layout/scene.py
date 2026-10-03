@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from math import isfinite
 from typing import Any, Mapping
@@ -12,6 +13,11 @@ from .input_fields import boolean, fields, mapping, number, optional_number, tex
 WALLS = frozenset({"south", "east", "north", "west"})
 PLACEMENT_MODES = frozenset({"wall", "free"})
 EXECUTABLE_CATEGORIES = frozenset({"floor_cabinet", "wall_cabinet"})
+#: 家具单元 id 的形状。板件阶段拿它拼板件编号（`{cabinet_id}__{role}`），
+#: 所以必须是合法 Python 标识符、且不含 `__`——与板件阶段的 `admit_cabinet_id()` 是同一条规则。
+#: 阶段之间不互相 import，所以两边各写一条，由 tests/test_skill_architecture.py 钉住一致。
+ITEM_ID_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+PANEL_ID_SEPARATOR = "__"
 EPSILON = 1e-6
 
 ROOM_FIELDS = frozenset({
@@ -289,7 +295,9 @@ class ItemSpec:
         if not isinstance(data, Mapping):
             raise ValueError(f"items[{index}] must be an object")
         fields(data, ITEM_FIELDS, f"items[{index}]")
-        item_id = text(data, "id") or f"item_{index + 1}"
+        item_id = require_item_id(
+            text(data, "id") or f"item_{index + 1}", where=f"items[{index}].id"
+        )
         placement = PlacementRequest.from_dict(mapping(data, "placement"))
         width = optional_number(data, "width")
         depth = number(data, "depth")
@@ -457,6 +465,23 @@ def parse_item_specs(
             raise ValueError(f"duplicate item id: {spec.id}")
         seen.add(spec.id)
     return specs
+
+
+def require_item_id(value: str, *, where: str) -> str:
+    """家具单元 id 的入口校验：合法标识符、不含 `__`。
+
+    为什么卡在入口：板件阶段用这个 id 拼板件编号（`{cabinet_id}__{role}`），
+    不合格的 id（`cabinet-1`、`1cabinet`、`a__b`）**建项目时看不出来**，
+    要跑到板件才炸。只校验**输入**，不校验读取——库里已有的旧 id 仍能打开，
+    由一次性迁移改名（见 references/craft-catalog.md 的"已决定"段与 backlog）。
+    """
+    if not ITEM_ID_PATTERN.fullmatch(value) or PANEL_ID_SEPARATOR in value:
+        raise ValueError(
+            f"{where} {value!r} is not usable: an id must be a Python identifier "
+            "(letters, digits, underscore; not starting with a digit) and must not "
+            "contain '__', because the panel stage builds panel ids from it"
+        )
+    return value
 
 
 def _optional_furniture_category(

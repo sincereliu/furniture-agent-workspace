@@ -258,6 +258,40 @@ class SkillArchitectureTests(unittest.TestCase):
             ).exists()
         )
 
+    def test_item_id_rule_is_the_same_on_both_sides_of_the_handoff(self) -> None:
+        """布局收的家具 id 形状，必须与板件阶段认的形状是同一条规则。
+
+        板件阶段用 `{cabinet_id}__{role}` 拼板件编号，所以 id 得是合法标识符、不含 `__`。
+        布局阶段不能 import 板件阶段的包（阶段各自独立），两边各写一条规则——
+        这条测试就是把它们钉在一起：改一边、另一边跟着红。
+        """
+        from furniture_layout import scene as layout_scene
+        from furniture_panel_planning.cabinet_identity import admit_cabinet_id
+
+        cases = {
+            "cabinet_1": True,
+            "Cabinet": True,
+            "_cabinet": True,
+            "cabinet1": True,
+            "cabinet-1": False,
+            "1cabinet": False,
+            "cabinet__x": False,
+            "柜子": False,
+            "cabinet.1": False,
+        }
+        for sample, allowed in cases.items():
+            with self.subTest(sample=sample):
+                layout_ok = bool(layout_scene.ITEM_ID_PATTERN.fullmatch(sample)) and (
+                    layout_scene.PANEL_ID_SEPARATOR not in sample
+                )
+                try:
+                    admit_cabinet_id(sample)
+                    panel_ok = True
+                except ValueError:
+                    panel_ok = False
+                self.assertEqual(layout_ok, allowed, "layout-side id rule drifted")
+                self.assertEqual(panel_ok, allowed, "panel-side id rule drifted")
+
     def test_layout_catalog_executable_families_match_runtime_supported_types(
         self,
     ) -> None:

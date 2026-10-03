@@ -33,6 +33,8 @@ from furniture_layout.open_preview import layout_version, preview_page_data
 from .workflow_decisions import (
     admit_decisions,
     append_decisions,
+    auto_withdrawn_entries,
+    changed_item_fields,
     pending_decision_ids,
 )
 from .workflow_lease import check_write, read_lease
@@ -100,13 +102,23 @@ def edit_project_layout(
         # 已经有东西依赖这一版了：改它就等于改别人的依据 → 追加新版。
         _store_document(project, layout, workspace_root, store_root)
         # 触发新版的那一次改动也是新工作副本的第一步：同样进日志，否则它撤不回来。
+        withdrawn: list[dict[str, Any]] = []
         if item_id and before is not None:
             _log_working_op(project.latest, op, item_id, before, actor)
+            withdrawn = _auto_withdraw_stale(
+                project, item_id, before, _item_snapshot(project.latest, item_id), actor
+            )
             JsonProjectStore(store_root).save(project)
     else:
         _edit_in_place(revision, layout, op, item_id, before, actor)
+        withdrawn = _auto_withdraw_stale(
+            project, item_id, before, _item_snapshot(revision, item_id), actor
+        )
         JsonProjectStore(store_root).save(project)
-    return preview_page_data(project, store_root=store_root)
+    document = preview_page_data(project, store_root=store_root)
+    if withdrawn:
+        document["withdrawn_decisions"] = withdrawn
+    return document
 
 
 def edit_project_decisions(
@@ -219,6 +231,43 @@ def undo_layout_edit(
     document = preview_page_data(project, store_root=store_root)
     document["undone"] = undone
     return document
+
+
+def _auto_withdraw_stale(
+    project: Project,
+    item_id: str,
+    before: dict[str, Any] | None,
+    after: dict[str, Any] | None,
+    actor: Mapping[str, Any] | None,
+) -> list[dict[str, Any]]:
+    """客户的动作改了某一处 → 把**针对那一处**还待确认的假设当场作废。
+
+    为什么要有它：动作是最强证据。手动拖过之后，台账里那条"沿墙 300 居中"还挂着"待确认"，
+    两边就打架了（实测撞到过）。规则很保守——只动**还待确认**、且引用精确到 `对象.字段`、
+    且那个字段**真的变了**的假设；客户已经点头过的约束一个字都不动（那是"改主意"，要显式来）。
+    """
+    if not item_id or before is None or after is None:
+        return []
+    changes = {item_id: changed_item_fields(before, after)}
+    speaker = "customer" if (actor or {}).get("holder") == "page" else "agent"
+    entries = auto_withdrawn_entries(
+        project.decisions,
+        changes,
+        speaker=speaker,
+        source="page" if speaker == "customer" else "tool",
+    )
+    if not entries:
+        return []
+    admitted = admit_decisions(
+        entries,
+        existing_ids=[str(entry.get("id") or "") for entry in project.decisions],
+    )
+    return append_decisions(
+        project.decisions,
+        admitted,
+        revision_number=project.latest.number,
+        actor=actor,
+    )
 
 
 def _store_document(

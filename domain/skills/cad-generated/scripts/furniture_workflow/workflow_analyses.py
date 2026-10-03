@@ -5,10 +5,12 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Callable, Mapping
 
+from furniture_manufacturing.manufacturing_handoff import merged_manufacturing_view
 from furniture_manufacturing.production_simulation import simulate_production
 from furniture_manufacturing.prototype_experiment import design_prototype_experiment
 from furniture_manufacturing.test_statistics import analyze_prototype_results
 from furniture_panel_planning.design_optimization import (
+    candidate_stage_output_matches,
     materialize_optimization_candidate,
     optimize_panel_design,
 )
@@ -42,6 +44,14 @@ class AnalysisMixin:
         source_output = self._stage_source_output(
             revision, source_stage, project_id=project.id
         )
+        # 制造产物是**逐柜**的（`{"cabinets": [{"id", "bom"}]}`）；旁路分析按**整份工程**算
+        # （材料/工序总量、生产模拟），所以这里合成一份只看不写的合并视图。
+        # 证据哈希仍用原始产物（下一行的 source_output），合并视图只喂给分析函数。
+        analysis_input = (
+            merged_manufacturing_view(source_output)
+            if source_stage == WorkflowStage.MANUFACTURING_PLANNED
+            else source_output
+        )
         values = dict(config or {})
         dispatch: dict[str, Callable[[], dict[str, Any]]] = {
             "panel_unit_audit": lambda: audit_panel_quantities(
@@ -54,15 +64,15 @@ class AnalysisMixin:
                 values,
             ),
             "prototype_experiment": lambda: design_prototype_experiment(
-                source_output,
+                analysis_input,
                 values,
             ),
             "test_statistics": lambda: analyze_prototype_results(
-                source_output,
+                analysis_input,
                 values,
             ),
             "production_simulation": lambda: simulate_production(
-                source_output,
+                analysis_input,
                 values,
             ),
         }
@@ -116,8 +126,9 @@ class AnalysisMixin:
             raise ValueError("selected optimization candidate is invalid")
         output = materialize_optimization_candidate(
             panel_envelopes_from_layout(revision.layout),
+            source_output,
             selected,
         )
-        if selected.get("stage_output_sha256") != _stable_digest(output):
+        if not candidate_stage_output_matches(output, selected):
             raise ValueError("selected candidate no longer materializes reproducibly")
         return self.revise_stage_output(project, stage, output)

@@ -39,7 +39,7 @@ def room(room_id: str, *, offset_mm: float = 200.0, width_mm: float = 4000.0) ->
         "height_mm": 2800.0,
         "items": [
             {
-                "id": f"{room_id}-wardrobe",
+                "id": f"{room_id}_wardrobe",
                 "label": "衣柜",
                 "category": "wardrobe",
                 "furniture_category": "floor_cabinet",

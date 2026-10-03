@@ -15,6 +15,8 @@ description: 用于 panel_plan 阶段。当用户说“几扇门”“几层板�
 
 整份板件方案写入 `stage_inputs.panels.parameters`。必填字段、可选料档和候选起点见 [提案契约](references/panel-proposal-contract.md)。料厚目录与工艺卡见 [料档与工艺卡](references/sheet-stock-catalog.md)。
 
+**逐柜参数**写在同一阶段的兄弟键上：`stage_inputs.panels.cabinets[柜名] = {…这一台要覆盖的字段…}`（逐字段覆盖，身份与几何仍在布局）。一组柜不用长一样——这台双门、那台单门、这格挂衣那格抽屉，都靠它表达；形状与禁区见提案契约「逐柜参数」。
+
 - 提案要盖住契约里的必填字段。客户没说的构造值，按提案契约的候选起点写成具体值，标成假设，一次确认。
 - 料档可以省略，按工艺卡展开，不进假设清单。
 - 停问清单和 `null` 口径只在提案契约。

@@ -27,7 +27,7 @@ from furniture_workflow.input_adapter import (
     stage_inputs_from_spec,
 )
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
-from workflow_test_support import confirm_through, confirm_until
+from workflow_test_support import confirm_through, confirm_until, primary_manufactured_bom
 from furniture_workflow.workflow_project import Project
 from furniture_workflow.workflow_state import STAGE_SEQUENCE, WorkflowStage, parse_stage
 from furniture_workflow.workflow_store import JsonProjectStore
@@ -101,9 +101,7 @@ class FurnitureOrchestratorLifecycleTests(unittest.TestCase):
             WorkflowStage.MANUFACTURING_PLANNED.value,
             manufactured.revision.stage_outputs,
         )
-        bom_panels = manufactured.revision.stage_outputs[
-            WorkflowStage.MANUFACTURING_PLANNED.value
-        ]["panels"]
+        bom_panels = primary_manufactured_bom(manufactured.revision)["panels"]
         self.assertTrue(bom_panels)
         self.assertEqual(
             bom_panels[0]["parent_id"],
@@ -222,8 +220,8 @@ class FurnitureOrchestratorLifecycleTests(unittest.TestCase):
                         "viewer_topology",
                     },
                 )
-                self.assertIsNotNone(result.pipeline)
-                self.assertEqual(result.bridge.status, "ok")
+                self.assertEqual([item.cabinet_id for item in result.cabinets], ["cabinet_1"])
+                self.assertEqual([bridge.status for bridge in result.bridges], ["ok"])
                 delivery_output = result.revision.stage_outputs[
                     WorkflowStage.DELIVERY_VALIDATED.value
                 ]
@@ -254,7 +252,7 @@ class FurnitureOrchestratorLifecycleTests(unittest.TestCase):
                 ]
                 self.assertEqual(
                     len(six_side_artifacts),
-                    len(result.pipeline.panels),
+                    len(result.cabinets[0].panels),
                 )
                 self.assertTrue(
                     all(
@@ -314,7 +312,7 @@ class FurnitureOrchestratorLifecycleTests(unittest.TestCase):
         edited = deepcopy(
             result.revision.stage_outputs[WorkflowStage.MANUFACTURING_PLANNED.value]
         )
-        edited["operations"][0]["pos_x"] = -1
+        edited["cabinets"][0]["bom"]["operations"][0]["pos_x"] = -1
         revision = self.orchestrator.revise_stage_output(
             result.project,
             WorkflowStage.MANUFACTURING_PLANNED,
@@ -343,7 +341,7 @@ class FurnitureOrchestratorLifecycleTests(unittest.TestCase):
                 WorkflowStage.MANUFACTURING_PLANNED.value
             ]
         )
-        edited["readiness"] = "claimed_ready"
+        edited["cabinets"][0]["bom"]["readiness"] = "claimed_ready"
         revision = self.orchestrator.revise_stage_output(
             result.project,
             WorkflowStage.MANUFACTURING_PLANNED,
@@ -398,7 +396,7 @@ class FurnitureOrchestratorLifecycleTests(unittest.TestCase):
             WorkflowStage.FEATURE_TREE_PLANNED,
         )
 
-        self.assertIsNone(result.pipeline)
+        self.assertEqual(result.cabinets, ())
         self.assertEqual(
             result.revision.workflow.current,
             WorkflowStage.LAYOUT_PLAN,

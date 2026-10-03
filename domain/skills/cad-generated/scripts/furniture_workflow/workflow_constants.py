@@ -43,8 +43,12 @@ ANALYSIS_METHOD_SKILLS = {
 
 @dataclass(frozen=True)
 class OrchestrationResult:
+    """一次编排调用的结果：**逐柜**快照（布局里有几台柜就有几项）。
+
+    `cabinets` 是板件 + 制造的快照，`bridges` 是逐柜 CAD 结果（没跑 CAD 时为空）。
+    """
+
     project: Project
     revision: Revision
-    pipeline: CabinetPipelineResult | None
-    bridge: BridgeResult | None = None
-    drilled_holes: dict[str, Any] | None = None
+    cabinets: tuple[CabinetPipelineResult, ...] = ()
+    bridges: tuple[BridgeResult, ...] = ()

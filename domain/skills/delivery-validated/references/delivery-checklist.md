@@ -12,6 +12,10 @@
 5. `readiness=preliminary` 只产生警告：文件可以完整交付，但不得称为工厂已确认或可直接投产。
 6. 六面钻 XML 的 Manifest 记录携带板件标识和制造 `readiness`；哈希完整只
    证明文件未被篡改，不证明机床坐标已经过工厂首件确认。
+7. **逐柜齐全（2026-10-02 起是硬关卡）**：制造与特征树是逐柜产物（`{"cabinets": [...]}`），
+   CAD 与清单也逐柜——**每台规划过的柜都必须有自己的 `step`、`drilled_holes`、`six_side_drill_xml`
+   记录**（manifest 柜级记录带 `cabinet_id`），少一台就 `MISSING_CABINET_ARTIFACT`。
+   在这之前，"规划了三台、只有一台有文件"照样通过——实测过。
 
 ## 已由上游阶段负责的语义关卡
 

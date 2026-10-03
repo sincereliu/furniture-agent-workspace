@@ -48,14 +48,14 @@ LAYOUT_PAGE = (
 def rooms() -> list[dict[str, object]]:
     return [
         {
-            "id": "room-1",
+            "id": "room_1",
             "name": "新房间",
             "width_mm": 3000,
             "depth_mm": 4000,
             "height_mm": 3500,
             "items": [
                 {
-                    "id": "cabinet-1",
+                    "id": "cabinet_1",
                     "category": "cabinet",
                     "furniture_category": "floor_cabinet",
                     "width": 2400,
@@ -365,7 +365,7 @@ class WorkingOpActorTests(unittest.TestCase):
         version = preview_page_data(project, store_root=self.store.root)["version"]
         return layout_edit.edit_project_layout(
             project,
-            {"op": "move", "item_id": "cabinet-1", "offset_mm": offset},
+            {"op": "move", "item_id": "cabinet_1", "offset_mm": offset},
             expected_version=version,
             workspace_root=WORKSPACE_ROOT,
             store_root=self.store.root,
@@ -506,7 +506,7 @@ class PageDecisionTests(unittest.TestCase):
     def test_confirm_settles_the_assumption_and_appends(self) -> None:
         project_id, token = self._project()
         document = self._decide(project_id, token, "confirm")
-        self.assertEqual(document["decisions"]["pending"], [])
+        self.assertEqual(pending_ids(document), [])
         self.assertEqual(document["decided"][0]["status"], "confirmed")
         # 页面按的按钮没有原话，措辞由服务端写死；谁按的从租约读。
         entry = self.store.load(project_id).decisions[-1]
@@ -522,7 +522,7 @@ class PageDecisionTests(unittest.TestCase):
     def test_withdraw_also_settles_it(self) -> None:
         project_id, token = self._project()
         document = self._decide(project_id, token, "withdraw")
-        self.assertEqual(document["decisions"]["pending"], [])
+        self.assertEqual(pending_ids(document), [])
         states = workflow_decisions.decision_states(self.store.load(project_id).decisions)
         self.assertEqual(states["dec_1"], "withdrawn")
 
@@ -583,6 +583,191 @@ class PageDecisionTests(unittest.TestCase):
         self.assertIn('data-basis="confirm"', script)
         self.assertIn('data-basis="withdraw"', script)
         self.assertIn("decideBasis(", script)
+
+
+def pending_ids(document: dict) -> list[str]:
+    """页面文档里的 pending 是**给人看的条目**，这里只要 id。"""
+    return [entry["id"] for entry in document["decisions"]["pending"]]
+
+
+class StaleAssumptionTests(unittest.TestCase):
+    """客户的动作动了某一处 → 针对那一处还**待确认**的假设当场作废。
+
+    实测撞到过：假设写"沿墙 300 居中"，柜子早被拖到 340，台账还挂着"待确认"——两边打架。
+    规则要保守：只动待确认的、只动引用精确到 `对象.字段` 的、只动那个字段**真的变了**的。
+    """
+
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
+        self.store = JsonProjectStore(self.temporary.name)
+        self.orchestrator = FurnitureOrchestrator(
+            workspace_root=WORKSPACE_ROOT,
+            project_store=self.store,
+        )
+        self.session = FurnitureToolSession(self.orchestrator)
+        self._switch = unittest.mock.patch.dict(
+            os.environ, {layout_edit.LAYOUT_EDIT_ENV: "1"}
+        )
+        self._switch.start()
+        self.addCleanup(self._switch.stop)
+
+    def tearDown(self) -> None:
+        self.temporary.cleanup()
+
+    def _project(self, decisions: list[dict]) -> tuple[str, str]:
+        project_id = self.session.call(
+            TOOL_CREATE_PROJECT,
+            {"name": "被动作动摇", "rooms": rooms(), "decisions": decisions},
+        )["project"]["id"]
+        lease = acquire(self.store.root, project_id, holder="page", label="窗口 a1b2")
+        return project_id, lease.token
+
+    def _drag(self, project_id: str, token: str, offset: float) -> dict:
+        project = self.store.load(project_id)
+        version = preview_page_data(project, store_root=self.store.root)["version"]
+        return layout_edit.edit_project_layout(
+            project,
+            {"op": "move", "item_id": "cabinet_1", "offset_mm": offset},
+            expected_version=version,
+            workspace_root=WORKSPACE_ROOT,
+            store_root=self.store.root,
+            lease_token=token,
+        )
+
+    def test_dragging_the_same_field_retires_the_assumption(self) -> None:
+        project_id, token = self._project(
+            [
+                {
+                    "interpretation": "柜体沿北墙 300 居中（助手选的）",
+                    "applies_to": ["cabinet_1.offset_mm"],
+                }
+            ]
+        )
+        document = self._drag(project_id, token, 448)
+        self.assertEqual(pending_ids(document), [])
+        self.assertEqual(len(document["withdrawn_decisions"]), 1)
+        entry = self.store.load(project_id).decisions[-1]
+        self.assertEqual(entry["status"], "withdrawn")
+        self.assertEqual(entry["targets"], ["dec_1"])
+        self.assertEqual(entry["source"], "page")
+        self.assertEqual(entry["speaker"], "customer")
+        self.assertEqual(entry["actor"]["label"], "窗口 a1b2")
+        self.assertIn("cabinet_1.offset_mm 从 300 改成 448", entry["interpretation"])
+        self.assertIn("自动作废", entry["interpretation"])
+
+    def test_a_different_field_does_not_retire_it(self) -> None:
+        project_id, token = self._project(
+            [{"interpretation": "宽度按 2400", "applies_to": ["cabinet_1.width"]}]
+        )
+        document = self._drag(project_id, token, 500)
+        self.assertEqual(pending_ids(document), ["dec_1"])
+        self.assertNotIn("withdrawn_decisions", document)
+
+    def test_object_level_reference_is_left_alone(self) -> None:
+        """只写到对象级的假设太模糊——宁可不动作，也不误作废。"""
+        project_id, token = self._project(
+            [{"interpretation": "柜体靠北墙（助手选的）", "applies_to": ["cabinet_1"]}]
+        )
+        document = self._drag(project_id, token, 500)
+        self.assertEqual(pending_ids(document), ["dec_1"])
+
+    def test_confirmed_constraints_are_never_auto_withdrawn(self) -> None:
+        """客户点过头的约束，代码不许替他改——那是"改主意"，要显式来。"""
+        project_id, token = self._project(
+            [
+                {
+                    "utterance": "沿墙摆 300",
+                    "interpretation": "沿北墙 300",
+                    "speaker": "customer",
+                    "status": "confirmed",
+                    "applies_to": ["cabinet_1.offset_mm"],
+                }
+            ]
+        )
+        document = self._drag(project_id, token, 448)
+        states = workflow_decisions.decision_states(self.store.load(project_id).decisions)
+        self.assertEqual(states["dec_1"], "confirmed")
+        self.assertNotIn("withdrawn_decisions", document)
+
+    def test_dragging_back_to_the_same_value_changes_nothing(self) -> None:
+        project_id, token = self._project(
+            [{"interpretation": "沿墙 300", "applies_to": ["cabinet_1.offset_mm"]}]
+        )
+        document = self._drag(project_id, token, 300)  # 和建项目时一样
+        self.assertEqual(pending_ids(document), ["dec_1"])
+
+    def test_assistant_revision_also_retires_stale_assumptions(self) -> None:
+        """助手改布局也一样：动过同一处，假设就不能再挂着。"""
+        project_id = self.session.call(
+            TOOL_CREATE_PROJECT,
+            {
+                "name": "助手改",
+                "rooms": rooms(),
+                "decisions": [
+                    {
+                        "interpretation": "沿北墙 300 居中（助手选的）",
+                        "applies_to": ["cabinet_1.offset_mm"],
+                    }
+                ],
+            },
+        )["project"]["id"]
+        moved = rooms()
+        moved[0]["items"][0]["placement"]["offset_mm"] = 500
+        result = self.session.call(
+            TOOL_REVISE_LAYOUT, {"project_id": project_id, "rooms": moved}
+        )
+        self.assertTrue(result["ok"], result.get("error"))
+        self.assertEqual(result["project"]["pending_decisions"], [])
+        entry = self.store.load(project_id).decisions[-1]
+        self.assertEqual(entry["speaker"], "agent")
+        self.assertEqual(entry["source"], "tool")
+        self.assertIn("助手直接改了", entry["interpretation"])
+
+
+class StaleRuleUnitTests(unittest.TestCase):
+    """规则本身（纯函数）——不经过 HTTP 与租约也能钉住。"""
+
+    def test_only_pending_precise_and_really_changed(self) -> None:
+        entries = [
+            {"id": "dec_1", "status": "assumption", "applies_to": ["cabinet_1.offset_mm"]},
+            {"id": "dec_2", "status": "assumption", "applies_to": ["cabinet_1"]},
+            {"id": "dec_3", "status": "confirmed", "applies_to": ["cabinet_1.offset_mm"]},
+            {"id": "dec_4", "status": "assumption", "applies_to": ["cabinet_1.width"]},
+        ]
+        changes = {"cabinet_1": {"offset_mm": (300.0, 448.0)}}
+        self.assertEqual(workflow_decisions.stale_pending_ids(entries, changes), ["dec_1"])
+        self.assertEqual(
+            workflow_decisions.parse_ref("cabinet_1.offset_mm"), ("cabinet_1", "offset_mm")
+        )
+        self.assertEqual(workflow_decisions.parse_ref("cabinet_1"), ("cabinet_1", None))
+
+    def test_changed_fields_ignore_fill_and_equal_values(self) -> None:
+        before = {"placement": {"mode": "wall", "fill": False, "offset_mm": 300.0}, "width": 2400.0}
+        after = dict(before, placement={"mode": "wall", "fill": True, "offset_mm": 300.0})
+        self.assertEqual(workflow_decisions.changed_item_fields(before, after), {})
+        after = dict(
+            before,
+            placement={"mode": "wall", "fill": False, "offset_mm": 448.0},
+            width=2300.0,
+        )
+        self.assertEqual(
+            workflow_decisions.changed_item_fields(before, after),
+            {"offset_mm": (300.0, 448.0), "width": (2400.0, 2300.0)},
+        )
+
+    def test_wording_lists_changes_and_summarises_the_rest(self) -> None:
+        entries = [{"id": "dec_1", "status": "assumption", "applies_to": ["cabinet_1.offset_mm"]}]
+        changes = {
+            "cabinet_1": {
+                "offset_mm": (300.0, 448.0),
+                "width": (2400.0, 2300.0),
+                "depth": (600.0, 620.0),
+                "height": (2700.0, 2650.0),
+            }
+        }
+        entry = workflow_decisions.auto_withdrawn_entries(entries, changes)[0]
+        self.assertIn("cabinet_1.offset_mm 从 300 改成 448", entry["interpretation"])
+        self.assertIn("等 4 处", entry["interpretation"])
 
 
 if __name__ == "__main__":

@@ -59,7 +59,7 @@ admit_cabinet_id(None, fallback="cabinet-1")  →  ValueError: cabinet_id must b
 也就是说 `cabinet-1` 这种 id **能建项目、能过布局确认，到板件阶段才炸**（客户手上的工程正是 `cabinet-1`）。所以：
 
 1. 生成规则用**下划线**（`north_run_u1`），不用连字符；
-2. **布局入口补一条集中校验**（item id 与 space id 都必须是合法标识符、不含 `__`），并给一句人话报错——这条独立于拆分，应该先修（登记在 [未落地需求](backlog.md)）。
+2. **布局入口已经补了集中校验**（2026-10-02）：`scene.parse_item_specs()` 在建项目/改布局时就拒，并说清为什么；只校验**输入**，读取照旧容忍（旧 id 靠一次性迁移改名）。**`space.id` 将来套同一条**（它生成单元 id，单元 id 就是板件阶段的 `cabinet_id`）——两边的规则一致性由 `test_skill_architecture` 钉住（阶段之间不互相 import，所以各写一条）。
 
 **钉住的单元 id 必须稳定**：客户手动改过的那台，重解时不许被换掉或改名（否则"钉住"是假的）。
 

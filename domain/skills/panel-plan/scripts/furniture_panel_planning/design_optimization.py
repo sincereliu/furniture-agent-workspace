@@ -10,7 +10,7 @@ from math import isfinite
 from typing import Any, Mapping, Sequence
 
 from .cabinet_envelope import CabinetEnvelope
-from .cabinet_identity import require_primary_handoff
+from .cabinet_identity import cabinet_handoff, cabinets_from_output
 from .panel_pipeline import plan_panel_stage
 from .panel_spec import PANEL_PARAMETER_FIELDS
 
@@ -60,8 +60,12 @@ def _normalize_domains(raw: Any) -> dict[str, list[Any]]:
     return domains
 
 
-def _metrics(output: Mapping[str, Any]) -> dict[str, float]:
-    _, structure, panels = require_primary_handoff(output)
+def _metrics(output: Mapping[str, Any], cabinet_id: str) -> dict[str, float]:
+    """**指名那一台**的指标：材料体积、板面积、内空体积、复杂度。
+
+    以前无参、默认取第一台——多柜工程里那等于"对 2 号柜做优化、算的却是 1 号柜"。
+    """
+    _, structure, panels = cabinet_handoff(output, cabinet_id)
     material_volume = sum(
         float(item["size_x"])
         * float(item["size_y"])
@@ -95,6 +99,29 @@ def _metrics(output: Mapping[str, Any]) -> dict[str, float]:
         "internal_depth_mm": internal_depth,
         "internal_volume_m3": internal_volume,
     }
+
+
+def target_cabinet_id(
+    envelopes: Sequence[CabinetEnvelope | Mapping[str, Any]],
+    config: Mapping[str, Any],
+) -> str:
+    """择优**必须指名哪一台**：给了就用，只有一台就默认它，多台而没说就停问。
+
+    择优的产出是"候选"，要人挑着落地——所以"改哪台"是决策，不能由代码默默取第一台。
+    """
+    units = tuple(CabinetEnvelope.from_mapping(item) for item in envelopes)
+    requested = config.get("cabinet_id")
+    if requested is not None:
+        name = str(requested)
+        if name not in {unit.id for unit in units}:
+            raise ValueError(f"optimization cabinet_id is unknown: {name}")
+        return name
+    if len(units) == 1:
+        return units[0].id
+    raise ValueError(
+        "optimization requires cabinet_id when the layout has several cabinets: "
+        + ", ".join(unit.id for unit in units)
+    )
 
 
 def _feasible(metrics: Mapping[str, float], constraints: Mapping[str, Any]) -> bool:
@@ -210,7 +237,13 @@ def optimize_panel_design(
             f"max_evaluations={max_evaluations}"
         )
 
-    base_spec, _, _ = require_primary_handoff(panel_output)
+    target = target_cabinet_id(envelopes, config)
+    target_envelope = next(
+        unit
+        for unit in (CabinetEnvelope.from_mapping(item) for item in envelopes)
+        if unit.id == target
+    )
+    base_spec = cabinet_handoff(panel_output, target)[0]
     base_options = {
         name: base_spec[name]
         for name in PANEL_PARAMETER_FIELDS
@@ -231,9 +264,10 @@ def optimize_panel_design(
                 if inherited not in changes:
                     options.pop(inherited, None)
         try:
-            output = plan_panel_stage(envelopes, options)
-            spec, _, _ = require_primary_handoff(output)
-            metrics = _metrics(output)
+            # 只重算**这一台**：改一台的料厚不该牵动别的柜。
+            output = plan_panel_stage((target_envelope,), options)
+            spec, _, _ = cabinet_handoff(output, target)
+            metrics = _metrics(output, target)
         except (KeyError, TypeError, ValueError) as exc:
             rejected.append({"parameters": changes, "reason": str(exc)})
             continue
@@ -242,6 +276,7 @@ def optimize_panel_design(
             continue
         candidates.append(
             {
+                "cabinet_id": target,
                 "parameters": changes,
                 "resolved_parameters": {
                     name: spec[name]
@@ -264,6 +299,7 @@ def optimize_panel_design(
         raise ValueError("max_candidates must be between 1 and 100")
     result = {
         "analysis": "panel_optimization",
+        "cabinet_id": target,
         "status": "unavailable" if unavailable_reason else "completed",
         "engine": engine,
         "upstream_method": (
@@ -288,11 +324,60 @@ def optimize_panel_design(
     return result
 
 
+def candidate_stage_output_matches(
+    panel_output: Mapping[str, Any],
+    candidate: Mapping[str, Any],
+) -> bool:
+    """候选的摘要记的是**它那台柜**那份产物；落地后按同一口径复核。
+
+    逐柜之前候选摘要是"整份产物"的（那时只有一台）；现在按柜复核，才谈得上
+    "改一台不动别的柜"。
+    """
+    target = str(candidate.get("cabinet_id") or "")
+    if not target:
+        return False
+    entry = next(
+        (
+            cabinet
+            for cabinet in cabinets_from_output(panel_output)
+            if str(cabinet.get("id") or "") == target
+        ),
+        None,
+    )
+    if entry is None:
+        return False
+    return _digest({"cabinets": [entry]}) == candidate.get("stage_output_sha256")
+
+
 def materialize_optimization_candidate(
     envelopes: Sequence[CabinetEnvelope | Mapping[str, Any]],
+    panel_output: Mapping[str, Any],
     candidate: Mapping[str, Any],
 ) -> dict[str, Any]:
+    """把选中的候选**落到它自己那台柜**上，其余各柜原样保留。
+
+    候选自带 `cabinet_id`（择优时必须指名），所以"挑了候选 2"不会不知道改哪台。
+    """
     parameters = candidate.get("resolved_parameters")
     if not isinstance(parameters, Mapping):
         raise ValueError("candidate requires resolved_parameters")
-    return plan_panel_stage(envelopes, parameters)
+    target = str(candidate.get("cabinet_id") or "")
+    if not target:
+        raise ValueError("candidate requires cabinet_id")
+    target_envelope = next(
+        (
+            CabinetEnvelope.from_mapping(item)
+            for item in envelopes
+            if CabinetEnvelope.from_mapping(item).id == target
+        ),
+        None,
+    )
+    if target_envelope is None:
+        raise ValueError(f"candidate cabinet is not in the layout: {target}")
+    replanned = plan_panel_stage((target_envelope,), parameters)["cabinets"][0]
+    return {
+        "cabinets": [
+            replanned if str(cabinet.get("id") or "") == target else dict(cabinet)
+            for cabinet in cabinets_from_output(panel_output)
+        ]
+    }

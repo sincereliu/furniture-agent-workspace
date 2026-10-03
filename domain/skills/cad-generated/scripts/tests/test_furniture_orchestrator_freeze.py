@@ -24,7 +24,7 @@ from furniture_delivery_validation.validation import validate_delivery
 from furniture_layout.project_layout import ProjectLayout
 from furniture_workflow.input_adapter import stage_inputs_from_spec
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
-from workflow_test_support import confirm_through, confirm_until
+from workflow_test_support import confirm_through, confirm_until, primary_manufactured_bom
 from furniture_workflow.workflow_project import Project
 from furniture_workflow.workflow_state import STAGE_SEQUENCE, WorkflowStage, parse_stage
 from furniture_workflow.workflow_store import JsonProjectStore
@@ -178,9 +178,7 @@ class FurnitureOrchestratorFreezeTests(unittest.TestCase):
             )
             bom_thicknesses = {
                 panel["thickness"]
-                for panel in first.revision.stage_outputs["manufacture_plan"][
-                    "panels"
-                ]
+                for panel in primary_manufactured_bom(first.revision)["panels"]
             }
             self.assertIn(original_thickness, bom_thicknesses)
             self.assertNotIn(original_thickness + 81, bom_thicknesses)
@@ -206,9 +204,9 @@ class FurnitureOrchestratorFreezeTests(unittest.TestCase):
                 frozen,
             )
             self.assertEqual(
-                second.revision.stage_outputs["manufacture_plan"][
-                    "requested_options"
-                ].get("door_hinge_side"),
+                primary_manufactured_bom(second.revision)["requested_options"].get(
+                    "door_hinge_side"
+                ),
                 "left",
             )
 
@@ -261,7 +259,7 @@ class FurnitureOrchestratorFreezeTests(unittest.TestCase):
                 first_cabinet_spec(snapshot)["board_thickness"],
                 original_thickness,
             )
-            self.assertEqual(cad.bridge.status, "ok")
+            self.assertEqual([bridge.status for bridge in cad.bridges], ["ok"])
 
     def test_failed_panel_attempt_can_be_retried_without_new_layout(self) -> None:
         project = self.orchestrator.create_project(

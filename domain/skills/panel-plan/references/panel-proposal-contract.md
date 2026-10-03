@@ -35,6 +35,26 @@
 - 用户说「就这样」或只改其中几项后，把完整对象写入 `stage_inputs` 再 `run_next()` / `retry_stage()`。代码准入后展示确认审查清单（`current_view.markdown` 或其中的柜体/板件/接触表），再等人确认阶段。
 - 只有超出当前拓扑表达能力时才停在消歧，不要写入 `stage_inputs`。完整停问清单：混合门/层板/抽屉分区；三门及以上的开启关系。
 
+## 逐柜参数（一组柜不用长一样）
+
+`stage_inputs.panels` 的形状是 **一份共享提案 + 按柜覆盖**：
+
+```json
+{
+  "parameters": { "…所有柜的底…" },
+  "cabinets": { "cabinet_2": { "n_doors": 1, "shelves": [ … ], "top_gap_mm": 620 } }
+}
+```
+
+- **覆盖是逐字段的**：`{**共享, **这台}`；合起来必须是一份完整合法的提案——阶段验收照旧拒不合法的结果（净空填不满、单门没给铰链方向之类，**由代码报错，不替人补**）。
+- **身份与几何不许写在覆盖里**：`cabinet_id` / `furniture_category` / `width` / `depth` / `height` 只来自包络（布局），覆盖里写了会被拒。
+- **柜名必须认识**：覆盖里出现布局里没有的柜名直接拒（不静默忽略）。
+- 平铺写法（`stage_inputs_from_spec`）用 `panel_cabinets: {柜名: {…}}`。
+- **制造选项同理**：`stage_inputs.manufacturing.cabinets[柜名]` 可覆盖 `parameters`（如 `door_hinge_side`）与 `appearance`——一台双门、一台单门时，共享一份铰链方向根本表达不了。
+- 改过板件产物（`revise_stage_output`）后，**每台柜自己的 spec 会写回它自己的覆盖**；不要再把某一台的参数抄给全部柜。
+
+**旁路分析也要指名**：`panel_unit_audit` 默认**逐台**跑（报告里 `cabinet_ids` + 逐台明细，问题条目带 `cabinet_id`），`config.cabinet_id` 可以只审一台；`panel_optimization` **必须**指名（多柜工程里不指就报错），候选自带 `cabinet_id`，落地只改那一台。
+
 ## LLM 候选起点
 
 用户没说时，LLM 用下面这组值填满必填字段并标成假设。料档按工艺卡省略或覆盖，不能把目录展开当成开放默认值。

@@ -91,29 +91,46 @@ def cabinets_from_output(output: Mapping[str, Any]) -> list[dict[str, Any]]:
     return cabinets
 
 
-def primary_cabinet(output: Mapping[str, Any]) -> dict[str, Any]:
-    cabinets = cabinets_from_output(output)
-    if not cabinets:
-        raise ValueError("panel stage output requires at least one cabinet")
-    return cabinets[0]
-
-
-def require_primary_handoff(
+def handoffs_from_output(
     output: Mapping[str, Any],
-) -> tuple[Mapping[str, Any], Mapping[str, Any], list[Any]]:
-    """Return spec, derived structure, and derived panels from the first cabinet."""
-    cabinet = primary_cabinet(output)
-    spec = cabinet.get("spec")
-    cabinet_id = cabinet.get("id") or DEFAULT_CABINET_ID
-    if not isinstance(spec, Mapping):
-        raise ValueError(f"{cabinet_id} requires spec")
-    if "interior" not in cabinet:
-        raise ValueError(f"{cabinet_id} requires interior")
-    structure = asdict(CabinetStructure.from_spec(FurnitureSpec.from_dict(spec)))
-    if "assemblies" not in cabinet:
-        raise ValueError(f"{cabinet_id} requires assemblies")
-    panels = flatten_panels_for_handoff(cabinet)
-    return spec, structure, panels
+) -> list[tuple[str, Mapping[str, Any], dict[str, Any], list[Any]]]:
+    """每台柜的 `(cabinet_id, spec, derived structure, derived panels)`——**逐柜**下游的手交接口。
+
+    布局里摆了几台柜，制造 / 特征树 / CAD / 交付就该覆盖几台（板件阶段早就支持多柜，
+    下游以前只读主柜）。"只看一台"的调用请用 `cabinet_handoff(output, cabinet_id)`，
+    **把哪一台说清**——不要取第一台然后只做一台。
+    """
+    handoffs: list[tuple[str, Mapping[str, Any], dict[str, Any], list[Any]]] = []
+    for cabinet in cabinets_from_output(output):
+        cabinet_id = str(cabinet.get("id") or DEFAULT_CABINET_ID)
+        spec = cabinet.get("spec")
+        if not isinstance(spec, Mapping):
+            raise ValueError(f"{cabinet_id} requires spec")
+        if "interior" not in cabinet:
+            raise ValueError(f"{cabinet_id} requires interior")
+        structure = asdict(CabinetStructure.from_spec(FurnitureSpec.from_dict(spec)))
+        if "assemblies" not in cabinet:
+            raise ValueError(f"{cabinet_id} requires assemblies")
+        handoffs.append(
+            (cabinet_id, spec, structure, flatten_panels_for_handoff(cabinet))
+        )
+    return handoffs
+
+
+def cabinet_handoff(
+    output: Mapping[str, Any],
+    cabinet_id: str,
+) -> tuple[Mapping[str, Any], dict[str, Any], list[Any]]:
+    """**指名某台柜**的 `(spec, 结构, 板件)`。
+
+    逐柜下游按柜名取料；旁路分析（审计、择优）也用它——**"哪一台"必须由调用方说清**，
+    不许默默取第一台（多柜工程里那会算错对象）。
+    """
+    for existing_id, spec, structure, panels in handoffs_from_output(output):
+        if existing_id == cabinet_id:
+            return spec, structure, panels
+    known = ", ".join(entry[0] for entry in handoffs_from_output(output))
+    raise ValueError(f"unknown cabinet id: {cabinet_id} (known: {known})")
 
 
 def bind_panels_to_cabinet(placements: list[Any], cabinet_id: str) -> list[Any]:

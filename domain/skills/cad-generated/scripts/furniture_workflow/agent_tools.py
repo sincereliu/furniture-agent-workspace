@@ -41,6 +41,8 @@ from .agent_tool_schema import (
 from furniture_layout.open_preview import open_project_preview
 from .workflow_decisions import (
     admit_decisions,
+    auto_withdrawn_entries,
+    changed_item_fields,
     decision_views,
     pending_decision_ids,
 )
@@ -185,17 +187,9 @@ class FurnitureToolSession:
         """
         if not admitted:
             return
-        store = self.orchestrator.project_store
-        actor = None
-        if store is not None:
-            lease = read_lease(store.root, project.id)
-            if lease is not None:
-                actor = {
-                    "holder": lease.holder,
-                    "label": lease.label,
-                    "lease_id": lease.id,
-                }
-        self.orchestrator.record_decisions(project, admitted, actor=actor)
+        self.orchestrator.record_decisions(
+            project, admitted, actor=self._active_actor(project)
+        )
 
     def _confirm_stage(
         self, project: Project, payload: dict[str, Any]
@@ -319,10 +313,65 @@ class FurnitureToolSession:
             existing_ids=[str(entry.get("id") or "") for entry in project.decisions],
         )
         layout = _layout_from_payload(payload)
+        previous = project.latest.layout
         self.orchestrator.revise(project, layout)
         self._remember(project)
         self._record_decisions(project, admitted)
+        self._auto_withdraw_stale(project, previous)
         return self._ok(TOOL_REVISE_LAYOUT, project, progressed=True)
+
+    def _auto_withdraw_stale(self, project: Project, previous: Any) -> list[dict[str, Any]]:
+        """布局整体改过之后，把被**这次改动**动摇的待确认假设作废。
+
+        与页面拖动同一条规矩（动作是最强证据），只是措辞记成"助手改的"。
+        只比对两边都有的件：新增/删除的件谈不上"动摇了哪一处假设"。
+        """
+
+        def snapshots(layout: Any) -> dict[str, dict[str, Any]]:
+            return {
+                item.id: {
+                    "placement": item.placement.to_dict(),
+                    "width": item.width,
+                    "depth": item.depth,
+                    "height": item.height,
+                }
+                for scene in layout.rooms
+                for item in scene.items
+            }
+
+        before_all, after_all = snapshots(previous), snapshots(project.latest.layout)
+        changes: dict[str, dict[str, tuple[Any, Any]]] = {}
+        for item_id, after in after_all.items():
+            before = before_all.get(item_id)
+            if before is None:
+                continue
+            field_changes = changed_item_fields(before, after)
+            if field_changes:
+                changes[item_id] = field_changes
+        if not changes:
+            return []
+        entries = auto_withdrawn_entries(
+            project.decisions, changes, speaker="agent", source="tool"
+        )
+        if not entries:
+            return []
+        admitted = admit_decisions(
+            entries,
+            existing_ids=[str(entry.get("id") or "") for entry in project.decisions],
+        )
+        return self.orchestrator.record_decisions(
+            project, admitted, actor=self._active_actor(project)
+        )
+
+    def _active_actor(self, project: Project) -> dict[str, Any] | None:
+        """当前编辑租约的持有者（谁在写）——读不出就不写 actor，而不是自称。"""
+        store = self.orchestrator.project_store
+        if store is None:
+            return None
+        lease = read_lease(store.root, project.id)
+        if lease is None:
+            return None
+        return {"holder": lease.holder, "label": lease.label, "lease_id": lease.id}
 
     def _record_decision(
         self, project: Project, payload: dict[str, Any]

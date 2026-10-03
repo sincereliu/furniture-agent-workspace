@@ -21,7 +21,10 @@ from furniture_panel_planning.construction_geometry import (
     drawer_panel_boxes,
     toe_kick_support_boxes,
 )
-from furniture_panel_planning.cabinet_identity import require_primary_handoff
+from furniture_panel_planning.cabinet_identity import (
+    cabinet_handoff,
+    handoffs_from_output,
+)
 from furniture_panel_planning.joint_topology import PanelJoint
 from furniture_panel_planning.panel_pipeline import plan_panel_cabinets, plan_panel_stage
 from furniture_panel_planning.panel_review import panel_review_from_output
@@ -365,7 +368,7 @@ class PanelRuleContractTests(unittest.TestCase):
                 "assemblies",
             },
         )
-        spec, structure, panels = require_primary_handoff(output)
+        spec, structure, panels = cabinet_handoff(output, output["cabinets"][0]["id"])
         self.assertEqual(spec["board_thickness"], 18.0)
         self.assertIn("internal_width", structure)
         self.assertTrue(panels)
@@ -373,9 +376,9 @@ class PanelRuleContractTests(unittest.TestCase):
         self.assertTrue(all(item["joints"] for item in panels if item["role"] == "left_side_panel"))
 
         with self.assertRaisesRegex(ValueError, "requires cabinets"):
-            require_primary_handoff({})
+            handoffs_from_output({})
         with self.assertRaisesRegex(ValueError, "does not support"):
-            require_primary_handoff(
+            handoffs_from_output(
                 {
                     "cabinets": output["cabinets"],
                     "spec": spec,
@@ -383,7 +386,7 @@ class PanelRuleContractTests(unittest.TestCase):
                 }
             )
         with self.assertRaisesRegex(ValueError, "requires interior"):
-            require_primary_handoff(
+            handoffs_from_output(
                 {
                     "cabinets": [
                         {
@@ -395,6 +398,8 @@ class PanelRuleContractTests(unittest.TestCase):
                     ]
                 }
             )
+        with self.assertRaisesRegex(ValueError, "unknown cabinet id"):
+            cabinet_handoff(output, "cabinet_9")
 
     def test_assembly_tree_keeps_integrated_toe_kick_on_carcass(self) -> None:
         output = plan_panel_stage((cabinet_envelope(),), panel_parameters(n_doors=2))
@@ -444,7 +449,7 @@ class PanelRuleContractTests(unittest.TestCase):
                 "cabinet_1__drawer_3",
             ],
         )
-        _, _, panels = require_primary_handoff(output)
+        _, _, panels = cabinet_handoff(output, output["cabinets"][0]["id"])
         drawer_ids = {item["id"] for item in first["box"]["panels"]}
         for joint in first["box"]["joints"]:
             self.assertIn(joint["bearing_id"], drawer_ids)
@@ -507,7 +512,7 @@ class PanelRuleContractTests(unittest.TestCase):
 
     def test_panel_review_lists_each_panel_and_contact_once(self) -> None:
         output = plan_panel_stage((cabinet_envelope(),), panel_parameters(n_doors=2))
-        spec, structure, panels = require_primary_handoff(output)
+        spec, structure, panels = cabinet_handoff(output, output["cabinets"][0]["id"])
         review = panel_review_from_output(output)
         self.assertEqual(set(review), {"cabinets", "markdown"})
         cabinet = review["cabinets"][0]
@@ -553,7 +558,7 @@ class PanelRuleContractTests(unittest.TestCase):
         self.assertIn("内部净空", review["markdown"])
         self.assertIn("左侧板", review["markdown"])
         with self.assertRaisesRegex(ValueError, "does not support"):
-            require_primary_handoff(review)
+            handoffs_from_output(review)
 
 
 if __name__ == "__main__":

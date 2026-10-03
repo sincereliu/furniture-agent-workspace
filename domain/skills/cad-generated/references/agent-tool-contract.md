@@ -68,11 +68,12 @@ result = session.call(name, arguments)  # arguments 为对象或 JSON 字符串
 - `lease`：编辑租约（谁此刻在写这个项目，含 `holder` / `label` / `expires_in`，**不含 token**）。写动作前工具面会**自动接管**租约，并把 `handover`（`taken_over` + 一句 `message`）放进结果里——模型要把那句话转告人："页面已切成只读，我做完还给你"
 - `decisions` / `pending_decisions`：决策台账全量条目与**还没人确认**的那些 id。
   客户说的话、我们翻译成什么、谁确认过都在这里；`pending_decisions` 就是"还差哪几条要问客户"。
+  **改布局会顺带作废被动摇的假设**：`furniture_revise_layout` 比对改动前后，把"针对真正变了的字段、还待确认、引用精确到 `对象.字段`"的条目自动记成 `withdrawn`——所以助手改完布局后，`pending_decisions` 里不该再留着已经被改掉的那几条。
   见 [决策台账设计](decision-log-design.md)
 - `inherited`（哪些阶段沿用了更早那一版的内容，附 `sha256` 与 `from_revision`）与 `inherited_stages`。摆动摆放或改房间后板件内容没变时，系统会**承认**上一版的确认而不是让人再点一次头——快照必须把它显示出来，别让"少做了一步"变得看不见（见 [修订继承设计](revision-inheritance-design.md)）
 - `allowed_tools`、`required_tool`、`cad_generation_required`
 - `attempts`（编号、是否通过、错误；不含整份输出）
-- `current_view`（当前阶段给人看的内容；`include_view=false` 可省略）。`panel_plan` 是确认审查清单（净空、板件一行一条、接触去重、`markdown`），不是冻结 `cabinets[]` 树；冻结板件仍在 Store。其他阶段一般就是该阶段结果本身。
+- `current_view`（当前阶段给人看的内容；`include_view=false` 可省略）。`panel_plan` 是确认审查清单（净空、板件一行一条、接触去重、`markdown`），不是冻结 `cabinets[]` 树；冻结板件仍在 Store。`manufacture_plan` 与 `feature_tree_planned` 是**逐柜**产物（`{"cabinets": [{"id", "bom"|"tree"}]}`，与板件 `cabinets[]` 一一对应），所以视图会随柜数变长——只关心一台时读 `cabinets[0]`。其他阶段一般就是该阶段结果本身。
 - `layout` 与冻结哈希
 
 `allowed_tools` 是当前合法的 `furniture_*` 工具名，不是方案推荐。`required_tool` 是下一步必须调用的那个工具。
@@ -92,6 +93,14 @@ result = session.call(name, arguments)  # arguments 为对象或 JSON 字符串
 - 再试：`furniture_retry_stage` 的 `stage_input`
 
 板件与制造都接受 `{parameters: {...}}`，或扁平 parameters 对象（运行时会包一层）。制造的 `appearance` 与 `parameters` 平级，不要写进 `parameters`。封边选型 `edge_banding` 写在制造 `parameters` 里。
+
+**逐柜参数**用同一个 `stage_input` 里的兄弟键 `cabinets`：
+
+```json
+{"stage_input": {"parameters": {…共享…}, "cabinets": {"cabinet_2": {…这台的覆盖…}}}}
+```
+
+板件的覆盖是**构造字段**（逐字段合并），制造的覆盖形如 `{"parameters": {…}, "appearance": {…}}`；身份与几何（柜类、宽深高）只来自布局，覆盖里写了会被拒；陌生柜名直接拒。**一组柜要不一样时（这台双门、那台单门）就靠它**——不要用一份共享参数假装也一样。形状见[板件提案契约](../../panel-plan/references/panel-proposal-contract.md)「逐柜参数」。
 
 工具面不补构造默认值。料档字段可省略，由车间工艺卡展开。缺字段或非法组合由阶段运行时拒绝，并记为失败 attempt。
 

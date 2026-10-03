@@ -33,18 +33,13 @@
 
 **设计方案**：[空间 → 单元：拆分设计](space-split-design.md)（已写：身份不变式、`spaces[]` 字段表、id 规则与那个"id 合法性"的坑、求解八步、钉住与重解规则、目录骨架、落地分批、五项未决）。
 
-### 布局入口不校验家具 id，板件阶段才炸（实测，独立于拆分）
+### 布局入口不校验家具 id，板件阶段才炸（**已修**，留档）
 
-**现状**：下游 `panel_planning.cabinet_identity.admit_cabinet_id()` 要求 id 是**合法 Python 标识符且不含 `__`**（它还要拿来拼板件 id `{cabinet_id}__{role}`），但**布局入口不校验**——`cabinet-1` 这种 id 能建项目、能过摆放检查、能确认，**到板件阶段才报错**。
+**问题**：下游 `admit_cabinet_id()` 要求 id 是**合法 Python 标识符且不含 `__`**（它还要拿来拼板件 id `{cabinet_id}__{role}`），但布局入口不校验——`cabinet-1` 这种 id 能建项目、能过摆放检查、能确认，**到板件阶段才报错**（实测：`admit_cabinet_id(None, fallback="cabinet-1")` → `ValueError`）。
 
-```
-admit_cabinet_id(None, fallback="cabinet-1")
-→ ValueError: cabinet_id must be a Python identifier and must not contain '__'
-```
+**已修（2026-10-02）**：`scene.parse_item_specs()` 在入口集中校验（全屋 / 单间 / 编辑三个入口共用 `plan_scene`），报错点名是哪一件并说清为什么；**只校验输入、不校验读取**（库里旧 id 仍打得开）。跨阶段规则一致性由 `tests/test_skill_architecture.py` 钉住——阶段之间不互相 import，所以两边各写一条规则，测试盯着不许漂移。`spaces[].id` 将来套同一条（见[拆分设计](space-split-design.md) §三）。
 
-**影响**：客户手上那个工程（`room-1` / `cabinet-1`）跑到板件就会炸；布局示例里用 `bookcase` / `wardrobe` 才碰巧没事。
-
-**要做**：在布局入口集中校验一次（`item.id` 与将来的 `space.id`），给一句人话报错（"id 只能用字母、数字、下划线，不能以数字开头，也不能含 `__`"）。**建议独立先修**——它今天就咬人，与拆分无关。
+**配套**：两个测试夹具（`test_room_level_confirmation`、`test_decision_log`）里的连字符 id 改成下划线；客户那个 `cabinet-1` 的工程用一次性脚本改名（几何不变，`working_ops` 的 `item_id` 一起改），**脚本不入库**——仓库不迁移旧数据（见编排层 backlog 已知缺口第 3 条）。
 
 ### 拖动的阈值与吸附容差（2026-10-02 落地后待评审）
 

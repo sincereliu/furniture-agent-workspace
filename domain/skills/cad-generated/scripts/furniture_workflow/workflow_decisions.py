@@ -142,6 +142,118 @@ def pending_decision_ids(entries: Iterable[Mapping[str, Any]]) -> list[str]:
     ]
 
 
+def parse_ref(ref: str) -> tuple[str, str | None]:
+    """把 `applies_to` 里的一条引用拆成 `(对象 id, 字段名 | None)`。
+
+    两种写法都收：`cabinet_1`（这一件）与 `cabinet_1.offset_mm`（这一件的某一处）。
+    """
+    object_id, _, field = str(ref).partition(".")
+    return object_id, (field or None)
+
+
+def changed_item_fields(
+    before: Mapping[str, Any] | None,
+    after: Mapping[str, Any] | None,
+) -> dict[str, tuple[Any, Any]]:
+    """两次家具快照之间**真正变了**的字段 → `{字段: (旧值, 新值)}`。
+
+    用"改前 vs 改后"而不是"这次发的是什么 op"：拖回原位、改了个一样的值都不算改动，
+    台账不该为一次没发生的改动作废任何东西。快照形状见 `_item_snapshot()`。
+    """
+    old_placement = dict((before or {}).get("placement") or {})
+    new_placement = dict((after or {}).get("placement") or {})
+    changes: dict[str, tuple[Any, Any]] = {}
+    for key in sorted(set(old_placement) | set(new_placement)):
+        if key == "fill":
+            # fill 件的宽与偏移由墙上空段派生，不是"谁改的"。
+            continue
+        if old_placement.get(key) != new_placement.get(key):
+            changes[key] = (old_placement.get(key), new_placement.get(key))
+    for key in ("width", "depth", "height"):
+        old_value = (before or {}).get(key)
+        new_value = (after or {}).get(key)
+        if old_value != new_value:
+            changes[key] = (old_value, new_value)
+    return changes
+
+
+def stale_pending_ids(
+    entries: Iterable[Mapping[str, Any]],
+    changes: Mapping[str, Mapping[str, tuple[Any, Any]]],
+) -> list[str]:
+    """这次动作**直接动摇**了哪几条待确认的假设。
+
+    `changes` 是 `{对象 id: {字段: (旧值, 新值)}}`。规则（宁可不动作，也不误作废）：
+
+    - 只看**还待确认**的条目——已经确认过的是"客户点过头的东西"，代码不许替他改；
+    - 只看 `对象.字段` 这种**精确引用**：纯对象级的引用太模糊，不动它；
+    - 字段必须真的变了（值相等不算）。
+    """
+    ordered = list(entries)
+    states = decision_states(ordered)
+    stale: list[str] = []
+    for entry in ordered:
+        decision_id = str(entry.get("id") or "")
+        if states.get(decision_id) != DEFAULT_STATUS:
+            continue
+        for ref in _entry_refs(entry.get("applies_to")):
+            object_id, field = parse_ref(ref)
+            if not field:
+                continue
+            if field in (changes.get(object_id) or {}):
+                stale.append(decision_id)
+                break
+    return stale
+
+
+def auto_withdrawn_entries(
+    entries: Iterable[Mapping[str, Any]],
+    changes: Mapping[str, Mapping[str, tuple[Any, Any]]],
+    *,
+    speaker: str = "customer",
+    source: str = "page",
+    limit: int = 3,
+) -> list[dict[str, Any]]:
+    """为"被动摇的待确认假设"生成作废条目（还没准入）。
+
+    措辞在这里统一写：谁的动作、改了哪一处、从多少到多少——出问题时一眼看得出为什么作废。
+    一次动作涉及多处时只列前 `limit` 处，其余写成"等 N 处"。
+    """
+    stale = stale_pending_ids(entries, changes)
+    if not stale:
+        return []
+    details: list[str] = []
+    total = 0
+    for object_id, fields in changes.items():
+        for field, (old_value, new_value) in fields.items():
+            total += 1
+            if len(details) < limit:
+                details.append(
+                    f"{object_id}.{field} 从 {_format_value(old_value)} "
+                    f"改成 {_format_value(new_value)}"
+                )
+    summary = "；".join(details)
+    if total > len(details):
+        summary += f" 等 {total} 处"
+    who = "客户" if speaker == "customer" else "助手"
+    return [
+        {
+            "interpretation": f"{who}直接改了 {summary}，与这条假设不一致，自动作废",
+            "speaker": speaker,
+            "status": "withdrawn",
+            "targets": [decision_id],
+            "source": source,
+        }
+        for decision_id in stale
+    ]
+
+
+def _format_value(value: Any) -> str:
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
+
+
 def decision_views(entries: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
     """给人、给页面看的那一份（原话、翻译、谁说的、哪一版记的）。"""
     keys = (
@@ -280,8 +392,12 @@ __all__ = [
     "STATUSES",
     "admit_decisions",
     "append_decisions",
+    "auto_withdrawn_entries",
+    "changed_item_fields",
     "decision_states",
     "decision_views",
+    "parse_ref",
     "pending_decision_ids",
     "pending_decision_views",
+    "stale_pending_ids",
 ]

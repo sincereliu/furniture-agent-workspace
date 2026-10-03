@@ -5,7 +5,7 @@ from __future__ import annotations
 from math import isfinite, sqrt
 from typing import Any, Mapping
 
-from .cabinet_identity import require_primary_handoff
+from .cabinet_identity import handoffs_from_output
 
 
 _LINEAR_UNIT_TO_MM = {
@@ -85,16 +85,86 @@ def audit_panel_quantities(
     panel_output: Mapping[str, Any],
     config: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """审计**每一台**柜（`config["cabinet_id"]` 可以只审一台），给逐台明细 + 合计。
+
+    以前无参、默认只审第一台，而且报告里看不出来少了几台——多柜工程里那是**沉默的错**
+    （客户以为三台都查了，其实只查了一台）。现在默认逐台，问题条目带 `cabinet_id`。
+    """
+    config = dict(config or {})
+    handoffs = list(handoffs_from_output(panel_output))
+    requested = config.get("cabinet_id")
+    if requested is not None:
+        name = str(requested)
+        known = [entry[0] for entry in handoffs]
+        if name not in known:
+            raise ValueError(
+                f"audit cabinet_id is unknown: {name} (known: {', '.join(known)})"
+            )
+        handoffs = [entry for entry in handoffs if entry[0] == name]
+
+    _validate_uncertainty_quantities(config, handoffs)
+    registry, engine = _unit_engine()
+    cabinets: list[dict[str, Any]] = []
+    issues: list[dict[str, str]] = []
+    checked_dimensions = 0
+    for cabinet_id, spec, structure, panels in handoffs:
+        result = _audit_one_cabinet(
+            cabinet_id, spec, structure, panels, config, registry, engine
+        )
+        cabinets.append(result)
+        checked_dimensions += int(result["checked_dimensions"])
+        issues.extend({**item, "cabinet_id": cabinet_id} for item in result["issues"])
+    return {
+        "analysis": "panel_unit_audit",
+        "status": "completed",
+        "passed": not any(item["severity"] == "error" for item in issues),
+        "engine": engine,
+        "canonical_unit": "mm",
+        "cabinet_ids": [cabinet["cabinet_id"] for cabinet in cabinets],
+        "checked_dimensions": checked_dimensions,
+        "cabinets": cabinets,
+        "issues": issues,
+        "limitations": [
+            "correlations are not inferred; supplied inputs are treated as independent",
+            "no conformity decision is made without an explicit acceptance rule",
+            "missing uncertainty inputs remain unknown rather than being treated as exact",
+            "expanded uncertainty is omitted unless coverage_factor is explicitly supplied",
+        ],
+    }
+
+
+def _validate_uncertainty_quantities(
+    config: Mapping[str, Any],
+    handoffs: list[tuple[str, Mapping[str, Any], Mapping[str, Any], list[Any]]],
+) -> None:
+    """不确定度输入按量名核对：**所有柜都不认识**的量直接拒，不静默忽略。"""
+    raw_uncertainties = config.get("uncertainties", {})
+    if not isinstance(raw_uncertainties, Mapping):
+        raise ValueError("uncertainties must be an object keyed by spec quantity")
+    known: set[str] = set()
+    for _, spec, structure, _ in handoffs:
+        known.update(spec)
+        known.update(structure)
+    for name in raw_uncertainties:
+        if str(name) not in known:
+            raise ValueError(f"unknown uncertainty quantity: {name}")
+
+
+def _audit_one_cabinet(
+    cabinet_id: str,
+    spec: Mapping[str, Any],
+    structure: Mapping[str, Any],
+    panels: list[Any],
+    config: Mapping[str, Any],
+    registry: Any,
+    engine: str,
+) -> dict[str, Any]:
     """Audit units, finite geometry, derived clearances, and optional GUM inputs.
 
     The function never edits ``panel_output``. Unspecified uncertainty inputs are
     treated as unknown, not as zero, and no conformity decision is inferred.
     """
 
-    config = dict(config or {})
-    spec, structure, panels = require_primary_handoff(panel_output)
-
-    registry, engine = _unit_engine()
     issues: list[dict[str, str]] = []
     checked_dimensions = 0
     for namespace, values in (("spec", spec), ("structure", structure)):
@@ -245,19 +315,11 @@ def audit_panel_quantities(
         )
 
     return {
-        "analysis": "panel_unit_audit",
+        "cabinet_id": cabinet_id,
         "status": "completed",
         "passed": not any(item["severity"] == "error" for item in issues),
-        "engine": engine,
-        "canonical_unit": "mm",
         "checked_dimensions": checked_dimensions,
         "uncertainty_inputs": uncertainty_inputs,
         "measurement_models": measurement_models,
         "issues": issues,
-        "limitations": [
-            "correlations are not inferred; supplied inputs are treated as independent",
-            "no conformity decision is made without an explicit acceptance rule",
-            "missing uncertainty inputs remain unknown rather than being treated as exact",
-            "expanded uncertainty is omitted unless coverage_factor is explicitly supplied",
-        ],
     }

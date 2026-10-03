@@ -156,7 +156,11 @@ store/<project-id>/
 
 **决策台账（谁说的）**：`store/<project-id>/project.json` → `decisions[]`，记"这句话是谁说的、我们把它落成了什么、他点头了没有"。只追加：改主意是加一条并用 `targets` 指回被改的那几条，旧条目一个字不动。缺省 `speaker=agent`、`status=assumption`——**不冒充客户、不冒充已确认**；只有 `customer` / `relay` 能写 `confirmed`，助手不能自己点头。条目由 `furniture_workflow/workflow_decisions.py` 一条路准入并派生当前状态（后续条目的确认/撤回说了算）。`source` 记它从哪来：`tool`（对话里说的，客户条目必须有原话）或 `page`（页面上按的按钮，措辞由服务端写死、没有原话）；`actor` 由运行时从编辑租约写（谁记的/谁按的，读不出就 `unknown`）。
 
-写入有两条路：工具面的 `decisions` 参数（`furniture_create_project` / `furniture_revise_layout` 可选，`furniture_record_decision` 专管"只记一句话、不动布局"），以及页面上的 `POST /api/project/{project_id}/decisions`（body `{expected_version, action: confirm|withdraw, target}`，与布局编辑同一套门：本机来源 → 灰度开关 → 版本对得上 → 编辑租约；**只能动还待确认的那一条**，已经定过的不再接受表态）。`GET /layout` 带 `decisions.pending`（还没人确认的那几条）与 `working.recent`（最近三次改动是谁做的），页眉牌子「助手假设 N 条 · 待确认」可点开，可编辑页上每条配「确认 / 划掉」。设计与未做项见 [决策台账设计](decision-log-design.md)。
+写入有两条路：工具面的 `decisions` 参数（`furniture_create_project` / `furniture_revise_layout` 可选，`furniture_record_decision` 专管"只记一句话、不动布局"），以及页面上的 `POST /api/project/{project_id}/decisions`（body `{expected_version, action: confirm|withdraw, target}`，与布局编辑同一套门：本机来源 → 灰度开关 → 版本对得上 → 编辑租约；**只能动还待确认的那一条**，已经定过的不再接受表态）。
+
+**动作动了同一处，假设当场作废**：页面拖动（`/layout/edit`）与助手改版（`furniture_revise_layout`）都会比对改动**前后**的家具快照，把"针对真正变了的字段、还待确认、引用精确到 `对象.字段`"的假设自动记成 `withdrawn`（措辞写明"谁把 X 从 A 改成 B"）。客户已确认过的约束不受影响；纯对象级的引用不动（宁可不动作，也不误作废）。页面保存后的状态行会带一句"顺带作废了 N 条助手假设"，写响应里多一个 `withdrawn_decisions`。规则见 [决策台账设计](decision-log-design.md)。
+
+`GET /layout` 带 `decisions.pending`（还没人确认的那几条）与 `working.recent`（最近三次改动是谁做的），页眉牌子「助手假设 N 条 · 点开确认」可点开，可编辑页上每条配「确认 / 划掉」。设计与未做项见 [决策台账设计](decision-log-design.md)。
 
 页面能不能编辑由**服务端按权限渲染**：本机来源（`may_edit`）给可编辑页，其余给只读页；`?mode=view`（分享形态）在本机也强制只读。可编辑页还要自己拿到**编辑租约**才算真的能写（申请 / 5 秒心跳 / 闲置 5 分钟自动让出 / 离开页面归还）。
 
@@ -222,7 +226,9 @@ Feature Tree v2 支持板件 `box` 和定向 `cut_box`；发射器先建板、�
 - `furniture_panel_planning/panel_pipeline.py::plan_panel_stage()`：从已确认 CAD 单元投影出的柜体外形尺寸物化功能数量、结构规格、精确净空、背板方案，并生成实体板件角色、尺寸和位置。
 - `furniture_manufacturing/manufacturing_bom.py::plan_manufacturing()`：材料、封边、五金、BOM、槽；`emit_drilled_holes()` 输出配合孔。
 
-`cabinet_pipeline.py::CabinetPipelineResult` 只是已确认板件+制造结果的快照，供 CAD 写入使用。Orchestrator 按阶段调用各 Skill，不合并检查点。
+`cabinet_pipeline.py::CabinetPipelineResult` 是**一台柜**的已确认板件+制造结果快照（带 `cabinet_id`），供逐柜 CAD 写入使用；`OrchestrationResult.cabinets` / `.bridges` 就是它的逐柜元组。Orchestrator 按阶段调用各 Skill，不合并检查点。
+
+**逐柜产物（2026-10-02 起）**：制造 / 特征树 / CAD 三阶段的阶段产物都是 `{"cabinets": [{"id", "bom"|"tree"|"bridge"}]}`，与板件 `cabinets[]` **一一对应、顺序一致**（顺序与身份由布局决定，代码不挑不排不漏）。CAD 是**一台柜一个源文件、一份 STEP**：`temp/cad-source/<revision-id>/<cabinet_id>.step.py` → `<artifact_dir>/<cabinet_id>.step`，另有 `bom.<cabinet_id>.md`、`<cabinet_id>.drilled-holes.*`、`六面钻文件/{cabinet_id}__{role}.xml`；manifest 的柜级记录带 `cabinet_id`。阶段级记录（`layout_plan` / `panel_plan` / `manufacturing_plan` / `feature_tree`）仍是每版一份，其中 `manufacturing_plan` 的 `readiness` 记的是**整份工程**的就绪度（取最弱的那台）。交付验证据此拦"少了一台"（`MISSING_CABINET_ARTIFACT`）。成本口径见 [TOOL.md](../TOOL.md)。
 
 **继承不变式**：下游只依赖布局可执行单元的那五个字段（`id` / `furniture_category` / `width` / `depth` / `height`）。这五个字段不变时，板件、制造、特征树的内容**逐字节不变**，因此内容相同的下游产物可以**跨 Revision 继承**，不必让人重新确认（`approved_stages` 的语义是"这份内容已被确认过"，不是"人在这一版又点了头"）。机制、判据、必重算清单与 `fill` 例外见 [修订继承设计](revision-inheritance-design.md)。
 

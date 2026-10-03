@@ -901,9 +901,12 @@ async function persist(item,kind,sizes){
         return true;
       }
       const working=next.working||{};
-      setStatus(working.open===false
+      // 你的改动可能顺手作废了某条助手假设（针对同一处的、还没确认的）：说一声，别让它悄悄消失。
+      const retired=(next.withdrawn_decisions||[]).length;
+      const suffix=retired?` · 顺带作废了 ${retired} 条助手假设（你改的与它不一致）`:"";
+      setStatus((working.open===false
         ? `已保存 ${item.label}（这一版已有下游产物，改动落成了新一版）`
-        : `已保存 ${item.label}（同一版，草稿中${working.ops?` · 已调整 ${working.ops} 次`:""}）`);
+        : `已保存 ${item.label}（同一版，草稿中${working.ops?` · 已调整 ${working.ops} 次`:""}）`)+suffix);
       return true;
     }
     scene.items=normalizeItems(next.items||[]);

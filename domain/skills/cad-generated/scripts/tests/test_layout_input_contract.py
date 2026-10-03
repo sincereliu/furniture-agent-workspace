@@ -55,6 +55,31 @@ class LayoutInputContractTests(unittest.TestCase):
             with self.subTest(alias=alias), self.assertRaisesRegex(ValueError, alias):
                 plan_scene(ROOM, [{**ITEM, alias: 1000}])
 
+    def test_item_ids_must_be_usable_by_the_panel_stage(self) -> None:
+        """家具 id 的形状卡在**入口**：板件阶段拿它拼板件编号。
+
+        以前 `cabinet-1` 这种 id 能建项目、能过摆放检查、能确认，跑到板件才炸；
+        所以入口（三个入口共用的 plan_scene）直接拒，并且报错点名是哪一件。
+        """
+        for bad in ("cabinet-1", "1cabinet", "cabinet__x", "柜子", "cabinet.1"):
+            with self.subTest(bad=bad):
+                with self.assertRaisesRegex(ValueError, "cabinet_1|id"):
+                    plan_scene(ROOM, [{**ITEM, "id": bad}])
+        # 合法形状照样过（含省略 id 时自动补的那个）。
+        for good in ("cabinet_1", "Cabinet", "_cabinet", "cabinet1"):
+            with self.subTest(good=good):
+                self.assertEqual(plan_scene(ROOM, [{**ITEM, "id": good}]).items[0].id, good)
+        self.assertEqual(plan_scene(ROOM, [{k: v for k, v in ITEM.items() if k != "id"}]).items[0].id, "item_1")
+        # 空 id 照旧按"没给"处理（自动补 item_1），不因为这条校验改变既有行为。
+        self.assertEqual(plan_scene(ROOM, [{**ITEM, "id": ""}]).items[0].id, "item_1")
+        # 报错要指名道姓，不然一个项目里十几件没人知道改哪一件。
+        with self.assertRaisesRegex(ValueError, r"items\[0\]\.id 'cabinet-1'"):
+            plan_scene(ROOM, [{**ITEM, "id": "cabinet-1"}])
+        # **只校验输入，不校验读取**：库里已有的旧 id 仍然打得开（靠一次性迁移改名）。
+        legacy = plan_scene(ROOM, [ITEM]).to_dict()
+        legacy["items"][0]["id"] = "cabinet-1"
+        self.assertEqual(RoomScene.from_dict(legacy).items[0].id, "cabinet-1")
+
     def test_placement_aliases_are_rejected(self) -> None:
         for alias in (
             "wall", "offset", "x", "y", "z", "x_mm", "y_mm", "z_mm",

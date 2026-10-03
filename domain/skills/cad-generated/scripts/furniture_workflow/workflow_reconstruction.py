@@ -3,25 +3,29 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Mapping
 
 from furniture_cad.cad_bridge import BridgeResult
 from furniture_delivery_validation.validation import ValidationReport
 from furniture_manufacturing.connection_points import ConnectionPoint
 from furniture_manufacturing.features import feature_from_dict
-from furniture_manufacturing.manufacturing_bom import BOMReport, emit_drilled_holes
+from furniture_manufacturing.manufacturing_bom import BOMReport
+from furniture_manufacturing.manufacturing_handoff import (
+    cabinets_from_manufacturing,
+)
 from furniture_manufacturing.manufacturing_models import (
     HardwareRecord,
     MachiningOperation,
     MaterialRecord,
     PanelRecord,
 )
-from furniture_panel_planning.cabinet_identity import require_primary_handoff
+from furniture_panel_planning.cabinet_identity import handoffs_from_output
 from furniture_panel_planning.panel_models import PanelPlacement
 from furniture_panel_planning.panel_spec import FurnitureSpec
 from furniture_panel_planning.structure_planning import CabinetStructure
 
 from .cabinet_pipeline import CabinetPipelineResult
+from .workflow_cabinets import cabinets_from_bridges
 from .workflow_constants import OrchestrationResult
 from .workflow_project import Project, Revision
 from .workflow_state import WorkflowStage
@@ -44,43 +48,41 @@ class ReconstructionMixin:
 
     def _result(self, project: Project) -> OrchestrationResult:
         revision = project.latest
-        pipeline = self._pipeline_from_revision(
-            revision, project_id=project.id
-        )
         return OrchestrationResult(
             project=project,
             revision=revision,
-            pipeline=pipeline,
-            bridge=self._bridge_from_revision(revision),
-            drilled_holes=(
-                emit_drilled_holes(pipeline.bom)
-                if pipeline is not None
-                else None
+            cabinets=self._pipelines_from_revision(
+                revision, project_id=project.id
             ),
+            bridges=self._bridges_from_revision(revision),
         )
 
-    def _pipeline_from_revision(
+    def _pipelines_from_revision(
         self,
         revision: Revision,
         *,
         project_id: str | None = None,
-    ) -> CabinetPipelineResult | None:
+    ) -> tuple[CabinetPipelineResult, ...]:
+        """**逐柜**快照（板件 + 制造），一台柜一项；上游没齐就是空的。"""
         required = (
             WorkflowStage.PANELS_PLANNED.value,
             WorkflowStage.MANUFACTURING_PLANNED.value,
         )
         if not all(key in revision.stage_outputs for key in required):
-            return None
-        return CabinetPipelineResult(
-            spec=self._spec_from_revision(revision, project_id=project_id),
-            structure=self._structure_from_revision(
+            return ()
+        boms = dict(self._cabinet_boms(revision))
+        return tuple(
+            CabinetPipelineResult(
+                cabinet_id=cabinet_id,
+                spec=spec,
+                structure=CabinetStructure.from_spec(spec),
+                placements=placements,
+                panels=boms[cabinet_id].panels,
+                bom=boms[cabinet_id],
+            )
+            for cabinet_id, spec, placements in self._cabinet_handoffs(
                 revision, project_id=project_id
-            ),
-            placements=self._placements_from_revision(
-                revision, project_id=project_id
-            ),
-            panels=self._panels_from_revision(revision),
-            bom=self._bom_from_revision(revision),
+            )
         )
 
     def _resolved_stage_outputs(
@@ -130,47 +132,39 @@ class ReconstructionMixin:
             raise ValueError("frozen panel plan must be an object")
         return frozen
 
-    def _spec_from_revision(
+    def _cabinet_handoffs(
         self,
         revision: Revision,
         *,
         project_id: str | None = None,
-    ) -> FurnitureSpec:
-        spec, _, _ = require_primary_handoff(
-            self._confirmed_panel_output(revision, project_id=project_id)
-        )
-        return FurnitureSpec.from_dict(spec)
+    ) -> list[tuple[str, FurnitureSpec, list[PanelPlacement]]]:
+        """**逐柜**的 `(id, spec, 该柜的板件放置)`——制造阶段按它一台一台算。
 
-    def _structure_from_revision(
-        self,
-        revision: Revision,
-        *,
-        project_id: str | None = None,
-    ) -> CabinetStructure:
-        _, structure, _ = require_primary_handoff(
-            self._confirmed_panel_output(revision, project_id=project_id)
-        )
-        return CabinetStructure.from_dict(structure)
-
-    def _placements_from_revision(
-        self,
-        revision: Revision,
-        *,
-        project_id: str | None = None,
-    ) -> list[PanelPlacement]:
-        _, _, panels = require_primary_handoff(
-            self._confirmed_panel_output(revision, project_id=project_id)
-        )
-        return [PanelPlacement.from_dict(item) for item in panels]
+        以前只取主柜（`_spec_from_revision` / `_placements_from_revision`），
+        所以布局里摆了三台也只有一台有 BOM。
+        """
+        output = self._confirmed_panel_output(revision, project_id=project_id)
+        handoffs = handoffs_from_output(output)
+        return [
+            (
+                cabinet_id,
+                FurnitureSpec.from_dict(spec),
+                [PanelPlacement.from_dict(item) for item in panels],
+            )
+            for cabinet_id, spec, _, panels in handoffs
+        ]
 
     @staticmethod
-    def _panels_from_revision(revision: Revision) -> list[PanelRecord]:
+    def _cabinet_boms(revision: Revision) -> list[tuple[str, BOMReport]]:
+        """**逐柜**的 `(id, BOM)`——特征树 / 逐柜产物按它一台一台做。"""
         output = revision.stage_outputs[WorkflowStage.MANUFACTURING_PLANNED.value]
-        return [PanelRecord.from_dict(item) for item in output.get("panels", [])]
+        return [
+            (entry["id"], ReconstructionMixin._bom_from_dict(entry["bom"]))
+            for entry in cabinets_from_manufacturing(output)
+        ]
 
     @staticmethod
-    def _bom_from_revision(revision: Revision) -> BOMReport:
-        output = revision.stage_outputs[WorkflowStage.MANUFACTURING_PLANNED.value]
+    def _bom_from_dict(output: Mapping[str, Any]) -> BOMReport:
         return BOMReport(
             furniture_name=str(output["furniture_name"]),
             dimensions=str(output["dimensions"]),
@@ -201,6 +195,12 @@ class ReconstructionMixin:
         )
 
     @staticmethod
-    def _bridge_from_revision(revision: Revision) -> BridgeResult | None:
+    def _bridges_from_revision(revision: Revision) -> tuple[BridgeResult, ...]:
+        """**逐柜** CAD 结果；没跑过 CAD 就是空的。"""
         output = revision.stage_outputs.get(WorkflowStage.CAD_GENERATED.value)
-        return BridgeResult(**output) if output else None
+        if not isinstance(output, Mapping):
+            return ()
+        return tuple(
+            BridgeResult(**entry["bridge"])
+            for entry in cabinets_from_bridges(output)
+        )

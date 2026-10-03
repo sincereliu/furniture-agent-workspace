@@ -27,6 +27,8 @@ PROTOCOL_FIELDS = frozenset(
         "manufacturing",
         "constraints",
         "constraint_mappings",
+        "panel_cabinets",
+        "manufacturing_cabinets",
         *PANEL_SPEC_FIELDS,
         *MANUFACTURING_SPEC_FIELDS,
     }
@@ -72,6 +74,21 @@ def stage_inputs_from_spec(spec: Mapping[str, Any]) -> dict[str, Any]:
             "appearance": dict(data.get("appearance", {})),
         },
     }
+    # **逐柜参数**：`panel_cabinets` / `manufacturing_cabinets` 是 `{柜名: 覆盖}`，
+    # 平铺写法直接落到各自阶段的兄弟键上（板件给构造字段，制造给 options/appearance）。
+    for flat_key, stage_key, part in (
+        ("panel_cabinets", "panels", None),
+        ("manufacturing_cabinets", "manufacturing", None),
+    ):
+        if flat_key not in data:
+            continue
+        raw_cabinets = data[flat_key]
+        if not isinstance(raw_cabinets, Mapping):
+            raise ValueError(f"{flat_key} must be an object")
+        output[stage_key]["cabinets"] = {
+            str(key): dict(value) if isinstance(value, Mapping) else value
+            for key, value in raw_cabinets.items()
+        }
     purpose = str(data.get("purpose", "")).strip()
     if purpose:
         output["layout"]["purpose"] = purpose

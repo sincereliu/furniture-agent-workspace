@@ -10,7 +10,7 @@
 
 ## 交接
 
-下游（制造、旁路分析、`revise_stage_output`）只通过 `cabinets_from_output()` / `require_primary_handoff()` 读板件结果。检查点只有 `cabinets[]`。每台柜带 `id` 和 `spec/interior/back_mount_resolution/assemblies`，不得在柜级再抄 `panels` 或 `structure`。
+下游（制造、旁路分析、`revise_stage_output`）只通过 `cabinets_from_output()` / `handoffs_from_output()` 读板件结果；**只看一台**时用 `cabinet_handoff(output, cabinet_id)`——**哪一台必须说清**（`require_primary_handoff()` 与 `primary_cabinet()` 已删：它们默默取第一台，多柜工程里算错对象）。检查点只有 `cabinets[]`。每台柜带 `id` 和 `spec/interior/back_mount_resolution/assemblies`，不得在柜级再抄 `panels` 或 `structure`。
 
 - `interior.cavity`：内空宽高深和角点；`interior.zones`：前开口分区。
 - `assemblies`：`carcass`、可选 `base`、`fronts`、`drawers[]`。板件和接触只写在所属子装配内。

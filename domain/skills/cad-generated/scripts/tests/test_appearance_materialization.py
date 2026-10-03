@@ -25,7 +25,7 @@ from furniture_panel_planning.panel_planning import plan_panels
 from furniture_panel_planning.structure_planning import CabinetStructure
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from furniture_workflow.workflow_state import WorkflowStage
-from workflow_test_support import confirm_through
+from workflow_test_support import confirm_through, primary_manufactured_bom
 
 
 def _appearance_valid():
@@ -157,9 +157,7 @@ class AppearanceValidationTests(unittest.TestCase):
             spec,
             through_stage=WorkflowStage.MANUFACTURING_PLANNED,
         )
-        output = result.revision.stage_outputs[
-            WorkflowStage.MANUFACTURING_PLANNED.value
-        ]
+        output = primary_manufactured_bom(result.revision)
         doors = [p for p in output["panels"] if p["panel_type"] == "door"]
         backs = [p for p in output["panels"] if p["panel_type"] == "back"]
         self.assertTrue(doors)

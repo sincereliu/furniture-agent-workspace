@@ -81,7 +81,6 @@ class Revision:
     workflow: WorkflowState = field(default_factory=WorkflowState)
     validations: list[ValidationReport] = field(default_factory=list)
     manifest: ArtifactManifest | None = None
-    feature_tree: dict[str, Any] | None = None
     stage_outputs: dict[str, Any] = field(default_factory=dict)
     stage_analyses: dict[str, dict[str, dict[str, Any]]] = field(default_factory=dict)
     approved_stages: list[str] = field(default_factory=list)
@@ -157,11 +156,6 @@ class Revision:
             WorkflowStage.LAYOUT_PLAN.value,
             self.layout.to_dict(),
         )
-        if self.feature_tree is not None:
-            self.stage_outputs.setdefault(
-                WorkflowStage.FEATURE_TREE_PLANNED.value,
-                self.feature_tree,
-            )
 
     def is_stage_approved(self, stage: WorkflowStage) -> bool:
         return stage.value in self.approved_stages
@@ -213,7 +207,6 @@ class Revision:
             "workflow": self.workflow.to_dict(),
             "validations": [report.to_dict() for report in self.validations],
             "manifest": self.manifest.to_dict() if self.manifest else None,
-            "feature_tree": self.feature_tree,
             "stage_outputs": self.stage_outputs,
             "stage_analyses": self.stage_analyses,
             "approved_stages": self.approved_stages,
@@ -277,7 +270,6 @@ class Revision:
                 if data.get("manifest")
                 else None
             ),
-            feature_tree=data.get("feature_tree"),
             stage_outputs=stage_outputs,
             stage_analyses=_remap_stage_keys(
                 {

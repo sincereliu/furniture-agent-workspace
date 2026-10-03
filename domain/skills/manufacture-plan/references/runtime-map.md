@@ -2,9 +2,21 @@
 
 本参考集中说明 `SKILL.md` 工作流背后的运行时结构与校验职责；LLM 走业务流时不必逐条记忆，核对实现或规划演进时再读。
 
+## 产物形状：**逐柜**
+
+`stage_outputs.manufacture_plan` 是**每台柜一份 BOM**：
+
+```json
+{"cabinets": [{"id": "cabinet_1", "bom": {…BOMReport…}}, …]}
+```
+
+与板件阶段的 `cabinets[]` **一一对应、顺序一致**（顺序与身份都由布局决定，本阶段不挑、不排、不漏）。读它只有一个入口：`manufacturing_handoff.cabinets_from_manufacturing()`；整份工程的汇总视图 `merged_manufacturing_view()` / `weakest_readiness()` 给旁路分析与阶段级记录用。**不接受**把某台柜的 BOM 顶到最上面那种压扁形状——形状不对直接拒。阶段验收也逐柜跑（`validate_manufacturing` 每台一次），问题里点名是哪一台。
+
 ## 交接
 
 板件几何来自已确认冻结文件，不重跑 `panel-plan`。Orchestrator 用 `confirmed_panel_sha256` 读 `store/<project-id>/panels/<sha256>.json`。本阶段用 `confirmed_panels.py` 只抄加工要用的字段：柜类、外形尺寸、料厚、已经解析好的背板模式和槽参数，以及每块板的尺寸、位置、语义面和接触几何。不引用板件阶段的 Python 类型。多出来的板件字段忽略。接触几何不含 `connection`；连不连由本阶段重算，并写在自己的接触记录上。已保存的制造接触必须带 `connection`。板件 id 是 `{cabinet_id}__{role}`，`role` 和 `parent_id` 必须已经写在板上。本阶段自己的提案在 `stage_inputs.manufacturing`。无 Store 或尚未记下确认哈希时读内存 `stage_outputs.panel_plan`。
+
+**逐柜读板件**：`panel_planning.cabinet_identity.handoffs_from_output()` 给出每一台的 `(cabinet_id, spec, 结构, 板件)`；只看一台用 `cabinet_handoff(output, cabinet_id)`（**哪一台必须说清**，没有"默认第一台"这个入口了）。
 
 ## 五金连接件（`connectors/`）
 

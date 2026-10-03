@@ -141,12 +141,8 @@ def validate_delivery(
         )
 
     manufacturing_readiness = _manufacturing_readiness(stage_outputs)
-    if manufacturing_readiness == "preliminary":
-        report.add_warning(
-            "MANUFACTURING_PRELIMINARY",
-            "manufacturing plan is still preliminary and is not factory-ready",
-            "manufacture_plan.readiness",
-        )
+    _validate_manufacturing_readiness(report, artifacts, stage_outputs)
+    _validate_cabinet_coverage(report, artifacts, stage_outputs)
 
     for artifact in artifacts:
         path = Path(artifact.path)
@@ -190,16 +186,111 @@ def validate_delivery(
                 artifact.kind,
             )
         if (
-            manufacturing_readiness
-            and artifact.kind in {"manufacturing_plan", "bom"}
+            artifact.kind in {"manufacturing_plan", "bom"}
+            and artifact.metadata.get("readiness")
             and artifact.metadata.get("readiness") != manufacturing_readiness
+            and not artifact.metadata.get("cabinet_id")
         ):
+            # 柜级 BOM 的就绪度按**它自己那台**核对（见 `_validate_manufacturing_readiness`）；
+            # 这里只管阶段级记录：它带的是"整份工程"的就绪度（最弱的那台）。
             report.add_error(
                 "ARTIFACT_READINESS_MISMATCH",
                 f"{artifact.kind} readiness does not match the manufacturing stage",
                 artifact.kind,
             )
     return report
+
+
+#: 每台规划过的柜都必须有的柜级产物种类（2026-10-02 之前，规划了三台
+#: 只有一台有 STEP/钻孔文件也照样通过——逐柜后必须拦住）。
+REQUIRED_CABINET_KINDS = ("step", "drilled_holes", "six_side_drill_xml")
+
+#: 就绪度从弱到强；整份工程取最弱的那一台（一台没定，整份不算定）。
+READINESS_ORDER = ("preliminary", "accepted", "factory_ready")
+
+#: 制造与特征树产物是**逐柜**的：`{"cabinets": [{"id", "bom"|"tree"}]}`。
+CABINET_STAGE_OUTPUTS = ("manufacture_plan", "feature_tree_planned")
+
+
+def _planned_cabinets(
+    stage_outputs: Mapping[str, Any] | None,
+) -> list[dict[str, Any]]:
+    """规划过的柜子（id + 那份 BOM），按制造产物的顺序。"""
+    if stage_outputs is None:
+        return []
+    manufacturing = stage_outputs.get("manufacture_plan")
+    if not isinstance(manufacturing, Mapping):
+        return []
+    raw = manufacturing.get("cabinets")
+    if not isinstance(raw, list):
+        return []
+    return [
+        {"id": str(item.get("id") or ""), "bom": dict(item.get("bom") or {})}
+        for item in raw
+        if isinstance(item, Mapping)
+    ]
+
+
+def _validate_cabinet_coverage(
+    report: ValidationReport,
+    artifacts: Sequence[Any],
+    stage_outputs: Mapping[str, Any] | None,
+) -> None:
+    """逐柜齐全：每台规划过的柜都要有自己的 STEP / 钻孔 / 六面钻文件。"""
+    cabinets = _planned_cabinets(stage_outputs)
+    if not cabinets:
+        return
+    kinds_by_cabinet: dict[str, set[str]] = {item["id"]: set() for item in cabinets}
+    for artifact in artifacts:
+        cabinet_id = str(artifact.metadata.get("cabinet_id") or "")
+        if cabinet_id in kinds_by_cabinet:
+            kinds_by_cabinet[cabinet_id].add(artifact.kind)
+    for item in cabinets:
+        cabinet_id = item["id"]
+        for kind in REQUIRED_CABINET_KINDS:
+            if kind not in kinds_by_cabinet[cabinet_id]:
+                report.add_error(
+                    "MISSING_CABINET_ARTIFACT",
+                    f"{cabinet_id}: no {kind} artifact for a planned cabinet",
+                    f"{kind}.{cabinet_id}",
+                )
+
+
+def _validate_manufacturing_readiness(
+    report: ValidationReport,
+    artifacts: Sequence[Any],
+    stage_outputs: Mapping[str, Any] | None,
+) -> None:
+    """就绪度：整份取最弱；柜级记录与它自己那份 BOM 对齐。"""
+    cabinets = _planned_cabinets(stage_outputs)
+    values = [str(item["bom"].get("readiness", READINESS_ORDER[0])) for item in cabinets]
+    ranks = {value: index for index, value in enumerate(READINESS_ORDER)}
+    weakest = READINESS_ORDER[-1]
+    for value in values:
+        if ranks.get(value, 0) < ranks[weakest]:
+            weakest = value if value in ranks else READINESS_ORDER[0]
+    if weakest == "preliminary":
+        report.add_warning(
+            "MANUFACTURING_PRELIMINARY",
+            "manufacturing plan is still preliminary and is not factory-ready",
+            "manufacture_plan.readiness",
+        )
+    by_cabinet = {item["id"]: item["bom"] for item in cabinets}
+    for artifact in artifacts:
+        if artifact.kind not in {"manufacturing_plan", "bom"}:
+            continue
+        cabinet_id = str(artifact.metadata.get("cabinet_id") or "")
+        expected = (
+            by_cabinet.get(cabinet_id, {}).get("readiness")
+            if cabinet_id
+            else weakest
+        )
+        if expected and artifact.metadata.get("readiness") != expected:
+            report.add_error(
+                "ARTIFACT_READINESS_MISMATCH",
+                f"{artifact.kind} readiness does not match the manufacturing stage",
+                artifact.kind,
+            )
 
 
 def _stable_digest(value: Any) -> str:
@@ -325,9 +416,14 @@ def _validate_checkpoint_lineage(
 def _manufacturing_readiness(
     stage_outputs: Mapping[str, Any] | None,
 ) -> str:
-    if stage_outputs is None:
+    """整份工程的制造就绪度 = **最弱**的那一台（逐柜产物的汇总）。"""
+    cabinets = _planned_cabinets(stage_outputs)
+    if not cabinets:
         return ""
-    manufacturing = stage_outputs.get("manufacture_plan")
-    if not isinstance(manufacturing, Mapping):
-        return ""
-    return str(manufacturing.get("readiness", "preliminary"))
+    ranks = {value: index for index, value in enumerate(READINESS_ORDER)}
+    weakest = READINESS_ORDER[-1]
+    for item in cabinets:
+        value = str(item["bom"].get("readiness", READINESS_ORDER[0]))
+        if ranks.get(value, 0) < ranks[weakest]:
+            weakest = value if value in ranks else READINESS_ORDER[0]
+    return weakest

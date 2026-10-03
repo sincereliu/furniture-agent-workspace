@@ -25,7 +25,7 @@ from furniture_panel_planning.structure_planning import CabinetStructure
 from furniture_panel_planning.validation import validate_panels, validate_structure
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from furniture_workflow.workflow_state import WorkflowStage
-from workflow_test_support import confirm_through
+from workflow_test_support import confirm_through, primary_manufactured_bom
 
 
 class BackMountModeTests(unittest.TestCase):
@@ -158,9 +158,7 @@ class BackMountModeTests(unittest.TestCase):
                     all(report.passed for report in manufacturing_reports)
                 )
 
-                operations = result.revision.stage_outputs[
-                    WorkflowStage.MANUFACTURING_PLANNED.value
-                ]["operations"]
+                operations = primary_manufactured_bom(result.revision)["operations"]
                 operation_ids = {operation["id"] for operation in operations}
                 if back_mount == "groove":
                     self.assertEqual(operation_ids, expected_groove_ids)
