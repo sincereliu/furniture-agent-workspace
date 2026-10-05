@@ -60,6 +60,8 @@ def studio_layout(
     }
     if fill:
         item["placement"]["fill"] = True
+        # 铺满要按柜类取门宽/进深/踢脚：目录里的键。
+        item["kind"] = "wardrobe" if furniture_category == "floor_cabinet" else "sideboard"
     else:
         item["width"] = width
     return ProjectLayout.from_source(
@@ -129,17 +131,19 @@ class EnvelopeJudgeTests(unittest.TestCase):
             self.assertIn("cabinet_2", diff["changed"])
 
     def test_fill_item_width_follows_the_room(self) -> None:
-        """设计稿的 `fill` 例外：房间一变，fill 件的宽度必变，判据必须说"变了"。
+        """设计稿的 `fill` 例外：房间一变，铺满那件的宽度必变，判据必须说"变了"。
 
-        注意跟的是**所在墙的长度**：北墙的长度就是房间的总宽。
+        注意跟的是**所在墙的长度**（北墙长度 = 房间总宽），而且 **宽度是净的**
+        （扣了收口）。房间取窄的（≤ 两扇门上限 960）才落得成一台合规单元；
+        宽墙现在**停问**（目录还没给标准单元宽档），不再给假包络。
         """
-        narrow = studio_layout(fill=True, room_width_mm=4000)
-        wide = studio_layout(fill=True, room_width_mm=5200)
+        narrow = studio_layout(fill=True, room_width_mm=900)
+        wide = studio_layout(fill=True, room_width_mm=950)
         diff = envelope_diff(narrow, wide)
         self.assertFalse(diff["same"])
-        self.assertEqual(diff["resized"], ["cabinet_1"])
-        self.assertEqual(envelope_set(narrow)["cabinet_1"][1], 4000.0)
-        self.assertEqual(envelope_set(wide)["cabinet_1"][1], 5200.0)
+        self.assertEqual(diff["resized"], ["cabinet_1_u1"])
+        self.assertEqual(envelope_set(narrow)["cabinet_1_u1"][1], 840.0)
+        self.assertEqual(envelope_set(wide)["cabinet_1_u1"][1], 890.0)
 
 
 class ByteEqualityTests(unittest.TestCase):
@@ -193,9 +197,9 @@ class ByteEqualityTests(unittest.TestCase):
         )
 
     def test_room_change_moves_a_fill_item_and_alters_its_panels(self) -> None:
-        """fill 件贴着北墙：房间变宽 → 它变宽 → 板件内容必变（所以判据不能粗判"房间变了可继承"）。"""
-        narrow = stable_digest(self._panel_output(studio_layout(fill=True, room_width_mm=4000)))
-        wide = stable_digest(self._panel_output(studio_layout(fill=True, room_width_mm=5200)))
+        """铺满贴着北墙：房间变宽 → 它变宽 → 板件内容必变（判据不能粗判"房间变了可继承"）。"""
+        narrow = stable_digest(self._panel_output(studio_layout(fill=True, room_width_mm=900)))
+        wide = stable_digest(self._panel_output(studio_layout(fill=True, room_width_mm=950)))
         self.assertNotEqual(narrow, wide)
 
 

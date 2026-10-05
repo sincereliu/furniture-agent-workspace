@@ -80,6 +80,8 @@ def layout_source(
                         "height": 2200,
                         "placement": wardrobe_placement,
                         **({} if fill else {"width": 1800.0}),
+                        # 铺满要写柜类（工艺目录里的键），否则停问的是"没说做什么柜"。
+                        **({"kind": "wardrobe"} if fill else {}),
                     },
                     {
                         "id": "desk",
@@ -342,22 +344,17 @@ class ProjectLayoutEditTests(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, 422)
         self.assertIn("move does not support: rotation_z_deg", str(ctx.exception.detail))
 
-    def test_fill_item_refuses_placement_edits(self) -> None:
-        """fill 件的宽与偏移由墙上的空段算出来，改它会被重算覆盖——直接说不行。"""
-        project = self._project(fill=True)
-        before = self._document(project.id)
-        with self.assertRaises(HTTPException) as ctx:
-            self._edit(
-                project.id,
-                local_request(),
-                op="move",
-                item_id="wardrobe",
-                offset_mm=500,
-                expected_version=before["version"],
-            )
-        self.assertEqual(ctx.exception.status_code, 422)
-        self.assertIn("fill unit", str(ctx.exception.detail))
-        self.assertEqual(self._document(project.id)["revision_number"], 1)
+    def test_a_fill_that_is_too_wide_stops_and_asks(self) -> None:
+        """铺满的墙超出两扇门上限 → **建项目时就停问**（不再给一个做不出来的宽包络）。
+
+        而且停问要说清两条路：缩小空间，或改用 `spaces[]` 写 `split=equal` 先按等分给一版
+        （目录还没给标准单元宽档，代码不替它编档位）。
+        """
+        with self.assertRaises(ValueError) as caught:
+            self._project(fill=True)
+        message = str(caught.exception)
+        self.assertIn("split=equal", message)
+        self.assertIn("spaces[]", message)
 
     # ---- 门：本机来源 + 灰度开关 ----
 

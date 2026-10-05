@@ -174,13 +174,29 @@ class LayoutHttpContractTests(unittest.TestCase):
             with self.subTest(data=data), self.assertRaises(ValidationError):
                 room_http.RoomSceneRequest(**data)
 
-    def test_http_fill_retains_manufacturing_flags(self) -> None:
+    def test_http_fill_expands_and_keeps_manufacturing_flags(self) -> None:
+        """铺满走 HTTP：窄墙落成一台合规单元，`manufacture: false` 照样带过去。
+
+        而且**没写柜类就停问**——铺满也要按目录展开，代码不替它猜柜类。
+        """
         item = deepcopy(ITEM)
         del item["width"]
         item["placement"]["fill"] = True
         item["manufacture"] = False
-        response = asyncio.run(room_http.plan_room(room_http.RoomSceneRequest(room=ROOM, items=[item])))
-        self.assertEqual(response.items[0]["width"], 3900)
+        narrow = {**ROOM, "width_mm": 900}
+        with self.assertRaises(HTTPException) as caught:
+            asyncio.run(
+                room_http.plan_room(room_http.RoomSceneRequest(room=narrow, items=[item]))
+            )
+        self.assertEqual(caught.exception.status_code, 422)
+        self.assertIn("没说要做什么柜", str(caught.exception.detail))
+        item["kind"] = "wardrobe"
+        response = asyncio.run(
+            room_http.plan_room(room_http.RoomSceneRequest(room=narrow, items=[item]))
+        )
+        # 墙长 900、件从 100 起铺满 → 空段 800 → 净宽 800 − 收口 60 = 740。
+        self.assertEqual(response.items[0]["id"], "cabinet_u1")
+        self.assertEqual(response.items[0]["width"], 740)
         self.assertEqual(response.items[0]["furniture_category"], "floor_cabinet")
         self.assertIs(response.items[0]["manufacture"], False)
 

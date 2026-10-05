@@ -146,6 +146,7 @@ def build_placed_item(
         },
         furniture_category=spec.furniture_category,
         manufacture=spec.manufacture,
+        kind=spec.kind,
     )
 
 

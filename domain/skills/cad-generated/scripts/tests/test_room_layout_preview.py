@@ -25,6 +25,7 @@ from furniture_layout.room_shell import (
 )
 from furniture_layout.layout_entry import write_room_shell, plan_project_layout, plan_room_scene
 from furniture_layout.room_svg import _build_projector
+from furniture_layout.scene_planning import plan_scene
 from furniture_layout.project_layout import ProjectLayout
 from furniture_layout.scene import RoomScene
 from furniture_layout.layout_figures import check_room_figures
@@ -78,7 +79,7 @@ def bedroom_items() -> list[dict]:
             "placement": {
                 "mode": "wall",
                 "host_wall": "east",
-                "fill": True,
+                "offset_mm": 0,
                 "origin_z_mm": 0,
             },
         },
@@ -156,7 +157,7 @@ class RoomSceneLayoutTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "items"):
             plan_room_scene(bedroom_room(), [])
 
-    def test_bedroom_places_bed_and_fills_east_wall_around_door(self) -> None:
+    def test_bedroom_places_bed_and_wardrobe_on_the_east_wall(self) -> None:
         output = plan_room_scene(bedroom_room(), bedroom_items())
         report = check_room_figures(output)
         self.assertTrue(report.passed, report.to_dict())
@@ -170,9 +171,8 @@ class RoomSceneLayoutTests(unittest.TestCase):
         self.assertEqual(bed["placement"]["origin_y_mm"], 0)
         self.assertEqual(bed["placement"]["rotation_z_deg"], 0)
         self.assertEqual(wardrobe["placement"]["host_wall"], "east")
-        self.assertTrue(wardrobe["placement"]["fill"])
         self.assertEqual(wardrobe["placement"]["offset_mm"], 0)
-        self.assertEqual(wardrobe["width"], 2000)
+        self.assertEqual(wardrobe["width"], 800)
         self.assertEqual(wardrobe["placement"]["origin_x_mm"], 4200)
         self.assertEqual(wardrobe["placement"]["origin_y_mm"], 0)
         self.assertEqual(wardrobe["placement"]["rotation_z_deg"], 90)
@@ -181,6 +181,88 @@ class RoomSceneLayoutTests(unittest.TestCase):
         self.assertIn("床", output["preview"]["svg"])
         self.assertIn("衣柜", output["preview"]["svg"])
         self.assertIn('<canvas id="scene"', output["viewer"]["html"])
+
+    def test_fill_expands_into_a_compliant_unit_with_a_derived_width(self) -> None:
+        """铺满：宽度仍由墙上空段算出，但结果是**一台合规单元**（不再是任意宽的包件）。
+
+        小房间（900 宽）北墙铺满 → 净宽 900 − 收口 60 = 840，正好一台（衣柜两扇门上 900）。
+        """
+        scene = plan_scene(
+            {
+                "id": "narrow",
+                "name": "窄间",
+                "width_mm": 900,
+                "depth_mm": 3000,
+                "height_mm": 3200,
+            },
+            [
+                {
+                    "id": "wardrobe_run",
+                    "category": "wardrobe",
+                    "furniture_category": "floor_cabinet",
+                    "kind": "wardrobe",
+                    "depth": 600,
+                    "height": 2400,
+                    "placement": {"mode": "wall", "host_wall": "north", "offset_mm": 0, "fill": True},
+                }
+            ],
+        )
+        self.assertEqual([item.id for item in scene.items], ["wardrobe_run_u1"])
+        self.assertEqual(scene.items[0].width, 840.0)
+        self.assertEqual(scene.items[0].placement.host_wall, "north")
+
+    def test_a_wide_fill_stops_and_asks_instead_of_faking_one_big_envelope(self) -> None:
+        """一面 3000 的墙铺满 → **停问**（不再给一个 3000 宽的假包络），并指出两条路。"""
+        from furniture_layout.space_split import SpaceInfeasible
+
+        with self.assertRaises(SpaceInfeasible) as caught:
+            plan_scene(
+                {
+                    "id": "wide",
+                    "name": "宽间",
+                    "width_mm": 3000,
+                    "depth_mm": 3000,
+                    "height_mm": 3200,
+                },
+                [
+                    {
+                        "id": "wardrobe_run",
+                        "category": "wardrobe",
+                        "furniture_category": "floor_cabinet",
+                        "kind": "wardrobe",
+                        "depth": 600,
+                        "height": 2400,
+                        "placement": {"mode": "wall", "host_wall": "north", "offset_mm": 0, "fill": True},
+                    }
+                ],
+            )
+        message = str(caught.exception)
+        self.assertIn("3000", message)
+        self.assertIn("split=equal", message, "要指出等分那条路")
+        self.assertIn("spaces[]", message, "并说清走哪条路才用得上它")
+
+    def test_a_fill_without_a_kind_stops_and_asks(self) -> None:
+        """铺满不说柜类 → 停问（代码不替它猜词表里的哪一类）。"""
+        with self.assertRaisesRegex(ValueError, "没说要做什么柜"):
+            plan_scene(
+                {
+                    "id": "narrow",
+                    "name": "窄间",
+                    "width_mm": 900,
+                    "depth_mm": 3000,
+                    "height_mm": 3200,
+                },
+                [
+                    {
+                        "id": "wardrobe_run",
+                        "category": "wardrobe",
+                        "furniture_category": "floor_cabinet",
+                        "depth": 600,
+                        "height": 2400,
+                        "placement": {"mode": "wall", "host_wall": "north", "offset_mm": 0, "fill": True},
+                    }
+                ],
+            )
 
     def test_two_items_that_overlap_fail_validation(self) -> None:
         items = [
@@ -337,14 +419,35 @@ class RoomSceneLayoutTests(unittest.TestCase):
 
 class ProjectLayoutAdmissionTests(unittest.TestCase):
     def test_fill_width_is_derived_when_omitted(self) -> None:
-        items = bedroom_items()
-        del items[1]["width"]
-        output = plan_project_layout([{**bedroom_room(), "items": items}])
-        wardrobe = next(
-            item for item in output["rooms"][0]["items"]
-            if item["id"] == "wardrobe"
+        """铺满不写宽度：仍旧由墙上空段算出，再按目录展开成一组合规单元。
+
+        窄间（900 宽）北墙铺满 → 净宽 840，一台。宽墙会停问（见 RoomSceneLayoutTests
+        里那条），因为目录还没给标准单元宽档。
+        """
+        item = {
+            "id": "wardrobe_run",
+            "category": "wardrobe",
+            "furniture_category": "floor_cabinet",
+            "kind": "wardrobe",
+            "depth": 600,
+            "height": 2400,
+            "placement": {"mode": "wall", "host_wall": "north", "offset_mm": 0, "fill": True},
+        }
+        output = plan_project_layout(
+            [
+                {
+                    "id": "narrow",
+                    "name": "窄间",
+                    "width_mm": 900,
+                    "depth_mm": 3000,
+                    "height_mm": 3200,
+                    "items": [item],
+                }
+            ]
         )
-        self.assertEqual(wardrobe["width"], 2000)
+        units = output["rooms"][0]["items"]
+        self.assertEqual([unit["id"] for unit in units], ["wardrobe_run_u1"])
+        self.assertEqual(units[0]["width"], 840)
 
     def test_fixed_item_still_requires_width(self) -> None:
         item = {"id": "fixed", "category": "wardrobe", "depth": 600,

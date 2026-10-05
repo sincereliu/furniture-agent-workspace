@@ -22,6 +22,12 @@ EPSILON = 1e-6
 
 ROOM_FIELDS = frozenset({
     "id", "name", "width_mm", "depth_mm", "height_mm", "openings", "obstacles",
+    "spaces",
+})
+SPACE_FIELDS = frozenset({
+    "id", "kind", "mode", "host_wall", "offset_mm", "width_mm", "depth_mm",
+    "height_mm", "origin_x_mm", "origin_y_mm", "origin_z_mm", "constraints",
+    "pinned",
 })
 OPENING_FIELDS = frozenset({
     "id", "kind", "wall", "offset_mm", "width_mm", "height_mm", "sill_height_mm",
@@ -36,6 +42,10 @@ PLACEMENT_FIELDS = frozenset({
 ITEM_FIELDS = frozenset({
     "id", "label", "category", "width", "depth", "height", "placement",
     "furniture_category", "manufacture",
+    #: 只对**沿墙铺满**（`placement.fill: true`）有意义：这块墙要做什么柜，
+    #: 取值来自工艺目录的 `families`。它是 `fill` 走向"按目录展开成合规单元"的入口；
+    #: 普通件不需要它（分几格、每格做什么属于 `spaces[]` 的约束）。
+    "kind",
 })
 PLACED_ITEM_FIELDS = ITEM_FIELDS | {"footprint", "clearances_mm"}
 
@@ -289,13 +299,15 @@ class ItemSpec:
     placement: PlacementRequest
     furniture_category: str | None = None
     manufacture: bool = True
+    #: 沿墙铺满时的柜类（见 ITEM_FIELDS 的说明）：铺满的墙要按目录展开成合规单元。
+    kind: str | None = None
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any], *, index: int = 0) -> "ItemSpec":
         if not isinstance(data, Mapping):
             raise ValueError(f"items[{index}] must be an object")
         fields(data, ITEM_FIELDS, f"items[{index}]")
-        item_id = require_item_id(
+        item_id = require_identifier(
             text(data, "id") or f"item_{index + 1}", where=f"items[{index}].id"
         )
         placement = PlacementRequest.from_dict(mapping(data, "placement"))
@@ -310,6 +322,13 @@ class ItemSpec:
         category = text(data, "category")
         if not category:
             raise ValueError(f"items[{index}].category is required")
+        kind = text(data, "kind") or None
+        if kind and not placement.fill:
+            raise ValueError(
+                f"items[{index}].kind only applies to fill items: 只有"
+                "「把这条墙铺满」才需要在件上说柜类；要分几格、每格做什么，"
+                "请写 rooms[].spaces[]"
+            )
         return cls(
             id=item_id,
             label=text(data, "label") or item_id,
@@ -320,6 +339,7 @@ class ItemSpec:
             placement=placement,
             furniture_category=_optional_furniture_category(data, index),
             manufacture=boolean(data, "manufacture", default=True),
+            kind=kind,
         )
 
 
@@ -336,6 +356,8 @@ class PlacedItem:
     clearances_mm: dict[str, float]
     furniture_category: str | None = None
     manufacture: bool = True
+    #: 沿墙铺满那件的柜类（`fill` 展开时要用；展开后由单元自己带）。
+    kind: str | None = None
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any], *, index: int = 0) -> "PlacedItem":
@@ -378,6 +400,7 @@ class PlacedItem:
             },
             furniture_category=_optional_furniture_category(data, index),
             manufacture=boolean(data, "manufacture", default=True),
+            kind=text(data, "kind") or None,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -394,6 +417,8 @@ class PlacedItem:
         }
         if self.furniture_category is not None:
             payload["furniture_category"] = self.furniture_category
+        if self.kind is not None:
+            payload["kind"] = self.kind
         if not self.manufacture:
             payload["manufacture"] = False
         return payload
@@ -422,9 +447,155 @@ class PlacedItem:
 
 
 @dataclass(frozen=True)
+class SpaceRequest:
+    """一块**空间**：区域 + 约束 + 锚（"北墙这 2400 做柜子"）。
+
+    空间是**输入侧的源**：它进 `rooms[].spaces[]`，展开成 `items[]` 里的单元包络。
+    它只说"这块地要做什么柜、有什么约束"，**不说"分几格、每格多宽"**——那是解，
+    由 `space_split.split_space()` 确定性算出来。
+
+    `kind`（柜类）是受控词表，取值由**工艺目录**的 `families` 决定（`craft_catalog.py`）；
+    这里只校验形状，词表准入在求解时做（那时才加载目录）。
+    """
+
+    id: str
+    kind: str
+    mode: str
+    width_mm: float
+    host_wall: str | None = None
+    offset_mm: float | None = None
+    origin_x_mm: float | None = None
+    origin_y_mm: float | None = None
+    depth_mm: float | None = None
+    height_mm: float | None = None
+    origin_z_mm: float = 0.0
+    constraints: tuple[str, ...] = ()
+    pinned: tuple[str, ...] = ()
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any], *, index: int = 0) -> "SpaceRequest":
+        if not isinstance(data, Mapping):
+            raise ValueError(f"spaces[{index}] must be an object")
+        fields(data, SPACE_FIELDS, f"spaces[{index}]")
+        space_id = require_identifier(
+            text(data, "id"), where=f"spaces[{index}].id"
+        )
+        kind = text(data, "kind")
+        if not kind:
+            raise ValueError(f"spaces[{index}].kind is required")
+        mode = text(data, "mode")
+        if mode not in PLACEMENT_MODES:
+            raise ValueError(
+                f"spaces[{index}].mode must be one of: "
+                + ", ".join(sorted(PLACEMENT_MODES))
+            )
+        host_wall = text(data, "host_wall") or None
+        offset = optional_number(data, "offset_mm")
+        origin_x = optional_number(data, "origin_x_mm")
+        origin_y = optional_number(data, "origin_y_mm")
+        if mode == "wall":
+            if not host_wall or host_wall not in WALLS:
+                raise ValueError(
+                    f"spaces[{index}].host_wall must be one of: "
+                    + ", ".join(sorted(WALLS))
+                )
+            if offset is None:
+                raise ValueError(f"spaces[{index}].offset_mm is required for wall spaces")
+        else:
+            # 自由空间也要有落脚点：没有坐标就说不清"这块地在哪"（与家具同一条口径）。
+            if origin_x is None or origin_y is None:
+                raise ValueError(
+                    f"spaces[{index}] free space requires origin_x_mm and origin_y_mm"
+                )
+        width = number(data, "width_mm")
+        require_positive(width)
+        depth = optional_number(data, "depth_mm")
+        height = optional_number(data, "height_mm")
+        for label, value in (("depth_mm", depth), ("height_mm", height)):
+            if value is not None:
+                require_positive(value)
+        origin_z = optional_number(data, "origin_z_mm") or 0.0
+        if origin_z < 0:
+            raise ValueError(f"spaces[{index}].origin_z_mm must not be negative")
+        return cls(
+            id=space_id,
+            kind=kind,
+            mode=mode,
+            width_mm=width,
+            host_wall=host_wall,
+            offset_mm=offset,
+            origin_x_mm=origin_x,
+            origin_y_mm=origin_y,
+            depth_mm=depth,
+            height_mm=height,
+            origin_z_mm=origin_z,
+            constraints=_string_tuple(data.get("constraints"), f"spaces[{index}].constraints"),
+            pinned=_string_tuple(data.get("pinned"), f"spaces[{index}].pinned"),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "id": self.id,
+            "kind": self.kind,
+            "mode": self.mode,
+            "width_mm": self.width_mm,
+        }
+        if self.mode == "wall":
+            payload["host_wall"] = self.host_wall
+            payload["offset_mm"] = self.offset_mm
+        else:
+            payload["origin_x_mm"] = self.origin_x_mm
+            payload["origin_y_mm"] = self.origin_y_mm
+        if self.depth_mm is not None:
+            payload["depth_mm"] = self.depth_mm
+        if self.height_mm is not None:
+            payload["height_mm"] = self.height_mm
+        if self.origin_z_mm:
+            payload["origin_z_mm"] = self.origin_z_mm
+        if self.constraints:
+            payload["constraints"] = list(self.constraints)
+        if self.pinned:
+            payload["pinned"] = list(self.pinned)
+        return payload
+
+
+def parse_space_requests(raw_spaces: Any) -> tuple[SpaceRequest, ...]:
+    if raw_spaces is None:
+        return ()
+    if not isinstance(raw_spaces, list):
+        raise ValueError("spaces must be a list")
+    spaces = tuple(
+        SpaceRequest.from_dict(space, index=index)
+        for index, space in enumerate(raw_spaces)
+    )
+    seen: set[str] = set()
+    for space in spaces:
+        if space.id in seen:
+            raise ValueError(f"duplicate space id: {space.id}")
+        seen.add(space.id)
+    return spaces
+
+
+def _string_tuple(value: Any, where: str) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, list):
+        raise ValueError(f"{where} must be a list")
+    items: list[str] = []
+    for entry in value:
+        if not isinstance(entry, str) or not entry.strip():
+            raise ValueError(f"{where} must contain non-empty strings")
+        items.append(entry)
+    return tuple(items)
+
+
+@dataclass(frozen=True)
 class RoomScene:
     room: RoomModel
     items: tuple[PlacedItem, ...]
+    #: 这块房间里声明的**空间**（可选）。它是输入侧的源，展开成上面的单元包络；
+    #: 下游一个字段都不读它（身份不变式见 references/space-split-design.md）。
+    spaces: tuple[SpaceRequest, ...] = ()
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "RoomScene":
@@ -439,13 +610,17 @@ class RoomScene:
                 PlacedItem.from_dict(item, index=index)
                 for index, item in enumerate(raw_items)
             ),
+            spaces=parse_space_requests(data.get("spaces")),
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "room": self.room.to_dict(),
             "items": [item.to_dict() for item in self.items],
         }
+        if self.spaces:
+            payload["spaces"] = [space.to_dict() for space in self.spaces]
+        return payload
 
 
 def parse_item_specs(
@@ -467,8 +642,8 @@ def parse_item_specs(
     return specs
 
 
-def require_item_id(value: str, *, where: str) -> str:
-    """家具单元 id 的入口校验：合法标识符、不含 `__`。
+def require_identifier(value: str, *, where: str) -> str:
+    """**家具单元 id 与空间 id** 的入口校验：合法标识符、不含 `__`。
 
     为什么卡在入口：板件阶段用这个 id 拼板件编号（`{cabinet_id}__{role}`），
     不合格的 id（`cabinet-1`、`1cabinet`、`a__b`）**建项目时看不出来**，

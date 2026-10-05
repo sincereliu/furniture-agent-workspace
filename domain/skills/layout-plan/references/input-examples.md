@@ -31,6 +31,7 @@ rooms:
       - id: wardrobe
         category: wardrobe
         furniture_category: floor_cabinet
+        kind: wardrobe          # 铺满要写柜类：按工艺目录展开成可制造的单元
         depth: 600
         height: 2400
         placement:

@@ -13,6 +13,8 @@
 
 下游板件只读已确认的 `LayoutUnit`（`furniture_category` 为 `floor_cabinet` / `wall_cabinet`，且该件不是 `manufacture: false`）。客户点名不制造的包络留在房间里，不是 `LayoutUnit`。`room_shell.py` 写的房间外壳 STEP 不是柜体模型。
 
+**空间（`rooms[].spaces[]`，可选）**：输入侧的来源——"北墙这 2400 做衣柜"——由 `space_split.py` 按[工艺目录](craft-catalog.yaml)展开成 `items[]` 里的单元包络。**下游一个字段都不读它**；没有 `spaces` 的老输入连目录都不读、行为逐字节不变。形状、身份不变式与求解八步见[拆分设计](space-split-design.md)。
+
 板件实际只依赖 `LayoutUnit` 的五个字段：`id`、`furniture_category`、`width`、`depth`、`height`。这五个不变，板件与制造的内容就不变，可以跨 Revision 继承（见编排层 [修订继承设计](../../cad-generated/references/revision-inheritance-design.md)）。沿墙铺满那件的 `width` 由该墙空段算出，改房间就会改它，所以这种件永远算变了，必须重算。
 
 确认时 `layout_figures.check_layout_figures` / `check_room_figures` 再核每个房间的图是不是由当前几何画出的。建项目前的 `validation.admit_scene` 不画 SVG。
@@ -21,16 +23,18 @@
 
 | 干什么 | 文件 | 代码归类 |
 | --- | --- | --- |
-| 房间、门窗、家具盒子的数据结构 | `scene.py` | schema |
+| 房间、门窗、家具盒子、**空间**（`spaces[]`）的数据结构 | `scene.py` | schema |
 | 只读取规范字段；拒绝未知字段、非法布尔值和非有限数值 | `input_fields.py` | schema / validation |
-| 全屋、单间和编辑共用的规划入口：解析 → 摆放 → 几何准入 | `scene_planning.py` | calculation / validation |
+| 车间工艺目录（`craft-catalog.yaml`）的加载与准入：区间、档位、策略；**缺项停问** | `craft_catalog.py` | schema / validation |
+| 空间 → 单元：净尺寸、门宽上限、功能格、格数、选解、代价提示；**不可行就停问** | `space_split.py` | calculation |
+| 全屋、单间和编辑共用的规划入口：解析 → **展开空间** → 摆放 → 几何准入 | `scene_planning.py` | calculation / validation |
 | 把靠墙、自由摆、沿墙铺满换成毫米坐标 | `placement.py` | calculation |
 | 检查盒子出不出房间、互相干涉不干涉、挡不挡门窗 | `placement_check.py` | calculation |
 | 上面几项有一项不过，就不建项目。不核对配进去的那张 SVG | `validation.py` | validation |
 | 一整套房子的摆放。确认后冻出给板件的盒子：宽、深、高和柜类。这里不画房间页，也不写房间外壳 | `project_layout.py` | schema |
 | 给这套摆放配上每个房间的图，确认时核对图是不是刚算出来的 | `layout_figures.py` | calculation |
 | 配进去的那张 SVG | `room_svg.py` | calculation |
-| 保存的只读预览、单间草稿、项目预览和分享共用一个模板。Python 读 `templates/room_page.html` 填上当前房间。原点三轴、光标坐标、房间药丸、`?room=`、页眉牌子都在模板里。`templates/room_page.js` 里的拖动检查必须与 `placement_check.py` 同步 | `room_page.py` | calculation |
+| 保存的只读预览、单间草稿、项目预览和分享共用一个模板。Python 读 `templates/room_page.html` 填上当前房间。原点三轴、光标坐标、房间药丸、`?room=`、页眉牌子、**空间分组卡片**都在模板里。`room_page_payload` 里的 `spaces` 是**现算的分组**（单元 id 就是 `{space_id}_u{n}`，不存映射）。`templates/room_page.js` 里的拖动检查必须与 `placement_check.py` 同步 | `room_page.py` | calculation |
 | 做过的项目名单 | `project_list.py` | calculation |
 | 把预览页打开，并准备这一页要读的数据 | `open_preview.py` | side_effect |
 | 房间页上的三维盒子 | `static/layout_scene.js` | calculation |

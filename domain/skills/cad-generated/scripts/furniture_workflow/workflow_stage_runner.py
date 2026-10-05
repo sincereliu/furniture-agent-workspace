@@ -271,7 +271,10 @@ class StageRunnerMixin:
                     revision, project_id=project.id
                 ),
             )
-            # **逐柜**生成：每一台各自一个 CAD 源文件与一份 STEP（桥一个源文件起一个进程）。
+            # **逐柜**生成：每一台各自一个 CAD 源文件与一份 STEP。
+            # 为什么不做"一个进程连做几台"：实测**更慢**（两台柜 20.1 秒 vs 9.3 秒）——
+            # viewer 拓扑的导出必须待在刚建完模型的那个进程里（热内核约 1.4 秒/台，
+            # 长进程里同样三台要 6.7 秒/台）。数据记在 TOOL.md 与未落地需求里。
             cabinets: list[dict[str, Any]] = []
             failures: list[str] = []
             for plan in plans:

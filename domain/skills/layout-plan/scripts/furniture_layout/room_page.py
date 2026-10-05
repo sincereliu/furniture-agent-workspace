@@ -45,6 +45,7 @@ def room_page_payload(scene: RoomScene) -> dict[str, Any]:
         "room": scene.room.to_dict(),
         # 与服务端 PlacedItem.to_dict() 同构：编辑后用同一形状替换，不引入第二种结构。
         "items": [item.to_dict() for item in scene.items],
+        "spaces": space_groups(scene),
         "obstacles": [
             {
                 "label": obstacle.kind,
@@ -56,6 +57,32 @@ def room_page_payload(scene: RoomScene) -> dict[str, Any]:
         ],
         "openings": [opening.to_dict() for opening in scene.room.openings],
     }
+
+
+def space_groups(scene: RoomScene) -> list[dict[str, Any]]:
+    """空间 → 单元的分组，**现算不存**（设计稿第三节）。
+
+    映射由确定性规则给出：单元 id 就是 `{space_id}_u{n}`，所以分组就是把 id 前缀
+    对上的那些件挑出来——不另存一张表，也就没有"表跟实际对不上"的可能。
+    """
+    groups: list[dict[str, Any]] = []
+    for space in scene.spaces:
+        prefix = f"{space.id}_u"
+        unit_ids = [item.id for item in scene.items if item.id.startswith(prefix)]
+        groups.append(
+            {
+                "id": space.id,
+                "kind": space.kind,
+                "mode": space.mode,
+                "host_wall": space.host_wall,
+                "width_mm": space.width_mm,
+                "constraints": list(space.constraints),
+                # 只有真的在这间房里、且确实属于这个空间的，才算钉住。
+                "pinned": [unit for unit in space.pinned if unit in unit_ids],
+                "unit_ids": unit_ids,
+            }
+        )
+    return groups
 
 
 def _json_for_script(payload: object) -> str:

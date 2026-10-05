@@ -46,6 +46,24 @@ body.share .mode-badge{color:#b45309;background:#fffbeb;border-color:#fcd34d}
    `[hidden]{display:none}` 覆盖掉——"划掉一条假设之后牌子里没字了，却还留着一个空气泡"
    就是这么来的。这一条同时管住以后新加的牌子。 */
 [hidden]{display:none !important}
+/* 空间卡片：一块地方展开成了哪几台。钉住的那台在单元按钮上带记号——
+   "这块地方以后重解，哪几台不会动"要看得见。 */
+.space-row{padding:7px 0;border-top:1px solid var(--line)}
+.space-row:first-child{border-top:0}
+.space-head{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.space-head .name{font-weight:600;color:var(--ink);font-size:12.5px}
+.space-head .mode{color:var(--muted);font-size:11.5px}
+.space-units{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+.unit-chip{appearance:none;border:1px solid var(--line);background:#f8fafc;color:var(--ink);border-radius:7px;padding:3px 8px;font:inherit;font-size:11.5px;cursor:pointer}
+.unit-chip:hover{background:#f1f5f9}
+.unit-chip.pinned{background:#fffbeb;border-color:#fcd34d;color:#92400e;font-weight:600}
+.space-edit{display:flex;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap}
+.space-edit label{display:flex;align-items:center;gap:4px;color:var(--muted);font-size:11px}
+.space-edit input{width:66px;padding:2px 5px;border:1px solid var(--line);border-radius:6px;font:inherit;font-size:11.5px}
+.space-edit button{appearance:none;border:1px solid #c7d2fe;background:var(--accent-soft);color:#3730a3;border-radius:7px;padding:3px 9px;font:inherit;font-size:11.5px;font-weight:600;cursor:pointer}
+.space-edit button:hover{background:#e0e7ff}
+.item-row .tag{margin-left:5px;font-size:10.5px;font-weight:600;color:#475569;background:#f1f5f9;border:1px solid var(--line);border-radius:999px;padding:1px 6px}
+.item-row .tag.pinned{color:#92400e;background:#fffbeb;border-color:#fcd34d}
 /* 工作副本状态：还没下游产物时改的是同一版（版号不变），这一点必须一直看得见。 */
 .working-badge{margin:6px 0 0;display:inline-block;font:600 11.5px/1.35 inherit;color:#5b21b6;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:999px;padding:3px 10px;cursor:pointer}
 .working-badge:hover{background:#ede9fe}
@@ -69,6 +87,8 @@ body.share .mode-badge{color:#b45309;background:#fffbeb;border-color:#fcd34d}
 .view-switch select{border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);font:inherit;font-weight:600;padding:6px 8px}
 /* 只读页没有编辑手柄，图例里对应的两行也藏掉——留着就是假广告。 */
 body.readonly .legend [data-edit-only]{display:none}
+/* 改空间只给可编辑的那一页留入口：只读页（预览/分享）看不到输入框。 */
+body.readonly .space-edit{display:none}
 .workspace{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:14px;min-height:0}
 .stage{position:relative;height:100%;min-height:340px;border-radius:16px;overflow:hidden;background:var(--canvas);border:1px solid var(--line);box-shadow:0 1px 2px rgba(15,23,42,.05),0 18px 40px -26px rgba(15,23,42,.42)}
 canvas{display:block;width:100%;height:100%;touch-action:none;cursor:default}
@@ -167,6 +187,11 @@ canvas.panning{cursor:grabbing}
       <section class="card">
         <h2>家具</h2>
         <ul class="list" id="item-list"></ul>
+      </section>
+      <section class="card" id="space-card" hidden>
+        <h2>空间</h2>
+        <ul class="list" id="space-list"></ul>
+        <p class="tips">空间是输入侧的来源：它按车间工艺目录展开成上面这些单元。钉住的单元不会被重解搬动。</p>
       </section>
       <section class="card">
         <h2>选中</h2>

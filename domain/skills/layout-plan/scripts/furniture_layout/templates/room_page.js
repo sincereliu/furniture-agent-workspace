@@ -481,16 +481,85 @@ function selectHint(item){
 const escapeHtml=value=>String(value).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
 // 侧栏列表只在结构变化时重建。
 let panelSignature=null;
+// 这一间里属于某个空间的单元（现算：单元 id 就是 `{space_id}_u{n}`），以及钉住的那几台。
+function spaceUnits(){
+  const pinned=new Set(),belongs=new Set();
+  (scene.spaces||[]).forEach(space=>{
+    (space.pinned||[]).forEach(id=>pinned.add(id));
+    (space.unit_ids||[]).forEach(id=>belongs.add(id));
+  });
+  return {pinned,belongs};
+}
 function syncPanel(){
-  const signature=scene.items.map(item=>`${item.id}:${item.label}:${item.placement.mode}`).join("|")+"#"+state.selectedId;
+  const {pinned,belongs}=spaceUnits();
+  const signature=scene.items.map(item=>`${item.id}:${item.label}:${item.placement.mode}:${pinned.has(item.id)}`).join("|")+"#"+state.selectedId;
   const list=document.getElementById("item-list");
   if(list&&signature!==panelSignature){
     panelSignature=signature;
     list.innerHTML=scene.items.map(item=>`<li><button type="button" class="item-row${item.id===state.selectedId?" active":""}" data-item="${escapeHtml(item.id)}">
-      <span class="dot"></span><span class="name">${escapeHtml(item.label)}</span>
+      <span class="dot"></span><span class="name">${escapeHtml(item.label)}${belongs.has(item.id)?" <span class=\"tag\">空间单元</span>":""}${pinned.has(item.id)?" <span class=\"tag pinned\">钉住</span>":""}</span>
       <span class="mode">${item.placement.mode==="wall"?"靠墙":"自由"}</span></button></li>`).join("");
   }
+  syncSpacePanel();
   syncDetail();
+}
+// 空间卡片：这块地方展开成了哪几台。没有空间就整张卡片收起来（老工程看不到它）。
+function syncSpacePanel(){
+  const card=document.getElementById("space-card"),list=document.getElementById("space-list");
+  if(!card||!list)return;
+  const spaces=scene.spaces||[];
+  card.hidden=!spaces.length;
+  if(!spaces.length){list.innerHTML="";return;}
+  list.innerHTML=spaces.map(space=>{
+    const units=(space.unit_ids||[]).map(id=>{
+      const isPinned=(space.pinned||[]).includes(id);
+      return `<button type="button" class="unit-chip${isPinned?" pinned":""}" data-item="${escapeHtml(id)}">${escapeHtml(id)}${isPinned?" · 钉住":""}</button>`;
+    }).join("")||`<span class="empty">还没展开出单元</span>`;
+    const where=space.mode==="wall"?`靠${wallLabel(space.host_wall)}墙`:"房间里";
+    // 改"这块地方"：起点 / 宽 → 重解。只读页看不到这一行（CSS 按 body.readonly 收起来）。
+    const edit=space.mode==="wall"?`<div class="space-edit">
+      <label>起点 <input type="number" class="space-offset" step="10" value="${Math.round(space.offset_mm??0)}"></label>
+      <label>宽 <input type="number" class="space-width" step="10" value="${Math.round(space.width_mm)}"></label>
+      <button type="button" class="space-apply" data-space="${escapeHtml(space.id)}">重解</button></div>`:"";
+    return `<li class="space-row"><div class="space-head"><span class="name">${escapeHtml(space.id)}</span>
+      <span class="mode">${escapeHtml(space.kind)} · ${where} · ${Math.round(space.width_mm)} 宽</span></div>
+      <div class="space-units">${units}</div>${edit}</li>`;
+  }).join("");
+  list.querySelectorAll(".unit-chip").forEach(chip=>{
+    chip.addEventListener("click",()=>selectItem(chip.dataset.item));
+  });
+  list.querySelectorAll(".space-apply").forEach(button=>{
+    button.addEventListener("click",()=>{
+      const row=button.closest(".space-row");
+      const offset=Number(row.querySelector(".space-offset")?.value);
+      const width=Number(row.querySelector(".space-width")?.value);
+      applySpaceEdit(button.dataset.space,offset,width);
+    });
+  });
+}
+// 改"这块地方"：起点 / 宽 → 服务端重解（钉住的单元不动）。与拖动同一套门与错误处理。
+async function applySpaceEdit(spaceId,offset,width){
+  if(READ_ONLY){setStatus("这一页只能看，改不了空间","warn");return;}
+  if(!PROJECT_EDIT_URL){setStatus("这一页不支持改空间（单间草稿路径还没接）","warn");return;}
+  if(!leaseToken){setStatus("这一页现在只能看：编辑权不在你手上（点「收回编辑权」或等助手做完）","warn");return;}
+  const op={op:"space",space_id:spaceId,expected_version:layoutVersion};
+  if(Number.isFinite(offset))op.offset_mm=Math.round(offset);
+  if(Number.isFinite(width))op.width_mm=Math.round(width);
+  const headers={"Content-Type":"application/json"};
+  if(leaseToken)headers["X-Edit-Lease"]=leaseToken;
+  try{
+    const response=await fetch(PROJECT_EDIT_URL,{method:"POST",headers,body:JSON.stringify(op)});
+    if(!response.ok){
+      const detail=await response.json().catch(()=>({}));
+      await reportWriteFailure(response.status,detail,{label:spaceId});
+      return;
+    }
+    applyDocument(await response.json());
+    setStatus(`已按新的空间「${spaceId}」重解：没钉住的单元重排了，钉住的原样不动`);
+  }catch(error){
+    setStatus("改空间失败："+error,"error");
+    await reload();
+  }
 }
 // 详情面板要显示的数值。单独拆出来，好让它能被直接测（DOM 那层只是把值填进去）。
 // 坐标行：房间原点在西北角地面，X 向东、Y 向南。给这件家具占地的范围，

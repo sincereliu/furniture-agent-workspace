@@ -123,6 +123,9 @@ class SceneItemRequest(BaseModel):
     placement: ItemPlacementRequest
     furniture_category: Literal["floor_cabinet", "wall_cabinet"] | None = None
     manufacture: bool = Field(default=True, strict=True)
+    #: 只对**沿墙铺满**（`placement.fill: true`）有意义：这块墙要做什么柜，
+    #: 取值来自工艺目录的 `families`（见 references/craft-catalog.yaml）。
+    kind: str | None = None
 
 
 class RoomSceneRequest(BaseModel):

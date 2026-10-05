@@ -59,7 +59,7 @@ z_room = oz + z_local
 必须提供：
 
 - `room`：`id`、`width_mm`/`depth_mm`/`height_mm`（矩形），可选 `name`、`openings[]`、`obstacles[]`。`openings[]` 是墙上的房间门洞/窗洞（`kind=door|window`），用来挡柜、扣 fill 空段；不是柜门 `n_doors`。
-- `items[]`：每件 `id`、`category`、`depth`/`height`、`placement`；固定宽度的件还要给 `width`，`fill=true` 可省略 `width`。不猜默认卧室，不猜默认家具。
+- `items[]`：每件 `id`、`category`、`depth`/`height`、`placement`；固定宽度的件还要给 `width`，`fill=true` 可省略 `width` 但**必须给 `kind`**（柜类，见下）。不猜默认卧室，不猜默认家具。
   **`id` 的形状有要求**：必须是合法 Python 标识符（字母/数字/下划线，不能以数字开头）、且不含 `__`——板件阶段拿它拼板件编号（`{cabinet_id}__{role}`）。`cabinet-1`、`1cabinet`、`a__b` 这类 id **在布局入口就被拒**（`scene.parse_item_specs`），不会等到板件阶段才炸；省略时自动补 `item_<序号>`。房间 `id` 不受这条约束（它只进 URL 与房间级确认）。
 
 结构化接口只接受这里列出的规范字段和精确枚举，未知字段直接拒绝。房间、门窗和障碍物尺寸带 `_mm`；家具尺寸用 `width/depth/height`。`placement.mode` 必须明确提供，不从 `host_wall` 或坐标猜测。门窗 `kind` 必须为 `door` 或 `window`。数值必须有限，`fill` 和 `manufacture` 必须是布尔值。历史字段名不再转换。
@@ -74,7 +74,13 @@ z_room = oz + z_local
 `placement.mode=wall` 使用 `host_wall + offset_mm + origin_z_mm`，可选 `fill`。背面贴墙、正面朝向室内。墙摆的原点与 `rotation_z_deg` 都由 `host_wall` 派生，不接受自由坐标，也转不动——要旋转或要离开墙面，就改成 `mode=free`。  
 `placement.mode=free` 使用 `origin_x_mm/origin_y_mm/origin_z_mm + rotation_z_deg`。
 
-`fill=true` 仅用于 `mode=wall`。无需提供 `width`；代码用该墙净长（扣除与该件高度相交的门窗、贴墙障碍、已摆家具）写入沿墙 `width` 和 `offset_mm`。未给 `offset_mm` 时取最长空段；给了则从该偏移铺到该空段终点。客户同时给了 width 与 fill 时，以墙净长为准。
+`fill=true` 仅用于 `mode=wall`。无需提供 `width`；代码用该墙净长（扣除与该件高度相交的门窗、贴墙障碍、已摆家具）算出这一段的起端与长度。未给 `offset_mm` 时取最长空段；给了则从该偏移铺到该空段终点。客户同时给了 width 与 fill 时，以墙净长为准。
+
+**铺满也要给柜类**：`fill=true` 的件必须写 `kind`（柜类，取[工艺目录](craft-catalog.yaml)的 `families`）——铺满不是"一个任意宽的大柜子"，而是**按目录展开成若干可制造的单元**（见[拆分设计](space-split-design.md)）：
+
+- **落得成一台**（净宽 ≤ 两扇门上限）：得到一台合规单元，id 为 `{原id}_u1`，宽度是**净宽**（扣了现场收口）；
+- **落不成**（墙太长）：**停问**——目录还没给标准单元宽档，代码不替它编档位；停问说清两条路：把这块空间缩短，或改用 `rooms[].spaces[]` 并在约束里写 `split=equal`（先按等分给一版，标成助手假设）；
+- 展开出来的单元继承原件的 `manufacture`（"这件不用做"跟着单元走）。
 
 ## 拒绝条件
 
