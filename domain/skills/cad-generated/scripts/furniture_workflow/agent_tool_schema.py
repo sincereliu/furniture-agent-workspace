@@ -134,12 +134,10 @@ _OPENAI_TOOLS: list[dict[str, Any]] = [
                         "description": (
                             "Rooms in the home project, each with items[] and "
                             "optional openings[] for room doors and windows. "
-                            "Use spaces[] when the customer describes an area to "
-                            "fill (such as the north wall, 2400 for a wardrobe) "
-                            "instead of a unit: it carries id/kind/mode/host_wall/"
-                            "offset_mm/width_mm plus constraints, expands into "
-                            "items[] deterministically, and stops to ask when the "
-                            "workshop catalog lacks a number instead of guessing."
+                            "A whole wall of cabinets is one wall item with "
+                            "placement.fill true and kind set to a craft-catalog "
+                            "family. The free span of that wall becomes one or "
+                            "more cabinets, each no wider than two door leaves."
                         ),
                     },
                     "decisions": deepcopy(_DECISIONS_PROPERTY),

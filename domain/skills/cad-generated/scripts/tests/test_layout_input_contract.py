@@ -194,9 +194,9 @@ class LayoutHttpContractTests(unittest.TestCase):
         response = asyncio.run(
             room_http.plan_room(room_http.RoomSceneRequest(room=narrow, items=[item]))
         )
-        # 墙长 900、件从 100 起铺满 → 空段 800 → 净宽 800 − 收口 60 = 740。
+        # 墙长 900、件从 100 起铺满 → 空段 800，宽度就是 800。
         self.assertEqual(response.items[0]["id"], "cabinet_u1")
-        self.assertEqual(response.items[0]["width"], 740)
+        self.assertEqual(response.items[0]["width"], 800)
         self.assertEqual(response.items[0]["furniture_category"], "floor_cabinet")
         self.assertIs(response.items[0]["manufacture"], False)
 

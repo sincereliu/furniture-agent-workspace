@@ -183,10 +183,7 @@ class RoomSceneLayoutTests(unittest.TestCase):
         self.assertIn('<canvas id="scene"', output["viewer"]["html"])
 
     def test_fill_expands_into_a_compliant_unit_with_a_derived_width(self) -> None:
-        """铺满：宽度仍由墙上空段算出，但结果是**一台合规单元**（不再是任意宽的包件）。
-
-        小房间（900 宽）北墙铺满 → 净宽 900 − 收口 60 = 840，正好一台（衣柜两扇门上 900）。
-        """
+        """铺满：宽度由墙上空段算出。900 宽的北墙不超过两扇门上限，就是一台 900。"""
         scene = plan_scene(
             {
                 "id": "narrow",
@@ -208,38 +205,37 @@ class RoomSceneLayoutTests(unittest.TestCase):
             ],
         )
         self.assertEqual([item.id for item in scene.items], ["wardrobe_run_u1"])
-        self.assertEqual(scene.items[0].width, 840.0)
+        self.assertEqual(scene.items[0].width, 900.0)
         self.assertEqual(scene.items[0].placement.host_wall, "north")
 
-    def test_a_wide_fill_stops_and_asks_instead_of_faking_one_big_envelope(self) -> None:
-        """一面 3000 的墙铺满 → **停问**（不再给一个 3000 宽的假包络），并指出两条路。"""
-        from furniture_layout.space_split import SpaceInfeasible
-
-        with self.assertRaises(SpaceInfeasible) as caught:
-            plan_scene(
+    def test_a_wide_fill_covers_the_wall_with_several_units(self) -> None:
+        """一面 3000 的墙铺满：衣柜一台最多 900，分成四台，宽度加起来是 3000。"""
+        scene = plan_scene(
+            {
+                "id": "wide",
+                "name": "宽间",
+                "width_mm": 3000,
+                "depth_mm": 3000,
+                "height_mm": 3200,
+            },
+            [
                 {
-                    "id": "wide",
-                    "name": "宽间",
-                    "width_mm": 3000,
-                    "depth_mm": 3000,
-                    "height_mm": 3200,
-                },
-                [
-                    {
-                        "id": "wardrobe_run",
-                        "category": "wardrobe",
-                        "furniture_category": "floor_cabinet",
-                        "kind": "wardrobe",
-                        "depth": 600,
-                        "height": 2400,
-                        "placement": {"mode": "wall", "host_wall": "north", "offset_mm": 0, "fill": True},
-                    }
-                ],
-            )
-        message = str(caught.exception)
-        self.assertIn("3000", message)
-        self.assertIn("split=equal", message, "要指出等分那条路")
-        self.assertIn("spaces[]", message, "并说清走哪条路才用得上它")
+                    "id": "wardrobe_run",
+                    "category": "wardrobe",
+                    "furniture_category": "floor_cabinet",
+                    "kind": "wardrobe",
+                    "depth": 600,
+                    "height": 2400,
+                    "placement": {"mode": "wall", "host_wall": "north", "offset_mm": 0, "fill": True},
+                }
+            ],
+        )
+        self.assertEqual(
+            [item.id for item in scene.items],
+            ["wardrobe_run_u1", "wardrobe_run_u2", "wardrobe_run_u3", "wardrobe_run_u4"],
+        )
+        self.assertEqual([item.width for item in scene.items], [750.0, 750.0, 750.0, 750.0])
+        self.assertEqual(sum(item.width for item in scene.items), 3000.0)
 
     def test_a_fill_without_a_kind_stops_and_asks(self) -> None:
         """铺满不说柜类 → 停问（代码不替它猜词表里的哪一类）。"""
@@ -419,11 +415,7 @@ class RoomSceneLayoutTests(unittest.TestCase):
 
 class ProjectLayoutAdmissionTests(unittest.TestCase):
     def test_fill_width_is_derived_when_omitted(self) -> None:
-        """铺满不写宽度：仍旧由墙上空段算出，再按目录展开成一组合规单元。
-
-        窄间（900 宽）北墙铺满 → 净宽 840，一台。宽墙会停问（见 RoomSceneLayoutTests
-        里那条），因为目录还没给标准单元宽档。
-        """
+        """铺满不写宽度：仍旧由墙上空段算出。窄间（900 宽）北墙是一台 900。"""
         item = {
             "id": "wardrobe_run",
             "category": "wardrobe",
@@ -447,7 +439,7 @@ class ProjectLayoutAdmissionTests(unittest.TestCase):
         )
         units = output["rooms"][0]["items"]
         self.assertEqual([unit["id"] for unit in units], ["wardrobe_run_u1"])
-        self.assertEqual(units[0]["width"], 840)
+        self.assertEqual(units[0]["width"], 900)
 
     def test_fixed_item_still_requires_width(self) -> None:
         item = {"id": "fixed", "category": "wardrobe", "depth": 600,

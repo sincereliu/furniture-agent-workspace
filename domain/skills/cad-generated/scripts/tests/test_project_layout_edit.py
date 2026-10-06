@@ -344,17 +344,25 @@ class ProjectLayoutEditTests(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, 422)
         self.assertIn("move does not support: rotation_z_deg", str(ctx.exception.detail))
 
-    def test_a_fill_that_is_too_wide_stops_and_asks(self) -> None:
-        """铺满的墙超出两扇门上限 → **建项目时就停问**（不再给一个做不出来的宽包络）。
-
-        而且停问要说清两条路：缩小空间，或改用 `spaces[]` 写 `split=equal` 先按等分给一版
-        （目录还没给标准单元宽档，代码不替它编档位）。
-        """
-        with self.assertRaises(ValueError) as caught:
-            self._project(fill=True)
-        message = str(caught.exception)
-        self.assertIn("split=equal", message)
-        self.assertIn("spaces[]", message)
+    def test_a_full_north_wall_becomes_five_wardrobes(self) -> None:
+        """北墙铺满：衣柜一台最多 900。4000 的墙是五台 800，沿墙接开。"""
+        project = self._project(fill=True)
+        document = self._document(project.id)
+        expected = (
+            ("wardrobe_u1", 0),
+            ("wardrobe_u2", 800),
+            ("wardrobe_u3", 1600),
+            ("wardrobe_u4", 2400),
+            ("wardrobe_u5", 3200),
+        )
+        for item_id, offset in expected:
+            item = self._item(document, "bedroom", item_id)
+            self.assertEqual(item["width"], 800)
+            self.assertEqual(item["placement"]["offset_mm"], offset)
+            self.assertEqual(item["placement"]["host_wall"], "north")
+            self.assertFalse(item["placement"]["fill"])
+        desk = self._item(document, "bedroom", "desk")
+        self.assertEqual(desk["placement"]["origin_x_mm"], 2600)
 
     # ---- 门：本机来源 + 灰度开关 ----
 

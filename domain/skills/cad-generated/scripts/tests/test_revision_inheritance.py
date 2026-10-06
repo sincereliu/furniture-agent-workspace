@@ -131,19 +131,18 @@ class EnvelopeJudgeTests(unittest.TestCase):
             self.assertIn("cabinet_2", diff["changed"])
 
     def test_fill_item_width_follows_the_room(self) -> None:
-        """设计稿的 `fill` 例外：房间一变，铺满那件的宽度必变，判据必须说"变了"。
+        """房间一变，铺满那件的宽度必变，判据必须说"变了"。
 
-        注意跟的是**所在墙的长度**（北墙长度 = 房间总宽），而且 **宽度是净的**
-        （扣了收口）。房间取窄的（≤ 两扇门上限 960）才落得成一台合规单元；
-        宽墙现在**停问**（目录还没给标准单元宽档），不再给假包络。
+        跟的是所在墙的长度（北墙长度 = 房间总宽），宽度等于这段墙。
+        两间都窄于衣柜两扇门上限 900，所以各是一台。
         """
-        narrow = studio_layout(fill=True, room_width_mm=900)
-        wide = studio_layout(fill=True, room_width_mm=950)
+        narrow = studio_layout(fill=True, room_width_mm=800)
+        wide = studio_layout(fill=True, room_width_mm=860)
         diff = envelope_diff(narrow, wide)
         self.assertFalse(diff["same"])
         self.assertEqual(diff["resized"], ["cabinet_1_u1"])
-        self.assertEqual(envelope_set(narrow)["cabinet_1_u1"][1], 840.0)
-        self.assertEqual(envelope_set(wide)["cabinet_1_u1"][1], 890.0)
+        self.assertEqual(envelope_set(narrow)["cabinet_1_u1"][1], 800.0)
+        self.assertEqual(envelope_set(wide)["cabinet_1_u1"][1], 860.0)
 
 
 class ByteEqualityTests(unittest.TestCase):
@@ -198,8 +197,8 @@ class ByteEqualityTests(unittest.TestCase):
 
     def test_room_change_moves_a_fill_item_and_alters_its_panels(self) -> None:
         """铺满贴着北墙：房间变宽 → 它变宽 → 板件内容必变（判据不能粗判"房间变了可继承"）。"""
-        narrow = stable_digest(self._panel_output(studio_layout(fill=True, room_width_mm=900)))
-        wide = stable_digest(self._panel_output(studio_layout(fill=True, room_width_mm=950)))
+        narrow = stable_digest(self._panel_output(studio_layout(fill=True, room_width_mm=800)))
+        wide = stable_digest(self._panel_output(studio_layout(fill=True, room_width_mm=860)))
         self.assertNotEqual(narrow, wide)
 
 

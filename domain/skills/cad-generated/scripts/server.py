@@ -150,22 +150,17 @@ room_scene_editor = room_http.room_scene_editor
 
 
 class ProjectLayoutEditRequest(BaseModel):
-    """页面上改项目布局：改**一件**（`move` / `rotate` / `resize`）或改**一块空间**（`space`）。
+    """页面上改项目布局：改一件（`move` / `rotate` / `resize`）。
 
     `expected_version` 必填：它是页面最近一次从 `/layout` 看到的 `version`。
     对不上就拒绝——页面上的画面已经过期，不能拿它去覆盖。
-
-    两类 op 的字段名跟各自契约走：件级用 `width`/`depth`/`height`（家具契约），
-    空间级用 `width_mm`/`offset_mm`（空间契约）。身份也各要一个：件要 `item_id`，
-    空间要 `space_id`——**不许两个都给**（说不清改的是哪一个）。
     """
 
     model_config = ConfigDict(extra="forbid")
 
     expected_version: str = Field(..., min_length=1, description="页面最近看到的 version")
-    op: Literal["move", "rotate", "resize", "space"]
-    item_id: str | None = Field(default=None, min_length=1)
-    space_id: str | None = Field(default=None, min_length=1)
+    op: Literal["move", "rotate", "resize"]
+    item_id: str = Field(..., min_length=1)
     mode: Literal["wall", "free"] | None = None
     host_wall: Literal["south", "east", "north", "west"] | None = None
     offset_mm: float | None = Field(default=None, ge=0)
@@ -176,18 +171,6 @@ class ProjectLayoutEditRequest(BaseModel):
     width: float | None = Field(default=None, gt=0)
     depth: float | None = Field(default=None, gt=0)
     height: float | None = Field(default=None, gt=0)
-    width_mm: float | None = Field(default=None, gt=0)
-
-    @model_validator(mode="after")
-    def _require_the_right_identity(self) -> "ProjectLayoutEditRequest":
-        if self.op == "space":
-            if not self.space_id:
-                raise ValueError("space edit requires space_id")
-            if self.item_id:
-                raise ValueError("space edit must not carry item_id")
-        elif not self.item_id:
-            raise ValueError(f"{self.op} edit requires item_id")
-        return self
 
 
 class ProjectLayoutUndoRequest(BaseModel):

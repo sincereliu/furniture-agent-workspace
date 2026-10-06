@@ -14,15 +14,11 @@ description: 用于 layout_plan 阶段，也是家具流水线的入口。当用
 - 项目统一整理成非空的 `rooms[]`，只有一件家具也要提供所属房间。每间房必须有 `id`、`width_mm`、`depth_mm`、`height_mm`；缺尺寸就问，不编造。家具写在该房间的 `items[]`，墙上的门窗写在 `openings[]`（`kind: door|window`）。
 - 每件家具给 `id`、`category`、深度、高度和 `placement`；固定宽度的件还要给 `width`。`category` 是给人看的种类，不决定是否制造。
 - 要做成柜的件写 `furniture_category: floor_cabinet|wall_cabinet`。`wall_cabinet` 表示吊柜，不表示靠墙摆放。只有客户点名某件不需要制造时才写 `manufacture: false`；该件仍参与摆放，但不进入板件阶段。
-- `placement.mode` 只有 `wall` 和 `free`：靠墙写 `host_wall`、可选 `offset_mm`；自由摆写局部原点坐标和转角。`fill: true` 是 `wall` 的选项，可省 `width`，由墙上空段计算；**铺满必须写 `kind`（柜类）**——它按工艺目录展开成可制造的单元，墙太长时会停问（目录还没给标准单元宽档）。吊柜离地写 `placement.origin_z_mm`。坐标、点序和拒绝条件见[空间布局规则](references/spatial-layout-rules.md)。
+- `placement.mode` 只有 `wall` 和 `free`：靠墙写 `host_wall`、可选 `offset_mm`；自由摆写局部原点坐标和转角。客户要**某一面墙的柜子**时，在那面墙上写 `fill: true`，并写 `kind`（柜类，取[工艺目录](references/craft-catalog.yaml)的 `families`）。宽度可省：空着的那段墙铺满，放得进一台就是一台，放不下就按两扇门的宽度上限接成两台、三台，沿墙排开。吊柜离地写 `placement.origin_z_mm`。坐标、点序和拒绝条件见[空间布局规则](references/spatial-layout-rules.md)。
+- 客户已经说清某一台的宽度时，直接给这台的 `width`，不要铺满。
 - 客户没点名家具清单时，按[房间场景指南](references/room-scene-guide.md)列出待确认假设，得到客户认可后再调用工具。
 
 输入写法见[示例](references/input-examples.md)。
-
-**两种输入，选一种**：
-
-- **单元（`rooms[].items[]`）**：客户已经说清"这一台 800 宽、两扇门"时直接给包络；
-- **空间（`rooms[].spaces[]`）**：客户说的是**一块地方要做什么柜**（"北墙这 2400 做衣柜""餐边那 1.8 米做薄柜"）时给空间——写 `id` / `kind`（柜类，取[工艺目录](references/craft-catalog.yaml)里的键）/ `mode` / 墙与起端 / 净宽，以及**约束**（功能格、通顶、开门方式、收口）。**不要写"分几格、每格多宽"**，那是解，由求解器算；它会按目录给出合规单元，并在**目录缺项或做不出来时停问**（把缺什么、可行区间说清）——这时按它的话去问客户或车间，**不要自己编宽度**。
 
 ## 操作流程
 
@@ -36,7 +32,7 @@ description: 用于 layout_plan 阶段，也是家具流水线的入口。当用
 ## 按需阅读
 
 - 改坐标、靠墙/自由摆、`fill` 或摆放检查：[空间布局规则](references/spatial-layout-rules.md)；定位实现文件与测试：[运行时映射](references/runtime-map.md)。
-- 改**空间 → 单元**（拆分、钉住、工艺数字）：[拆分设计](references/space-split-design.md) 与[工艺目录填写说明](references/craft-catalog.md)。
+- 改沿墙铺满拆成几台，或工艺目录里的门宽：[沿墙铺满](references/space-split-design.md) 与[工艺目录填写说明](references/craft-catalog.md)。
 - 改输入示例：[输入示例](references/input-examples.md)；客户没给清单：[房间场景指南](references/room-scene-guide.md)。
 - 排查房间页、预览服务或重开项目：[预览维护](references/preview-ops.md)。
 - 改可执行柜类：[可执行柜类](references/intake/catalog.yaml)。未落地需求才读 [backlog](references/backlog.md)。
