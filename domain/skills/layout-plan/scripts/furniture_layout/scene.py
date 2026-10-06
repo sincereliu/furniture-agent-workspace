@@ -36,9 +36,6 @@ PLACEMENT_FIELDS = frozenset({
 ITEM_FIELDS = frozenset({
     "id", "label", "category", "width", "depth", "height", "placement",
     "furniture_category", "manufacture",
-    #: 只对沿墙铺满（`placement.fill: true`）有意义：这块墙要做什么柜，
-    #: 取值来自工艺目录的 `families`，用来决定一台柜子最宽多少。
-    "kind",
 })
 PLACED_ITEM_FIELDS = ITEM_FIELDS | {"footprint", "clearances_mm"}
 
@@ -292,8 +289,6 @@ class ItemSpec:
     placement: PlacementRequest
     furniture_category: str | None = None
     manufacture: bool = True
-    #: 沿墙铺满时的柜类（见 ITEM_FIELDS 的说明）：铺满的墙要按目录展开成合规单元。
-    kind: str | None = None
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any], *, index: int = 0) -> "ItemSpec":
@@ -315,12 +310,6 @@ class ItemSpec:
         category = text(data, "category")
         if not category:
             raise ValueError(f"items[{index}].category is required")
-        kind = text(data, "kind") or None
-        if kind and not placement.fill:
-            raise ValueError(
-                f"items[{index}].kind only applies to fill items: 只有"
-                "「把这条墙铺满」才需要在件上说柜类"
-            )
         return cls(
             id=item_id,
             label=text(data, "label") or item_id,
@@ -331,7 +320,6 @@ class ItemSpec:
             placement=placement,
             furniture_category=_optional_furniture_category(data, index),
             manufacture=boolean(data, "manufacture", default=True),
-            kind=kind,
         )
 
 
@@ -348,8 +336,6 @@ class PlacedItem:
     clearances_mm: dict[str, float]
     furniture_category: str | None = None
     manufacture: bool = True
-    #: 只在展开前的铺满件上有值，用来取门宽上限。展开后的单元不带 kind。
-    kind: str | None = None
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any], *, index: int = 0) -> "PlacedItem":
@@ -392,7 +378,6 @@ class PlacedItem:
             },
             furniture_category=_optional_furniture_category(data, index),
             manufacture=boolean(data, "manufacture", default=True),
-            kind=text(data, "kind") or None,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -409,8 +394,6 @@ class PlacedItem:
         }
         if self.furniture_category is not None:
             payload["furniture_category"] = self.furniture_category
-        if self.kind is not None:
-            payload["kind"] = self.kind
         if not self.manufacture:
             payload["manufacture"] = False
         return payload
@@ -490,7 +473,7 @@ def require_identifier(value: str, *, where: str) -> str:
     为什么卡在入口：板件阶段用这个 id 拼板件编号（`{cabinet_id}__{role}`），
     不合格的 id（`cabinet-1`、`1cabinet`、`a__b`）**建项目时看不出来**，
     要跑到板件才炸。只校验**输入**，不校验读取——库里已有的旧 id 仍能打开，
-    由一次性迁移改名（见 references/craft-catalog.md 的"已决定"段与 backlog）。
+    由一次性迁移改名（见 references/backlog.md）。
     """
     if not ITEM_ID_PATTERN.fullmatch(value) or PANEL_ID_SEPARATOR in value:
         raise ValueError(

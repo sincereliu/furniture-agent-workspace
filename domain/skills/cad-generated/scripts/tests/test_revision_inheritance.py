@@ -60,8 +60,6 @@ def studio_layout(
     }
     if fill:
         item["placement"]["fill"] = True
-        # 铺满要按柜类取门宽/进深/踢脚：目录里的键。
-        item["kind"] = "wardrobe" if furniture_category == "floor_cabinet" else "sideboard"
     else:
         item["width"] = width
     return ProjectLayout.from_source(
@@ -134,15 +132,14 @@ class EnvelopeJudgeTests(unittest.TestCase):
         """房间一变，铺满那件的宽度必变，判据必须说"变了"。
 
         跟的是所在墙的长度（北墙长度 = 房间总宽），宽度等于这段墙。
-        两间都窄于衣柜两扇门上限 900，所以各是一台。
         """
         narrow = studio_layout(fill=True, room_width_mm=800)
         wide = studio_layout(fill=True, room_width_mm=860)
         diff = envelope_diff(narrow, wide)
         self.assertFalse(diff["same"])
-        self.assertEqual(diff["resized"], ["cabinet_1_u1"])
-        self.assertEqual(envelope_set(narrow)["cabinet_1_u1"][1], 800.0)
-        self.assertEqual(envelope_set(wide)["cabinet_1_u1"][1], 860.0)
+        self.assertEqual(diff["resized"], ["cabinet_1"])
+        self.assertEqual(envelope_set(narrow)["cabinet_1"][1], 800.0)
+        self.assertEqual(envelope_set(wide)["cabinet_1"][1], 860.0)
 
 
 class ByteEqualityTests(unittest.TestCase):

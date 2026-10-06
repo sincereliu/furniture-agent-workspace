@@ -31,7 +31,6 @@ rooms:
       - id: wardrobe
         category: wardrobe
         furniture_category: floor_cabinet
-        kind: wardrobe          # 铺满要写柜类：这段墙按两扇门上限拆成一台或几台
         depth: 600
         height: 2400
         placement:

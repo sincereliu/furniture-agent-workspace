@@ -8,7 +8,7 @@
 
 **问题**：下游 `admit_cabinet_id()` 要求 id 是**合法 Python 标识符且不含 `__`**（它还要拿来拼板件 id `{cabinet_id}__{role}`），但布局入口不校验——`cabinet-1` 这种 id 能建项目、能过摆放检查、能确认，**到板件阶段才报错**（实测：`admit_cabinet_id(None, fallback="cabinet-1")` → `ValueError`）。
 
-**已修（2026-10-02）**：`scene.parse_item_specs()` 在入口集中校验（全屋 / 单间 / 编辑三个入口共用 `plan_scene`），报错点名是哪一件并说清为什么；**只校验输入、不校验读取**（库里旧 id 仍打得开）。跨阶段规则一致性由 `tests/test_skill_architecture.py` 钉住——阶段之间不互相 import，所以两边各写一条规则，测试盯着不许漂移。铺满展开出的单元 id 是 `{原id}_u1` 这种形状，同样要能当板件编号。
+**已修（2026-10-02）**：`scene.parse_item_specs()` 在入口集中校验（全屋 / 单间 / 编辑三个入口共用 `plan_scene`），报错点名是哪一件并说清为什么；**只校验输入、不校验读取**（库里旧 id 仍打得开）。跨阶段规则一致性由 `tests/test_skill_architecture.py` 钉住——阶段之间不互相 import，所以两边各写一条规则，测试盯着不许漂移。家具 id 本身就要能当板件编号。
 
 **配套**：两个测试夹具（`test_room_level_confirmation`、`test_decision_log`）里的连字符 id 改成下划线；客户那个 `cabinet-1` 的工程用一次性脚本改名（几何不变，`working_ops` 的 `item_id` 一起改），**脚本不入库**——仓库不迁移旧数据（见编排层 backlog 已知缺口第 3 条）。
 
@@ -52,8 +52,8 @@
 
 ## 已落地（留档）
 
-- 沿墙铺满：客户在一面墙上写 `fill: true` 和 `kind`，这段空墙铺满成一台或几台，宽度加起来等于这段墙。口径在[沿墙铺满](space-split-design.md)。
-- 页面写项目（P3）：`POST /api/project/{id}/layout/edit` —— 页面上改一件的摆放，落成一个新 Revision（未确认）。几何复用房间场景编辑那套 op 词表与重算/准入（新增 `project_edit.py`：`RoomScene` ↔ 场景源往返 + `plan_scene`），版本与生命周期归 `furniture_workflow/project_layout_edit.py` 门面；三道门（本机来源 / 灰度开关 / `expected_version`）任一不过都不落盘。展开前的铺满件拒绝摆放类 op（宽与偏移由墙上空段派生）；展开后的各台是普通靠墙件。设计见 [页面写项目设计](../../cad-generated/references/project-layout-edit-design.md)；预览页**尚未**接上这个 op（属单页内核收敛）。
+- 沿墙铺满：客户在一面墙上写 `fill: true`，这段空墙就是这一台的包络宽。不按门宽或内部分格拆成几台。口径在[空间布局规则](spatial-layout-rules.md)。
+- 页面写项目（P3）：`POST /api/project/{id}/layout/edit` —— 页面上改一件的摆放，落成一个新 Revision（未确认）。几何复用房间场景编辑那套 op 词表与重算/准入（新增 `project_edit.py`：`RoomScene` ↔ 场景源往返 + `plan_scene`），版本与生命周期归 `furniture_workflow/project_layout_edit.py` 门面；三道门（本机来源 / 灰度开关 / `expected_version`）任一不过都不落盘。铺满件拒绝摆放类 op（宽与偏移由墙上空段派生）。设计见 [页面写项目设计](../../cad-generated/references/project-layout-edit-design.md)；预览页**尚未**接上这个 op（属单页内核收敛）。
 - 页面身份与房间导航：两页页眉各挂一块身份牌（预览「只读预览 · 由对话更新」 / 草稿「草稿 · 不影响项目」）；多间房的切换从下拉改成页眉药丸按钮（只有一间房时整条藏掉），当前房间写进地址栏 `?room=<id>`，切房间时 `history.replaceState` 跟着改，链接可分享；深链按房间 → 视角 → 选中件依次生效。
 - 只读分享形态：预览页带 `?mode=view`（`preview_url(id, mode="view")` / `open_project_preview(id, share=True)`）时牌子换「只读分享 · 链接可转发」、提示语换成"只看不改"、**不生成「退出」按钮**。它只是表达，不承担权限；写权限的门在服务端（见 [访问模式与外网分享](../../cad-generated/references/preview-access-design.md)）。
 - 内容指纹收敛到一个实现：`workflow_digest.stable_digest`（key 排序 + 紧凑分隔符的规范化 JSON 上取 sha256），`workflow_constants` / `workflow_project` 都改用它，`open_preview` 的 `version` 从「修订号」改成内容版本 `layout_sha256:确认位`。

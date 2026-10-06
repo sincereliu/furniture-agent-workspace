@@ -55,6 +55,14 @@ class LayoutInputContractTests(unittest.TestCase):
             with self.subTest(alias=alias), self.assertRaisesRegex(ValueError, alias):
                 plan_scene(ROOM, [{**ITEM, alias: 1000}])
 
+    def test_cabinet_kind_is_not_a_layout_field(self) -> None:
+        with self.assertRaisesRegex(ValueError, "kind"):
+            plan_scene(ROOM, [{**ITEM, "kind": "wardrobe"}])
+
+    def test_legacy_spaces_field_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "spaces"):
+            plan_scene({**ROOM, "spaces": [{"id": "north_run"}]}, [ITEM])
+
     def test_item_ids_must_be_usable_by_the_panel_stage(self) -> None:
         """家具 id 的形状卡在**入口**：板件阶段拿它拼板件编号。
 
@@ -174,29 +182,20 @@ class LayoutHttpContractTests(unittest.TestCase):
             with self.subTest(data=data), self.assertRaises(ValidationError):
                 room_http.RoomSceneRequest(**data)
 
-    def test_http_fill_expands_and_keeps_manufacturing_flags(self) -> None:
-        """铺满走 HTTP：窄墙落成一台合规单元，`manufacture: false` 照样带过去。
-
-        而且**没写柜类就停问**——铺满也要按目录展开，代码不替它猜柜类。
-        """
+    def test_http_fill_keeps_one_envelope_and_manufacturing_flags(self) -> None:
+        """铺满走 HTTP：窄墙仍是这一台，宽度是空段，`manufacture: false` 照样带过去。"""
         item = deepcopy(ITEM)
         del item["width"]
         item["placement"]["fill"] = True
         item["manufacture"] = False
         narrow = {**ROOM, "width_mm": 900}
-        with self.assertRaises(HTTPException) as caught:
-            asyncio.run(
-                room_http.plan_room(room_http.RoomSceneRequest(room=narrow, items=[item]))
-            )
-        self.assertEqual(caught.exception.status_code, 422)
-        self.assertIn("没说要做什么柜", str(caught.exception.detail))
-        item["kind"] = "wardrobe"
         response = asyncio.run(
             room_http.plan_room(room_http.RoomSceneRequest(room=narrow, items=[item]))
         )
         # 墙长 900、件从 100 起铺满 → 空段 800，宽度就是 800。
-        self.assertEqual(response.items[0]["id"], "cabinet_u1")
+        self.assertEqual(response.items[0]["id"], "cabinet")
         self.assertEqual(response.items[0]["width"], 800)
+        self.assertTrue(response.items[0]["placement"]["fill"])
         self.assertEqual(response.items[0]["furniture_category"], "floor_cabinet")
         self.assertIs(response.items[0]["manufacture"], False)
 

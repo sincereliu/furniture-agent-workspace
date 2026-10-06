@@ -80,8 +80,6 @@ def layout_source(
                         "height": 2200,
                         "placement": wardrobe_placement,
                         **({} if fill else {"width": 1800.0}),
-                        # 铺满要写柜类（工艺目录里的键），否则停问的是"没说做什么柜"。
-                        **({"kind": "wardrobe"} if fill else {}),
                     },
                     {
                         "id": "desk",
@@ -344,23 +342,15 @@ class ProjectLayoutEditTests(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, 422)
         self.assertIn("move does not support: rotation_z_deg", str(ctx.exception.detail))
 
-    def test_a_full_north_wall_becomes_five_wardrobes(self) -> None:
-        """北墙铺满：衣柜一台最多 900。4000 的墙是五台 800，沿墙接开。"""
+    def test_a_full_north_wall_is_one_envelope(self) -> None:
+        """北墙铺满：4000 的墙是一台，宽度就是这段墙。"""
         project = self._project(fill=True)
         document = self._document(project.id)
-        expected = (
-            ("wardrobe_u1", 0),
-            ("wardrobe_u2", 800),
-            ("wardrobe_u3", 1600),
-            ("wardrobe_u4", 2400),
-            ("wardrobe_u5", 3200),
-        )
-        for item_id, offset in expected:
-            item = self._item(document, "bedroom", item_id)
-            self.assertEqual(item["width"], 800)
-            self.assertEqual(item["placement"]["offset_mm"], offset)
-            self.assertEqual(item["placement"]["host_wall"], "north")
-            self.assertFalse(item["placement"]["fill"])
+        item = self._item(document, "bedroom", "wardrobe")
+        self.assertEqual(item["width"], 4000)
+        self.assertEqual(item["placement"]["offset_mm"], 0)
+        self.assertEqual(item["placement"]["host_wall"], "north")
+        self.assertTrue(item["placement"]["fill"])
         desk = self._item(document, "bedroom", "desk")
         self.assertEqual(desk["placement"]["origin_x_mm"], 2600)
 

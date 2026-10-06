@@ -182,8 +182,8 @@ class RoomSceneLayoutTests(unittest.TestCase):
         self.assertIn("衣柜", output["preview"]["svg"])
         self.assertIn('<canvas id="scene"', output["viewer"]["html"])
 
-    def test_fill_expands_into_a_compliant_unit_with_a_derived_width(self) -> None:
-        """铺满：宽度由墙上空段算出。900 宽的北墙不超过两扇门上限，就是一台 900。"""
+    def test_fill_width_is_the_free_span(self) -> None:
+        """铺满：宽度由墙上空段算出。900 宽的北墙就是一台 900。"""
         scene = plan_scene(
             {
                 "id": "narrow",
@@ -197,19 +197,19 @@ class RoomSceneLayoutTests(unittest.TestCase):
                     "id": "wardrobe_run",
                     "category": "wardrobe",
                     "furniture_category": "floor_cabinet",
-                    "kind": "wardrobe",
                     "depth": 600,
                     "height": 2400,
                     "placement": {"mode": "wall", "host_wall": "north", "offset_mm": 0, "fill": True},
                 }
             ],
         )
-        self.assertEqual([item.id for item in scene.items], ["wardrobe_run_u1"])
+        self.assertEqual([item.id for item in scene.items], ["wardrobe_run"])
         self.assertEqual(scene.items[0].width, 900.0)
+        self.assertTrue(scene.items[0].placement.fill)
         self.assertEqual(scene.items[0].placement.host_wall, "north")
 
-    def test_a_wide_fill_covers_the_wall_with_several_units(self) -> None:
-        """一面 3000 的墙铺满：衣柜一台最多 900，分成四台，宽度加起来是 3000。"""
+    def test_a_wide_fill_stays_one_envelope(self) -> None:
+        """一面 3000 的墙铺满：仍是一台，宽度就是这段墙。"""
         scene = plan_scene(
             {
                 "id": "wide",
@@ -223,42 +223,52 @@ class RoomSceneLayoutTests(unittest.TestCase):
                     "id": "wardrobe_run",
                     "category": "wardrobe",
                     "furniture_category": "floor_cabinet",
-                    "kind": "wardrobe",
                     "depth": 600,
                     "height": 2400,
                     "placement": {"mode": "wall", "host_wall": "north", "offset_mm": 0, "fill": True},
                 }
             ],
         )
-        self.assertEqual(
-            [item.id for item in scene.items],
-            ["wardrobe_run_u1", "wardrobe_run_u2", "wardrobe_run_u3", "wardrobe_run_u4"],
-        )
-        self.assertEqual([item.width for item in scene.items], [750.0, 750.0, 750.0, 750.0])
-        self.assertEqual(sum(item.width for item in scene.items), 3000.0)
+        self.assertEqual([item.id for item in scene.items], ["wardrobe_run"])
+        self.assertEqual(scene.items[0].width, 3000.0)
+        self.assertEqual(scene.items[0].placement.offset_mm, 0.0)
+        self.assertTrue(scene.items[0].placement.fill)
 
-    def test_a_fill_without_a_kind_stops_and_asks(self) -> None:
-        """铺满不说柜类 → 停问（代码不替它猜词表里的哪一类）。"""
-        with self.assertRaisesRegex(ValueError, "没说要做什么柜"):
-            plan_scene(
+    def test_a_fill_that_starts_mid_wall_keeps_one_envelope(self) -> None:
+        scene = plan_scene(
+            {
+                "id": "wide",
+                "name": "宽间",
+                "width_mm": 2600,
+                "depth_mm": 3000,
+                "height_mm": 3200,
+            },
+            [
                 {
-                    "id": "narrow",
-                    "name": "窄间",
-                    "width_mm": 900,
-                    "depth_mm": 3000,
-                    "height_mm": 3200,
-                },
-                [
-                    {
-                        "id": "wardrobe_run",
-                        "category": "wardrobe",
-                        "furniture_category": "floor_cabinet",
-                        "depth": 600,
-                        "height": 2400,
-                        "placement": {"mode": "wall", "host_wall": "north", "offset_mm": 0, "fill": True},
-                    }
-                ],
-            )
+                    "id": "wardrobe_run",
+                    "category": "wardrobe",
+                    "furniture_category": "wall_cabinet",
+                    "manufacture": False,
+                    "depth": 350,
+                    "height": 800,
+                    "placement": {
+                        "mode": "wall",
+                        "host_wall": "north",
+                        "offset_mm": 200,
+                        "origin_z_mm": 1600,
+                        "fill": True,
+                    },
+                }
+            ],
+        )
+        unit = scene.items[0]
+        self.assertEqual(unit.id, "wardrobe_run")
+        self.assertEqual(unit.width, 2400.0)
+        self.assertEqual(unit.placement.offset_mm, 200.0)
+        self.assertEqual(unit.placement.origin_z_mm, 1600.0)
+        self.assertEqual(unit.furniture_category, "wall_cabinet")
+        self.assertFalse(unit.manufacture)
+        self.assertTrue(unit.placement.fill)
 
     def test_two_items_that_overlap_fail_validation(self) -> None:
         items = [
@@ -420,7 +430,6 @@ class ProjectLayoutAdmissionTests(unittest.TestCase):
             "id": "wardrobe_run",
             "category": "wardrobe",
             "furniture_category": "floor_cabinet",
-            "kind": "wardrobe",
             "depth": 600,
             "height": 2400,
             "placement": {"mode": "wall", "host_wall": "north", "offset_mm": 0, "fill": True},
@@ -438,7 +447,7 @@ class ProjectLayoutAdmissionTests(unittest.TestCase):
             ]
         )
         units = output["rooms"][0]["items"]
-        self.assertEqual([unit["id"] for unit in units], ["wardrobe_run_u1"])
+        self.assertEqual([unit["id"] for unit in units], ["wardrobe_run"])
         self.assertEqual(units[0]["width"], 900)
 
     def test_fixed_item_still_requires_width(self) -> None:

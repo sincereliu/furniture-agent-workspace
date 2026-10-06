@@ -13,7 +13,7 @@
 
 下游板件只读已确认的 `LayoutUnit`（`furniture_category` 为 `floor_cabinet` / `wall_cabinet`，且该件不是 `manufacture: false`）。客户点名不制造的包络留在房间里，不是 `LayoutUnit`。`room_shell.py` 写的房间外壳 STEP 不是柜体模型。
 
-**沿墙铺满**（`placement.fill` + `kind`）：这段空墙由 `space_split.unit_widths` 按[工艺目录](craft-catalog.yaml)里该柜类的门宽上限拆成一台或几台，沿墙接开，宽度加起来等于这段空墙。没有铺满的输入不读目录。口径见[沿墙铺满](space-split-design.md)。
+**沿墙铺满**（`placement.fill`）：这段空墙就是这一台的包络宽，id 不变。不按门宽或内部分格拆成几台。口径见[空间布局规则](spatial-layout-rules.md)。
 
 板件实际只依赖 `LayoutUnit` 的五个字段：`id`、`furniture_category`、`width`、`depth`、`height`。这五个不变，板件与制造的内容就不变，可以跨 Revision 继承（见编排层 [修订继承设计](../../cad-generated/references/revision-inheritance-design.md)）。沿墙铺满那件的 `width` 由该墙空段算出，改房间就会改它，所以这种件永远算变了，必须重算。
 
@@ -25,9 +25,7 @@
 | --- | --- | --- |
 | 房间、门窗、家具盒子的数据结构 | `scene.py` | schema |
 | 只读取规范字段；拒绝未知字段、非法布尔值和非有限数值 | `input_fields.py` | schema / validation |
-| 车间工艺目录（`craft-catalog.yaml`）的加载与准入：区间、档位、策略；**缺项停问** | `craft_catalog.py` | schema / validation |
-| 一段墙长拆成若干台的宽度：每台不超过两扇门上限，加起来等于这段墙 | `space_split.py` | calculation |
-| 全屋、单间和编辑共用的规划入口：解析 → 摆放 → 沿墙铺满拆成几台 → 几何准入 | `scene_planning.py` | calculation / validation |
+| 全屋、单间和编辑共用的规划入口：解析 → 摆放 → 几何准入 | `scene_planning.py` | calculation / validation |
 | 把靠墙、自由摆、沿墙铺满换成毫米坐标 | `placement.py` | calculation |
 | 检查盒子出不出房间、互相干涉不干涉、挡不挡门窗 | `placement_check.py` | calculation |
 | 上面几项有一项不过，就不建项目。不核对配进去的那张 SVG | `validation.py` | validation |
