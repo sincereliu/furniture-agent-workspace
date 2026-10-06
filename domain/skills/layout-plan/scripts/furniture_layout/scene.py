@@ -19,6 +19,10 @@ WALL_ENDS = {
     "west": ("south", "north"),
 }
 AGAINST_WALL = "wall"
+#: 家具 id 里**不能**用的值：`placement.against` 用 `wall` 表示"这一头贴到侧面的墙"。
+#: 柜子若也叫这个名字，`against: {west: "wall"}` 就永远读成贴墙——那台柜子点不到，
+#: 而且**不报错**（摆放照样成功，只是摆到了别处）。所以形状规则之外再留一个保留值。
+RESERVED_ITEM_IDS = frozenset({AGAINST_WALL})
 PLACEMENT_MODES = frozenset({"wall", "free"})
 EXECUTABLE_CATEGORIES = frozenset({"floor_cabinet", "wall_cabinet"})
 #: 家具单元 id 的形状。板件阶段拿它拼板件编号（`{cabinet_id}__{role}`），
@@ -529,18 +533,27 @@ def _against_token(value: Any, direction: str) -> str:
 
 
 def require_identifier(value: str, *, where: str) -> str:
-    """**家具单元 id 与空间 id** 的入口校验：合法标识符、不含 `__`。
+    """**家具单元 id** 的入口校验：合法标识符、不含 `__`、不是保留值。
 
     为什么卡在入口：板件阶段用这个 id 拼板件编号（`{cabinet_id}__{role}`），
     不合格的 id（`cabinet-1`、`1cabinet`、`a__b`）**建项目时看不出来**，
     要跑到板件才炸。只校验**输入**，不校验读取——库里已有的旧 id 仍能打开，
     由一次性迁移改名（见 references/backlog.md）。
+
+    保留值（`RESERVED_ITEM_IDS`）是**布局输入**这一侧的约束，跟形状规则无关：
+    `placement.against` 拿 `wall` 当"贴墙"，id 撞上它之后那句话就有两种读法，
+    而代码只会挑一种、不报错。板件阶段不受这条限制（它没有 `against`）。
     """
     if not ITEM_ID_PATTERN.fullmatch(value) or PANEL_ID_SEPARATOR in value:
         raise ValueError(
             f"{where} {value!r} is not usable: an id must be a Python identifier "
             "(letters, digits, underscore; not starting with a digit) and must not "
             "contain '__', because the panel stage builds panel ids from it"
+        )
+    if value in RESERVED_ITEM_IDS:
+        raise ValueError(
+            f"{where} {value!r} is reserved: placement.against uses {value!r} to "
+            "mean the side wall, so a cabinet cannot carry that id (rename it)"
         )
     return value
 

@@ -292,6 +292,16 @@ class SkillArchitectureTests(unittest.TestCase):
                 self.assertEqual(layout_ok, allowed, "layout-side id rule drifted")
                 self.assertEqual(panel_ok, allowed, "panel-side id rule drifted")
 
+        # 形状规则两边一致；`wall` 只是**布局输入**的保留值（`against` 拿它表示贴墙），
+        # 不是形状问题——形状两边都认，板件阶段没有 `against`，不受这条限制。
+        self.assertTrue(layout_scene.ITEM_ID_PATTERN.fullmatch("wall"))
+        self.assertEqual(
+            set(layout_scene.RESERVED_ITEM_IDS),
+            {layout_scene.AGAINST_WALL},
+            "保留值只该是 against 用的那个词；多一个都会变成没写进契约的隐藏规则",
+        )
+        admit_cabinet_id("wall")
+
     def test_layout_catalog_executable_families_match_runtime_supported_types(
         self,
     ) -> None:

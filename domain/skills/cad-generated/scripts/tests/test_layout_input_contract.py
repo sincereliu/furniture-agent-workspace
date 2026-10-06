@@ -612,6 +612,28 @@ class AgainstEndTests(unittest.TestCase):
                 ),
             ])
 
+    def test_a_cabinet_cannot_be_called_wall_because_against_reserves_it(self) -> None:
+        """`wall` 是 `against` 的保留值：柜子不能叫它。
+
+        不卡的话没有报错——`against: {west: "wall"}` 一律读成"贴西墙"，那台叫 `wall`
+        的柜子永远点不到，摆放照样成功、只是摆到了别处（这正是"点不到"最难查的形态）。
+        """
+        with self.assertRaisesRegex(ValueError, "items\\[0\\]\\.id 'wall' is reserved"):
+            plan_scene(ROOM, [
+                _cabinet("wall", host_wall="north", width=800),
+                _cabinet("b", host_wall="north", width=600, against={"west": "wall"}),
+            ])
+        # 只是撞上这一个值：长得像的名字照旧能用，id 原样保留。
+        for good in ("wall_cabinet", "wall1", "Wall", "walls"):
+            with self.subTest(good=good):
+                scene = plan_scene(ROOM, [_cabinet(good, host_wall="north", width=800)])
+                self.assertEqual(scene.items[0].id, good)
+        # `wall` 仍然只是**值**：写成贴墙照旧生效。
+        scene = plan_scene(ROOM, [
+            _cabinet("b", host_wall="north", width=600, against={"west": "wall"}),
+        ])
+        self.assertEqual(scene.items[0].placement.origin_x_mm, 0)
+
     def test_edit_keeps_against_until_the_cabinet_leaves_that_wall(self) -> None:
         scene = plan_scene(ROOM, [
             _cabinet("south_cab", host_wall="south", against={"east": "wall"}),
