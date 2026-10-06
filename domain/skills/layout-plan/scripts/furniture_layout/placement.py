@@ -29,6 +29,8 @@ WALL_ROTATION_DEG = {
 def resolve_placement(
     room: RoomModel,
     request: PlacementRequest,
+    *,
+    offset_given: bool | None = None,
 ) -> ResolvedPlacement:
     if request.mode not in PLACEMENT_MODES:
         raise ValueError(
@@ -50,6 +52,7 @@ def resolve_placement(
             origin_z_mm=request.origin_z_mm,
             rotation_z_deg=request.rotation_z_deg or 0.0,
             fill=False,
+            offset_given=False,
         )
 
     wall = request.host_wall
@@ -71,6 +74,9 @@ def resolve_placement(
         )
     offset = request.offset_mm or 0.0
     origin = wall_origin(room, wall, offset)
+    if offset_given is None:
+        # 非铺满的靠墙件总是带着沿墙起点；铺满则看请求里有没有写 offset_mm。
+        offset_given = True if not request.fill else request.offset_mm is not None
     return ResolvedPlacement(
         mode="wall",
         host_wall=wall,
@@ -80,6 +86,7 @@ def resolve_placement(
         origin_z_mm=request.origin_z_mm,
         rotation_z_deg=expected_rotation,
         fill=request.fill,
+        offset_given=offset_given,
     )
 
 
@@ -176,7 +183,9 @@ def _place_fill(
     already_placed: tuple[PlacedItem, ...],
 ) -> PlacedItem:
     # Validate the original request before replacing its computed offset.
-    resolve_placement(room, spec.placement)
+    # 客户有没有写 offset_mm，以这份原始请求为准；下面的 request 已换成算出的起点。
+    user_gave_offset = spec.placement.offset_mm is not None
+    resolve_placement(room, spec.placement, offset_given=user_gave_offset)
     wall = spec.placement.host_wall
     if wall not in WALLS:
         raise ValueError(f"item {spec.id!r} fill requires host_wall")
@@ -195,7 +204,7 @@ def _place_fill(
         rotation_z_deg=spec.placement.rotation_z_deg,
         fill=True,
     )
-    placement = resolve_placement(room, request)
+    placement = resolve_placement(room, request, offset_given=user_gave_offset)
     return build_placed_item(spec, room, placement, width=width)
 
 

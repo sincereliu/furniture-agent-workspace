@@ -128,6 +128,31 @@ class SceneEditTests(unittest.TestCase):
         self.assertNotIn("host_wall", placement)
         self.assertEqual(placement["origin_x_mm"], 300)
 
+    def test_move_back_to_wall_drops_the_free_rotation(self) -> None:
+        """自由摆放的转角留在源上。改回靠墙时把它拿掉，朝向改由这面墙决定。"""
+        source = _source()
+        source["items"][0]["placement"] = {
+            "mode": "free",
+            "origin_x_mm": 100,
+            "origin_y_mm": 100,
+            "rotation_z_deg": 15,
+        }
+        edited = apply_edit(
+            source,
+            {
+                "op": "move",
+                "item_id": "wardrobe",
+                "mode": "wall",
+                "host_wall": "north",
+                "offset_mm": 400,
+            },
+        )
+        placement = edited["items"][0]["placement"]
+        self.assertEqual(placement["mode"], "wall")
+        self.assertEqual(placement["offset_mm"], 400)
+        self.assertNotIn("rotation_z_deg", placement)
+        self.assertNotIn("origin_x_mm", placement)
+
     def test_move_origin_z_only(self) -> None:
         edited = apply_edit(
             _source(), {"op": "move", "item_id": "desk", "origin_z_mm": 100}

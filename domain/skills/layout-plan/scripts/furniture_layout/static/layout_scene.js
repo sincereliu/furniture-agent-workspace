@@ -646,21 +646,24 @@ export function mountLayout(canvas) {
       const center = footprintCenter(item.footprint);
       const midZ = (itemZStart + itemZEnd) / 2;
       if (!readOnly) {
-        const ring = new THREE.Mesh(
-          new THREE.TorusGeometry(Math.max(180, width * 0.06), 14, 8, 48),
-          new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.4, metalness: 0 }),
-        );
-        ring.rotation.x = Math.PI / 2;
-        ring.position.set(...roomToThree(center[0], center[1], midZ));
-        ring.userData = { kind: "ring", itemId: item.id };
-        addMesh(content, ring, pickables);
-        const rotateHandle = new THREE.Mesh(
-          new THREE.SphereGeometry(70, 16, 12),
-          new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.35, metalness: 0 }),
-        );
-        rotateHandle.position.set(...roomToThree(center[0] + 220, center[1], itemZEnd + 160));
-        rotateHandle.userData = { kind: "rotate", itemId: item.id };
-        addMesh(content, rotateHandle, pickables);
+        const fillsWall = item.placement && item.placement.fill;
+        if (!fillsWall) {
+          const ring = new THREE.Mesh(
+            new THREE.TorusGeometry(Math.max(180, width * 0.06), 14, 8, 48),
+            new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.4, metalness: 0 }),
+          );
+          ring.rotation.x = Math.PI / 2;
+          ring.position.set(...roomToThree(center[0], center[1], midZ));
+          ring.userData = { kind: "ring", itemId: item.id };
+          addMesh(content, ring, pickables);
+          const rotateHandle = new THREE.Mesh(
+            new THREE.SphereGeometry(70, 16, 12),
+            new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.35, metalness: 0 }),
+          );
+          rotateHandle.position.set(...roomToThree(center[0] + 220, center[1], itemZEnd + 160));
+          rotateHandle.userData = { kind: "rotate", itemId: item.id };
+          addMesh(content, rotateHandle, pickables);
+        }
         const heightHandle = new THREE.Mesh(
           new THREE.SphereGeometry(64, 16, 12),
           new THREE.MeshStandardMaterial({ color: 0x3b82f6, roughness: 0.35, metalness: 0 }),

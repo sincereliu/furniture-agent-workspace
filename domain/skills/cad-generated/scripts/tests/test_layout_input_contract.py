@@ -27,6 +27,7 @@ from furniture_layout.project_edit import apply_layout_edit, room_scene_source
 from furniture_layout.project_layout import ProjectLayout
 from furniture_layout.room_page import render_viewer
 from furniture_layout.scene import RoomScene
+from furniture_layout.scene_edit import apply_edit
 from furniture_layout.scene_planning import plan_scene
 
 
@@ -210,6 +211,210 @@ class LayoutHttpContractTests(unittest.TestCase):
                 asyncio.run(room_http.save_room_scene(request, local_request()))
             self.assertEqual(rejected.exception.status_code, 422)
             save.assert_not_called()
+
+
+NORTH = {"id": "room", "width_mm": 4000, "depth_mm": 3000, "height_mm": 2800}
+
+
+def _desk(offset: float) -> dict:
+    return {
+        "id": "desk",
+        "category": "desk",
+        "width": 1000,
+        "depth": 500,
+        "height": 850,
+        "placement": {"mode": "wall", "host_wall": "north", "offset_mm": offset},
+    }
+
+
+def _fill(*, height: float = 2200, **placement) -> dict:
+    return {
+        "id": "run",
+        "category": "wardrobe",
+        "depth": 600,
+        "height": height,
+        "placement": {"mode": "wall", "host_wall": "north", "fill": True, **placement},
+    }
+
+
+def _named(layout: ProjectLayout, item_id: str):
+    return next(item for item in layout.rooms[0].items if item.id == item_id)
+
+
+class FillSpanEditTests(unittest.TestCase):
+    def test_omitted_fill_offset_follows_the_longest_span(self) -> None:
+        """北墙 4000，西端一台宽 1000 的书桌。铺满没写 offset_mm。
+
+        书桌挪到 500：最长空段是 1500–4000，铺满宽 2500。
+        书桌挪到 2000：最长空段改成 0–2000，铺满宽 2000。
+        """
+        layout = ProjectLayout.from_source(
+            {"rooms": [{**NORTH, "items": [_desk(0), _fill()]}]}
+        )
+        run = _named(layout, "run")
+        self.assertEqual((run.placement.offset_mm, run.width), (1000, 3000))
+        self.assertFalse(run.placement.offset_given)
+        source = run.to_source()["placement"]
+        self.assertNotIn("offset_mm", source)
+        self.assertNotIn("offset_given", source)
+
+        beside = apply_layout_edit(
+            layout, {"op": "move", "item_id": "desk", "offset_mm": 500}
+        )
+        run = _named(beside, "run")
+        self.assertEqual((run.placement.offset_mm, run.width), (1500, 2500))
+        self.assertFalse(run.placement.offset_given)
+
+        across = apply_layout_edit(
+            layout, {"op": "move", "item_id": "desk", "offset_mm": 2000}
+        )
+        run = _named(across, "run")
+        self.assertEqual((run.placement.offset_mm, run.width), (0, 2000))
+        self.assertFalse(run.placement.offset_given)
+        self.assertEqual(_named(layout, "desk").placement.offset_mm, 0)
+
+    def test_door_fill_start_is_recomputed_with_the_room(self) -> None:
+        """门占北墙 0–900。铺满从 900 起、宽 3100。下一次请求不带着这个 900。
+
+        再在 1200 放一台宽 1000 的柜子后，最长空段是 2200–4000。
+        """
+        room = {
+            **NORTH,
+            "openings": [{
+                "id": "entry",
+                "kind": "door",
+                "wall": "north",
+                "offset_mm": 0,
+                "width_mm": 900,
+                "height_mm": 2100,
+            }],
+        }
+        scene = plan_scene(room, [_fill()])
+        run = scene.items[0]
+        self.assertEqual((run.placement.offset_mm, run.width), (900, 3100))
+        self.assertFalse(run.placement.offset_given)
+        source = run.to_source()
+        self.assertNotIn("offset_mm", source["placement"])
+        replanned = plan_scene(room, [source, _desk(1200)])
+        run = next(item for item in replanned.items if item.id == "run")
+        self.assertEqual((run.placement.offset_mm, run.width), (2200, 1800))
+        self.assertFalse(run.placement.offset_given)
+
+    def test_given_fill_offset_stays_on_its_span(self) -> None:
+        """写了 offset_mm: 1000 的铺满，书桌挪开后仍从 1000 铺到所在空段的终点。
+
+        书桌盖住 1000 时，这次编辑失败，原来的摆放不动。
+        """
+        layout = ProjectLayout.from_source(
+            {"rooms": [{**NORTH, "items": [_desk(0), _fill(offset_mm=1000)]}]}
+        )
+        run = _named(layout, "run")
+        self.assertTrue(run.placement.offset_given)
+        self.assertEqual((run.placement.offset_mm, run.width), (1000, 3000))
+        self.assertEqual(run.to_source()["placement"]["offset_mm"], 1000)
+        self.assertNotIn("offset_given", run.to_source()["placement"])
+
+        kept = apply_layout_edit(
+            layout, {"op": "move", "item_id": "desk", "offset_mm": 1500}
+        )
+        run = _named(kept, "run")
+        self.assertEqual((run.placement.offset_mm, run.width), (1000, 500))
+        self.assertTrue(run.placement.offset_given)
+
+        with self.assertRaisesRegex(ValueError, "fill offset_mm is not on a free span"):
+            apply_layout_edit(
+                layout, {"op": "move", "item_id": "desk", "offset_mm": 200}
+            )
+        self.assertEqual(_named(layout, "desk").placement.offset_mm, 0)
+        self.assertEqual(_named(layout, "run").width, 3000)
+
+    def test_explicit_zero_offset_is_given(self) -> None:
+        """offset_mm: 0 算写了起点。书桌从 2500 挪到 500 后，铺满留在 0–500。"""
+        layout = ProjectLayout.from_source(
+            {"rooms": [{**NORTH, "items": [_desk(2500), _fill(offset_mm=0)]}]}
+        )
+        run = _named(layout, "run")
+        self.assertTrue(run.placement.offset_given)
+        self.assertEqual((run.placement.offset_mm, run.width), (0, 2500))
+        moved = apply_layout_edit(
+            layout, {"op": "move", "item_id": "desk", "offset_mm": 500}
+        )
+        run = _named(moved, "run")
+        self.assertEqual((run.placement.offset_mm, run.width), (0, 500))
+        self.assertTrue(run.placement.offset_given)
+
+    def test_fill_edit_accepts_only_origin_z_on_both_paths(self) -> None:
+        """吊柜铺满整面北墙。离地从 1400 改到 1600，宽度仍是 4000。
+
+        项目编辑和房间编辑都拒绝改沿墙起点、朝向和宽度。
+        """
+        layout = ProjectLayout.from_source(
+            {"rooms": [{**NORTH, "items": [_fill(height=700, origin_z_mm=1400)]}]}
+        )
+        run = _named(layout, "run")
+        self.assertEqual(run.width, 4000)
+        self.assertFalse(run.placement.offset_given)
+
+        raised = apply_layout_edit(
+            layout, {"op": "move", "item_id": "run", "origin_z_mm": 1600}
+        )
+        run = _named(raised, "run")
+        self.assertEqual(run.placement.origin_z_mm, 1600)
+        self.assertEqual(run.width, 4000)
+        self.assertFalse(run.placement.offset_given)
+        self.assertNotIn("offset_mm", run.to_source()["placement"])
+
+        source = room_scene_source(layout.rooms[0])
+        edited = apply_edit(
+            source, {"op": "move", "item_id": "run", "origin_z_mm": 1600}
+        )
+        self.assertNotIn("offset_mm", edited["items"][0]["placement"])
+        replanned = plan_scene(edited["room"], edited["items"])
+        run = replanned.items[0]
+        self.assertEqual((run.placement.origin_z_mm, run.width), (1600, 4000))
+        self.assertFalse(run.placement.offset_given)
+
+        refused = (
+            {"op": "move", "item_id": "run", "offset_mm": 200},
+            {
+                "op": "rotate",
+                "item_id": "run",
+                "rotation_z_deg": 15,
+                "mode": "free",
+                "origin_x_mm": 100,
+                "origin_y_mm": 100,
+            },
+            {"op": "resize", "item_id": "run", "width": 1000},
+        )
+        for op in refused:
+            with self.subTest(path="room", op=op["op"]):
+                with self.assertRaisesRegex(ValueError, "only origin_z_mm can change"):
+                    apply_edit(source, op)
+            with self.subTest(path="project", op=op["op"]):
+                with self.assertRaisesRegex(ValueError, "only origin_z_mm can change"):
+                    apply_layout_edit(layout, op)
+
+    def test_saved_fill_without_offset_given_cannot_load(self) -> None:
+        """铺满结果缺 offset_given 就打不开。靠墙和自由摆放的旧结果仍能打开。"""
+        filled = plan_scene(NORTH, [_fill()]).to_dict()
+        del filled["items"][0]["placement"]["offset_given"]
+        with self.assertRaisesRegex(ValueError, "fill placement requires offset_given"):
+            RoomScene.from_dict(filled)
+
+        wall = plan_scene(NORTH, [ITEM]).to_dict()
+        del wall["items"][0]["placement"]["offset_given"]
+        self.assertTrue(RoomScene.from_dict(wall).items[0].placement.offset_given)
+
+        free = plan_scene(NORTH, [{
+            "id": "sofa",
+            "category": "sofa",
+            "width": 800,
+            "depth": 800,
+            "height": 800,
+            "placement": {"mode": "free", "origin_x_mm": 1000, "origin_y_mm": 1000},
+        }]).to_dict()
+        del free["items"][0]["placement"]["offset_given"]
+        self.assertFalse(RoomScene.from_dict(free).items[0].placement.offset_given)
 
 
 if __name__ == "__main__":

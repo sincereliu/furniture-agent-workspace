@@ -38,6 +38,7 @@ def apply_edit(source: Mapping[str, Any], op: Mapping[str, Any]) -> dict[str, An
         raise ValueError(f"unknown item: {item_id}")
 
     fields = set(op) - {"op", "item_id"}
+    _reject_unsupported_fill_edit(target, name, fields)
     if name == "move":
         _apply_move(target, op, fields)
     elif name == "rotate":
@@ -45,6 +46,21 @@ def apply_edit(source: Mapping[str, Any], op: Mapping[str, Any]) -> dict[str, An
     else:
         _apply_resize(target, op, fields)
     return {**source, "items": items}
+
+
+def _reject_unsupported_fill_edit(
+    item: dict[str, Any], name: str, fields: set[str]
+) -> None:
+    """铺满的宽和沿墙起点由空段算出。编辑只改离地高度。"""
+    placement = item.get("placement")
+    if not isinstance(placement, dict) or not placement.get("fill"):
+        return
+    if name == "move" and fields == {"origin_z_mm"}:
+        return
+    raise ValueError(
+        f"item {item.get('id')!r} fills the wall: only origin_z_mm can change; "
+        "its width and along-wall start come from the free span"
+    )
 
 
 def _reject_unknown(name: str, fields: set[str], allowed: frozenset[str]) -> None:
@@ -91,6 +107,8 @@ def _placement_after(
     if mode == "wall":
         for key in FREE_ONLY_FIELDS:
             placement.pop(key, None)
+        # 靠墙朝向由宿主墙算出。自由摆放留下的转角若还在，重算会当成客户指定的转角而拒绝。
+        placement.pop("rotation_z_deg", None)
     else:
         for key in WALL_ONLY_FIELDS:
             placement.pop(key, None)

@@ -71,12 +71,14 @@ z_room = oz + z_local
 - `south`：东 → 西
 - `west`：南 → 北
 
-`placement.mode=wall` 使用 `host_wall + offset_mm + origin_z_mm`，可选 `fill`。背面贴墙、正面朝向室内。墙摆的原点与 `rotation_z_deg` 都由 `host_wall` 派生，不接受自由坐标，也转不动——要旋转或要离开墙面，就改成 `mode=free`。  
+`placement.mode=wall` 使用 `host_wall + offset_mm + origin_z_mm`，可选 `fill`。背面贴墙、正面朝向室内。墙摆的原点与 `rotation_z_deg` 都由 `host_wall` 派生，不接受自由坐标，也转不动——要旋转或要离开墙面，就改成 `mode=free`。从自由摆放改回靠墙时，原来的转角不进入下一次计算，朝向仍由宿主墙决定。  
 `placement.mode=free` 使用 `origin_x_mm/origin_y_mm/origin_z_mm + rotation_z_deg`。
 
 `fill=true` 仅用于 `mode=wall`。无需提供 `width`；代码用该墙净长（扣除与该件高度相交的门窗、贴墙障碍、已摆家具）算出这一段的起端与长度。未给 `offset_mm` 时取最长空段；给了则从该偏移铺到该空段终点。客户同时给了 width 与 fill 时，以墙净长为准。
 
 铺满得到**一台**柜子：id 不变，宽度就是这段空墙，`fill` 仍为 true。不按门宽、门扇数或内部分格再拆成几台。柜门、层板和抽屉归板件阶段。
+
+编辑已经摆好的房间时，铺满件沿用当初的写法。请求里没有 `offset_mm`，重算仍取最长空段；请求里写了 `offset_mm`，就从该偏移铺到所在空段的终点。算出的起点留在这一次的摆放结果里，下一次编辑的请求不带走它。铺满件的编辑只改 `origin_z_mm`。沿墙位置、朝向和宽度仍由空段计算。
 
 ## 拒绝条件
 

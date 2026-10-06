@@ -33,6 +33,9 @@ PLACEMENT_FIELDS = frozenset({
     "mode", "host_wall", "offset_mm", "origin_x_mm", "origin_y_mm",
     "origin_z_mm", "rotation_z_deg", "fill",
 })
+#: 已摆放结果比请求多一个事实：铺满的沿墙起点是不是客户写的。
+#: 请求里用 `offset_mm` 是否出现表示这件事，摆放结果里 `offset_mm` 已是算出来的起点。
+RESOLVED_PLACEMENT_FIELDS = PLACEMENT_FIELDS | {"offset_given"}
 ITEM_FIELDS = frozenset({
     "id", "label", "category", "width", "depth", "height", "placement",
     "furniture_category", "manufacture",
@@ -245,15 +248,24 @@ class ResolvedPlacement:
     origin_z_mm: float
     rotation_z_deg: float
     fill: bool = False
+    #: 铺满时为真表示客户写了 `offset_mm`。靠墙非铺满件恒为真，自由摆放恒为假。
+    offset_given: bool = False
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ResolvedPlacement":
         if not isinstance(data, Mapping):
             raise ValueError("placement must be an object")
-        fields(data, PLACEMENT_FIELDS, "placement")
+        fields(data, RESOLVED_PLACEMENT_FIELDS, "placement")
         mode = text(data, "mode")
         if mode not in PLACEMENT_MODES:
             raise ValueError("placement.mode must be wall or free")
+        fill = boolean(data, "fill")
+        if "offset_given" in data:
+            offset_given = boolean(data, "offset_given")
+        elif fill:
+            raise ValueError("fill placement requires offset_given")
+        else:
+            offset_given = mode == "wall"
         return cls(
             mode=mode,
             host_wall=text(data, "host_wall") or None,
@@ -262,7 +274,8 @@ class ResolvedPlacement:
             origin_y_mm=number(data, "origin_y_mm"),
             origin_z_mm=number(data, "origin_z_mm", default=0.0),
             rotation_z_deg=number(data, "rotation_z_deg", default=0.0),
-            fill=boolean(data, "fill"),
+            fill=fill,
+            offset_given=offset_given,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -275,6 +288,7 @@ class ResolvedPlacement:
             "origin_z_mm": self.origin_z_mm,
             "rotation_z_deg": self.rotation_z_deg,
             "fill": self.fill,
+            "offset_given": self.offset_given,
         }
 
 
@@ -399,14 +413,20 @@ class PlacedItem:
         return payload
 
     def to_source(self) -> dict[str, Any]:
-        """Editable request fields; wall origins and angles are derived again."""
+        """Editable request fields; wall origins and angles are derived again.
+
+        铺满没写 `offset_mm` 时，算出来的起点不写回请求，下次仍取最长空段。
+        """
         payload = self.to_dict()
         del payload["footprint"]
         del payload["clearances_mm"]
         placement = payload["placement"]
+        placement.pop("offset_given", None)
         if self.placement.mode == "wall":
             for key in ("origin_x_mm", "origin_y_mm", "rotation_z_deg"):
                 del placement[key]
+            if self.placement.fill and not self.placement.offset_given:
+                placement.pop("offset_mm", None)
         else:
             for key in ("host_wall", "offset_mm"):
                 del placement[key]

@@ -360,15 +360,26 @@ def _restore_ops(entry: Mapping[str, Any]) -> list[dict[str, Any]]:
     ops: list[dict[str, Any]] = []
     if placement:
         if placement.get("mode") == "wall":
-            ops.append(
-                {
-                    "op": "move",
-                    "item_id": item_id,
-                    "host_wall": placement.get("host_wall"),
-                    "offset_mm": placement.get("offset_mm"),
-                    "origin_z_mm": placement.get("origin_z_mm") or 0,
-                }
-            )
+            if placement.get("fill"):
+                # 铺满的沿墙起点由空段重算。撤销只恢复离地高度，避免把算出的起点写回成指定偏移。
+                ops.append(
+                    {
+                        "op": "move",
+                        "item_id": item_id,
+                        "origin_z_mm": placement.get("origin_z_mm") or 0,
+                    }
+                )
+            else:
+                ops.append(
+                    {
+                        "op": "move",
+                        "item_id": item_id,
+                        "mode": "wall",
+                        "host_wall": placement.get("host_wall"),
+                        "offset_mm": placement.get("offset_mm"),
+                        "origin_z_mm": placement.get("origin_z_mm") or 0,
+                    }
+                )
         else:
             ops.append(
                 {
@@ -395,7 +406,7 @@ def _restore_ops(entry: Mapping[str, Any]) -> list[dict[str, Any]]:
         for key in ("width", "depth", "height")
         if before.get(key) is not None
     }
-    if sizes:
+    if sizes and not placement.get("fill"):
         ops.append({"op": "resize", "item_id": item_id, **sizes})
     return ops
 

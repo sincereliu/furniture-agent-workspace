@@ -13,7 +13,7 @@
 
 下游板件只读已确认的 `LayoutUnit`（`furniture_category` 为 `floor_cabinet` / `wall_cabinet`，且该件不是 `manufacture: false`）。客户点名不制造的包络留在房间里，不是 `LayoutUnit`。`room_shell.py` 写的房间外壳 STEP 不是柜体模型。
 
-**沿墙铺满**（`placement.fill`）：这段空墙就是这一台的包络宽，id 不变。不按门宽或内部分格拆成几台。口径见[空间布局规则](spatial-layout-rules.md)。
+**沿墙铺满**（`placement.fill`）：这段空墙就是这一台的包络宽，id 不变。不按门宽或内部分格拆成几台。请求里没写 `offset_mm` 时，`to_source()` 不把这次算出的起点写进下一次请求，重算仍取最长空段。口径见[空间布局规则](spatial-layout-rules.md)。
 
 板件实际只依赖 `LayoutUnit` 的五个字段：`id`、`furniture_category`、`width`、`depth`、`height`。这五个不变，板件与制造的内容就不变，可以跨 Revision 继承（见编排层 [修订继承设计](../../cad-generated/references/revision-inheritance-design.md)）。沿墙铺满那件的 `width` 由该墙空段算出，改房间就会改它，所以这种件永远算变了，必须重算。
 

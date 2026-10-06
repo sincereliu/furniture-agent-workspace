@@ -184,6 +184,7 @@ def _validate_item_placement(
                     rotation_z_deg=None,
                     fill=placement.fill,
                 ),
+                offset_given=placement.offset_given,
             )
         except ValueError as exc:
             report.add_error("INVALID_WALL_PLACEMENT", str(exc), f"{path}.placement")

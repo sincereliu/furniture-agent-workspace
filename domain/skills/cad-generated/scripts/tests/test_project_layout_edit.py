@@ -30,7 +30,7 @@ bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 import server
 from fake_request_support import local_request, remote_request
-from furniture_layout.project_edit import apply_layout_edit
+from furniture_layout.project_edit import apply_layout_edit, room_scene_source
 from furniture_layout.project_layout import ProjectLayout
 from furniture_workflow import project_layout_edit as layout_edit
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
@@ -420,6 +420,126 @@ class ProjectLayoutEditTests(unittest.TestCase):
         xs = [x for x, _ in item.footprint]
         self.assertEqual(min(xs), 900)
         self.assertEqual(item.clearances_mm["west"], 900)
+
+    def test_undo_puts_a_rotated_wall_item_back_on_the_wall(self) -> None:
+        """靠墙柜子转成自由摆放后，撤销要带回 mode=wall，否则服务端仍按自由摆放解释。"""
+        layout = ProjectLayout.from_source({
+            "rooms": [{
+                "id": "bedroom",
+                "width_mm": 4000,
+                "depth_mm": 3600,
+                "height_mm": 2800,
+                "items": [{
+                    "id": "cabinet",
+                    "label": "柜子",
+                    "category": "cabinet",
+                    "furniture_category": "floor_cabinet",
+                    "width": 800,
+                    "depth": 500,
+                    "height": 900,
+                    "placement": {
+                        "mode": "wall",
+                        "host_wall": "north",
+                        "offset_mm": 400,
+                    },
+                }],
+            }]
+        })
+        project = self.orchestrator.create_project("墙柜", layout)
+        before = self._document(project.id)
+        rotated = self._edit(
+            project.id,
+            local_request(),
+            op="rotate",
+            item_id="cabinet",
+            rotation_z_deg=15,
+            mode="free",
+            origin_x_mm=1000,
+            origin_y_mm=1000,
+            expected_version=before["version"],
+        )
+        self.assertEqual(
+            self._item(rotated, "bedroom", "cabinet")["placement"]["mode"], "free"
+        )
+        undone = asyncio.run(
+            server.undo_project_layout_edit(
+                project.id,
+                server.ProjectLayoutUndoRequest(
+                    expected_version=rotated["version"], steps=1
+                ),
+                local_request(),
+            )
+        )
+        item = self._item(undone, "bedroom", "cabinet")
+        self.assertEqual(item["placement"]["mode"], "wall")
+        self.assertEqual(item["placement"]["host_wall"], "north")
+        self.assertEqual(item["placement"]["offset_mm"], 400)
+        self.assertEqual(item["placement"]["rotation_z_deg"], 0)
+        self.assertEqual(item["width"], 800)
+
+    def test_undo_of_fill_height_does_not_pin_the_computed_start(self) -> None:
+        """铺满吊柜的离地高度可以改，也可以撤回去。撤销不把算出的起点写成指定偏移。"""
+        layout = ProjectLayout.from_source({
+            "rooms": [{
+                "id": "bedroom",
+                "width_mm": 4000,
+                "depth_mm": 3600,
+                "height_mm": 2800,
+                "items": [{
+                    "id": "upper",
+                    "label": "吊柜",
+                    "category": "wall_cabinet",
+                    "furniture_category": "wall_cabinet",
+                    "depth": 350,
+                    "height": 700,
+                    "placement": {
+                        "mode": "wall",
+                        "host_wall": "north",
+                        "fill": True,
+                        "origin_z_mm": 1400,
+                    },
+                }],
+            }]
+        })
+        project = self.orchestrator.create_project("吊柜", layout)
+        before = self._document(project.id)
+        self.assertEqual(self._item(before, "bedroom", "upper")["width"], 4000)
+        self.assertFalse(
+            self._item(before, "bedroom", "upper")["placement"]["offset_given"]
+        )
+        raised = self._edit(
+            project.id,
+            local_request(),
+            op="move",
+            item_id="upper",
+            origin_z_mm=1600,
+            expected_version=before["version"],
+        )
+        self.assertEqual(
+            self._item(raised, "bedroom", "upper")["placement"]["origin_z_mm"], 1600
+        )
+        self.assertEqual(self._item(raised, "bedroom", "upper")["width"], 4000)
+        undone = asyncio.run(
+            server.undo_project_layout_edit(
+                project.id,
+                server.ProjectLayoutUndoRequest(
+                    expected_version=raised["version"], steps=1
+                ),
+                local_request(),
+            )
+        )
+        self.assertEqual(
+            layout_edit._restore_ops(undone["undone"][0]),
+            [{"op": "move", "item_id": "upper", "origin_z_mm": 1400}],
+        )
+        item = self._item(undone, "bedroom", "upper")
+        self.assertEqual(item["placement"]["origin_z_mm"], 1400)
+        self.assertEqual(item["width"], 4000)
+        self.assertFalse(item["placement"]["offset_given"])
+        stored = self.store.load(project.id)
+        source = room_scene_source(stored.latest.layout.rooms[0])["items"][0]
+        self.assertNotIn("offset_mm", source["placement"])
+        self.assertNotIn("offset_given", source["placement"])
 
 
 def stored_layout_digest(path: Path) -> str:

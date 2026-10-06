@@ -472,8 +472,12 @@ function detachToFree(activeDrag){
   activeDrag.item.footprint=localFootprint(activeDrag.item,placement.origin_x_mm,placement.origin_y_mm,placement.rotation_z_deg);
   setStatus(`${activeDrag.item.label} 已离开墙面，改为自由摆放`,"warn");
 }
+function fillsWall(item){
+  return !!(item&&item.placement&&item.placement.fill);
+}
 function selectHint(item){
   if(READ_ONLY)return `已选中 ${item.label}`;
+  if(fillsWall(item))return `已选中 ${item.label}：铺满这面墙，可改离地高度`;
   return item.placement.mode==="wall"
     ?`已选中 ${item.label}：沿墙拖动，向外拖可离开墙面`
     :`已选中 ${item.label}：拖动可移动`;
@@ -530,10 +534,11 @@ function detailMarkup(item){
   // 粗调用旁边的 − / ＋：净距 10、离地 50、朝向 15，点一下就是正好加这么多。
   // 只读页（项目预览）**不生成**这些控件：灰着留在那儿只会让人点一下发现没反应、又不说明原因。
   // 读数照样刷新——钩子挂在 <span> 上，applyDetailValues() 已按 tagName==="INPUT" 分支处理。
-  const gapRow=(label,key)=>READ_ONLY
+  const fills=fillsWall(item);
+  const gapRow=(label,key)=>(READ_ONLY||fills)
     ? `<dt>${label}</dt><dd><span data-gap="${key}"></span> mm<span class="who" data-who="${key}"></span></dd>`
     : `<dt>${label}</dt><dd><button type="button" class="step" data-gap-step="${key}" data-delta="-10" aria-label="${label}减 10">−</button><input class="num" type="number" step="1" data-gap="${key}" aria-label="${label}"><button type="button" class="step" data-gap-step="${key}" data-delta="10" aria-label="${label}加 10">＋</button><span class="who" data-who="${key}"></span></dd>`;
-  const rotationRow=READ_ONLY
+  const rotationRow=(READ_ONLY||fills)
     ? `<span data-field="rotation"></span>°<span class="who" data-front></span>`
     : `<button type="button" class="step" data-rotation-step data-delta="-15" aria-label="逆时针 15°">−</button><input class="num" type="number" step="1" data-rotation data-field="rotation" aria-label="朝向角度"><button type="button" class="step" data-rotation-step data-delta="15" aria-label="顺时针 15°">＋</button><span class="who">°</span><span class="who" data-front></span>`;
   const heightRow=READ_ONLY
@@ -543,11 +548,13 @@ function detailMarkup(item){
     ? `<p class="hint-inline">${SHARE_FORM
         ? "只读分享：这一页只能看，位置由房主那边更新。"
         : "只读预览：位置由对话更新；要自己拖，用草稿页。"}</p>`
-    : `<p class="hint-inline">可以直接输入任意毫米值，回车生效。宽、深、高改的是这一件的外形，保存后给板件用；改过的这间要再看一眼。输入框的上下箭头走 1；旁边的 − / ＋ 走整数档（净距 10 · 离地 50 · 朝向 15）。到不了就只挪到能到的地方，并在左下角说明是越界、干涉还是遮挡门窗洞口。</p>`;
+    : fills
+      ? `<p class="hint-inline">这一台铺满剩下的空墙。沿墙位置、朝向和净距不在这里改。离地高度可以改。</p>`
+      : `<p class="hint-inline">可以直接输入任意毫米值，回车生效。宽、深、高改的是这一件的外形，保存后给板件用；改过的这间要再看一眼。输入框的上下箭头走 1；旁边的 − / ＋ 走整数档（净距 10 · 离地 50 · 朝向 15）。到不了就只挪到能到的地方，并在左下角说明是越界、干涉还是遮挡门窗洞口。</p>`;
   const sizeReadout=`<dt>尺寸</dt><dd>${round(item.width)}×${round(item.depth)}×${round(item.height)}</dd>`;
   const sizeRow=READ_ONLY
     ? sizeReadout
-    : (item.placement&&item.placement.fill)
+    : fills
       ? `<dt>尺寸</dt><dd>${round(item.width)}×${round(item.depth)}×${round(item.height)} · 沿墙铺满，宽度由墙算出</dd>`
       : `<dt>尺寸</dt><dd class="size-edit"><input class="num size" type="number" step="1" min="1" data-size="width" aria-label="宽"><span class="who">×</span><input class="num size" type="number" step="1" min="1" data-size="depth" aria-label="深"><span class="who">×</span><input class="num size" type="number" step="1" min="1" data-size="height" aria-label="高"><span class="who">mm</span></dd>`;
   return `<dl class="detail">
@@ -637,6 +644,10 @@ function withDragContext(item,run){
 // 所以只会停在到得了的地方，不会把家具塞进邻居里。
 function setGap(item,direction,value){
   if(READ_ONLY)return;
+  if(fillsWall(item)){
+    setStatus("沿墙铺满的位置由空段算出，这一页不改净距","warn");
+    return;
+  }
   const gap=distancesOf(item)[direction];
   const horizontal=direction==="west"||direction==="east";
   const sign=(direction==="west"||direction==="north")?1:-1;
@@ -660,6 +671,10 @@ function setGap(item,direction,value){
 }
 function setRotationValue(item,degrees){
   if(READ_ONLY)return;
+  if(fillsWall(item)){
+    setStatus("沿墙铺满的朝向由这面墙决定，这一页不改","warn");
+    return;
+  }
   const result=applyRotation(item,footprintCenter(item),degrees);
   render();
   if(!result.applied){
@@ -683,7 +698,7 @@ function setHeightValue(item,value){
 }
 function setSize(item,key,value){
   if(READ_ONLY)return;
-  if(item.placement&&item.placement.fill){
+  if(fillsWall(item)){
     setStatus("沿墙铺满的宽度由这面墙剩下的空段算出，这一页不手改","warn");
     return;
   }
@@ -720,6 +735,7 @@ canvas.addEventListener("pointerdown",event=>{
     return;
   }
   if(picked&&(picked.kind==="rotate"||picked.kind==="ring")&&pickedItem){
+    if(fillsWall(pickedItem)){selectItem(pickedItem.id);return}
     view.setEnabled(false);
     const center=footprintCenter(pickedItem),height=(pickedItem.z_start+pickedItem.z_end)/2;
     const origin=projector()([center[0],center[1],height]);
@@ -735,6 +751,7 @@ canvas.addEventListener("pointerdown",event=>{
   }
   const ground=unprojectToGround(sx,sy);
   if(pickedItem&&picked.kind==="item"&&(ground||isElevation())){
+    if(fillsWall(pickedItem)){selectItem(pickedItem.id);return}
     view.setEnabled(false);
     const placement=pickedItem.placement;
     state.selectedId=pickedItem.id;state.blocked=null;
@@ -866,7 +883,14 @@ async function persist(item,kind,sizes){
     return false;
   }
   let op;
-  if(kind==="resize"){
+  if(fillsWall(item)){
+    // 蓝点拖离地时 kind 是 "height"，侧栏和 PageUp/PageDown 走 "move"。两条都只发离地高度。
+    if(kind!=="move"&&kind!=="height"){
+      setStatus("沿墙铺满不改沿墙位置和朝向","warn");
+      return false;
+    }
+    op={op:"move",item_id:item.id,origin_z_mm:Math.round(item.placement.origin_z_mm||0)};
+  }else if(kind==="resize"){
     op={op:"resize",item_id:item.id};
     if(sizes)Object.assign(op,sizes);
   }else{

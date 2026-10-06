@@ -152,7 +152,7 @@ store/<project-id>/
 
 撤销（`POST /api/project/{project_id}/layout/undo`，body `{expected_version, steps}`）：只在工作副本还开着时可用，**逐条恢复旧值**（失败整体拒绝），并留一条 `undo N step(s)` 事件——撤销会让"已经跟人说过"的内容变样，必须看得出来。窗口的边界是**下游产物**，不是时间：没有下游产物时随时可以撤，有了就不能（再往回走是"修订"的事：明确、留痕、下游跟着作废）。
 
-响应就是 `GET /layout` 那份文档（含 `working: {open, ops, can_undo}`），页面可直接换上新包络。几何校验不过（越界、与别的件或障碍物干涉、遮挡门窗洞口）回 422，**什么都不改**。`fill` 件的宽与偏移由墙上的空段算出，所以拒绝摆放类 op（改了也会被重算覆盖，与其静默丢掉不如明说）。判断、取舍与尚未做的部分见 [页面写项目设计](project-layout-edit-design.md)。
+响应就是 `GET /layout` 那份文档（含 `working: {open, ops, can_undo}`），页面可直接换上新包络。几何校验不过（越界、与别的件或障碍物干涉、遮挡门窗洞口）回 422，**什么都不改**。`fill` 件的宽和沿墙起点由空段算出。没写 `offset_mm` 的，之后重算仍取最长空段。编辑只接受 `origin_z_mm`；改沿墙位置、朝向或宽度会拒绝。判断、取舍与尚未做的部分见 [页面写项目设计](project-layout-edit-design.md)。
 
 **决策台账（谁说的）**：`store/<project-id>/project.json` → `decisions[]`，记"这句话是谁说的、我们把它落成了什么、他点头了没有"。只追加：改主意是加一条并用 `targets` 指回被改的那几条，旧条目一个字不动。缺省 `speaker=agent`、`status=assumption`——**不冒充客户、不冒充已确认**；只有 `customer` / `relay` 能写 `confirmed`，助手不能自己点头。条目由 `furniture_workflow/workflow_decisions.py` 一条路准入并派生当前状态（后续条目的确认/撤回说了算）。`source` 记它从哪来：`tool`（对话里说的，客户条目必须有原话）或 `page`（页面上按的按钮，措辞由服务端写死、没有原话）；`actor` 由运行时从编辑租约写（谁记的/谁按的，读不出就 `unknown`）。
 
@@ -166,7 +166,7 @@ store/<project-id>/
 
 `/api/room-scene/save`、`/api/room-scene/{scene_id}`、`/api/room-scenes`、`/api/room-scene/{scene_id}/edit`、`/api/room-scene/{scene_id}/editor` 组成场景状态（供交互编辑）：只存源（房间定义 + 多件包络及其摆放请求），**不存派生结果**——摆放坐标、footprint、净距、预览都在读取时重算；存储独立于家具主流程，不写 `stage_outputs`。
 
-编辑是**单 op、原子**：`move`（按当前 `mode` 二选一——`wall` 收 `host_wall`/`offset_mm`，`free` 收 `origin_x_mm`/`origin_y_mm`；**混给即拒**，换模式必须显式给 `mode` 并给出目标模式的坐标）、`rotate`（`rotation_z_deg`）、`resize`（`width`/`depth`/`height` 任意子集，至少一个）。可编辑项目页的右侧用输入框提交 `resize`，一次改宽、深或高里的一项。沿墙铺满的件不显示这三个输入，宽度由墙的空段算出。每个 op 只接受自己的字段，白名单外即拒；**重算与校验通过才落盘**，失败整体拒绝，不留半成品。批量 op 留待多选拖动或场景级操作出现时再加。
+编辑是**单 op、原子**：`move`（按当前 `mode` 二选一——`wall` 收 `host_wall`/`offset_mm`，`free` 收 `origin_x_mm`/`origin_y_mm`；**混给即拒**，换模式必须显式给 `mode` 并给出目标模式的坐标）、`rotate`（`rotation_z_deg`）、`resize`（`width`/`depth`/`height` 任意子集，至少一个）。可编辑项目页的右侧用输入框提交 `resize`，一次改宽、深或高里的一项。沿墙铺满的件不显示这三个输入，宽度由墙的空段算出。这一页上沿墙位置、朝向和净距也是读数；离地高度可以改。每个 op 只接受自己的字段，白名单外即拒；**重算与校验通过才落盘**，失败整体拒绝，不留半成品。批量 op 留待多选拖动或场景级操作出现时再加。
 
 `rotate` 只对 `free` 摆放有定义：`wall` 的原点与 `rotation_z_deg` 都由 `host_wall` 派生（见 `placement.py`），直接转会被拒。所以 rotate 可以带 `mode: "free"` + `origin_x_mm`/`origin_y_mm`，在**同一个 op 里**把墙摆改成自由摆放并给出绕中心旋转后的原点；带 `host_wall`/`offset_mm` 的 rotate 一律拒绝（否则 `rotation_z_deg: 0` 会伪装成一次沿墙移动）。
 

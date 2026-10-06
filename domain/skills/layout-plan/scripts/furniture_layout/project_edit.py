@@ -52,15 +52,6 @@ def apply_layout_edit(
         raise ValueError("edit requires item_id")
     index = _target_index(layout, item_id)
     scene = layout.rooms[index]
-    target = next(item for item in scene.items if item.id == item_id)
-    if target.placement.fill:
-        # fill 件的宽与偏移都由墙上的空段算出来（见 placement.fill_span），
-        # 改它等于改完就被重算覆盖：与其静默丢掉这次编辑，不如直接说清为什么不行。
-        raise ValueError(
-            f"item {item_id!r} is a fill unit: its width and offset come from the "
-            "wall span, so placement edits are recomputed away"
-        )
-
     edited = apply_edit(room_scene_source(scene), op)
     replanned = plan_scene(edited["room"], edited["items"])
     rooms = list(layout.rooms)

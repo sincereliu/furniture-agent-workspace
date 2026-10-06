@@ -53,7 +53,7 @@
 ## 已落地（留档）
 
 - 沿墙铺满：客户在一面墙上写 `fill: true`，这段空墙就是这一台的包络宽。不按门宽或内部分格拆成几台。口径在[空间布局规则](spatial-layout-rules.md)。
-- 页面写项目（P3）：`POST /api/project/{id}/layout/edit` —— 页面上改一件的摆放，落成一个新 Revision（未确认）。几何复用房间场景编辑那套 op 词表与重算/准入（新增 `project_edit.py`：`RoomScene` ↔ 场景源往返 + `plan_scene`），版本与生命周期归 `furniture_workflow/project_layout_edit.py` 门面；三道门（本机来源 / 灰度开关 / `expected_version`）任一不过都不落盘。铺满件拒绝摆放类 op（宽与偏移由墙上空段派生）。设计见 [页面写项目设计](../../cad-generated/references/project-layout-edit-design.md)；预览页**尚未**接上这个 op（属单页内核收敛）。
+- 页面写项目（P3）：`POST /api/project/{id}/layout/edit` —— 页面上改一件的摆放，落成一个新 Revision（未确认）。几何复用房间场景编辑那套 op 词表与重算/准入（新增 `project_edit.py`：`RoomScene` ↔ 场景源往返 + `plan_scene`），版本与生命周期归 `furniture_workflow/project_layout_edit.py` 门面；三道门（本机来源 / 灰度开关 / `expected_version`）任一不过都不落盘。铺满件只接受改离地高度（宽和沿墙起点由空段算出）。设计见 [页面写项目设计](../../cad-generated/references/project-layout-edit-design.md)；预览页**尚未**接上这个 op（属单页内核收敛）。
 - 页面身份与房间导航：两页页眉各挂一块身份牌（预览「只读预览 · 由对话更新」 / 草稿「草稿 · 不影响项目」）；多间房的切换从下拉改成页眉药丸按钮（只有一间房时整条藏掉），当前房间写进地址栏 `?room=<id>`，切房间时 `history.replaceState` 跟着改，链接可分享；深链按房间 → 视角 → 选中件依次生效。
 - 只读分享形态：预览页带 `?mode=view`（`preview_url(id, mode="view")` / `open_project_preview(id, share=True)`）时牌子换「只读分享 · 链接可转发」、提示语换成"只看不改"、**不生成「退出」按钮**。它只是表达，不承担权限；写权限的门在服务端（见 [访问模式与外网分享](../../cad-generated/references/preview-access-design.md)）。
 - 内容指纹收敛到一个实现：`workflow_digest.stable_digest`（key 排序 + 紧凑分隔符的规范化 JSON 上取 sha256），`workflow_constants` / `workflow_project` 都改用它，`open_preview` 的 `version` 从「修订号」改成内容版本 `layout_sha256:确认位`。
