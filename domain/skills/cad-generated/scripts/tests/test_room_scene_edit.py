@@ -43,7 +43,6 @@ def _source() -> dict:
                 "placement": {
                     "mode": "wall",
                     "host_wall": "north",
-                    "offset_mm": 200,
                 },
             },
             {
@@ -85,11 +84,12 @@ class SceneEditTests(unittest.TestCase):
                 {"op": "resize", "item_id": "wardrobe", "origin_x_mm": 1},
             )
 
-    def test_move_wall_uses_offset(self) -> None:
+    def test_move_wall_uses_host_wall(self) -> None:
         edited = apply_edit(
-            _source(), {"op": "move", "item_id": "wardrobe", "offset_mm": 500}
+            _source(), {"op": "move", "item_id": "wardrobe", "host_wall": "east"}
         )
-        self.assertEqual(edited["items"][0]["placement"]["offset_mm"], 500)
+        self.assertEqual(edited["items"][0]["placement"]["host_wall"], "east")
+        self.assertNotIn("offset_mm", edited["items"][0]["placement"])
 
     def test_move_wall_rejects_free_coordinates(self) -> None:
         with self.assertRaises(ValueError):
@@ -105,7 +105,7 @@ class SceneEditTests(unittest.TestCase):
                 {
                     "op": "move",
                     "item_id": "wardrobe",
-                    "offset_mm": 500,
+                    "host_wall": "east",
                     "origin_x_mm": 100,
                 },
             )
@@ -144,12 +144,12 @@ class SceneEditTests(unittest.TestCase):
                 "item_id": "wardrobe",
                 "mode": "wall",
                 "host_wall": "north",
-                "offset_mm": 400,
             },
         )
         placement = edited["items"][0]["placement"]
         self.assertEqual(placement["mode"], "wall")
-        self.assertEqual(placement["offset_mm"], 400)
+        self.assertEqual(placement["host_wall"], "north")
+        self.assertNotIn("offset_mm", placement)
         self.assertNotIn("rotation_z_deg", placement)
         self.assertNotIn("origin_x_mm", placement)
 
@@ -214,7 +214,7 @@ class SceneEditTests(unittest.TestCase):
                     "op": "rotate",
                     "item_id": "wardrobe",
                     "rotation_z_deg": 0,
-                    "offset_mm": 300,
+                    "host_wall": "east",
                 },
             )
 
@@ -287,7 +287,6 @@ class RoomSceneEditApiTests(unittest.TestCase):
                             placement=server.ItemPlacementRequest(
                                 mode="wall",
                                 host_wall="north",
-                                offset_mm=200,
                             ),
                         )
                     ],
@@ -325,7 +324,8 @@ class RoomSceneEditApiTests(unittest.TestCase):
             )
         self.assertEqual(ctx.exception.status_code, 422)
         reloaded = asyncio.run(server.load_room_scene("demo"))
-        self.assertEqual(reloaded.items[0]["placement"]["offset_mm"], 200)
+        self.assertEqual(reloaded.items[0]["placement"]["host_wall"], "north")
+        self.assertEqual(reloaded.items[0]["placement"]["mode"], "wall")
         self.assertEqual(reloaded.items[0]["width"], 1800)
 
     def test_geometry_conflict_does_not_persist(self) -> None:
@@ -426,7 +426,7 @@ class RoomSceneEditApiTests(unittest.TestCase):
         self.assertIn("derived", str(ctx.exception.detail))
         reloaded = asyncio.run(server.load_room_scene("demo"))
         self.assertEqual(reloaded.items[0]["placement"]["mode"], "wall")
-        self.assertEqual(reloaded.items[0]["placement"]["offset_mm"], 200)
+        self.assertEqual(reloaded.items[0]["placement"]["host_wall"], "north")
 
 
 if __name__ == "__main__":

@@ -12,7 +12,7 @@ from .scene import PLACEMENT_MODES
 
 EDIT_OPERATIONS = frozenset({"move", "rotate", "resize"})
 
-WALL_ONLY_FIELDS = frozenset({"host_wall", "offset_mm"})
+WALL_ONLY_FIELDS = frozenset({"host_wall"})
 FREE_ONLY_FIELDS = frozenset({"origin_x_mm", "origin_y_mm"})
 SHARED_FIELDS = frozenset({"origin_z_mm", "mode"})
 POSITION_FIELDS = WALL_ONLY_FIELDS | FREE_ONLY_FIELDS
@@ -51,7 +51,7 @@ def apply_edit(source: Mapping[str, Any], op: Mapping[str, Any]) -> dict[str, An
 def _reject_unsupported_fill_edit(
     item: dict[str, Any], name: str, fields: set[str]
 ) -> None:
-    """铺满的宽和沿墙起点由空段算出。编辑只改离地高度。"""
+    """铺满的宽和沿墙位置由空段算出。编辑只改离地高度。"""
     placement = item.get("placement")
     if not isinstance(placement, dict) or not placement.get("fill"):
         return
@@ -85,13 +85,13 @@ def _placement_after(
         raise ValueError(f"{name} cannot mix wall placement with free coordinates")
     if mode == "wall" and free_fields:
         raise ValueError(
-            "wall placement moves by host_wall/offset_mm, "
+            "wall placement moves by host_wall, "
             "not origin_x_mm/origin_y_mm"
         )
     if mode == "free" and wall_fields:
         raise ValueError(
             "free placement moves by origin_x_mm/origin_y_mm, "
-            "not host_wall/offset_mm"
+            "not host_wall"
         )
     if mode != current_mode:
         required = FREE_ONLY_FIELDS if mode == "free" else WALL_ONLY_FIELDS

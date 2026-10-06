@@ -419,7 +419,6 @@ class FurnitureOrchestratorLifecycleTests(unittest.TestCase):
                     placement={
                         "mode": "wall",
                         "host_wall": "north",
-                        "offset_mm": 500,
                     },
                 )
             )

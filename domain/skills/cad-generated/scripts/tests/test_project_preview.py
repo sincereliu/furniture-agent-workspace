@@ -31,7 +31,7 @@ from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from furniture_workflow.workflow_store import JsonProjectStore
 
 
-def home_layout(*, bed_offset_mm: float) -> ProjectLayout:
+def home_layout(*, bed_origin_z_mm: float) -> ProjectLayout:
     return ProjectLayout.from_source(
         {
             "rooms": [
@@ -52,7 +52,7 @@ def home_layout(*, bed_offset_mm: float) -> ProjectLayout:
                             "placement": {
                                 "mode": "wall",
                                 "host_wall": "north",
-                                "offset_mm": bed_offset_mm,
+                                "origin_z_mm": bed_origin_z_mm,
                             },
                         }
                     ],
@@ -74,7 +74,6 @@ def home_layout(*, bed_offset_mm: float) -> ProjectLayout:
                             "placement": {
                                 "mode": "wall",
                                 "host_wall": "south",
-                                "offset_mm": 400,
                             },
                         }
                     ],
@@ -116,7 +115,7 @@ class ProjectPreviewTests(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, 422)
 
     def test_layout_returns_placed_envelopes_without_viewer_markup(self) -> None:
-        project = self.orchestrator.create_project("家", home_layout(bed_offset_mm=200))
+        project = self.orchestrator.create_project("家", home_layout(bed_origin_z_mm=200))
         document = asyncio.run(server.project_layout(project.id))
         self.assertEqual(document["revision_number"], 1)
         self.assertFalse(document["layout_confirmed"])
@@ -126,14 +125,14 @@ class ProjectPreviewTests(unittest.TestCase):
         self.assertEqual([room["id"] for room in document["rooms"]], ["bedroom", "living"])
         bed = document["rooms"][0]["scene"]["items"][0]
         self.assertEqual(bed["id"], "bed")
-        self.assertEqual(bed["placement"]["offset_mm"], 200)
+        self.assertEqual(bed["placement"]["origin_z_mm"], 200)
         encoded = json.dumps(document)
         self.assertNotIn("viewer", encoded)
         self.assertNotIn("<svg", encoded)
         self.assertNotIn("text/html", encoded)
 
     def test_preview_embeds_first_room_and_polls_layout(self) -> None:
-        project = self.orchestrator.create_project("家", home_layout(bed_offset_mm=200))
+        project = self.orchestrator.create_project("家", home_layout(bed_origin_z_mm=200))
         response = asyncio.run(
             server.project_preview(project.id, remote_request())
         )
@@ -141,7 +140,7 @@ class ProjectPreviewTests(unittest.TestCase):
         self.assertEqual(response.media_type, "text/html")
         self.assertIn("<canvas", html)
         self.assertIn('"id":"bed"', html)
-        self.assertIn('"offset_mm":200', html)
+        self.assertIn('"origin_z_mm":200', html)
         self.assertIn("卧室", html)
         self.assertIn("客厅", html)
         # 非本机来源 → 只读页（能不能编辑由服务端按权限渲染，不看 URL 参数）。
@@ -159,7 +158,7 @@ class ProjectPreviewTests(unittest.TestCase):
 
     def test_local_preview_is_rendered_editable(self) -> None:
         """本机来源 → 可编辑页：写入地址、租约、工作副本状态都在；只读那支不再出现。"""
-        project = self.orchestrator.create_project("家", home_layout(bed_offset_mm=200))
+        project = self.orchestrator.create_project("家", home_layout(bed_origin_z_mm=200))
         html = asyncio.run(
             server.project_preview(project.id, local_request())
         ).body.decode("utf-8")
@@ -174,7 +173,7 @@ class ProjectPreviewTests(unittest.TestCase):
 
     def test_preview_shows_room_axes_and_cursor_coordinates(self) -> None:
         """房间坐标要看得见：原点三轴（带总宽/总深/总高）+ 光标读数 + 右栏坐标行。"""
-        project = self.orchestrator.create_project("家", home_layout(bed_offset_mm=200))
+        project = self.orchestrator.create_project("家", home_layout(bed_origin_z_mm=200))
         html = asyncio.run(server.project_preview(project.id, local_request())).body.decode("utf-8")
         self.assertIn('id="coord"', html)
         self.assertIn("mountLayout", html)
@@ -197,7 +196,7 @@ class ProjectPreviewTests(unittest.TestCase):
 
     def test_preview_switches_rooms_with_chips_and_a_shareable_room_link(self) -> None:
         """房间切换是药丸不是下拉；切房间要写进地址栏 ?room=，链接能分享、能复现。"""
-        project = self.orchestrator.create_project("家", home_layout(bed_offset_mm=200))
+        project = self.orchestrator.create_project("家", home_layout(bed_origin_z_mm=200))
         html = asyncio.run(server.project_preview(project.id, local_request())).body.decode("utf-8")
         self.assertIn('<nav class="room-band" id="room-band" aria-label="房间切换" hidden></nav>', html)
         self.assertIn("function syncRoomBand()", html)
@@ -215,7 +214,7 @@ class ProjectPreviewTests(unittest.TestCase):
 
     def test_both_pages_carry_a_mode_badge(self) -> None:
         """每页自报身份：可编辑=可直接拖动，只读（非本机）=只读预览，草稿=草稿·不影响项目。"""
-        project = self.orchestrator.create_project("家", home_layout(bed_offset_mm=200))
+        project = self.orchestrator.create_project("家", home_layout(bed_origin_z_mm=200))
         editable = asyncio.run(
             server.project_preview(project.id, local_request())
         ).body.decode("utf-8")
@@ -234,7 +233,7 @@ class ProjectPreviewTests(unittest.TestCase):
         「退出」能停掉本机的预览服务，不能给拿到链接的人用，所以分享形态是
         **不生成**这个按钮，而不是生成后藏起来。分享形态在本机也强制只读。
         """
-        project = self.orchestrator.create_project("家", home_layout(bed_offset_mm=200))
+        project = self.orchestrator.create_project("家", home_layout(bed_origin_z_mm=200))
         share = asyncio.run(
             server.project_preview(project.id, local_request(), mode="view")
         ).body.decode("utf-8")
@@ -277,7 +276,7 @@ class ProjectPreviewTests(unittest.TestCase):
         注意：两支都在同一份 HTML 的 JS 源码里，所以只能断言分支内容，
         不能断言"整页源码里没有 class=\"num\""——那串在可编辑支里。
         """
-        project = self.orchestrator.create_project("家", home_layout(bed_offset_mm=200))
+        project = self.orchestrator.create_project("家", home_layout(bed_origin_z_mm=200))
         html = asyncio.run(
             server.project_preview(project.id, remote_request())
         ).body.decode("utf-8")
@@ -326,33 +325,33 @@ class ProjectPreviewTests(unittest.TestCase):
         self.assertEqual(len(set(digests.values())), 1, digests)
 
     def test_revise_layout_changes_version_and_reread_position(self) -> None:
-        project = self.orchestrator.create_project("家", home_layout(bed_offset_mm=200))
+        project = self.orchestrator.create_project("家", home_layout(bed_origin_z_mm=200))
         before = asyncio.run(server.project_layout(project.id))
-        self.orchestrator.revise_layout(project, home_layout(bed_offset_mm=800))
+        self.orchestrator.revise_layout(project, home_layout(bed_origin_z_mm=800))
         after = asyncio.run(server.project_layout(project.id))
         self.assertEqual(after["revision_number"], 2)
         self.assertNotEqual(after["version"], before["version"])
         self.assertEqual(
-            after["rooms"][0]["scene"]["items"][0]["placement"]["offset_mm"],
+            after["rooms"][0]["scene"]["items"][0]["placement"]["origin_z_mm"],
             800,
         )
         html = asyncio.run(server.project_preview(project.id, local_request())).body.decode("utf-8")
-        self.assertIn('"offset_mm":800', html)
-        self.assertNotIn('"offset_mm":200', html)
+        self.assertIn('"origin_z_mm":800', html)
+        self.assertNotIn('"origin_z_mm":200', html)
 
         self.orchestrator.confirm_stage(project, "layout_plan")
         confirmed = asyncio.run(server.project_layout(project.id))
         self.assertTrue(confirmed["layout_confirmed"])
         self.assertNotEqual(confirmed["version"], after["version"])
         self.assertEqual(
-            confirmed["rooms"][0]["scene"]["items"][0]["placement"]["offset_mm"],
+            confirmed["rooms"][0]["scene"]["items"][0]["placement"]["origin_z_mm"],
             800,
         )
 
     def test_project_list_shows_openable_and_unavailable_projects(self) -> None:
-        ready = self.orchestrator.create_project("张家卧室", home_layout(bed_offset_mm=200))
+        ready = self.orchestrator.create_project("张家卧室", home_layout(bed_origin_z_mm=200))
         self.orchestrator.confirm_stage(ready, "layout_plan")
-        pending = self.orchestrator.create_project("工作室", home_layout(bed_offset_mm=400))
+        pending = self.orchestrator.create_project("工作室", home_layout(bed_origin_z_mm=400))
         broken = self.root / "broken"
         broken.mkdir()
         (broken / "project.json").write_text("{", encoding="utf-8")
@@ -409,7 +408,7 @@ class ProjectPreviewTests(unittest.TestCase):
         )
 
     def test_old_project_does_not_expire_but_unsupported_layout_cannot_open(self) -> None:
-        old = self.orchestrator.create_project("旧工程", home_layout(bed_offset_mm=200))
+        old = self.orchestrator.create_project("旧工程", home_layout(bed_origin_z_mm=200))
         old.created_at = "2020-01-01T00:00:00+00:00"
         self.store.save(old)
         self.assertEqual(self.store.inspect_projects()[0]["availability"], "ready")
@@ -426,7 +425,7 @@ class ProjectPreviewTests(unittest.TestCase):
         self.assertEqual(blocked.exception.status_code, 422)
 
     def test_project_missing_layout_is_unavailable(self) -> None:
-        project = self.orchestrator.create_project("缺布局的项目", home_layout(bed_offset_mm=200))
+        project = self.orchestrator.create_project("缺布局的项目", home_layout(bed_origin_z_mm=200))
         file = self.store.project_dir(project.id) / "project.json"
         payload = json.loads(file.read_text(encoding="utf-8"))
         del payload["revisions"][-1]["layout"]
@@ -445,7 +444,7 @@ class ProjectPreviewTests(unittest.TestCase):
         self.assertEqual(blocked.exception.status_code, 422)
 
     def test_editable_preview_can_type_width_depth_height(self) -> None:
-        project = self.orchestrator.create_project("家", home_layout(bed_offset_mm=200))
+        project = self.orchestrator.create_project("家", home_layout(bed_origin_z_mm=200))
         html = asyncio.run(
             server.project_preview(project.id, local_request())
         ).body.decode("utf-8")

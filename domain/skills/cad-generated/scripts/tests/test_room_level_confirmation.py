@@ -30,7 +30,7 @@ from furniture_workflow.workflow_state import WorkflowStage
 from furniture_workflow.workflow_store import JsonProjectStore
 
 
-def room(room_id: str, *, offset_mm: float = 200.0, width_mm: float = 4000.0) -> dict:
+def room(room_id: str, *, origin_z_mm: float = 0.0, width_mm: float = 4000.0) -> dict:
     return {
         "id": room_id,
         "name": room_id,
@@ -49,8 +49,7 @@ def room(room_id: str, *, offset_mm: float = 200.0, width_mm: float = 4000.0) ->
                 "placement": {
                     "mode": "wall",
                     "host_wall": "north",
-                    "offset_mm": offset_mm,
-                    "origin_z_mm": 0.0,
+                    "origin_z_mm": origin_z_mm,
                 },
             }
         ],
@@ -59,14 +58,14 @@ def room(room_id: str, *, offset_mm: float = 200.0, width_mm: float = 4000.0) ->
 
 def two_room_layout(
     *,
-    bedroom_offset_mm: float = 200.0,
-    living_offset_mm: float = 200.0,
+    bedroom_origin_z_mm: float = 0.0,
+    living_origin_z_mm: float = 0.0,
 ) -> ProjectLayout:
     return ProjectLayout.from_source(
         {
             "rooms": [
-                room("bedroom", offset_mm=bedroom_offset_mm),
-                room("living", offset_mm=living_offset_mm),
+                room("bedroom", origin_z_mm=bedroom_origin_z_mm),
+                room("living", origin_z_mm=living_origin_z_mm),
             ]
         }
     )
@@ -132,7 +131,7 @@ class RoomLevelConfirmationTests(unittest.TestCase):
         self.orchestrator.confirm_layout(project)
         first = project.latest
 
-        self.orchestrator.revise(project, two_room_layout(living_offset_mm=1200))
+        self.orchestrator.revise(project, two_room_layout(living_origin_z_mm=200))
         revised = project.latest
         self.assertEqual(revised.approved_rooms, ["bedroom"])
         self.assertEqual(revised.pending_room_ids(), ["living"])
@@ -159,7 +158,7 @@ class RoomLevelConfirmationTests(unittest.TestCase):
         """改客厅不能让客厅"沿用"自己的旧确认（内容变了）。"""
         project = self._project()
         self.orchestrator.confirm_layout(project)
-        self.orchestrator.revise(project, two_room_layout(living_offset_mm=1200))
+        self.orchestrator.revise(project, two_room_layout(living_origin_z_mm=200))
         self.assertNotIn("living", project.latest.inherited_rooms)
         self.assertNotIn("living", project.latest.approved_rooms)
 
@@ -207,7 +206,7 @@ class RoomLevelConfirmationTests(unittest.TestCase):
     def test_room_marks_survive_a_store_round_trip(self) -> None:
         project = self._project()
         self.orchestrator.confirm_layout(project)
-        self.orchestrator.revise(project, two_room_layout(living_offset_mm=1200))
+        self.orchestrator.revise(project, two_room_layout(living_origin_z_mm=200))
         with tempfile.TemporaryDirectory() as temporary:
             store = JsonProjectStore(temporary)
             store.save(project)
@@ -284,7 +283,7 @@ class RoomDigestTests(unittest.TestCase):
     def test_room_digest_ignores_other_rooms(self) -> None:
         revision = Revision(number=1, layout=two_room_layout())
         before = revision.room_digest("bedroom")
-        other = Revision(number=1, layout=two_room_layout(living_offset_mm=1200))
+        other = Revision(number=1, layout=two_room_layout(living_origin_z_mm=200))
         self.assertEqual(other.room_digest("bedroom"), before)
         self.assertNotEqual(other.room_digest("living"), revision.room_digest("living"))
         self.assertIsNone(revision.room_digest("kitchen"))

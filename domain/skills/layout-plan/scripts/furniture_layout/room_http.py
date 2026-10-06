@@ -103,7 +103,6 @@ class ItemPlacementRequest(BaseModel):
 
     mode: Literal["wall", "free"]
     host_wall: Literal["south", "east", "north", "west"] | None = None
-    offset_mm: float | None = Field(default=None, ge=0)
     origin_x_mm: float | None = None
     origin_y_mm: float | None = None
     origin_z_mm: float = Field(default=0, ge=0)
@@ -166,7 +165,6 @@ class RoomSceneEditRequest(BaseModel):
     item_id: str = Field(..., min_length=1)
     mode: Literal["wall", "free"] | None = None
     host_wall: Literal["south", "east", "north", "west"] | None = None
-    offset_mm: float | None = Field(default=None, ge=0)
     origin_x_mm: float | None = None
     origin_y_mm: float | None = None
     origin_z_mm: float | None = Field(default=None, ge=0)

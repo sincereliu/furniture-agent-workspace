@@ -135,9 +135,11 @@ _OPENAI_TOOLS: list[dict[str, Any]] = [
                             "Rooms in the home project, each with items[] and "
                             "optional openings[] for room doors and windows. "
                             "A whole wall of cabinets is one wall item with "
-                            "placement.fill true. Its width is the free span of "
-                            "that wall. Do not split that envelope by door width "
-                            "or interior bays."
+                            "placement.fill true. Its width is the longest free "
+                            "span of that wall. Fixed wall cabinets name host_wall "
+                            "and width; this stage packs envelopes and does not "
+                            "take an along-wall offset. Do not split that envelope "
+                            "by door width or interior bays."
                         ),
                     },
                     "decisions": deepcopy(_DECISIONS_PROPERTY),

@@ -299,7 +299,6 @@ function rotationSign(center,height){
 }
 function snapAngle(deg,step){return Math.round(deg/step)*step}
 function normalizeAngle(deg){return ((deg%360)+360)%360}
-function wallSign(wall){return {north:["x",1],east:["y",1],south:["x",-1],west:["y",-1]}[wall]||null}
 function wallNormal(wall){return {north:[0,1],east:[-1,0],south:[0,-1],west:[1,0]}[wall]||null}
 function wallLabel(wall){return {north:"北",east:"东",south:"南",west:"西"}[wall]||wall}
 function openingLabel(kind){return {door:"门",window:"窗"}[kind]||kind}
@@ -315,14 +314,7 @@ function horizontalAxis(){
   const axis=Math.abs(right[0])>=Math.abs(right[1])?0:1;
   return{axis,sign:right[axis]>=0?1:-1};
 }
-function wallLength(wall){return wall==="north"||wall==="south"?room.width_mm:(wall==="east"||wall==="west"?room.depth_mm:0)}
-function spanOf(footprint,axis){const values=footprint.map(point=>axis==="x"?point[0]:point[1]);return Math.max(...values)-Math.min(...values)}
 // 落盘取整到整数毫米，所以拖动也在整数毫米上求解：预览 == 落盘值。
-function anchorWallOffset(offset,probe){
-  if(!probe(offset))return offset;
-  for(const step of [1,-1,2,-2])if(!probe(offset+step))return offset+step;
-  return null;
-}
 function anchorFreeCell(x,y,probe){
   if(!probe(x,y))return[x,y];
   for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]]){
@@ -342,28 +334,8 @@ function setItemHeight(item,z){
 }
 function applyLocalDrag(item,dx,dy){
   const placement=item.placement;
-  if(placement.mode==="wall"){
-    const sign=wallSign(placement.host_wall);
-    if(!sign)return null;
-    const axis=sign[0]==="x"?0:1;
-    const maxOffset=Math.max(0,wallLength(placement.host_wall)-spanOf(drag.startFootprint,sign[0]));
-    const at=offset=>drag.startFootprint.map(point=>{
-      const next=[point[0],point[1]];
-      next[axis]+=(offset-drag.startOffset)*sign[1];
-      return next;
-    });
-    const probe=offset=>offset<0||offset>maxOffset
-      ?{label:"墙尽头",id:null}
-      :blockerAt(at(offset),item.z_start,item.z_end,item.id);
-    const start=anchorWallOffset(Math.round(drag.startOffset),probe);
-    if(start===null)return{label:"无处可移",id:null};
-    const along=Math.round(axis===0?dx:dy)*sign[1];
-    const target=clamp(start+along,0,maxOffset);
-    const solved=resolveInteger(start,target,probe);
-    placement.offset_mm=solved.value;
-    item.footprint=at(solved.value);
-    return solved.blocker;
-  }
+  // 靠墙位置由包络贴合算出。这一页不沿墙滑动；离开墙面走 detachToFree。
+  if(placement.mode==="wall")return null;
   const rotation=placement.rotation_z_deg||0;
   const at=(x,y)=>localFootprint(item,x,y,rotation);
   const probe=(x,y)=>blockerAt(at(x,y),item.z_start,item.z_end,item.id);
@@ -373,14 +345,11 @@ function applyLocalDrag(item,dx,dy){
   const solvedY=resolveInteger(anchor[1],anchor[1]+Math.round(dy),(y)=>probe(solvedX.value,y));
   placement.origin_x_mm=solvedX.value;placement.origin_y_mm=solvedY.value;
   item.footprint=at(solvedX.value,solvedY.value);
-  // 贴回墙边就认回"靠墙"：不认的话，离开过墙面的件只能顶在墙上不动（滑不动、
-  // 也不再显示靠墙），用户看到的就是"拖完之后离墙的距离不对了"。
+  // 贴回墙边就认回靠墙。沿墙位置由服务端按包络重贴，这里只认墙。
   const snap=wallSnap({footprint:item.footprint,rotation,
     room:{width_mm:room.width_mm,depth_mm:room.depth_mm}});
   if(snap){
-    placement.mode="wall";placement.host_wall=snap.host_wall;placement.offset_mm=snap.offset_mm;
-    // 换了模式，之后的每一帧走的是"沿墙滑动"那条路，起点必须跟着换，否则会跳。
-    if(drag){drag.startOffset=snap.offset_mm;drag.startFootprint=item.footprint.map(point=>[...point])}
+    placement.mode="wall";placement.host_wall=snap.host_wall;
   }
   return solvedX.blocker||solvedY.blocker;
 }
@@ -389,28 +358,7 @@ function applyElevationDrag(item,dHoriz,dVert){
   const placement=item.placement,rotation=placement.rotation_z_deg||0;
   const baseZ=Math.round(drag.startZ);
   let blocker=null;
-  if(placement.mode==="wall"){
-    const sign=wallSign(placement.host_wall);
-    const wallAxis=sign?(sign[0]==="x"?0:1):-1;
-    if(sign&&wallAxis===drag.horizontal.axis){
-      const maxOffset=Math.max(0,wallLength(placement.host_wall)-spanOf(drag.startFootprint,sign[0]));
-      const at=offset=>drag.startFootprint.map(point=>{
-        const next=[point[0],point[1]];
-        next[wallAxis]+=(offset-drag.startOffset)*sign[1];
-        return next;
-      });
-      const probe=offset=>offset<0||offset>maxOffset
-        ?{label:"墙尽头",id:null}
-        :heightProbe(item,at(offset))(baseZ);
-      const start=anchorWallOffset(Math.round(drag.startOffset),probe);
-      if(start!==null){
-        const solved=resolveInteger(start,clamp(start+Math.round(dHoriz*drag.horizontal.sign)*sign[1],0,maxOffset),probe);
-        placement.offset_mm=solved.value;
-        item.footprint=at(solved.value);
-        blocker=solved.blocker;
-      }
-    }
-  }else{
+  if(placement.mode!=="wall"){
     const at=(x,y)=>localFootprint(item,x,y,rotation);
     const probe=(x,y)=>heightProbe(item,at(x,y))(baseZ);
     const anchor=anchorFreeCell(Math.round(drag.startOrigin[0]),Math.round(drag.startOrigin[1]),probe);
@@ -456,16 +404,15 @@ function applyRotation(item,center,rotationDeg){
   if(blocker)return{applied:false,blocker};
   const placement=item.placement;
   // 墙面的旋转由 host_wall 派生，转不动；要旋转就同一次 op 里改成自由摆放。
-  placement.mode="free";placement.host_wall=null;placement.offset_mm=null;
+  placement.mode="free";placement.host_wall=null;
   placement.origin_x_mm=originX;placement.origin_y_mm=originY;placement.rotation_z_deg=target;
   item.footprint=footprint;
   return{applied:true,blocker:null};
 }
-// 墙摆只有一个自由度（沿墙 offset）；把家具往房间内拖够远就转成自由摆放，
-// 用当前派生原点当自由原点，位置不跳。
+// 靠墙件没有沿墙拖动。往房间内拖够远就转成自由摆放，用当前原点，位置不跳。
 function detachToFree(activeDrag){
   const placement=activeDrag.item.placement;
-  placement.mode="free";placement.host_wall=null;placement.offset_mm=null;
+  placement.mode="free";placement.host_wall=null;
   placement.origin_x_mm=Math.round(activeDrag.startOrigin[0]);
   placement.origin_y_mm=Math.round(activeDrag.startOrigin[1]);
   placement.rotation_z_deg=placement.rotation_z_deg||0;
@@ -479,7 +426,7 @@ function selectHint(item){
   if(READ_ONLY)return `已选中 ${item.label}`;
   if(fillsWall(item))return `已选中 ${item.label}：铺满这面墙，可改离地高度`;
   return item.placement.mode==="wall"
-    ?`已选中 ${item.label}：沿墙拖动，向外拖可离开墙面`
+    ?`已选中 ${item.label}：靠墙贴合，向外拖可离开墙面`
     :`已选中 ${item.label}：拖动可移动`;
 }
 const escapeHtml=value=>String(value).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
@@ -511,7 +458,7 @@ function detailValues(item){
   return {
     mode:item.placement.mode==="wall"?"靠墙":"自由",
     position:item.placement.mode==="wall"
-      ?`沿${wallLabel(item.placement.host_wall)}墙 ${round(item.placement.offset_mm)} mm`
+      ?`靠${wallLabel(item.placement.host_wall)}墙`
       :`X ${round(item.placement.origin_x_mm)} · Y ${round(item.placement.origin_y_mm)} mm`,
     rotation:round(normalizeAngle(item.placement.rotation_z_deg||0)),
     front:`前朝${frontCompass(item)}`,
@@ -636,7 +583,7 @@ function nudgeHeight(item,delta){
 function withDragContext(item,run){
   const saved=drag;
   drag={item,startOrigin:[item.placement.origin_x_mm||0,item.placement.origin_y_mm||0],
-    startOffset:item.placement.offset_mm||0,startZ:item.placement.origin_z_mm||0,
+    startZ:item.placement.origin_z_mm||0,
     startFootprint:item.footprint.map(point=>[...point])};
   try{return run()}finally{drag=saved}
 }
@@ -654,12 +601,8 @@ function setGap(item,direction,value){
   const delta=Math.round(sign*(value-gap.gap));
   if(!delta)return;
   if(item.placement.mode==="wall"){
-    const wsign=wallSign(item.placement.host_wall);
-    const wallAxis=wsign?(wsign[0]==="x"?0:1):-1;
-    if((horizontal?0:1)!==wallAxis){
-      setStatus("靠墙件只能改沿墙方向的距离；要改进深方向请先把它拖离墙面","warn");
-      return;
-    }
+    setStatus("靠墙位置由包络贴合算出，这一页不改沿墙距离","warn");
+    return;
   }
   const blocker=withDragContext(item,()=>applyLocalDrag(item,horizontal?delta:0,horizontal?0:delta));
   render();
@@ -757,7 +700,7 @@ canvas.addEventListener("pointerdown",event=>{
     state.selectedId=pickedItem.id;state.blocked=null;
     drag={kind:"move",item:pickedItem,startScreen:[sx,sy],moved:false,
       startOrigin:[placement.origin_x_mm||0,placement.origin_y_mm||0],
-      startOffset:placement.offset_mm||0,startZ:placement.origin_z_mm||0,
+      startZ:placement.origin_z_mm||0,startMode:placement.mode,startWall:placement.host_wall,
       horizontal:horizontalAxis(),elevation:isElevation(),
       startFootprint:pickedItem.footprint.map(point=>[...point])};
     if(placement.mode==="wall"&&!drag.elevation){
@@ -900,7 +843,7 @@ async function persist(item,kind,sizes){
     // mode 一律显式发：拖回墙边会从 free 变回 wall（反之亦然），不显式说，
     // 服务端会按它那边的旧模式解释这次 op——那正是"改完位置不对"的经典来源。
     if(placement.mode==="wall"){
-      op.mode="wall";op.host_wall=placement.host_wall;op.offset_mm=Math.round(placement.offset_mm);
+      op.mode="wall";op.host_wall=placement.host_wall;
     }
     else{op.mode="free";op.origin_x_mm=Math.round(placement.origin_x_mm);op.origin_y_mm=Math.round(placement.origin_y_mm)}
     // origin_z_mm 是 move 的共享字段，平面移动时顺带带上也不会互相干扰。
@@ -976,7 +919,9 @@ canvas.addEventListener("pointerup",event=>{
     const unchanged=kind==="rotate"
       ?(item.placement.rotation_z_deg===drag.startRotation&&item.placement.mode===drag.startMode)
       :kind==="height"?Math.round(item.placement.origin_z_mm||0)===Math.round(drag.startZ)
-      :false;
+      :kind==="move"&&drag.startMode==="wall"&&item.placement.mode==="wall"
+        &&item.placement.host_wall===drag.startWall
+        &&Math.round(item.placement.origin_z_mm||0)===Math.round(drag.startZ);
     drag=null;state.blocked=null;canvas.classList.remove("moving");
     view.setEnabled(true);
     canvas.releasePointerCapture(event.pointerId);
@@ -1362,7 +1307,8 @@ function localTime(iso){
 }
 function describeOp(op,itemId){
   const entry=op||{};
-  if(entry.op==="move"&&entry.offset_mm!==undefined)return `沿墙挪到 ${round1(entry.offset_mm)} mm`;
+  if(entry.op==="move"&&entry.host_wall)return `靠${wallLabel(entry.host_wall)}墙`;
+  if(entry.op==="move"&&entry.origin_z_mm!==undefined)return `离地 ${round1(entry.origin_z_mm)} mm`;
   if(entry.op==="move"&&entry.origin_x_mm!==undefined)
     return `挪到 X ${round1(entry.origin_x_mm)} · Y ${round1(entry.origin_y_mm)} mm`;
   if(entry.op==="resize")return "改了外形尺寸";

@@ -43,7 +43,6 @@ def save_request(scene_id: str = "") -> server.RoomSceneSaveRequest:
                 placement=server.ItemPlacementRequest(
                     mode="wall",
                     host_wall="north",
-                    offset_mm=1200,
                 ),
             )
         ],

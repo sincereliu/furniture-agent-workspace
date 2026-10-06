@@ -145,7 +145,7 @@ def pending_decision_ids(entries: Iterable[Mapping[str, Any]]) -> list[str]:
 def parse_ref(ref: str) -> tuple[str, str | None]:
     """把 `applies_to` 里的一条引用拆成 `(对象 id, 字段名 | None)`。
 
-    两种写法都收：`cabinet_1`（这一件）与 `cabinet_1.offset_mm`（这一件的某一处）。
+    两种写法都收：`cabinet_1`（这一件）与 `cabinet_1.width`（这一件的某一处）。
     """
     object_id, _, field = str(ref).partition(".")
     return object_id, (field or None)
@@ -165,7 +165,7 @@ def changed_item_fields(
     changes: dict[str, tuple[Any, Any]] = {}
     for key in sorted(set(old_placement) | set(new_placement)):
         if key == "fill":
-            # fill 件的宽与偏移由墙上空段派生，不是"谁改的"。
+            # 铺满标记本身不是一处可改的尺寸。
             continue
         if old_placement.get(key) != new_placement.get(key):
             changes[key] = (old_placement.get(key), new_placement.get(key))

@@ -27,7 +27,6 @@ rooms:
         placement:
           mode: wall
           host_wall: north
-          offset_mm: 900
       - id: wardrobe
         category: wardrobe
         furniture_category: floor_cabinet
@@ -52,5 +51,4 @@ rooms:
   placement:
     mode: wall
     host_wall: east
-    offset_mm: 200
 ```

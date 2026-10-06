@@ -40,7 +40,6 @@ def bedroom_request(**overrides) -> server.RoomSceneRequest:
                 placement=server.ItemPlacementRequest(
                     mode="wall",
                     host_wall="north",
-                    offset_mm=1200,
                 ),
             )
         ],

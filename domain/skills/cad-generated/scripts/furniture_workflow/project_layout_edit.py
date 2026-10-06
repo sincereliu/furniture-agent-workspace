@@ -360,8 +360,9 @@ def _restore_ops(entry: Mapping[str, Any]) -> list[dict[str, Any]]:
     ops: list[dict[str, Any]] = []
     if placement:
         if placement.get("mode") == "wall":
+            # 沿墙位置由包络重贴。普通靠墙柜恢复哪面墙和离地高度。
+            # 铺满件的编辑只收离地高度，多写墙面会被拒绝。
             if placement.get("fill"):
-                # 铺满的沿墙起点由空段重算。撤销只恢复离地高度，避免把算出的起点写回成指定偏移。
                 ops.append(
                     {
                         "op": "move",
@@ -376,7 +377,6 @@ def _restore_ops(entry: Mapping[str, Any]) -> list[dict[str, Any]]:
                         "item_id": item_id,
                         "mode": "wall",
                         "host_wall": placement.get("host_wall"),
-                        "offset_mm": placement.get("offset_mm"),
                         "origin_z_mm": placement.get("origin_z_mm") or 0,
                     }
                 )

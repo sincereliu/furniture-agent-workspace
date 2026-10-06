@@ -362,7 +362,6 @@ class AgentToolSurfaceTests(unittest.TestCase):
                                 "placement": {
                                     "mode": "wall",
                                     "host_wall": "north",
-                                    "offset_mm": 0,
                                     "origin_z_mm": 0,
                                 },
                             }

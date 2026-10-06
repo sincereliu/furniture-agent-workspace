@@ -111,12 +111,13 @@ class SceneContactTests(unittest.TestCase):
         scene = _scene([
             {"id": "wardrobe", "label": "衣柜", "category": "wardrobe", "width": 1000,
              "depth": 600, "height": 2000,
-             "placement": {"mode": "wall", "host_wall": "north", "offset_mm": 0}},
+             "placement": {"mode": "wall", "host_wall": "north"}},
         ], room)
         # 0..1000 is flush with the window span starting at 1000
         self.assertEqual(placement_issues(scene), {})
 
-    def test_wall_item_overlapping_an_opening_is_reported(self) -> None:
+    def test_wall_item_wider_than_the_gap_packs_past_the_opening(self) -> None:
+        """窗前只剩 1000。宽 1001 的柜子贴不进这段，就贴到窗后，不挡这扇窗。"""
         room = dict(ROOM)
         room["openings"] = [
             {"id": "window", "kind": "window", "wall": "north", "offset_mm": 1000,
@@ -125,7 +126,36 @@ class SceneContactTests(unittest.TestCase):
         items = [
             {"id": "wardrobe", "label": "衣柜", "category": "wardrobe", "width": 1001,
              "depth": 600, "height": 2000,
-             "placement": {"mode": "wall", "host_wall": "north", "offset_mm": 0}},
+             "placement": {"mode": "wall", "host_wall": "north"}},
+        ]
+        scene = _placed_scene(items, room)
+        self.assertEqual(scene.items[0].placement.origin_x_mm, 1500)
+        self.assertEqual(placement_issues(scene), {})
+
+    def test_wall_item_wider_than_every_free_span_does_not_fit(self) -> None:
+        room = dict(ROOM)
+        room["openings"] = [
+            {"id": "window", "kind": "window", "wall": "north", "offset_mm": 1000,
+             "width_mm": 500, "sill_height_mm": 900, "height_mm": 1200},
+        ]
+        items = [
+            {"id": "wardrobe", "label": "衣柜", "category": "wardrobe", "width": 1600,
+             "depth": 600, "height": 2000,
+             "placement": {"mode": "wall", "host_wall": "north"}},
+        ]
+        with self.assertRaisesRegex(ValueError, "does not fit"):
+            plan_room_scene(room, items)
+
+    def test_a_free_envelope_across_an_opening_is_reported(self) -> None:
+        room = dict(ROOM)
+        room["openings"] = [
+            {"id": "window", "kind": "window", "wall": "north", "offset_mm": 1000,
+             "width_mm": 500, "sill_height_mm": 900, "height_mm": 1200},
+        ]
+        items = [
+            {"id": "wardrobe", "label": "衣柜", "category": "wardrobe", "width": 400,
+             "depth": 600, "height": 2000,
+             "placement": {"mode": "free", "origin_x_mm": 800, "origin_y_mm": 0}},
         ]
         scene = _placed_scene(items, room)
         self.assertIn("opening:window", placement_issues(scene)["wardrobe"])

@@ -25,30 +25,29 @@ export function groundDragDelta({ dx, dy, scale, right, forward }) {
   ];
 }
 
-//: 轴对齐的转角 → 背面贴的那面墙，以及沿墙偏移该怎么取（与 placement.py 的派生表一致）。
+//: 轴对齐的转角 → 背面贴的那面墙。沿墙位置由包络贴合算出，不在这里取偏移。
 const WALL_BY_ANGLE = {
-  0: { wall: "north", offset: (box, room) => box.minX },
-  90: { wall: "east", offset: (box) => box.minY },
-  180: { wall: "south", offset: (box, room) => room.width_mm - box.maxX },
-  270: { wall: "west", offset: (box, room) => room.depth_mm - box.maxY },
+  0: "north",
+  90: "east",
+  180: "south",
+  270: "west",
 };
 
 /**
  * 自由摆放的件贴回墙边时，重新认成"靠墙"。
  *
- * 为什么需要它：一旦离开墙面（拖过头或误触阈值），它就永远是自由件——再往回拖只会
- * **顶在墙上不动**，既滑不动、也不再显示"靠墙"，用户看到的就是"拖完之后离墙的距离不对了"。
- * 贴回去就认回来，这条回路才是可逆的。
+ * 为什么需要它：离开墙面之后它就是自由件。贴回墙面要重新认成靠墙，这条回路才是可逆的。
+ * 沿墙位置不在这里算，服务端按包络重贴。
  *
  * 条件卡得很死，不做"自动摆正"：转角必须轴对齐、背面必须**正好**落在墙上（容差 0.5mm）、
  * 而且整件都在房间里。任何一条不满足就返回 `null`，不猜。
  *
- * @returns {{host_wall: string, offset_mm: number} | null}
+ * @returns {{host_wall: string} | null}
  */
 export function wallSnap({ footprint, rotation, room }) {
   const angle = (((Math.round(rotation * 10) / 10) % 360) + 360) % 360;
-  const rule = WALL_BY_ANGLE[angle];
-  if (!rule) return null;
+  const wall = WALL_BY_ANGLE[angle];
+  if (!wall) return null;
   const xs = footprint.map((point) => (Array.isArray(point) ? point[0] : point.x_mm));
   const ys = footprint.map((point) => (Array.isArray(point) ? point[1] : point.y_mm));
   const box = {
@@ -70,6 +69,6 @@ export function wallSnap({ footprint, rotation, room }) {
     south: Math.abs(box.maxY - room.depth_mm) <= eps,
     west: Math.abs(box.minX) <= eps,
   };
-  if (!touching[rule.wall]) return null;
-  return { host_wall: rule.wall, offset_mm: rule.offset(box, room) };
+  if (!touching[wall]) return null;
+  return { host_wall: wall };
 }

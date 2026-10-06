@@ -65,7 +65,6 @@ def bedroom_items() -> list[dict]:
             "placement": {
                 "mode": "wall",
                 "host_wall": "north",
-                "offset_mm": 1200,
                 "origin_z_mm": 0,
             },
         },
@@ -79,7 +78,6 @@ def bedroom_items() -> list[dict]:
             "placement": {
                 "mode": "wall",
                 "host_wall": "east",
-                "offset_mm": 0,
                 "origin_z_mm": 0,
             },
         },
@@ -167,11 +165,11 @@ class RoomSceneLayoutTests(unittest.TestCase):
         bed = items["bed"]
         wardrobe = items["wardrobe"]
         self.assertEqual(bed["placement"]["host_wall"], "north")
-        self.assertEqual(bed["placement"]["origin_x_mm"], 1200)
+        self.assertEqual(bed["placement"]["origin_x_mm"], 0)
         self.assertEqual(bed["placement"]["origin_y_mm"], 0)
         self.assertEqual(bed["placement"]["rotation_z_deg"], 0)
         self.assertEqual(wardrobe["placement"]["host_wall"], "east")
-        self.assertEqual(wardrobe["placement"]["offset_mm"], 0)
+        self.assertNotIn("offset_mm", wardrobe["placement"])
         self.assertEqual(wardrobe["width"], 800)
         self.assertEqual(wardrobe["placement"]["origin_x_mm"], 4200)
         self.assertEqual(wardrobe["placement"]["origin_y_mm"], 0)
@@ -199,7 +197,7 @@ class RoomSceneLayoutTests(unittest.TestCase):
                     "furniture_category": "floor_cabinet",
                     "depth": 600,
                     "height": 2400,
-                    "placement": {"mode": "wall", "host_wall": "north", "offset_mm": 0, "fill": True},
+                    "placement": {"mode": "wall", "host_wall": "north", "fill": True},
                 }
             ],
         )
@@ -225,16 +223,17 @@ class RoomSceneLayoutTests(unittest.TestCase):
                     "furniture_category": "floor_cabinet",
                     "depth": 600,
                     "height": 2400,
-                    "placement": {"mode": "wall", "host_wall": "north", "offset_mm": 0, "fill": True},
+                    "placement": {"mode": "wall", "host_wall": "north", "fill": True},
                 }
             ],
         )
         self.assertEqual([item.id for item in scene.items], ["wardrobe_run"])
         self.assertEqual(scene.items[0].width, 3000.0)
-        self.assertEqual(scene.items[0].placement.offset_mm, 0.0)
+        self.assertEqual(scene.items[0].placement.origin_x_mm, 0.0)
         self.assertTrue(scene.items[0].placement.fill)
 
-    def test_a_fill_that_starts_mid_wall_keeps_one_envelope(self) -> None:
+    def test_fill_takes_the_longest_free_span(self) -> None:
+        """铺满占当前最长空墙。2600 的北墙就是一台 2600，起点在墙头。"""
         scene = plan_scene(
             {
                 "id": "wide",
@@ -254,7 +253,6 @@ class RoomSceneLayoutTests(unittest.TestCase):
                     "placement": {
                         "mode": "wall",
                         "host_wall": "north",
-                        "offset_mm": 200,
                         "origin_z_mm": 1600,
                         "fill": True,
                     },
@@ -263,8 +261,8 @@ class RoomSceneLayoutTests(unittest.TestCase):
         )
         unit = scene.items[0]
         self.assertEqual(unit.id, "wardrobe_run")
-        self.assertEqual(unit.width, 2400.0)
-        self.assertEqual(unit.placement.offset_mm, 200.0)
+        self.assertEqual(unit.width, 2600.0)
+        self.assertEqual(unit.placement.origin_x_mm, 0.0)
         self.assertEqual(unit.placement.origin_z_mm, 1600.0)
         self.assertEqual(unit.furniture_category, "wall_cabinet")
         self.assertFalse(unit.manufacture)
@@ -279,11 +277,7 @@ class RoomSceneLayoutTests(unittest.TestCase):
                 "width": 2000,
                 "depth": 600,
                 "height": 2400,
-                "placement": {
-                    "mode": "wall",
-                    "host_wall": "north",
-                    "offset_mm": 0,
-                },
+                "placement": {"mode": "wall", "host_wall": "north"},
             },
             {
                 "id": "right",
@@ -293,9 +287,9 @@ class RoomSceneLayoutTests(unittest.TestCase):
                 "depth": 600,
                 "height": 2400,
                 "placement": {
-                    "mode": "wall",
-                    "host_wall": "north",
-                    "offset_mm": 1000,
+                    "mode": "free",
+                    "origin_x_mm": 500,
+                    "origin_y_mm": 0,
                 },
             },
         ]
@@ -315,7 +309,7 @@ class RoomSceneLayoutTests(unittest.TestCase):
         self.assertIn("'id': 'bed'", source)
         self.assertIn("'id': 'wardrobe'", source)
         self.assertIn("'rotation_z_deg': 90.0", source)
-        self.assertIn("'x': 1200.0", source)
+        self.assertIn("'x': 4200.0", source)
 
     def test_write_room_shell_uses_bridge_and_records_paths(self) -> None:
         output = plan_room_scene(bedroom_room(), bedroom_items())
@@ -432,7 +426,7 @@ class ProjectLayoutAdmissionTests(unittest.TestCase):
             "furniture_category": "floor_cabinet",
             "depth": 600,
             "height": 2400,
-            "placement": {"mode": "wall", "host_wall": "north", "offset_mm": 0, "fill": True},
+            "placement": {"mode": "wall", "host_wall": "north", "fill": True},
         }
         output = plan_project_layout(
             [
@@ -458,12 +452,14 @@ class ProjectLayoutAdmissionTests(unittest.TestCase):
             plan_project_layout([{**bedroom_room(), "items": [item]}])
 
     def test_overlapping_items_are_rejected_before_project_creation(self) -> None:
+        """靠墙柜贴上墙头之后，自由摆放的另一台压在它的包络上，创建前就拒绝。"""
         items = [
-            {"id": item_id, "category": "wardrobe", "width": 2000,
+            {"id": "left", "category": "wardrobe", "width": 2000,
              "depth": 600, "height": 2400,
-             "placement": {"mode": "wall", "host_wall": "north",
-                           "offset_mm": offset}}
-            for item_id, offset in (("left", 0), ("right", 1000))
+             "placement": {"mode": "wall", "host_wall": "north"}},
+            {"id": "right", "category": "wardrobe", "width": 2000,
+             "depth": 600, "height": 2400,
+             "placement": {"mode": "free", "origin_x_mm": 500, "origin_y_mm": 0}},
         ]
         rooms = [{**bedroom_room(), "items": items}]
         with self.assertRaisesRegex(ValueError, "interferes with item"):
@@ -491,7 +487,6 @@ class ProjectLayoutAdmissionTests(unittest.TestCase):
                     "placement": {
                         "mode": "wall",
                         "host_wall": "north",
-                        "offset_mm": 0,
                     },
                 },
                 {
@@ -504,7 +499,6 @@ class ProjectLayoutAdmissionTests(unittest.TestCase):
                     "placement": {
                         "mode": "wall",
                         "host_wall": "south",
-                        "offset_mm": 0,
                     },
                 },
             ],
@@ -540,7 +534,6 @@ class ProjectLayoutAdmissionTests(unittest.TestCase):
                             "placement": {
                                 "mode": "wall",
                                 "host_wall": "north",
-                                "offset_mm": 0,
                             },
                         }
                     ],
@@ -569,20 +562,19 @@ class ProjectLayoutAdmissionTests(unittest.TestCase):
                     "placement": {
                         "mode": "wall",
                         "host_wall": "north",
-                        "offset_mm": 0,
                     },
                 },
                 {
                     "id": "wardrobe",
                     "category": "wardrobe",
                     "furniture_category": "floor_cabinet",
-                    "width": 2000,
+                    "width": 1800,
                     "depth": 600,
                     "height": 2400,
                     "placement": {
-                        "mode": "wall",
-                        "host_wall": "north",
-                        "offset_mm": 1000,
+                        "mode": "free",
+                        "origin_x_mm": 100,
+                        "origin_y_mm": 0,
                     },
                 },
             ],
@@ -608,7 +600,6 @@ class ProjectLayoutAdmissionTests(unittest.TestCase):
                     "placement": {
                         "mode": "wall",
                         "host_wall": "north",
-                        "offset_mm": 0,
                     },
                 }
             ],
@@ -620,7 +611,7 @@ class ProjectLayoutAdmissionTests(unittest.TestCase):
         items = [{"id": "oversized", "category": "wardrobe", "width": 5000,
                   "depth": 600, "height": 2400,
                   "placement": {"mode": "wall", "host_wall": "north"}}]
-        with self.assertRaisesRegex(ValueError, "inside the room"):
+        with self.assertRaisesRegex(ValueError, "does not fit"):
             plan_project_layout([{**bedroom_room(), "items": items}])
 
 

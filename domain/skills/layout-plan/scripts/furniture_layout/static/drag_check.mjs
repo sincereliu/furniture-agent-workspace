@@ -39,10 +39,9 @@ const box = (x0, y0, x1, y1) => [
   { x_mm: x0, y_mm: y1 },
 ];
 
-// 背面正好落在北墙上（y=0）且轴对齐 → 认回靠北墙，偏移取西端。
+// 背面正好落在北墙上（y=0）且轴对齐 → 认回靠北墙。沿墙位置不在这一步取。
 assert.deepEqual(wallSnap({ footprint: box(322, 0, 2722, 600), rotation: 0, room }), {
   host_wall: "north",
-  offset_mm: 322,
 });
 
 // 离墙 2mm：不算贴墙，不许自动吸附（否则"我就要留一条缝"会被悄悄改掉）。
@@ -51,18 +50,15 @@ assert.equal(wallSnap({ footprint: box(322, 2, 2722, 602), rotation: 0, room }),
 // 斜着放的：不吸附，也不自动摆正。
 assert.equal(wallSnap({ footprint: box(322, 0, 2722, 600), rotation: 15, room }), null);
 
-// 四面的偏移口径（沿墙顺时针，与 placement.py 的派生表一致）。
+// 四面都只认墙，不取沿墙偏移。
 assert.deepEqual(wallSnap({ footprint: box(2700, 800, 3000, 1400), rotation: 90, room }), {
   host_wall: "east",
-  offset_mm: 800,
 });
 assert.deepEqual(wallSnap({ footprint: box(300, 3400, 2700, 4000), rotation: 180, room }), {
   host_wall: "south",
-  offset_mm: 300,
 });
 assert.deepEqual(wallSnap({ footprint: box(0, 900, 600, 3300), rotation: 270, room }), {
   host_wall: "west",
-  offset_mm: 700,
 });
 
 // 贴在墙上但探出房间（比如拖到墙角外）：不认——那份几何本来就不合法。

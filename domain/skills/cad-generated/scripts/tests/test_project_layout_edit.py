@@ -59,7 +59,6 @@ def layout_source(
         wardrobe_placement = {
             "mode": "wall",
             "host_wall": "north",
-            "offset_mm": 0,
             "fill": True,
         }
     return {
@@ -348,7 +347,8 @@ class ProjectLayoutEditTests(unittest.TestCase):
         document = self._document(project.id)
         item = self._item(document, "bedroom", "wardrobe")
         self.assertEqual(item["width"], 4000)
-        self.assertEqual(item["placement"]["offset_mm"], 0)
+        self.assertEqual(item["placement"]["origin_x_mm"], 0)
+        self.assertNotIn("offset_mm", item["placement"])
         self.assertEqual(item["placement"]["host_wall"], "north")
         self.assertTrue(item["placement"]["fill"])
         desk = self._item(document, "bedroom", "desk")
@@ -440,7 +440,6 @@ class ProjectLayoutEditTests(unittest.TestCase):
                     "placement": {
                         "mode": "wall",
                         "host_wall": "north",
-                        "offset_mm": 400,
                     },
                 }],
             }]
@@ -473,7 +472,9 @@ class ProjectLayoutEditTests(unittest.TestCase):
         item = self._item(undone, "bedroom", "cabinet")
         self.assertEqual(item["placement"]["mode"], "wall")
         self.assertEqual(item["placement"]["host_wall"], "north")
-        self.assertEqual(item["placement"]["offset_mm"], 400)
+        self.assertEqual(item["placement"]["origin_x_mm"], 0)
+        self.assertEqual(item["placement"]["origin_y_mm"], 0)
+        self.assertNotIn("offset_mm", item["placement"])
         self.assertEqual(item["placement"]["rotation_z_deg"], 0)
         self.assertEqual(item["width"], 800)
 
@@ -504,8 +505,8 @@ class ProjectLayoutEditTests(unittest.TestCase):
         project = self.orchestrator.create_project("吊柜", layout)
         before = self._document(project.id)
         self.assertEqual(self._item(before, "bedroom", "upper")["width"], 4000)
-        self.assertFalse(
-            self._item(before, "bedroom", "upper")["placement"]["offset_given"]
+        self.assertNotIn(
+            "offset_mm", self._item(before, "bedroom", "upper")["placement"]
         )
         raised = self._edit(
             project.id,
@@ -535,7 +536,7 @@ class ProjectLayoutEditTests(unittest.TestCase):
         item = self._item(undone, "bedroom", "upper")
         self.assertEqual(item["placement"]["origin_z_mm"], 1400)
         self.assertEqual(item["width"], 4000)
-        self.assertFalse(item["placement"]["offset_given"])
+        self.assertNotIn("offset_given", item["placement"])
         stored = self.store.load(project.id)
         source = room_scene_source(stored.latest.layout.rooms[0])["items"][0]
         self.assertNotIn("offset_mm", source["placement"])

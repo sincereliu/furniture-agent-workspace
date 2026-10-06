@@ -85,16 +85,15 @@ class RoomCoordinateContractTests(unittest.TestCase):
 
     def test_wall_back_edge_touches_host_and_front_points_into_room(self) -> None:
         cases = {
-            "north": (0, ((400, 0), (1600, 0), (1600, 500), (400, 500)), (0, 500)),
-            "east": (90, ((6000, 400), (6000, 1600), (5500, 1600), (5500, 400)), (-500, 0)),
-            "south": (180, ((5600, 5000), (4400, 5000), (4400, 4500), (5600, 4500)), (0, -500)),
-            "west": (270, ((0, 4600), (0, 3400), (500, 3400), (500, 4600)), (500, 0)),
+            "north": (0, ((0, 0), (1200, 0), (1200, 500), (0, 500)), (0, 500)),
+            "east": (90, ((6000, 0), (6000, 1200), (5500, 1200), (5500, 0)), (-500, 0)),
+            "south": (180, ((6000, 5000), (4800, 5000), (4800, 4500), (6000, 4500)), (0, -500)),
+            "west": (270, ((0, 5000), (0, 3800), (500, 3800), (500, 5000)), (500, 0)),
         }
         for wall, (angle, expected, front_direction) in cases.items():
             with self.subTest(wall=wall):
                 item = _placed({
-                    "mode": "wall", "host_wall": wall,
-                    "offset_mm": 400, "origin_z_mm": 300,
+                    "mode": "wall", "host_wall": wall, "origin_z_mm": 300,
                 })
                 self.assertEqual(item.footprint, expected)
                 self.assertEqual(item.placement.rotation_z_deg, angle)

@@ -33,7 +33,7 @@ from panel_fixtures import panel_parameters
 
 def studio_layout(
     *,
-    offset_mm: float = 0.0,
+    origin_z_mm: float | None = None,
     width: float = 800.0,
     depth: float = 600.0,
     height: float = 1000.0,
@@ -43,7 +43,9 @@ def studio_layout(
     fill: bool = False,
     extra_items: list[dict] | None = None,
 ) -> ProjectLayout:
-    """工作室房间 + 一个柜子：位置、房间尺寸、尺寸、类别都能单独动。"""
+    """工作室房间 + 一个柜子：离地高度、房间尺寸、尺寸、类别都能单独动。"""
+    if origin_z_mm is None:
+        origin_z_mm = 2000.0 if furniture_category == "wall_cabinet" else 0.0
     item: dict = {
         "id": "cabinet_1",
         "label": "cabinet_1",
@@ -54,8 +56,7 @@ def studio_layout(
         "placement": {
             "mode": "wall",
             "host_wall": "north",
-            "offset_mm": offset_mm,
-            "origin_z_mm": 2000.0 if furniture_category == "wall_cabinet" else 0.0,
+            "origin_z_mm": origin_z_mm,
         },
     }
     if fill:
@@ -90,7 +91,6 @@ def second_cabinet(**overrides) -> dict:
         "placement": {
             "mode": "wall",
             "host_wall": "north",
-            "offset_mm": 2000.0,
             "origin_z_mm": 0.0,
         },
     }
@@ -103,7 +103,7 @@ class EnvelopeJudgeTests(unittest.TestCase):
 
     def test_placement_and_room_changes_do_not_change_the_envelope_set(self) -> None:
         base = studio_layout()
-        moved = studio_layout(offset_mm=1400)
+        moved = studio_layout(origin_z_mm=1400)
         bigger_room = studio_layout(room_width_mm=5200, room_depth_mm=4200)
         for other in (moved, bigger_room):
             diff = envelope_diff(base, other)
@@ -165,7 +165,7 @@ class ByteEqualityTests(unittest.TestCase):
     def test_placement_and_room_changes_keep_panel_output_identical(self) -> None:
         base = self._panel_output(studio_layout())
         self.assertEqual(
-            stable_digest(self._panel_output(studio_layout(offset_mm=1400))),
+            stable_digest(self._panel_output(studio_layout(origin_z_mm=1400))),
             stable_digest(base),
         )
         self.assertEqual(
@@ -229,7 +229,7 @@ class InheritanceTests(unittest.TestCase):
 
     def test_placement_change_inherits_the_confirmed_panels(self) -> None:
         project, first, digest = self._baseline()
-        revised = self._revise_and_run_panels(project, offset_mm=1200)
+        revised = self._revise_and_run_panels(project, origin_z_mm=1200)
 
         self.assertEqual(revised.number, 2)
         self.assertTrue(revised.is_stage_approved(WorkflowStage.PANELS_PLANNED))
@@ -280,7 +280,7 @@ class InheritanceTests(unittest.TestCase):
         from furniture_workflow.workflow_store import JsonProjectStore
 
         project, first, digest = self._baseline()
-        self._revise_and_run_panels(project, offset_mm=1200)
+        self._revise_and_run_panels(project, origin_z_mm=1200)
         with tempfile.TemporaryDirectory() as temporary:
             store = JsonProjectStore(temporary)
             store.save(project)
@@ -298,7 +298,7 @@ class InheritanceTests(unittest.TestCase):
         from furniture_layout.open_preview import preview_page_data
 
         project, first, digest = self._baseline()
-        revised = self._revise_and_run_panels(project, offset_mm=1200)
+        revised = self._revise_and_run_panels(project, origin_z_mm=1200)
 
         snapshot = project_snapshot(project)
         self.assertEqual(snapshot["inherited_stages"], ["panel_plan"])

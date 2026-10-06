@@ -36,7 +36,7 @@ ITEMS = [
         "width": 1800,
         "depth": 600,
         "height": 2200,
-        "placement": {"mode": "wall", "host_wall": "north", "offset_mm": 200},
+        "placement": {"mode": "wall", "host_wall": "north"},
     }
 ]
 

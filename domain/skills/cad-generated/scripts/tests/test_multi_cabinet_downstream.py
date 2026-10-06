@@ -57,7 +57,6 @@ def two_cabinet_rooms() -> list[dict]:
                     "placement": {
                         "mode": "wall",
                         "host_wall": "north",
-                        "offset_mm": 0,
                         "origin_z_mm": 0,
                     },
                 },
@@ -72,7 +71,6 @@ def two_cabinet_rooms() -> list[dict]:
                     "placement": {
                         "mode": "wall",
                         "host_wall": "north",
-                        "offset_mm": 900,
                         "origin_z_mm": 0,
                     },
                 },

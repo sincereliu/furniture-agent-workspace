@@ -15,7 +15,7 @@
 | 衣柜 | `wardrobe` | 沿墙铺满时用 `fill` | 靠长墙或避开门的墙 |
 | 梳妆台 | `dresser` | 1000×450×750 | 靠窗或靠空墙 |
 
-衣柜要铺满一面墙时：`mode=wall`，`fill=true`。提供深度和高度，可省略 `width`。宽度就是这段空墙，仍是一台。要制造的柜写 `furniture_category=floor_cabinet`（落地）或 `wall_cabinet`（上墙）。客户点名某件不制造的写法在布局 Skill。
+衣柜要铺满一面墙时：`mode=wall`，`fill=true`。提供深度和高度，可省略 `width`。宽度就是当前最长的那段空墙，仍是一台。固定宽度的靠墙柜只写 `host_wall` 和宽度，沿墙位置由包络贴合算出。要制造的柜写 `furniture_category=floor_cabinet`（落地）或 `wall_cabinet`（上墙）。客户点名某件不制造的写法在布局 Skill。
 
 ## 客厅（示例）
 

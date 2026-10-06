@@ -39,7 +39,7 @@ ITEMS = [
         "width": 1800,
         "depth": 600,
         "height": 2200,
-        "placement": {"mode": "wall", "host_wall": "north", "offset_mm": 200},
+        "placement": {"mode": "wall", "host_wall": "north"},
     },
     {
         "id": "desk",
@@ -69,7 +69,7 @@ class RoomSceneEditorTests(unittest.TestCase):
         self.assertIn("const SCENE_ID=\"demo\"", html)
         self.assertIn('"id":"wardrobe"', html)
         self.assertIn('"mode":"wall"', html)
-        self.assertIn('"offset_mm":200', html)
+        self.assertIn('"host_wall":"north"', html)
 
     def test_editor_allows_same_origin_fetch(self) -> None:
         html = str(render_draft_page("demo", _scene())["html"])
@@ -205,7 +205,6 @@ class RoomSceneEditorApiTests(unittest.TestCase):
                             placement=server.ItemPlacementRequest(
                                 mode="wall",
                                 host_wall="north",
-                                offset_mm=200,
                             ),
                         )
                     ],

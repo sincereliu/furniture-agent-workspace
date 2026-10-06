@@ -30,8 +30,13 @@ def resolve_placement(
     room: RoomModel,
     request: PlacementRequest,
     *,
-    offset_given: bool | None = None,
+    along_mm: float = 0.0,
 ) -> ResolvedPlacement:
+    """Turn a request into a room transform.
+
+    ``along_mm`` is the packed start of a wall envelope. Callers compute it
+    from neighboring envelopes. It is not a customer offset.
+    """
     if request.mode not in PLACEMENT_MODES:
         raise ValueError(
             "placement.mode must be one of: " + ", ".join(sorted(PLACEMENT_MODES))
@@ -41,18 +46,16 @@ def resolve_placement(
     if request.mode == "free":
         if request.origin_x_mm is None or request.origin_y_mm is None:
             raise ValueError("free placement requires origin_x_mm and origin_y_mm")
-        if request.host_wall is not None or request.offset_mm is not None:
-            raise ValueError("free placement cannot define host_wall or offset_mm")
+        if request.host_wall is not None:
+            raise ValueError("free placement cannot define host_wall")
         return ResolvedPlacement(
             mode="free",
             host_wall=None,
-            offset_mm=None,
             origin_x_mm=request.origin_x_mm,
             origin_y_mm=request.origin_y_mm,
             origin_z_mm=request.origin_z_mm,
             rotation_z_deg=request.rotation_z_deg or 0.0,
             fill=False,
-            offset_given=False,
         )
 
     wall = request.host_wall
@@ -62,7 +65,7 @@ def resolve_placement(
         )
     if request.origin_x_mm is not None or request.origin_y_mm is not None:
         raise ValueError(
-            "wall placement derives its origin; use offset_mm instead of x/y"
+            "wall placement derives its origin from how envelopes fit"
         )
     expected_rotation = WALL_ROTATION_DEG[wall]
     if (
@@ -72,30 +75,25 @@ def resolve_placement(
         raise ValueError(
             f"wall placement rotation is derived as {expected_rotation:g} degrees"
         )
-    offset = request.offset_mm or 0.0
-    origin = wall_origin(room, wall, offset)
-    if offset_given is None:
-        # 非铺满的靠墙件总是带着沿墙起点；铺满则看请求里有没有写 offset_mm。
-        offset_given = True if not request.fill else request.offset_mm is not None
+    origin = wall_origin(room, wall, along_mm)
     return ResolvedPlacement(
         mode="wall",
         host_wall=wall,
-        offset_mm=offset,
         origin_x_mm=origin[0],
         origin_y_mm=origin[1],
         origin_z_mm=request.origin_z_mm,
         rotation_z_deg=expected_rotation,
         fill=request.fill,
-        offset_given=offset_given,
     )
 
 
-def wall_origin(room: RoomModel, wall: str, offset_mm: float) -> tuple[float, float]:
+def wall_origin(room: RoomModel, wall: str, along_mm: float) -> tuple[float, float]:
+    """Envelope corner for a back that sits on ``wall`` at packed start ``along_mm``."""
     return {
-        "north": (offset_mm, 0.0),
-        "east": (room.width_mm, offset_mm),
-        "south": (room.width_mm - offset_mm, room.depth_mm),
-        "west": (0.0, room.depth_mm - offset_mm),
+        "north": (along_mm, 0.0),
+        "east": (room.width_mm, along_mm),
+        "south": (room.width_mm - along_mm, room.depth_mm),
+        "west": (0.0, room.depth_mm - along_mm),
     }[wall]
 
 
@@ -163,17 +161,24 @@ def place_items(room: RoomModel, specs: Sequence[ItemSpec]) -> tuple[PlacedItem,
         if spec.placement.fill:
             deferred_fill.append(spec)
             continue
-        placed.append(_place_fixed(room, spec))
+        placed.append(_place_fixed(room, spec, tuple(placed)))
     for spec in deferred_fill:
         placed.append(_place_fill(room, spec, tuple(placed)))
     _assert_finite_placements(placed)
     return tuple(placed)
 
 
-def _place_fixed(room: RoomModel, spec: ItemSpec) -> PlacedItem:
+def _place_fixed(
+    room: RoomModel,
+    spec: ItemSpec,
+    already_placed: tuple[PlacedItem, ...],
+) -> PlacedItem:
     if spec.width is None:
         raise ValueError(f"item {spec.id!r} requires width without fill")
-    placement = resolve_placement(room, spec.placement)
+    along = 0.0
+    if spec.placement.mode == "wall":
+        along = pack_along(room, spec, already_placed, spec.width)
+    placement = resolve_placement(room, spec.placement, along_mm=along)
     return build_placed_item(spec, room, placement, width=spec.width)
 
 
@@ -182,30 +187,34 @@ def _place_fill(
     spec: ItemSpec,
     already_placed: tuple[PlacedItem, ...],
 ) -> PlacedItem:
-    # Validate the original request before replacing its computed offset.
-    # 客户有没有写 offset_mm，以这份原始请求为准；下面的 request 已换成算出的起点。
-    user_gave_offset = spec.placement.offset_mm is not None
-    resolve_placement(room, spec.placement, offset_given=user_gave_offset)
+    resolve_placement(room, spec.placement, along_mm=0.0)
+    along, width = fill_span(room, spec, already_placed)
+    placement = resolve_placement(room, spec.placement, along_mm=along)
+    return build_placed_item(spec, room, placement, width=width)
+
+
+def pack_along(
+    room: RoomModel,
+    spec: ItemSpec,
+    already_placed: Sequence[PlacedItem],
+    width: float,
+) -> float:
+    """Start of the earliest free span on the host wall that can hold ``width``."""
     wall = spec.placement.host_wall
     if wall not in WALLS:
-        raise ValueError(f"item {spec.id!r} fill requires host_wall")
-    offset, width = fill_span(
+        raise ValueError(f"item {spec.id!r} wall placement requires host_wall")
+    length = room.wall_length(wall)
+    occupied = occupied_wall_spans(
         room,
-        spec,
-        already_placed,
+        wall,
+        z_start=spec.placement.origin_z_mm,
+        z_end=spec.placement.origin_z_mm + spec.height,
+        already_placed=already_placed,
     )
-    request = PlacementRequest(
-        mode="wall",
-        host_wall=wall,
-        offset_mm=offset,
-        origin_x_mm=None,
-        origin_y_mm=None,
-        origin_z_mm=spec.placement.origin_z_mm,
-        rotation_z_deg=spec.placement.rotation_z_deg,
-        fill=True,
-    )
-    placement = resolve_placement(room, request, offset_given=user_gave_offset)
-    return build_placed_item(spec, room, placement, width=width)
+    for start, end in free_spans(length, occupied):
+        if end - start + EPSILON >= width:
+            return clean(start)
+    raise ValueError(f"item {spec.id!r} envelope does not fit on {wall} wall")
 
 
 def fill_span(
@@ -227,23 +236,7 @@ def fill_span(
     free = free_spans(length, occupied)
     if not free:
         raise ValueError(f"item {spec.id!r} has no free span on {wall} wall")
-    requested_offset = spec.placement.offset_mm
-    if requested_offset is None:
-        start, end = max(free, key=lambda span: span[1] - span[0])
-    else:
-        match = next(
-            (
-                span
-                for span in free
-                if span[0] - EPSILON <= requested_offset <= span[1] + EPSILON
-            ),
-            None,
-        )
-        if match is None:
-            raise ValueError(
-                f"item {spec.id!r} fill offset_mm is not on a free span of {wall}"
-            )
-        start, end = requested_offset, match[1]
+    start, end = max(free, key=lambda span: span[1] - span[0])
     width = end - start
     if width <= EPSILON:
         raise ValueError(f"item {spec.id!r} fill span on {wall} is empty")

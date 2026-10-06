@@ -85,7 +85,7 @@ def layout_rooms(
             "furniture_category": furniture_category,
             "width": width, "depth": depth, "height": height,
             "placement": {"mode": "wall", "host_wall": "north",
-                          "offset_mm": 0, "origin_z_mm": origin_z_mm},
+                          "origin_z_mm": origin_z_mm},
         }],
     }]
 

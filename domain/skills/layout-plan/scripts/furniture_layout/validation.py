@@ -13,11 +13,7 @@ from .placement_check import (
     item_outside_room,
     obstacle_interferences,
 )
-from .placement import (
-    build_placed_item,
-    furniture_footprint,
-    resolve_placement,
-)
+from .placement import furniture_footprint, place_items
 from .scene import (
     EPSILON,
     ItemSpec,
@@ -41,13 +37,58 @@ def admit_scene(scene: RoomScene) -> ValidationReport:
         return report
 
     seen_ids: set[str] = set()
+    blocked = False
     for index, item in enumerate(scene.items):
         path = f"items[{index}]"
         if item.id in seen_ids:
             report.add_error("DUPLICATE_ITEM_ID", f"duplicate item id: {item.id}", path)
+            blocked = True
         seen_ids.add(item.id)
-        expected = _validate_item_placement(scene.room, item, report, path)
-        if expected is None:
+        placement = item.placement
+        if placement.mode not in PLACEMENT_MODES:
+            report.add_error(
+                "INVALID_PLACEMENT_MODE",
+                "placement.mode must be one of: " + ", ".join(sorted(PLACEMENT_MODES)),
+                f"{path}.placement.mode",
+            )
+            blocked = True
+        elif not _all_finite(
+            placement.origin_x_mm,
+            placement.origin_y_mm,
+            placement.origin_z_mm,
+            placement.rotation_z_deg,
+            item.width,
+            item.depth,
+            item.height,
+        ):
+            report.add_error(
+                "INVALID_PLACEMENT_TRANSFORM",
+                "placement transform values must be finite",
+                f"{path}.placement",
+            )
+            blocked = True
+    if blocked:
+        return report
+
+    try:
+        expected_items = place_items(
+            scene.room,
+            tuple(_spec_from_placed(item) for item in scene.items),
+        )
+    except ValueError as exc:
+        report.add_error("INVALID_PLACEMENT", str(exc), "items")
+        return report
+
+    expected_by_id = {item.id: item for item in expected_items}
+    for index, item in enumerate(scene.items):
+        path = f"items[{index}]"
+        expected = expected_by_id.get(item.id)
+        if expected is None or not _envelope_matches(item, expected):
+            report.add_error(
+                "ENVELOPE_FIT_MISMATCH",
+                "cabinet envelope must match how the envelopes fit",
+                f"{path}.placement",
+            )
             continue
         _validate_derived_item(item, expected, report, path)
         _validate_item_fit(scene, item, report, path)
@@ -132,109 +173,28 @@ def _validate_room(room: RoomModel, report: ValidationReport) -> None:
             )
 
 
-def _validate_item_placement(
-    room: RoomModel,
-    item: PlacedItem,
-    report: ValidationReport,
-    path: str,
-) -> PlacedItem | None:
-    placement = item.placement
-    if placement.mode not in PLACEMENT_MODES:
-        report.add_error(
-            "INVALID_PLACEMENT_MODE",
-            "placement.mode must be one of: " + ", ".join(sorted(PLACEMENT_MODES)),
-            f"{path}.placement.mode",
-        )
-        return None
-    if not _all_finite(
-        placement.origin_x_mm,
-        placement.origin_y_mm,
-        placement.origin_z_mm,
-        placement.rotation_z_deg,
-        item.width,
-        item.depth,
-        item.height,
-    ):
-        report.add_error(
-            "INVALID_PLACEMENT_TRANSFORM",
-            "placement transform values must be finite",
-            f"{path}.placement",
-        )
-        return None
-
-    expected_placement = placement
-    if placement.mode == "wall":
-        if placement.host_wall not in WALLS or placement.offset_mm is None:
-            report.add_error(
-                "INVALID_WALL_PLACEMENT",
-                "wall placement requires a known host_wall and offset_mm",
-                f"{path}.placement",
-            )
-            return None
-        try:
-            expected_placement = resolve_placement(
-                room,
-                PlacementRequest(
-                    mode="wall",
-                    host_wall=placement.host_wall,
-                    offset_mm=placement.offset_mm,
-                    origin_x_mm=None,
-                    origin_y_mm=None,
-                    origin_z_mm=placement.origin_z_mm,
-                    rotation_z_deg=None,
-                    fill=placement.fill,
-                ),
-                offset_given=placement.offset_given,
-            )
-        except ValueError as exc:
-            report.add_error("INVALID_WALL_PLACEMENT", str(exc), f"{path}.placement")
-            return None
-        if not _placements_close(placement, expected_placement):
-            report.add_error(
-                "WALL_PLACEMENT_TRANSFORM_MISMATCH",
-                "wall placement origin and rotation must be derived from wall and offset",
-                f"{path}.placement",
-            )
-    elif placement.host_wall is not None or placement.offset_mm is not None:
-        report.add_error(
-            "INVALID_FREE_PLACEMENT",
-            "free placement cannot retain host_wall or offset_mm",
-            f"{path}.placement",
-        )
-
-    spec = ItemSpec(
+def _spec_from_placed(item: PlacedItem) -> ItemSpec:
+    """Replay a placed envelope without re-checking the stored id shape."""
+    return ItemSpec(
         id=item.id,
         label=item.label,
         category=item.category,
-        width=item.width,
+        width=None if item.placement.fill else item.width,
         depth=item.depth,
         height=item.height,
+        placement=PlacementRequest.from_dict(item.to_source()["placement"]),
         furniture_category=item.furniture_category,
         manufacture=item.manufacture,
-        placement=PlacementRequest(
-            mode=expected_placement.mode,
-            host_wall=expected_placement.host_wall,
-            offset_mm=expected_placement.offset_mm,
-            origin_x_mm=(
-                None
-                if expected_placement.mode == "wall"
-                else expected_placement.origin_x_mm
-            ),
-            origin_y_mm=(
-                None
-                if expected_placement.mode == "wall"
-                else expected_placement.origin_y_mm
-            ),
-            origin_z_mm=expected_placement.origin_z_mm,
-            rotation_z_deg=(
-                None
-                if expected_placement.mode == "wall"
-                else expected_placement.rotation_z_deg
-            ),
-            fill=expected_placement.fill,
-        ),
     )
-    return build_placed_item(spec, room, expected_placement, width=item.width)
+
+
+def _envelope_matches(actual: PlacedItem, expected: PlacedItem) -> bool:
+    return (
+        abs(actual.width - expected.width) <= EPSILON
+        and abs(actual.depth - expected.depth) <= EPSILON
+        and abs(actual.height - expected.height) <= EPSILON
+        and _placements_close(actual.placement, expected.placement)
+    )
 
 
 def _validate_derived_item(
@@ -302,7 +262,6 @@ def _placements_close(first: Any, second: Any) -> bool:
     return (
         first.mode == second.mode
         and first.host_wall == second.host_wall
-        and first.offset_mm == second.offset_mm
         and first.fill == second.fill
         and abs(first.origin_x_mm - second.origin_x_mm) <= EPSILON
         and abs(first.origin_y_mm - second.origin_y_mm) <= EPSILON
