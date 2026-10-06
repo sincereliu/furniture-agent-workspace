@@ -478,6 +478,70 @@ class ProjectLayoutEditTests(unittest.TestCase):
         self.assertEqual(item["placement"]["rotation_z_deg"], 0)
         self.assertEqual(item["width"], 800)
 
+    def test_undo_puts_against_back_after_leaving_the_wall(self) -> None:
+        """换墙或转成自由摆放会丢掉 against。撤销按改之前的那一份写回，并重新占住墙角。"""
+        layout = ProjectLayout.from_source({
+            "rooms": [{
+                "id": "bedroom",
+                "width_mm": 4000,
+                "depth_mm": 3000,
+                "height_mm": 2800,
+                "items": [{
+                    "id": "south_cab",
+                    "category": "cabinet",
+                    "furniture_category": "floor_cabinet",
+                    "width": 800,
+                    "depth": 600,
+                    "height": 2100,
+                    "placement": {
+                        "mode": "wall",
+                        "host_wall": "south",
+                        "against": {"east": "wall"},
+                    },
+                }],
+            }]
+        })
+        original = next(item for item in layout.rooms[0].items if item.id == "south_cab")
+        self.assertEqual(original.placement.origin_x_mm, 4000)
+        entry = {
+            "item_id": "south_cab",
+            "before": {
+                "placement": original.placement.to_dict(),
+                "width": original.width,
+                "depth": original.depth,
+                "height": original.height,
+            },
+        }
+        for op in (
+            {"op": "move", "item_id": "south_cab", "host_wall": "north"},
+            {
+                "op": "rotate",
+                "item_id": "south_cab",
+                "rotation_z_deg": 15,
+                "mode": "free",
+                "origin_x_mm": 1000,
+                "origin_y_mm": 1000,
+            },
+        ):
+            with self.subTest(op=op["op"]):
+                edited = apply_layout_edit(layout, op)
+                edited_item = next(
+                    item for item in edited.rooms[0].items if item.id == "south_cab"
+                )
+                self.assertNotIn("against", edited_item.to_source()["placement"])
+                restored = edited
+                for restore_op in layout_edit._restore_ops(entry):
+                    restored = apply_layout_edit(restored, restore_op)
+                back = next(
+                    item for item in restored.rooms[0].items if item.id == "south_cab"
+                )
+                self.assertEqual(back.placement.host_wall, "south")
+                self.assertEqual(back.placement.origin_x_mm, 4000)
+                self.assertEqual(
+                    back.to_source()["placement"]["against"], {"east": "wall"}
+                )
+                self.assertNotIn("origin_x_mm", back.to_source()["placement"])
+
     def test_undo_of_fill_height_does_not_pin_the_computed_start(self) -> None:
         """铺满吊柜的离地高度可以改，也可以撤回去。撤销不把算出的起点写成指定偏移。"""
         layout = ProjectLayout.from_source({

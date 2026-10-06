@@ -16,7 +16,7 @@ WALL_ONLY_FIELDS = frozenset({"host_wall"})
 FREE_ONLY_FIELDS = frozenset({"origin_x_mm", "origin_y_mm"})
 SHARED_FIELDS = frozenset({"origin_z_mm", "mode"})
 POSITION_FIELDS = WALL_ONLY_FIELDS | FREE_ONLY_FIELDS
-MOVE_FIELDS = POSITION_FIELDS | SHARED_FIELDS
+MOVE_FIELDS = POSITION_FIELDS | SHARED_FIELDS | {"against"}
 # 旋转只对 free 摆放有定义：墙摆的原点与 rotation_z_deg 都由 host_wall 派生
 # （见 placement.py），转不动。所以墙摆要旋转，必须在同一次 op 里改成 free 并给出自由原点。
 ROTATE_FIELDS = frozenset({"rotation_z_deg"}) | FREE_ONLY_FIELDS | {"mode"}
@@ -74,6 +74,7 @@ def _placement_after(
 ) -> dict[str, Any]:
     """按 op 里的摆放字段算出新的 placement；不涉及旋转。"""
     placement = dict(item["placement"])
+    previous_wall = placement.get("host_wall")
     current_mode = placement["mode"]
     mode = op.get("mode", current_mode)
     if mode not in PLACEMENT_MODES:
@@ -109,9 +110,20 @@ def _placement_after(
             placement.pop(key, None)
         # 靠墙朝向由宿主墙算出。自由摆放留下的转角若还在，重算会当成客户指定的转角而拒绝。
         placement.pop("rotation_z_deg", None)
+        # 换墙之后，原来那两头的东南西北不再是这面墙的两头。
+        # op 里若带了 against，是撤销在写回改之前的那一份，以它为准。
+        if op.get("host_wall", previous_wall) != previous_wall:
+            placement.pop("against", None)
+        if "against" in op:
+            against = op.get("against")
+            if against:
+                placement["against"] = dict(against)
+            else:
+                placement.pop("against", None)
     else:
         for key in WALL_ONLY_FIELDS:
             placement.pop(key, None)
+        placement.pop("against", None)
     placement["mode"] = mode
     return placement
 

@@ -271,6 +271,7 @@ def _placements_close(first: Any, second: Any) -> bool:
             - 180.0
         )
         <= EPSILON
+        and first.against == second.against
     )
 
 

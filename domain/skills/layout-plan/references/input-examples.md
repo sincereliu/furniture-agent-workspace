@@ -38,6 +38,33 @@ rooms:
           fill: true
 ```
 
+东南角要南墙柜子到底、东墙柜子贴着它停时，写在各自的 `against` 上。南墙的东头贴东墙，东墙的南头贴着 `south_cab`。算出的沿墙起点不写进请求。
+
+```yaml
+- id: south_cab
+  category: cabinet
+  furniture_category: floor_cabinet
+  width: 800
+  depth: 600
+  height: 2100
+  placement:
+    mode: wall
+    host_wall: south
+    against:
+      east: wall
+- id: east_cab
+  category: cabinet
+  furniture_category: floor_cabinet
+  width: 900
+  depth: 550
+  height: 2100
+  placement:
+    mode: wall
+    host_wall: east
+    against:
+      south: south_cab
+```
+
 客户说房间里已有一件、不用做时，只给那一件加 `manufacture: false`。下面的书柜仍占位置，确认后不进板件：
 
 ```yaml

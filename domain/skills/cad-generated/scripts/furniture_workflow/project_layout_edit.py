@@ -378,6 +378,8 @@ def _restore_ops(entry: Mapping[str, Any]) -> list[dict[str, Any]]:
                         "mode": "wall",
                         "host_wall": placement.get("host_wall"),
                         "origin_z_mm": placement.get("origin_z_mm") or 0,
+                        # 换墙或转成自由摆放会丢掉 against。撤销按改之前的那一份写回。
+                        "against": placement.get("against"),
                     }
                 )
         else:

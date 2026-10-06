@@ -11,6 +11,14 @@ from .input_fields import boolean, fields, mapping, number, optional_number, tex
 
 
 WALLS = frozenset({"south", "east", "north", "west"})
+#: 沿墙两头：先是沿墙起点那一头，再是沿墙终点那一头。与顺时针沿墙方向一致。
+WALL_ENDS = {
+    "north": ("west", "east"),
+    "east": ("north", "south"),
+    "south": ("east", "west"),
+    "west": ("south", "north"),
+}
+AGAINST_WALL = "wall"
 PLACEMENT_MODES = frozenset({"wall", "free"})
 EXECUTABLE_CATEGORIES = frozenset({"floor_cabinet", "wall_cabinet"})
 #: 家具单元 id 的形状。板件阶段拿它拼板件编号（`{cabinet_id}__{role}`），
@@ -30,9 +38,10 @@ OBSTACLE_FIELDS = frozenset({
     "id", "kind", "x_mm", "y_mm", "z_mm", "width_mm", "depth_mm", "height_mm",
 })
 #: 靠墙柜子不收沿墙偏移。起点由包络贴合算出，只留在结果的原点里。
+#: against 是沿墙两头贴墙还是贴着哪一台，会原样留在下一次请求里。
 PLACEMENT_FIELDS = frozenset({
     "mode", "host_wall", "origin_x_mm", "origin_y_mm",
-    "origin_z_mm", "rotation_z_deg", "fill",
+    "origin_z_mm", "rotation_z_deg", "fill", "against",
 })
 RESOLVED_PLACEMENT_FIELDS = PLACEMENT_FIELDS
 ITEM_FIELDS = frozenset({
@@ -215,6 +224,7 @@ class PlacementRequest:
     origin_z_mm: float
     rotation_z_deg: float | None
     fill: bool = False
+    against: tuple[tuple[str, str], ...] = ()
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PlacementRequest":
@@ -224,14 +234,16 @@ class PlacementRequest:
         mode = text(data, "mode")
         if mode not in PLACEMENT_MODES:
             raise ValueError("placement.mode must be wall or free")
+        host_wall = text(data, "host_wall") or None
         return cls(
             mode=mode,
-            host_wall=text(data, "host_wall") or None,
+            host_wall=host_wall,
             origin_x_mm=optional_number(data, "origin_x_mm"),
             origin_y_mm=optional_number(data, "origin_y_mm"),
             origin_z_mm=number(data, "origin_z_mm", default=0.0),
             rotation_z_deg=optional_number(data, "rotation_z_deg"),
             fill=boolean(data, "fill"),
+            against=_parse_against(data, mode=mode, host_wall=host_wall),
         )
 
 
@@ -244,6 +256,7 @@ class ResolvedPlacement:
     origin_z_mm: float
     rotation_z_deg: float
     fill: bool = False
+    against: tuple[tuple[str, str], ...] = ()
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ResolvedPlacement":
@@ -253,18 +266,20 @@ class ResolvedPlacement:
         mode = text(data, "mode")
         if mode not in PLACEMENT_MODES:
             raise ValueError("placement.mode must be wall or free")
+        host_wall = text(data, "host_wall") or None
         return cls(
             mode=mode,
-            host_wall=text(data, "host_wall") or None,
+            host_wall=host_wall,
             origin_x_mm=number(data, "origin_x_mm"),
             origin_y_mm=number(data, "origin_y_mm"),
             origin_z_mm=number(data, "origin_z_mm", default=0.0),
             rotation_z_deg=number(data, "rotation_z_deg", default=0.0),
             fill=boolean(data, "fill"),
+            against=_parse_against(data, mode=mode, host_wall=host_wall),
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "mode": self.mode,
             "host_wall": self.host_wall,
             "origin_x_mm": self.origin_x_mm,
@@ -273,6 +288,9 @@ class ResolvedPlacement:
             "rotation_z_deg": self.rotation_z_deg,
             "fill": self.fill,
         }
+        if self.against:
+            payload["against"] = {direction: value for direction, value in self.against}
+        return payload
 
 
 @dataclass(frozen=True)
@@ -461,6 +479,53 @@ def parse_item_specs(
             raise ValueError(f"duplicate item id: {spec.id}")
         seen.add(spec.id)
     return specs
+
+
+def _parse_against(
+    data: Mapping[str, Any], *, mode: str, host_wall: str | None
+) -> tuple[tuple[str, str], ...]:
+    """沿墙两头。值 ``wall`` 是贴到侧面的墙，其他值是柜子 id。"""
+    if "against" not in data or data.get("against") is None:
+        return ()
+    raw = data["against"]
+    if not isinstance(raw, Mapping):
+        raise ValueError("placement.against must be an object")
+    fields(raw, WALLS, "placement.against")
+    written = {
+        direction: value for direction, value in raw.items() if value is not None
+    }
+    if mode == "free":
+        if written:
+            raise ValueError("free placement cannot define against")
+        return ()
+    if host_wall not in WALL_ENDS:
+        if written:
+            raise ValueError("placement.against requires host_wall")
+        return ()
+    low, high = WALL_ENDS[host_wall]
+    pairs: list[tuple[str, str]] = []
+    for direction in (low, high):
+        if direction not in written:
+            continue
+        pairs.append((direction, _against_token(written[direction], direction)))
+    for direction in written:
+        if direction not in {low, high}:
+            raise ValueError(
+                f"placement.against on {host_wall} only allows {low} and {high}"
+            )
+    return tuple(pairs)
+
+
+def _against_token(value: Any, direction: str) -> str:
+    if isinstance(value, str):
+        token = value.strip()
+        if token == AGAINST_WALL or (
+            ITEM_ID_PATTERN.fullmatch(token) and PANEL_ID_SEPARATOR not in token
+        ):
+            return token
+    raise ValueError(
+        f"placement.against.{direction} must be wall or a cabinet id"
+    )
 
 
 def require_identifier(value: str, *, where: str) -> str:

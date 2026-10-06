@@ -136,9 +136,14 @@ _OPENAI_TOOLS: list[dict[str, Any]] = [
                             "optional openings[] for room doors and windows. "
                             "A whole wall of cabinets is one wall item with "
                             "placement.fill true. Its width is the longest free "
-                            "span of that wall. Fixed wall cabinets name host_wall "
-                            "and width; this stage packs envelopes and does not "
-                            "take an along-wall offset. Do not split that envelope "
+                            "span of that wall, or the free span touching a named "
+                            "end when placement.against is set. Fixed wall cabinets "
+                            "name host_wall and width. placement.against maps an "
+                            "end (east, south, west, or north) to wall or another "
+                            "item id: wall reaches the side wall, an id stops "
+                            "against that cabinet. Omitted ends pack into the "
+                            "earliest free span. This stage does not take an "
+                            "along-wall offset. Do not split that envelope "
                             "by door width or interior bays."
                         ),
                     },

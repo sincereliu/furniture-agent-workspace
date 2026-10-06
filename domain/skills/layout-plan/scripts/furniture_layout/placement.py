@@ -7,12 +7,14 @@ from typing import Sequence
 
 from .scene import (
     EPSILON,
+    AGAINST_WALL,
     ItemSpec,
     PLACEMENT_MODES,
     PlacementRequest,
     PlacedItem,
     ResolvedPlacement,
     RoomModel,
+    WALL_ENDS,
     WALLS,
     clean,
 )
@@ -56,6 +58,7 @@ def resolve_placement(
             origin_z_mm=request.origin_z_mm,
             rotation_z_deg=request.rotation_z_deg or 0.0,
             fill=False,
+            against=request.against,
         )
 
     wall = request.host_wall
@@ -84,6 +87,7 @@ def resolve_placement(
         origin_z_mm=request.origin_z_mm,
         rotation_z_deg=expected_rotation,
         fill=request.fill,
+        against=request.against,
     )
 
 
@@ -154,18 +158,327 @@ def build_placed_item(
     )
 
 
+# (宿主墙, 这一头的方向) → 墙角。同一墙角只能有一台把这一头写成 wall。
+CORNER_OF = {
+    ("north", "west"): "northwest",
+    ("north", "east"): "northeast",
+    ("east", "north"): "northeast",
+    ("east", "south"): "southeast",
+    ("south", "east"): "southeast",
+    ("south", "west"): "southwest",
+    ("west", "south"): "southwest",
+    ("west", "north"): "northwest",
+}
+
+
 def place_items(room: RoomModel, specs: Sequence[ItemSpec]) -> tuple[PlacedItem, ...]:
-    placed: list[PlacedItem] = []
-    deferred_fill: list[ItemSpec] = []
-    for spec in specs:
-        if spec.placement.fill:
-            deferred_fill.append(spec)
+    """摆下一间房的包络。
+
+    固定宽度里写了 against 的先占它声明的那一头。普通固定宽度柜子接着按清单
+    占最早空段。铺满最后摆：没写 against 占最长空段，写了就占贴着那一头的空段。
+    """
+    specs = tuple(specs)
+    _reject_corner_claims(specs)
+    _reject_against_targets(specs)
+    placed: dict[str, PlacedItem] = {}
+    _place_group(room, [spec for spec in specs if not spec.placement.fill], placed)
+    _place_group(room, [spec for spec in specs if spec.placement.fill], placed)
+    ordered = [spec for spec in specs if not spec.placement.fill]
+    ordered += [spec for spec in specs if spec.placement.fill]
+    items = [placed[spec.id] for spec in ordered]
+    _assert_finite_placements(items)
+    return tuple(items)
+
+
+def _place_group(
+    room: RoomModel,
+    group: Sequence[ItemSpec],
+    placed: dict[str, PlacedItem],
+) -> None:
+    pending = {spec.id for spec in group}
+    while pending:
+        explicit = [
+            spec
+            for spec in group
+            if spec.id in pending
+            and spec.placement.against
+            and _against_ready(spec, placed)
+        ]
+        if explicit:
+            for spec in explicit:
+                _commit(room, spec, placed, pending)
             continue
-        placed.append(_place_fixed(room, spec, tuple(placed)))
-    for spec in deferred_fill:
-        placed.append(_place_fill(room, spec, tuple(placed)))
-    _assert_finite_placements(placed)
-    return tuple(placed)
+        blockers = [
+            spec
+            for spec in group
+            if spec.id in pending
+            and spec.id in _unplaced_targets(group, pending, placed)
+            and _against_ready(spec, placed)
+        ]
+        if blockers:
+            for spec in blockers:
+                _commit(room, spec, placed, pending)
+            continue
+        if any(_against_targets(spec) for spec in group if spec.id in pending):
+            names = ", ".join(sorted(pending))
+            raise ValueError(f"against cycle: {names}")
+        for spec in group:
+            if spec.id in pending:
+                _commit(room, spec, placed, pending)
+        return
+
+
+def _commit(
+    room: RoomModel,
+    spec: ItemSpec,
+    placed: dict[str, PlacedItem],
+    pending: set[str],
+) -> None:
+    placed[spec.id] = _place_one(room, spec, tuple(placed.values()))
+    pending.remove(spec.id)
+
+
+def _place_one(
+    room: RoomModel,
+    spec: ItemSpec,
+    already_placed: tuple[PlacedItem, ...],
+) -> PlacedItem:
+    if spec.placement.mode != "wall" or not spec.placement.against:
+        if spec.placement.fill:
+            return _place_fill(room, spec, already_placed)
+        return _place_fixed(room, spec, already_placed)
+    along, width = _against_interval(room, spec, already_placed)
+    placement = resolve_placement(room, spec.placement, along_mm=along)
+    return build_placed_item(spec, room, placement, width=width)
+
+
+def _against_targets(spec: ItemSpec) -> tuple[str, ...]:
+    return tuple(
+        value for _direction, value in spec.placement.against if value != AGAINST_WALL
+    )
+
+
+def _against_ready(spec: ItemSpec, placed: dict[str, PlacedItem]) -> bool:
+    return all(target in placed for target in _against_targets(spec))
+
+
+def _unplaced_targets(
+    group: Sequence[ItemSpec],
+    pending: set[str],
+    placed: dict[str, PlacedItem],
+) -> set[str]:
+    needed: set[str] = set()
+    for spec in group:
+        if spec.id not in pending:
+            continue
+        for target in _against_targets(spec):
+            if target not in placed and target in pending:
+                needed.add(target)
+    return needed
+
+
+def _reject_corner_claims(specs: Sequence[ItemSpec]) -> None:
+    """同一墙角、高度重叠的柜子里，只能有一台把这一头写成 wall。"""
+    claimed: dict[str, list[ItemSpec]] = {}
+    for spec in specs:
+        wall = spec.placement.host_wall
+        for direction, value in spec.placement.against:
+            if value != AGAINST_WALL or wall is None:
+                continue
+            corner = CORNER_OF[(wall, direction)]
+            z_start = spec.placement.origin_z_mm
+            z_end = z_start + spec.height
+            for previous in claimed.get(corner, ()):
+                if ranges_overlap(
+                    z_start,
+                    z_end,
+                    previous.placement.origin_z_mm,
+                    previous.placement.origin_z_mm + previous.height,
+                ):
+                    raise ValueError(
+                        f"{corner} corner is claimed by {previous.id!r} and {spec.id!r}"
+                    )
+            claimed.setdefault(corner, []).append(spec)
+
+
+def _reject_against_targets(specs: Sequence[ItemSpec]) -> None:
+    by_id = {spec.id: spec for spec in specs}
+    for spec in specs:
+        for direction, value in spec.placement.against:
+            if value == AGAINST_WALL:
+                continue
+            if value == spec.id:
+                raise ValueError(
+                    f"item {spec.id!r} against.{direction} names itself"
+                )
+            target = by_id.get(value)
+            if target is None:
+                raise ValueError(
+                    f"item {spec.id!r} against.{direction} names unknown item {value!r}"
+                )
+            if target.placement.fill and not spec.placement.fill:
+                raise ValueError(
+                    f"item {spec.id!r} against.{direction} names {value!r}; "
+                    "a fixed cabinet cannot stop against a fill"
+                )
+
+
+def _against_interval(
+    room: RoomModel,
+    spec: ItemSpec,
+    already_placed: Sequence[PlacedItem],
+) -> tuple[float, float]:
+    wall = spec.placement.host_wall
+    if wall not in WALL_ENDS:
+        raise ValueError(f"item {spec.id!r} wall placement requires host_wall")
+    placed = {item.id: item for item in already_placed}
+    low, high = WALL_ENDS[wall]
+    against = dict(spec.placement.against)
+    low_at = (
+        _end_contact(room, spec, placed, low, against[low]) if low in against else None
+    )
+    high_at = (
+        _end_contact(room, spec, placed, high, against[high])
+        if high in against
+        else None
+    )
+    length = room.wall_length(wall)
+    if low_at is not None and high_at is not None:
+        if high_at <= low_at + EPSILON:
+            raise ValueError(
+                f"item {spec.id!r} against ends do not form a span on {wall}"
+            )
+        width = high_at - low_at
+        if (
+            not spec.placement.fill
+            and spec.width is not None
+            and abs(spec.width - width) > EPSILON
+        ):
+            raise ValueError(
+                f"item {spec.id!r} width does not match its against ends"
+            )
+        _require_free(room, spec, already_placed, low_at, high_at)
+        return clean(low_at), clean(width if spec.placement.fill else spec.width or width)
+    if low_at is not None:
+        return _one_end(
+            room, spec, already_placed, contact=low_at, at_low=True, length=length
+        )
+    if high_at is None:
+        raise ValueError(f"item {spec.id!r} against does not name an end")
+    return _one_end(
+        room, spec, already_placed, contact=high_at, at_low=False, length=length
+    )
+
+
+def _one_end(
+    room: RoomModel,
+    spec: ItemSpec,
+    already_placed: Sequence[PlacedItem],
+    *,
+    contact: float,
+    at_low: bool,
+    length: float,
+) -> tuple[float, float]:
+    wall = spec.placement.host_wall or ""
+    if spec.placement.fill:
+        start, end = _touching_free_span(
+            room, spec, already_placed, contact, at_low=at_low
+        )
+        return clean(start), clean(end - start)
+    if spec.width is None:
+        raise ValueError(f"item {spec.id!r} requires width without fill")
+    if at_low:
+        start, end = contact, contact + spec.width
+    else:
+        start, end = contact - spec.width, contact
+    if start < -EPSILON or end > length + EPSILON:
+        raise ValueError(f"item {spec.id!r} envelope does not fit on {wall} wall")
+    _require_free(room, spec, already_placed, start, end)
+    return clean(start), clean(spec.width)
+
+
+def _end_contact(
+    room: RoomModel,
+    spec: ItemSpec,
+    placed: dict[str, PlacedItem],
+    direction: str,
+    value: str,
+) -> float:
+    wall = spec.placement.host_wall
+    if wall not in WALL_ENDS:
+        raise ValueError(f"item {spec.id!r} wall placement requires host_wall")
+    low, _high = WALL_ENDS[wall]
+    if value == AGAINST_WALL:
+        return 0.0 if direction == low else room.wall_length(wall)
+    target = placed[value]
+    if not ranges_overlap(
+        spec.placement.origin_z_mm,
+        spec.placement.origin_z_mm + spec.height,
+        target.placement.origin_z_mm,
+        target.z_end,
+    ):
+        raise ValueError(
+            f"item {spec.id!r} against.{direction} names {value!r}, "
+            "which does not meet that end"
+        )
+    span = footprint_span_on_wall(room, wall, target.footprint)
+    if span is None:
+        raise ValueError(
+            f"item {spec.id!r} against.{direction} names {value!r}, "
+            "which does not meet that end"
+        )
+    return span[1] if direction == low else span[0]
+
+
+def _require_free(
+    room: RoomModel,
+    spec: ItemSpec,
+    already_placed: Sequence[PlacedItem],
+    start: float,
+    end: float,
+) -> None:
+    wall = spec.placement.host_wall
+    if wall not in WALLS:
+        raise ValueError(f"item {spec.id!r} wall placement requires host_wall")
+    occupied = occupied_wall_spans(
+        room,
+        wall,
+        z_start=spec.placement.origin_z_mm,
+        z_end=spec.placement.origin_z_mm + spec.height,
+        already_placed=already_placed,
+    )
+    for occupied_start, occupied_end in occupied:
+        if ranges_overlap(start, end, occupied_start, occupied_end):
+            raise ValueError(f"item {spec.id!r} envelope does not fit on {wall} wall")
+
+
+def _touching_free_span(
+    room: RoomModel,
+    spec: ItemSpec,
+    already_placed: Sequence[PlacedItem],
+    contact: float,
+    *,
+    at_low: bool,
+) -> tuple[float, float]:
+    wall = spec.placement.host_wall
+    if wall not in WALLS:
+        raise ValueError(f"item {spec.id!r} wall placement requires host_wall")
+    free = free_spans(
+        room.wall_length(wall),
+        occupied_wall_spans(
+            room,
+            wall,
+            z_start=spec.placement.origin_z_mm,
+            z_end=spec.placement.origin_z_mm + spec.height,
+            already_placed=already_placed,
+        ),
+    )
+    for start, end in free:
+        if at_low and abs(start - contact) <= EPSILON:
+            return start, end
+        if not at_low and abs(end - contact) <= EPSILON:
+            return start, end
+    raise ValueError(f"item {spec.id!r} has no free span on {wall} wall")
 
 
 def _place_fixed(

@@ -98,6 +98,17 @@ class RoomRequest(BaseModel):
     obstacles: list[RoomObstacleRequest] = Field(default_factory=list)
 
 
+class AgainstEnds(BaseModel):
+    """靠墙柜子沿墙的两头。值 ``wall`` 表示贴到侧面的墙，其他值是柜子 id。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    east: str | None = Field(default=None, min_length=1)
+    west: str | None = Field(default=None, min_length=1)
+    south: str | None = Field(default=None, min_length=1)
+    north: str | None = Field(default=None, min_length=1)
+
+
 class ItemPlacementRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
@@ -108,6 +119,7 @@ class ItemPlacementRequest(BaseModel):
     origin_z_mm: float = Field(default=0, ge=0)
     rotation_z_deg: float | None = None
     fill: bool = Field(default=False, strict=True)
+    against: AgainstEnds | None = None
 
 
 class SceneItemRequest(BaseModel):

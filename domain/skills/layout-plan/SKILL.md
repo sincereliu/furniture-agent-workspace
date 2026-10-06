@@ -14,7 +14,7 @@ description: 用于 layout_plan 阶段，也是家具流水线的入口。当用
 - 项目统一整理成非空的 `rooms[]`，只有一件家具也要提供所属房间。每间房必须有 `id`、`width_mm`、`depth_mm`、`height_mm`；缺尺寸就问，不编造。家具写在该房间的 `items[]`，墙上的门窗写在 `openings[]`（`kind: door|window`）。
 - 每件家具给 `id`、`category`、深度、高度和 `placement`；固定宽度的件还要给 `width`。`category` 是给人看的种类，不决定是否制造。
 - 要做成柜的件写 `furniture_category: floor_cabinet|wall_cabinet`。`wall_cabinet` 表示吊柜，不表示靠墙摆放。只有客户点名某件不需要制造时才写 `manufacture: false`；该件仍参与摆放，但不进入板件阶段。
-- `placement.mode` 只有 `wall` 和 `free`。靠墙写 `host_wall`：同一面墙上的包络按顺序贴合，每台占最早放得下的那段空墙的起点；`fill: true` 占剩下最长的一段，宽度可省。自由摆写局部原点坐标和转角。沿墙偏移不在这一阶段。吊柜离地写 `placement.origin_z_mm`。坐标、点序和拒绝条件见[空间布局规则](references/spatial-layout-rules.md)。
+- `placement.mode` 只有 `wall` 和 `free`。靠墙写 `host_wall`。某一头要贴到侧面的墙，或贴着另一台，写 `placement.against`：方向是 `east`/`south`/`west`/`north`，值是 `wall` 或那台的 id。没写的一头仍按顺序占最早放得下的空段；`fill: true` 占剩下最长的一段，写了 `against` 就占贴着那一头的空段。自由摆写局部原点坐标和转角。沿墙偏移不在这一阶段。吊柜离地写 `placement.origin_z_mm`。坐标、点序和拒绝条件见[空间布局规则](references/spatial-layout-rules.md)。
 - 客户已经说清某一台的宽度时，直接给这台的 `width`，不要铺满。
 - 客户没点名家具清单时，按[房间场景指南](references/room-scene-guide.md)列出待确认假设，得到客户认可后再调用工具。
 
