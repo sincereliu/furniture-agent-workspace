@@ -74,7 +74,7 @@ z_room = oz + z_local
 `placement.mode=wall` 使用 `host_wall + origin_z_mm`，可选 `fill` 和 `against`。背面贴墙、正面朝向室内。墙摆的原点与 `rotation_z_deg` 都由 `host_wall` 和贴合结果派生，不接受自由坐标，也不接受沿墙偏移，也转不动——要旋转或要离开墙面，就改成 `mode=free`。从自由摆放改回靠墙时，原来的转角不进入下一次计算，朝向仍由宿主墙决定，沿墙位置重新贴合。  
 `placement.mode=free` 使用 `origin_x_mm/origin_y_mm/origin_z_mm + rotation_z_deg`。自由摆不写 `against`。
 
-`placement.against` 写靠墙柜子沿墙的两头。方向用 `east` / `south` / `west` / `north`，值是 `wall`（这一头贴到侧面那面墙）或另一台的 id（这一头贴着那台）。`wall` 这个词只表示贴墙，不是柜子 id。背面仍由 `host_wall` 表示，所以每面墙只许写它的两头：北墙 `west`/`east`，东墙 `north`/`south`，南墙 `east`/`west`，西墙 `south`/`north`。
+`placement.against` 写靠墙柜子沿墙的两头。方向用 `east` / `south` / `west` / `north`，值是 `wall`（这一头贴到侧面那面墙）或另一台的 id（这一头贴着那台）。`wall` 这个词只表示贴墙，不是柜子 id——**它是保留值，柜子 id 不能叫 `wall`**，否则那句话就有两种读法（入口直接拒，见 `scene.require_identifier`）。背面仍由 `host_wall` 表示，所以每面墙只许写它的两头：北墙 `west`/`east`，东墙 `north`/`south`，南墙 `east`/`west`，西墙 `south`/`north`。
 
 固定宽度里写了 `against` 的先摆，占住它声明的那一头。它点名的固定柜子如果自己没写 `against`，按当时的最早空段先摆好。其余没写 `against` 的固定柜子再按清单顺序，占该高度上最早一段放得下的空墙。因此排在前面的普通柜子不会抢走已经声明贴墙的那一头。同一个角上，高度重叠的柜子只能有一台写 `wall`；落地柜和吊柜高度不重叠时可以各写一次。空段要扣掉同高度的门窗、贴墙障碍和已经摆下的包络。放不下就失败。
 
