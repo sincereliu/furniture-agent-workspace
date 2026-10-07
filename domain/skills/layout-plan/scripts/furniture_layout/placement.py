@@ -8,6 +8,7 @@ from typing import Sequence
 from .scene import (
     EPSILON,
     AGAINST_WALL,
+    AgainstTarget,
     ItemSpec,
     PLACEMENT_MODES,
     PlacementRequest,
@@ -254,7 +255,9 @@ def _place_one(
 
 def _against_targets(spec: ItemSpec) -> tuple[str, ...]:
     return tuple(
-        value for _direction, value in spec.placement.against if value != AGAINST_WALL
+        target.id
+        for _direction, target in spec.placement.against
+        if target.kind == "item"
     )
 
 
@@ -282,8 +285,8 @@ def _reject_corner_claims(specs: Sequence[ItemSpec]) -> None:
     claimed: dict[str, list[ItemSpec]] = {}
     for spec in specs:
         wall = spec.placement.host_wall
-        for direction, value in spec.placement.against:
-            if value != AGAINST_WALL or wall is None:
+        for direction, target in spec.placement.against:
+            if target.kind != AGAINST_WALL or wall is None:
                 continue
             corner = CORNER_OF[(wall, direction)]
             z_start = spec.placement.origin_z_mm
@@ -304,9 +307,10 @@ def _reject_corner_claims(specs: Sequence[ItemSpec]) -> None:
 def _reject_against_targets(specs: Sequence[ItemSpec]) -> None:
     by_id = {spec.id: spec for spec in specs}
     for spec in specs:
-        for direction, value in spec.placement.against:
-            if value == AGAINST_WALL:
+        for direction, against in spec.placement.against:
+            if against.kind == AGAINST_WALL:
                 continue
+            value = against.id
             if value == spec.id:
                 raise ValueError(
                     f"item {spec.id!r} against.{direction} names itself"
@@ -402,14 +406,15 @@ def _end_contact(
     spec: ItemSpec,
     placed: dict[str, PlacedItem],
     direction: str,
-    value: str,
+    against: AgainstTarget,
 ) -> float:
     wall = spec.placement.host_wall
     if wall not in WALL_ENDS:
         raise ValueError(f"item {spec.id!r} wall placement requires host_wall")
     low, _high = WALL_ENDS[wall]
-    if value == AGAINST_WALL:
+    if against.kind == AGAINST_WALL:
         return 0.0 if direction == low else room.wall_length(wall)
+    value = against.id
     target = placed[value]
     if not ranges_overlap(
         spec.placement.origin_z_mm,

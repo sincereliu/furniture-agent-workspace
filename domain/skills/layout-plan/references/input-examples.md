@@ -51,7 +51,7 @@ rooms:
     mode: wall
     host_wall: south
     against:
-      east: wall
+      east: {kind: wall}
 - id: east_cab
   category: cabinet
   furniture_category: floor_cabinet
@@ -62,7 +62,7 @@ rooms:
     mode: wall
     host_wall: east
     against:
-      south: south_cab
+      south: {kind: item, id: south_cab}
 ```
 
 客户说房间里已有一件、不用做时，只给那一件加 `manufacture: false`。下面的书柜仍占位置，确认后不进板件：

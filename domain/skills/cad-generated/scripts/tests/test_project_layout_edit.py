@@ -538,9 +538,42 @@ class ProjectLayoutEditTests(unittest.TestCase):
                 self.assertEqual(back.placement.host_wall, "south")
                 self.assertEqual(back.placement.origin_x_mm, 4000)
                 self.assertEqual(
-                    back.to_source()["placement"]["against"], {"east": "wall"}
+                    back.to_source()["placement"]["against"], {"east": {"kind": "wall"}}
                 )
                 self.assertNotIn("origin_x_mm", back.to_source()["placement"])
+
+    def test_undo_preserves_an_explicit_reference_to_an_item_named_wall(self) -> None:
+        layout = ProjectLayout.from_source({"rooms": [{
+            "id": "bedroom", "width_mm": 4000, "depth_mm": 3000, "height_mm": 2800,
+            "items": [{
+                "id": "wall", "category": "cabinet", "furniture_category": "floor_cabinet",
+                "width": 800, "depth": 600, "height": 1000,
+                "placement": {"mode": "wall", "host_wall": "north"},
+            }, {
+                "id": "b", "category": "cabinet", "furniture_category": "floor_cabinet",
+                "width": 600, "depth": 600, "height": 1000,
+                "placement": {"mode": "wall", "host_wall": "north",
+                              "against": {"west": {"kind": "item", "id": "wall"}}},
+            }],
+        }]})
+        original = next(item for item in layout.rooms[0].items if item.id == "b")
+        self.assertEqual(original.placement.origin_x_mm, 800)
+        entry = {"item_id": "b", "before": {
+            "placement": original.placement.to_dict(),
+            "width": original.width, "depth": original.depth, "height": original.height,
+        }}
+        restored = apply_layout_edit(layout, {
+            "op": "move", "item_id": "b", "mode": "free",
+            "origin_x_mm": 2000, "origin_y_mm": 1200,
+        })
+        for op in layout_edit._restore_ops(entry):
+            restored = apply_layout_edit(restored, op)
+        # 经过完整项目序列化再重读，撤销后的家具引用仍保持原义。
+        restored = ProjectLayout.from_dict(restored.to_dict())
+        back = next(item for item in restored.rooms[0].items if item.id == "b")
+        self.assertEqual(back.placement.origin_x_mm, 800)
+        self.assertEqual(back.to_source()["placement"]["against"],
+                         {"west": {"kind": "item", "id": "wall"}})
 
     def test_undo_of_fill_height_does_not_pin_the_computed_start(self) -> None:
         """铺满吊柜的离地高度可以改，也可以撤回去。撤销不把算出的起点写成指定偏移。"""

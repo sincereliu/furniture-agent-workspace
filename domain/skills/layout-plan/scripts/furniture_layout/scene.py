@@ -19,10 +19,6 @@ WALL_ENDS = {
     "west": ("south", "north"),
 }
 AGAINST_WALL = "wall"
-#: 家具 id 里**不能**用的值：`placement.against` 用 `wall` 表示"这一头贴到侧面的墙"。
-#: 柜子若也叫这个名字，`against: {west: "wall"}` 就永远读成贴墙——那台柜子点不到，
-#: 而且**不报错**（摆放照样成功，只是摆到了别处）。所以形状规则之外再留一个保留值。
-RESERVED_ITEM_IDS = frozenset({AGAINST_WALL})
 PLACEMENT_MODES = frozenset({"wall", "free"})
 EXECUTABLE_CATEGORIES = frozenset({"floor_cabinet", "wall_cabinet"})
 #: 家具单元 id 的形状。板件阶段拿它拼板件编号（`{cabinet_id}__{role}`），
@@ -42,7 +38,7 @@ OBSTACLE_FIELDS = frozenset({
     "id", "kind", "x_mm", "y_mm", "z_mm", "width_mm", "depth_mm", "height_mm",
 })
 #: 靠墙柜子不收沿墙偏移。起点由包络贴合算出，只留在结果的原点里。
-#: against 是沿墙两头贴墙还是贴着哪一台，会原样留在下一次请求里。
+#: against 是沿墙两头贴墙还是贴着哪一台，输出统一保留显式目标结构。
 PLACEMENT_FIELDS = frozenset({
     "mode", "host_wall", "origin_x_mm", "origin_y_mm",
     "origin_z_mm", "rotation_z_deg", "fill", "against",
@@ -220,6 +216,19 @@ class RoomModel:
 
 
 @dataclass(frozen=True)
+class AgainstTarget:
+    """已解析的贴合目标；家具 id 不再与贴墙指令共用一个字符串。"""
+
+    kind: str
+    id: str = ""
+
+    def to_dict(self) -> dict[str, str]:
+        if self.kind == AGAINST_WALL:
+            return {"kind": AGAINST_WALL}
+        return {"kind": "item", "id": self.id}
+
+
+@dataclass(frozen=True)
 class PlacementRequest:
     mode: str
     host_wall: str | None
@@ -228,7 +237,7 @@ class PlacementRequest:
     origin_z_mm: float
     rotation_z_deg: float | None
     fill: bool = False
-    against: tuple[tuple[str, str], ...] = ()
+    against: tuple[tuple[str, AgainstTarget], ...] = ()
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PlacementRequest":
@@ -260,7 +269,7 @@ class ResolvedPlacement:
     origin_z_mm: float
     rotation_z_deg: float
     fill: bool = False
-    against: tuple[tuple[str, str], ...] = ()
+    against: tuple[tuple[str, AgainstTarget], ...] = ()
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ResolvedPlacement":
@@ -293,7 +302,9 @@ class ResolvedPlacement:
             "fill": self.fill,
         }
         if self.against:
-            payload["against"] = {direction: value for direction, value in self.against}
+            payload["against"] = {
+                direction: target.to_dict() for direction, target in self.against
+            }
         return payload
 
 
@@ -487,8 +498,8 @@ def parse_item_specs(
 
 def _parse_against(
     data: Mapping[str, Any], *, mode: str, host_wall: str | None
-) -> tuple[tuple[str, str], ...]:
-    """沿墙两头。值 ``wall`` 是贴到侧面的墙，其他值是柜子 id。"""
+) -> tuple[tuple[str, AgainstTarget], ...]:
+    """沿墙两头；字符串简写只在入口转换，几何与输出使用显式目标。"""
     if "against" not in data or data.get("against") is None:
         return ()
     raw = data["against"]
@@ -507,11 +518,11 @@ def _parse_against(
             raise ValueError("placement.against requires host_wall")
         return ()
     low, high = WALL_ENDS[host_wall]
-    pairs: list[tuple[str, str]] = []
+    pairs: list[tuple[str, AgainstTarget]] = []
     for direction in (low, high):
         if direction not in written:
             continue
-        pairs.append((direction, _against_token(written[direction], direction)))
+        pairs.append((direction, _against_target(written[direction], direction)))
     for direction in written:
         if direction not in {low, high}:
             raise ValueError(
@@ -520,40 +531,45 @@ def _parse_against(
     return tuple(pairs)
 
 
-def _against_token(value: Any, direction: str) -> str:
+def _against_target(value: Any, direction: str) -> AgainstTarget:
+    where = f"placement.against.{direction}"
     if isinstance(value, str):
         token = value.strip()
-        if token == AGAINST_WALL or (
-            ITEM_ID_PATTERN.fullmatch(token) and PANEL_ID_SEPARATOR not in token
-        ):
-            return token
+        if token == AGAINST_WALL:
+            return AgainstTarget(kind=AGAINST_WALL)
+        return AgainstTarget(kind="item", id=require_identifier(token, where=where))
+    if isinstance(value, Mapping):
+        kind = value.get("kind")
+        if kind == AGAINST_WALL:
+            fields(value, frozenset({"kind"}), where)
+            return AgainstTarget(kind=AGAINST_WALL)
+        if kind == "item":
+            fields(value, frozenset({"kind", "id"}), where)
+            item_id = text(value, "id")
+            return AgainstTarget(
+                kind="item", id=require_identifier(item_id, where=f"{where}.id")
+            )
     raise ValueError(
-        f"placement.against.{direction} must be wall or a cabinet id"
+        f"{where} must be {{kind: wall}} or {{kind: item, id: cabinet_id}}; "
+        "string shorthand accepts wall or a cabinet id"
     )
 
 
 def require_identifier(value: str, *, where: str) -> str:
-    """**家具单元 id** 的入口校验：合法标识符、不含 `__`、不是保留值。
+    """**家具单元 id** 的入口校验：合法标识符、不含 `__`。
 
     为什么卡在入口：板件阶段用这个 id 拼板件编号（`{cabinet_id}__{role}`），
     不合格的 id（`cabinet-1`、`1cabinet`、`a__b`）**建项目时看不出来**，
     要跑到板件才炸。只校验**输入**，不校验读取——库里已有的旧 id 仍能打开，
     由一次性迁移改名（见 references/backlog.md）。
 
-    保留值（`RESERVED_ITEM_IDS`）是**布局输入**这一侧的约束，跟形状规则无关：
-    `placement.against` 拿 `wall` 当"贴墙"，id 撞上它之后那句话就有两种读法，
-    而代码只会挑一种、不报错。板件阶段不受这条限制（它没有 `against`）。
+    `against` 用 kind 区分墙和家具，因此家具 id 可以叫 `wall`。
     """
     if not ITEM_ID_PATTERN.fullmatch(value) or PANEL_ID_SEPARATOR in value:
         raise ValueError(
             f"{where} {value!r} is not usable: an id must be a Python identifier "
             "(letters, digits, underscore; not starting with a digit) and must not "
             "contain '__', because the panel stage builds panel ids from it"
-        )
-    if value in RESERVED_ITEM_IDS:
-        raise ValueError(
-            f"{where} {value!r} is reserved: placement.against uses {value!r} to "
-            "mean the side wall, so a cabinet cannot carry that id (rename it)"
         )
     return value
 

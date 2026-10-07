@@ -13,7 +13,7 @@
 
 下游板件只读已确认的 `LayoutUnit`（`furniture_category` 为 `floor_cabinet` / `wall_cabinet`，且该件不是 `manufacture: false`）。客户点名不制造的包络留在房间里，不是 `LayoutUnit`。`room_shell.py` 写的房间外壳 STEP 不是柜体模型。
 
-**靠墙包络**：写了 `placement.against` 的固定柜子先占声明的那一头（`wall` 贴到侧面的墙，柜子 id 贴着那台）。其余固定宽度的按顺序贴上最早放得下的空段。`placement.fill` 没写 `against` 时占最长空段，写了就占贴着那一头的空段；id 不变，不按门宽拆开。请求不写沿墙位置。`to_source()` 不把这次算出的起点写进下一次请求，但留下 `against`。口径见[空间布局规则](spatial-layout-rules.md)。
+**靠墙包络**：写了 `placement.against` 的固定柜子先占声明的那一头（`{kind: wall}` 贴到侧面的墙，`{kind: item, id: ...}` 贴着指定家具）。入口也接受 `wall` / 家具 id 字符串简写，内部使用 `AgainstTarget`，输出统一为显式对象。其余固定宽度的按顺序贴上最早放得下的空段。`placement.fill` 没写 `against` 时占最长空段，写了就占贴着那一头的空段；id 不变，不按门宽拆开。请求不写沿墙位置。`to_source()` 不把这次算出的起点写进下一次请求，但留下 `against`。口径见[空间布局规则](spatial-layout-rules.md)。
 
 板件实际只依赖 `LayoutUnit` 的五个字段：`id`、`furniture_category`、`width`、`depth`、`height`。这五个不变，板件与制造的内容就不变，可以跨 Revision 继承（见编排层 [修订继承设计](../../cad-generated/references/revision-inheritance-design.md)）。沿墙铺满那件的 `width` 由该墙空段算出，改房间就会改它，所以这种件永远算变了，必须重算。
 

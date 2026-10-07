@@ -74,9 +74,20 @@ z_room = oz + z_local
 `placement.mode=wall` 使用 `host_wall + origin_z_mm`，可选 `fill` 和 `against`。背面贴墙、正面朝向室内。墙摆的原点与 `rotation_z_deg` 都由 `host_wall` 和贴合结果派生，不接受自由坐标，也不接受沿墙偏移，也转不动——要旋转或要离开墙面，就改成 `mode=free`。从自由摆放改回靠墙时，原来的转角不进入下一次计算，朝向仍由宿主墙决定，沿墙位置重新贴合。  
 `placement.mode=free` 使用 `origin_x_mm/origin_y_mm/origin_z_mm + rotation_z_deg`。自由摆不写 `against`。
 
-`placement.against` 写靠墙柜子沿墙的两头。方向用 `east` / `south` / `west` / `north`，值是 `wall`（这一头贴到侧面那面墙）或另一台的 id（这一头贴着那台）。`wall` 这个词只表示贴墙，不是柜子 id——**它是保留值，柜子 id 不能叫 `wall`**，否则那句话就有两种读法（入口直接拒，见 `scene.require_identifier`）。背面仍由 `host_wall` 表示，所以每面墙只许写它的两头：北墙 `west`/`east`，东墙 `north`/`south`，南墙 `east`/`west`，西墙 `south`/`north`。
+`placement.against` 写靠墙柜子沿墙的两头。方向用 `east` / `south` / `west` / `north`，每一头的目标显式区分墙和家具：
 
-固定宽度里写了 `against` 的先摆，占住它声明的那一头。它点名的固定柜子如果自己没写 `against`，按当时的最早空段先摆好。其余没写 `against` 的固定柜子再按清单顺序，占该高度上最早一段放得下的空墙。因此排在前面的普通柜子不会抢走已经声明贴墙的那一头。同一个角上，高度重叠的柜子只能有一台写 `wall`；落地柜和吊柜高度不重叠时可以各写一次。空段要扣掉同高度的门窗、贴墙障碍和已经摆下的包络。放不下就失败。
+```json
+{"against": {"west": {"kind": "wall"}, "east": {"kind": "item", "id": "cabinet_b"}}}
+```
+
+- `{kind: wall}`：这一头贴到侧面那面墙，只允许 `kind` 字段。
+- `{kind: item, id: cabinet_b}`：这一头贴着指定家具，必须有合法家具 `id`，只允许 `kind` 和 `id` 字段。家具可以叫 `wall`，用 `{kind: item, id: wall}` 引用。
+- 字符串简写仍是允许的结构化输入：`"wall"` 始终表示贴墙，其他字符串表示家具 id；不根据场景里有没有同名家具改变解释。入口统一转换为显式目标，已摆放输出、`to_source()` 和下一次编辑请求都输出对象。这样已有请求与保存的字符串目标仍可读取，且显式家具引用不会在保存后退回贴墙指令。
+- 缺失或未知 `kind`、缺失或非法家具 `id`、目标上的额外字段直接拒绝。方向值为 `null` 表示未声明这一头。
+
+这两种输入形式是明确的结构化协议，转换不涉及自然语言消歧；LLM 负责选择贴墙还是贴哪件家具，运行时只验证目标并计算坐标。背面仍由 `host_wall` 表示，所以每面墙只许写它的两头：北墙 `west`/`east`，东墙 `north`/`south`，南墙 `east`/`west`，西墙 `south`/`north`。
+
+固定宽度里写了 `against` 的先摆，占住它声明的那一头。它点名的固定柜子如果自己没写 `against`，按当时的最早空段先摆好。其余没写 `against` 的固定柜子再按清单顺序，占该高度上最早一段放得下的空墙。因此排在前面的普通柜子不会抢走已经声明贴墙的那一头。同一个角上，高度重叠的柜子只能有一台指定墙为目标；落地柜和吊柜高度不重叠时可以各写一次。空段要扣掉同高度的门窗、贴墙障碍和已经摆下的包络。放不下就失败。
 
 `fill=true` 仅用于 `mode=wall`。可以不写 `width`。固定宽度的柜子都贴完之后才铺满。没写 `against` 时，这一台占剩下最长的一段空墙。写了 `against` 时，占贴着那一头的空段，不改拿更长的另一段。客户同时给了 width 与 fill 时，以这段空墙为准。
 

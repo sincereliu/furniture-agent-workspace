@@ -87,6 +87,8 @@ result = session.call(name, arguments)  # arguments 为对象或 JSON 字符串
 
 柜门（`n_doors`）、层板、抽屉、料厚、背板、踢脚、五金不得进入布局，它们属于 `stage_input`。房间门窗写在 `rooms[].openings[]`（`kind=door|window`），这是 layout 输入，不是柜门。
 
+布局的 `placement.against` 将沿墙的一头（`east` / `south` / `west` / `north`）映射到 `{kind: wall}` 或 `{kind: item, id: 家具id}`。字符串简写也可输入：`wall` 始终表示侧墙，其他字符串表示家具 id。引用名为 `wall` 的家具必须用显式 `item` 对象；输出统一为显式对象。字段与拒绝条件见[空间布局规则](../../layout-plan/references/spatial-layout-rules.md)。
+
 板件/制造构造走：
 
 - 第一次板件/制造：`furniture_run_next` 的 `stage_input`

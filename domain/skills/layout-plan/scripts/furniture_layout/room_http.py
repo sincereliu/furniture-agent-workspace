@@ -6,16 +6,16 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Callable, Literal
+from typing import Annotated, Any, Callable, Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from furniture_layout.room_page import render_draft_page
 from furniture_layout.layout_entry import write_room_shell, plan_room_scene
-from furniture_layout.scene import RoomScene
+from furniture_layout.scene import RoomScene, require_identifier
 from furniture_layout.scene_planning import plan_scene
 from furniture_layout.scene_edit import apply_edit
 from furniture_layout.scene_store import (
@@ -98,15 +98,39 @@ class RoomRequest(BaseModel):
     obstacles: list[RoomObstacleRequest] = Field(default_factory=list)
 
 
+class AgainstWallTarget(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["wall"]
+
+
+class AgainstItemTarget(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["item"]
+    id: str = Field(strict=True, min_length=1)
+
+    @field_validator("id")
+    @classmethod
+    def valid_identifier(cls, value: str) -> str:
+        return require_identifier(value.strip(), where="against target.id")
+
+
+AgainstTargetInput = (
+    Annotated[AgainstWallTarget | AgainstItemTarget, Field(discriminator="kind")]
+    | Annotated[str, Field(min_length=1)]
+)
+
+
 class AgainstEnds(BaseModel):
-    """靠墙柜子沿墙的两头。值 ``wall`` 表示贴到侧面的墙，其他值是柜子 id。"""
+    """沿墙两头的显式目标，也接受 wall / 家具 id 字符串简写。"""
 
     model_config = ConfigDict(extra="forbid")
 
-    east: str | None = Field(default=None, min_length=1)
-    west: str | None = Field(default=None, min_length=1)
-    south: str | None = Field(default=None, min_length=1)
-    north: str | None = Field(default=None, min_length=1)
+    east: AgainstTargetInput | None = None
+    west: AgainstTargetInput | None = None
+    south: AgainstTargetInput | None = None
+    north: AgainstTargetInput | None = None
 
 
 class ItemPlacementRequest(BaseModel):
