@@ -430,8 +430,8 @@ class AgainstEndTests(unittest.TestCase):
         东柜宽 900、深 550，南头贴着南柜，沿墙起点是 3000−600−900。
         """
         scene = plan_scene(ROOM, [
-            _cabinet("east_cab", host_wall="east", width=900, depth=550, against={"south": "south_cab"}),
-            _cabinet("south_cab", host_wall="south", width=800, against={"east": "wall"}),
+            _cabinet("east_cab", host_wall="east", width=900, depth=550, against={"south": {"kind": "item", "id": "south_cab"}}),
+            _cabinet("south_cab", host_wall="south", width=800, against={"east": {"kind": "wall"}}),
         ])
         south = next(item for item in scene.items if item.id == "south_cab")
         east = next(item for item in scene.items if item.id == "east_cab")
@@ -460,7 +460,7 @@ class AgainstEndTests(unittest.TestCase):
         """普通柜子写在前面，也不会抢走已经声明贴墙的那一头。"""
         scene = plan_scene(ROOM, [
             _cabinet("desk", host_wall="south", width=600, depth=500, height=750),
-            _cabinet("south_cab", host_wall="south", width=800, against={"east": "wall"}),
+            _cabinet("south_cab", host_wall="south", width=800, against={"east": {"kind": "wall"}}),
         ])
         south = next(item for item in scene.items if item.id == "south_cab")
         desk = next(item for item in scene.items if item.id == "desk")
@@ -470,7 +470,7 @@ class AgainstEndTests(unittest.TestCase):
     def test_naming_a_cabinet_puts_this_end_against_that_cabinet(self) -> None:
         """北墙：后写的 A 在西头。B 的西头写着贴 A，所以 B 排在 A 东侧。"""
         scene = plan_scene(ROOM, [
-            _cabinet("b_cab", host_wall="north", width=700, against={"west": "a_cab"}),
+            _cabinet("b_cab", host_wall="north", width=700, against={"west": {"kind": "item", "id": "a_cab"}}),
             _cabinet("a_cab", host_wall="north", width=800),
         ])
         placed = {item.id: item for item in scene.items}
@@ -480,10 +480,10 @@ class AgainstEndTests(unittest.TestCase):
     def test_floor_and_hanging_cabinets_can_claim_the_same_corner(self) -> None:
         """落地柜和吊柜高度不重叠，可以同时把东头写成贴墙。高度一重叠就拒绝。"""
         scene = plan_scene(ROOM, [
-            _cabinet("base", host_wall="south", height=800, against={"east": "wall"}),
+            _cabinet("base", host_wall="south", height=800, against={"east": {"kind": "wall"}}),
             _cabinet(
                 "hang", host_wall="south", height=700, origin_z_mm=1600,
-                against={"east": "wall"},
+                against={"east": {"kind": "wall"}},
             ),
         ])
         placed = {item.id: item for item in scene.items}
@@ -493,31 +493,31 @@ class AgainstEndTests(unittest.TestCase):
         self.assertEqual(placed["hang"].placement.origin_x_mm, 4000)
         with self.assertRaisesRegex(ValueError, "southeast corner"):
             plan_scene(ROOM, [
-                _cabinet("base", host_wall="south", height=800, against={"east": "wall"}),
+                _cabinet("base", host_wall="south", height=800, against={"east": {"kind": "wall"}}),
                 _cabinet(
                     "hang", host_wall="south", height=700, origin_z_mm=400,
-                    against={"east": "wall"},
+                    against={"east": {"kind": "wall"}},
                 ),
             ])
 
     def test_one_corner_allows_only_one_cabinet_to_reach_the_wall(self) -> None:
         with self.assertRaisesRegex(ValueError, "southeast corner"):
             plan_scene(ROOM, [
-                _cabinet("south_cab", host_wall="south", against={"east": "wall"}),
-                _cabinet("east_cab", host_wall="east", against={"south": "wall"}),
+                _cabinet("south_cab", host_wall="south", against={"east": {"kind": "wall"}}),
+                _cabinet("east_cab", host_wall="east", against={"south": {"kind": "wall"}}),
             ])
 
     def test_cabinets_that_only_name_each_other_fail(self) -> None:
         with self.assertRaisesRegex(ValueError, "against cycle"):
             plan_scene(ROOM, [
-                _cabinet("south_cab", host_wall="south", against={"east": "east_cab"}),
-                _cabinet("east_cab", host_wall="east", against={"south": "south_cab"}),
+                _cabinet("south_cab", host_wall="south", against={"east": {"kind": "item", "id": "east_cab"}}),
+                _cabinet("east_cab", host_wall="east", against={"south": {"kind": "item", "id": "south_cab"}}),
             ])
 
     def test_against_only_accepts_the_two_ends_of_the_host_wall(self) -> None:
         with self.assertRaisesRegex(ValueError, "only allows east and west"):
             plan_scene(ROOM, [
-                _cabinet("south_cab", host_wall="south", against={"north": "wall"}),
+                _cabinet("south_cab", host_wall="south", against={"north": {"kind": "wall"}}),
             ])
 
     def test_free_placement_rejects_against(self) -> None:
@@ -532,7 +532,7 @@ class AgainstEndTests(unittest.TestCase):
                     "mode": "free",
                     "origin_x_mm": 1000,
                     "origin_y_mm": 1000,
-                    "against": {"east": "wall"},
+                    "against": {"east": {"kind": "wall"}},
                 },
             }])
 
@@ -550,7 +550,7 @@ class AgainstEndTests(unittest.TestCase):
         }
         with self.assertRaisesRegex(ValueError, "does not fit"):
             plan_scene(room, [
-                _cabinet("north_cab", host_wall="north", width=800, against={"west": "wall"}),
+                _cabinet("north_cab", host_wall="north", width=800, against={"west": {"kind": "wall"}}),
             ])
 
     def test_fill_takes_the_span_touching_the_named_end(self) -> None:
@@ -570,7 +570,7 @@ class AgainstEndTests(unittest.TestCase):
         touching = plan_scene(room, [
             _cabinet(
                 "run", host_wall="north", width=None, height=700,
-                origin_z_mm=1400, fill=True, against={"west": "wall"},
+                origin_z_mm=1400, fill=True, against={"west": {"kind": "wall"}},
             ),
         ])
         run = touching.items[0]
@@ -578,7 +578,7 @@ class AgainstEndTests(unittest.TestCase):
         east_end = plan_scene(room, [
             _cabinet(
                 "run", host_wall="north", width=None, height=700,
-                origin_z_mm=1400, fill=True, against={"east": "wall"},
+                origin_z_mm=1400, fill=True, against={"east": {"kind": "wall"}},
             ),
         ])
         self.assertEqual(
@@ -599,10 +599,10 @@ class AgainstEndTests(unittest.TestCase):
     def test_heights_that_do_not_overlap_do_not_meet(self) -> None:
         with self.assertRaisesRegex(ValueError, "does not meet"):
             plan_scene(ROOM, [
-                _cabinet("south_cab", host_wall="south", height=800, against={"east": "wall"}),
+                _cabinet("south_cab", host_wall="south", height=800, against={"east": {"kind": "wall"}}),
                 _cabinet(
                     "east_cab", host_wall="east", width=900, depth=550,
-                    height=700, origin_z_mm=1600, against={"south": "south_cab"},
+                    height=700, origin_z_mm=1600, against={"south": {"kind": "item", "id": "south_cab"}},
                 ),
             ])
 
@@ -611,7 +611,7 @@ class AgainstEndTests(unittest.TestCase):
             plan_scene(ROOM, [
                 _cabinet(
                     "south_cab", host_wall="south", width=800,
-                    against={"east": "wall", "west": "wall"},
+                    against={"east": {"kind": "wall"}, "west": {"kind": "wall"}},
                 ),
             ])
 
@@ -636,29 +636,28 @@ class AgainstEndTests(unittest.TestCase):
         )
         self.assertEqual(plan_scene(source["room"], source["items"]).to_dict(), saved)
 
-    def test_string_shorthand_has_the_same_geometry_as_explicit_targets(self) -> None:
-        for wall, item in (("wall", "south_cab"),
-                           ({"kind": "wall"}, {"kind": "item", "id": "south_cab"})):
-            with self.subTest(wall=wall):
-                scene = plan_scene(ROOM, [
-                    _cabinet("east_cab", host_wall="east", width=900, depth=550,
-                             against={"south": item}),
-                    _cabinet("south_cab", host_wall="south", width=800,
-                             against={"east": wall}),
-                ])
-                placed = {entry.id: entry for entry in scene.items}
-                self.assertEqual(placed["east_cab"].placement.origin_y_mm, 1500)
-                self.assertEqual(placed["south_cab"].placement.origin_x_mm, 4000)
-                self.assertEqual(
-                    placed["south_cab"].to_source()["placement"]["against"],
-                    {"east": {"kind": "wall"}},
-                )
+    def test_string_targets_are_rejected_by_direct_http_and_edit_inputs(self) -> None:
+        source = room_scene_source(plan_scene(ROOM, [ITEM]))
+        for target in ("wall", "cabinet_b"):
+            with self.subTest(target=target):
+                against = {"west": target}
+                placement = {"mode": "wall", "host_wall": "north", "against": against}
+                with self.assertRaisesRegex(ValueError, "placement.against.west must be"):
+                    plan_scene(ROOM, [{**ITEM, "placement": placement}])
+                with self.assertRaises(ValidationError):
+                    room_http.ItemPlacementRequest.model_validate(placement)
+                edited = apply_edit(source, {
+                    "op": "move", "item_id": ITEM["id"],
+                    "origin_z_mm": 100, "against": against,
+                })
+                with self.assertRaisesRegex(ValueError, "placement.against.west must be"):
+                    plan_scene(edited["room"], edited["items"])
 
-    def test_wall_shorthand_still_means_wall_when_an_item_has_that_name(self) -> None:
+    def test_wall_target_is_distinct_from_an_item_with_the_same_name(self) -> None:
         scene = plan_scene(ROOM, [
             _cabinet("wall", host_wall="north", width=800, height=800),
             _cabinet("b", host_wall="north", width=600, height=700,
-                     origin_z_mm=1600, against={"west": "wall"}),
+                     origin_z_mm=1600, against={"west": {"kind": "wall"}}),
         ])
         self.assertEqual(scene.items[1].placement.origin_x_mm, 0)
         self.assertEqual(
@@ -666,16 +665,19 @@ class AgainstEndTests(unittest.TestCase):
             {"west": {"kind": "wall"}},
         )
 
-    def test_saved_string_targets_can_be_read_as_explicit_targets(self) -> None:
-        scene = plan_scene(ROOM, [
-            _cabinet("b", host_wall="north", width=600, against={"west": "a"}),
-            _cabinet("a", host_wall="north", width=800, against={"west": "wall"}),
-        ])
-        saved = scene.to_dict()
-        saved["items"][0]["placement"]["against"] = {"west": "a"}
-        saved["items"][1]["placement"]["against"] = {"west": "wall"}
-        restored = RoomScene.from_dict(saved)
-        self.assertEqual(restored.to_dict(), scene.to_dict())
+    def test_saved_string_targets_are_rejected(self) -> None:
+        scene = plan_scene(ROOM, [ITEM])
+        layout = ProjectLayout.from_source({"rooms": [{**ROOM, "items": [ITEM]}]})
+        for target in ("wall", "cabinet_b"):
+            with self.subTest(target=target):
+                saved_scene = scene.to_dict()
+                saved_scene["items"][0]["placement"]["against"] = {"west": target}
+                with self.assertRaisesRegex(ValueError, "placement.against.west must be"):
+                    RoomScene.from_dict(saved_scene)
+                saved_layout = layout.to_dict()
+                saved_layout["rooms"][0]["items"][0]["placement"]["against"] = {"west": target}
+                with self.assertRaisesRegex(ValueError, "placement.against.west must be"):
+                    ProjectLayout.from_dict(saved_layout)
 
     def test_invalid_explicit_targets_fail_at_direct_and_http_inputs(self) -> None:
         for target in (
@@ -731,7 +733,7 @@ class AgainstEndTests(unittest.TestCase):
 
     def test_edit_keeps_against_until_the_cabinet_leaves_that_wall(self) -> None:
         scene = plan_scene(ROOM, [
-            _cabinet("south_cab", host_wall="south", against={"east": "wall"}),
+            _cabinet("south_cab", host_wall="south", against={"east": {"kind": "wall"}}),
         ])
         source = room_scene_source(scene)
         raised = apply_edit(source, {"op": "move", "item_id": "south_cab", "origin_z_mm": 100})
@@ -759,10 +761,10 @@ class AgainstEndTests(unittest.TestCase):
         placement = room_http.ItemPlacementRequest.model_validate({
             "mode": "wall",
             "host_wall": "south",
-            "against": {"east": "wall"},
+            "against": {"east": {"kind": "wall"}},
         })
         dumped = placement.model_dump(exclude_none=True)
-        self.assertEqual(dumped["against"], {"east": "wall"})
+        self.assertEqual(dumped["against"], {"east": {"kind": "wall"}})
         explicit = room_http.ItemPlacementRequest.model_validate({
             "mode": "wall", "host_wall": "north",
             "against": {"west": {"kind": "item", "id": "wall"},
@@ -781,7 +783,7 @@ class AgainstEndTests(unittest.TestCase):
             room_http.ItemPlacementRequest.model_validate({
                 "mode": "wall",
                 "host_wall": "south",
-                "against": {"front": "wall"},
+                "against": {"front": {"kind": "wall"}},
             })
 
 

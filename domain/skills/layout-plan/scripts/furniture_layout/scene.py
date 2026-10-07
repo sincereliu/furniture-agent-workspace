@@ -499,7 +499,7 @@ def parse_item_specs(
 def _parse_against(
     data: Mapping[str, Any], *, mode: str, host_wall: str | None
 ) -> tuple[tuple[str, AgainstTarget], ...]:
-    """沿墙两头；字符串简写只在入口转换，几何与输出使用显式目标。"""
+    """沿墙两头；输入、几何与输出使用同一份显式目标。"""
     if "against" not in data or data.get("against") is None:
         return ()
     raw = data["against"]
@@ -533,11 +533,6 @@ def _parse_against(
 
 def _against_target(value: Any, direction: str) -> AgainstTarget:
     where = f"placement.against.{direction}"
-    if isinstance(value, str):
-        token = value.strip()
-        if token == AGAINST_WALL:
-            return AgainstTarget(kind=AGAINST_WALL)
-        return AgainstTarget(kind="item", id=require_identifier(token, where=where))
     if isinstance(value, Mapping):
         kind = value.get("kind")
         if kind == AGAINST_WALL:
@@ -550,8 +545,7 @@ def _against_target(value: Any, direction: str) -> AgainstTarget:
                 kind="item", id=require_identifier(item_id, where=f"{where}.id")
             )
     raise ValueError(
-        f"{where} must be {{kind: wall}} or {{kind: item, id: cabinet_id}}; "
-        "string shorthand accepts wall or a cabinet id"
+        f"{where} must be {{kind: wall}} or {{kind: item, id: cabinet_id}}"
     )
 
 

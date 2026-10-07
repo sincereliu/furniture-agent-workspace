@@ -496,7 +496,7 @@ class ProjectLayoutEditTests(unittest.TestCase):
                     "placement": {
                         "mode": "wall",
                         "host_wall": "south",
-                        "against": {"east": "wall"},
+                        "against": {"east": {"kind": "wall"}},
                     },
                 }],
             }]

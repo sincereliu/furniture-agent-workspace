@@ -116,14 +116,13 @@ class AgainstItemTarget(BaseModel):
         return require_identifier(value.strip(), where="against target.id")
 
 
-AgainstTargetInput = (
-    Annotated[AgainstWallTarget | AgainstItemTarget, Field(discriminator="kind")]
-    | Annotated[str, Field(min_length=1)]
-)
+AgainstTargetInput = Annotated[
+    AgainstWallTarget | AgainstItemTarget, Field(discriminator="kind")
+]
 
 
 class AgainstEnds(BaseModel):
-    """沿墙两头的显式目标，也接受 wall / 家具 id 字符串简写。"""
+    """沿墙两头的显式目标。"""
 
     model_config = ConfigDict(extra="forbid")
 
