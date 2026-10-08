@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from copy import deepcopy
+import itertools
 import sys
 import unittest
 from pathlib import Path
@@ -476,6 +477,129 @@ class AgainstEndTests(unittest.TestCase):
         placed = {item.id: item for item in scene.items}
         self.assertEqual(placed["a_cab"].placement.origin_x_mm, 0)
         self.assertEqual(placed["b_cab"].placement.origin_x_mm, 800)
+
+    def test_two_cabinets_cannot_share_one_item_end_at_the_same_height(self) -> None:
+        """两台在同一段高度上抢同一个贴靠位时，报清是哪两台、该怎么改。
+
+        以前这种输入要等到摆放时才以 `does not fit` 被拒——读起来像"墙不够长"，
+        而真正的修法是改引用（另一台改成贴前一台，或换到目标柜的另一侧）。
+
+        高度**不**重叠是允许的：落地柜与吊柜可以共用同一台的同一个侧面（一上一下）。
+        """
+        shared_end = {"west": {"kind": "item", "id": "a"}}
+        with self.assertRaisesRegex(ValueError, "'b' and 'c' both stop against 'a'"):
+            plan_scene(ROOM, [
+                _cabinet("a", host_wall="north", against={"west": {"kind": "wall"}}),
+                _cabinet("b", host_wall="north", width=600, against=shared_end),
+                _cabinet("c", host_wall="north", width=600, against=shared_end),
+            ])
+        # 一上一下：a 是高柜，b 落地、c 吊柜，都贴 a 的东侧 → 允许，且都在 a 的东面。
+        scene = plan_scene(ROOM, [
+            _cabinet("a", host_wall="north", height=2400, against={"west": {"kind": "wall"}}),
+            _cabinet("b", host_wall="north", width=600, height=800, against=shared_end),
+            _cabinet("c", host_wall="north", width=600, height=800, origin_z_mm=1600,
+                     against=shared_end),
+        ])
+        placed = {item.id: item for item in scene.items}
+        self.assertEqual(placed["b"].placement.origin_x_mm, 800)
+        self.assertEqual(placed["c"].placement.origin_x_mm, 800)
+        self.assertEqual((placed["b"].placement.origin_z_mm, placed["c"].placement.origin_z_mm),
+                         (0, 1600))
+
+    def test_declared_ends_do_not_depend_on_list_order(self) -> None:
+        """三台链式：清单顺序怎么打乱，声明过的位置都一模一样。
+
+        这是"家具只能顺时针一个一个生成"的正面对照，也是那段摆放循环存在的理由：
+        它得能在依赖没就绪时回头再来一轮。把循环换成"一趟 + 多等一轮"（现有两台
+        用例拦不住那种退化），三台反序就会炸——这条会先红。
+        """
+        chain = [
+            _cabinet("b", host_wall="north", width=700,
+                     against={"west": {"kind": "item", "id": "a"}}),
+            _cabinet("c", host_wall="north", width=600,
+                     against={"west": {"kind": "item", "id": "b"}}),
+            _cabinet("a", host_wall="north", width=800,
+                     against={"west": {"kind": "wall"}}),
+        ]
+
+        def snapshot(items: list[dict]) -> tuple:
+            scene = plan_scene(ROOM, items)
+            return tuple(sorted(
+                (item.id, item.width, item.placement.origin_x_mm)
+                for item in scene.items
+            ))
+
+        results = {snapshot(list(order)) for order in itertools.permutations(chain)}
+        self.assertEqual(len(results), 1, "声明过的柜子不该跟着清单顺序换位置")
+        self.assertEqual(snapshot(chain), snapshot(chain), "同一份输入重跑也必须一样")
+        placed = {item.id: item for item in plan_scene(ROOM, chain).items}
+        self.assertEqual(
+            (placed["a"].placement.origin_x_mm, placed["a"].width), (0, 800)
+        )
+        self.assertEqual(placed["b"].placement.origin_x_mm, 800, "b 紧贴 a")
+        self.assertEqual(placed["c"].placement.origin_x_mm, 1500, "c 紧贴 b")
+
+    def test_a_longer_declared_chain_ignores_list_order_too(self) -> None:
+        """链更长时同样顺序无关（抽几种顺序，不做全排列）。
+
+        完全反序那一组是"最坏情况"：要转 6 轮才摆得完。
+        """
+        def specs() -> dict[str, dict]:
+            table: dict[str, dict] = {}
+            for index in range(6):
+                item_id = f"c{index + 1}"
+                against = (
+                    {"west": {"kind": "wall"}}
+                    if index == 0
+                    else {"west": {"kind": "item", "id": f"c{index}"}}
+                )
+                table[item_id] = _cabinet(
+                    item_id, host_wall="north", width=600, against=against
+                )
+            return table
+
+        table = specs()
+        orders = (
+            ["c1", "c2", "c3", "c4", "c5", "c6"],      # 正序
+            ["c6", "c5", "c4", "c3", "c2", "c1"],      # 完全反序（最坏）
+            ["c3", "c1", "c5", "c2", "c6", "c4"],      # 打乱
+            ["c2", "c6", "c4", "c1", "c3", "c5"],      # 再打乱
+        )
+        results = {
+            tuple(sorted(
+                (item.id, item.placement.origin_x_mm)
+                for item in plan_scene(ROOM, [table[key] for key in order]).items
+            ))
+            for order in orders
+        }
+        self.assertEqual(len(results), 1, "链更长时也必须与清单顺序无关")
+        placed = {
+            item.id: item.placement.origin_x_mm
+            for item in plan_scene(ROOM, list(table.values())).items
+        }
+        self.assertEqual(
+            [placed[f"c{index}"] for index in range(1, 7)],
+            [0, 600, 1200, 1800, 2400, 3000],
+        )
+
+    def test_ordinary_cabinets_still_follow_the_list_order(self) -> None:
+        """没写 `against` 的一头仍按清单顺序占最早空段：别把"顺序无关"推过头。
+
+        上面两条守的是"声明过的免疫顺序"；这条守的是另一侧——普通件的既有行为。
+        两条一起，才把那条界线钉住。
+        """
+        first = plan_scene(ROOM, [
+            _cabinet("p1", host_wall="north", width=500),
+            _cabinet("p2", host_wall="north", width=700),
+        ])
+        swapped = plan_scene(ROOM, [
+            _cabinet("p2", host_wall="north", width=700),
+            _cabinet("p1", host_wall="north", width=500),
+        ])
+        placed = {item.id: item.placement.origin_x_mm for item in first.items}
+        self.assertEqual((placed["p1"], placed["p2"]), (0, 500))
+        swapped_placed = {item.id: item.placement.origin_x_mm for item in swapped.items}
+        self.assertEqual((swapped_placed["p2"], swapped_placed["p1"]), (0, 700))
 
     def test_floor_and_hanging_cabinets_can_claim_the_same_corner(self) -> None:
         """落地柜和吊柜高度不重叠，可以同时把东头写成贴墙。高度一重叠就拒绝。"""
