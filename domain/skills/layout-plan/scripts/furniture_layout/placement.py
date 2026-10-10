@@ -180,6 +180,7 @@ def place_items(room: RoomModel, specs: Sequence[ItemSpec]) -> tuple[PlacedItem,
     """
     specs = tuple(specs)
     _reject_corner_claims(specs)
+    _reject_shared_item_ends(specs)
     _reject_against_targets(specs)
     placed: dict[str, PlacedItem] = {}
     _place_group(room, [spec for spec in specs if not spec.placement.fill], placed)
@@ -304,6 +305,44 @@ def _reject_corner_claims(specs: Sequence[ItemSpec]) -> None:
             claimed.setdefault(corner, []).append(spec)
 
 
+def _reject_shared_item_ends(specs: Sequence[ItemSpec]) -> None:
+    """同一面墙、同一头、同一台目标：高度重叠的两台柜子只能有一台。
+
+    `{west: a}` 的语义是"我的西端顶在 a 的东面"——那是一个**确定的位置**，两台在同一段
+    高度上都要占它，等于两台占同一块空间。先在这里说清是哪两台、该怎么改；否则要等到
+    摆放时以 `does not fit` 被拒，读起来像"墙不够长"，而真正的修法是改引用。
+
+    高度**不**重叠是允许的（落地柜与吊柜可以共用同一个侧面，一上一下），所以与
+    `_reject_corner_claims` 一样带高度相交条件。高度不相交的两台若也点名同一台，
+    由摆放时的 `does not meet that end` 拒掉——它们本来就没挨上。
+    """
+    claimed: dict[tuple[str, str, str], list[ItemSpec]] = {}
+    for spec in specs:
+        wall = spec.placement.host_wall
+        if wall is None:
+            continue
+        for direction, target in spec.placement.against:
+            if target.kind == AGAINST_WALL or target.id is None:
+                continue
+            key = (wall, direction, target.id)
+            z_start = spec.placement.origin_z_mm
+            z_end = z_start + spec.height
+            for previous in claimed.get(key, ()):
+                if ranges_overlap(
+                    z_start,
+                    z_end,
+                    previous.placement.origin_z_mm,
+                    previous.placement.origin_z_mm + previous.height,
+                ):
+                    raise ValueError(
+                        f"items {previous.id!r} and {spec.id!r} both stop against "
+                        f"{target.id!r} on the same side ({wall} {direction}) at "
+                        "overlapping heights: only one can; put the other one "
+                        "behind the first or against the other end"
+                    )
+            claimed.setdefault(key, []).append(spec)
+
+
 def _reject_against_targets(specs: Sequence[ItemSpec]) -> None:
     by_id = {spec.id: spec for spec in specs}
     for spec in specs:
@@ -362,7 +401,10 @@ def _against_interval(
                 f"item {spec.id!r} width does not match its against ends"
             )
         _require_free(room, spec, already_placed, low_at, high_at)
-        return clean(low_at), clean(width if spec.placement.fill else spec.width or width)
+        # 与单端分支同一句口径：非铺满的件必须自带宽度，不从两头的间距里"借"。
+        if not spec.placement.fill and spec.width is None:
+            raise ValueError(f"item {spec.id!r} requires width without fill")
+        return clean(low_at), clean(width if spec.placement.fill else spec.width)
     if low_at is not None:
         return _one_end(
             room, spec, already_placed, contact=low_at, at_low=True, length=length
