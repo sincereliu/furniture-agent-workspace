@@ -7,6 +7,8 @@
 - 由 `scripts/furniture_manufacturing/export_six_side_drill.py` + `devices/six_side_drill_guigui.yaml` 完成。
 - 从 `drilled-holes.json` 反推板件和孔位，逐板生成 `KDTPanelFormat` XML。
 - 槽位尚无设备侧数据契约；输入包含槽位时明确拒绝，避免静默漏加工。
+- 每个孔必须自带 `local_x` / `local_y` / `local_z`。缺了就拒绝，不用世界坐标减原点去补。
+- 机床轴只认已经点名的 `panel_type`（隔板并入侧板，顶/底/层板并入水平板，背板和背拉条用 yaml 里名为 `default` 的那段轴）。没点名的类型拒绝，不套用背板轴。
 
 ## 坐标与设备映射
 

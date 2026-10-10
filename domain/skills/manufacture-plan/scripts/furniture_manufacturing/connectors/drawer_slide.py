@@ -133,10 +133,12 @@ class DrawerSlideConnector(Connector):
         if not standard_lengths:
             return {}
         target_length = depth_mm - 50
-        match_length = next(
-            (length for length in reversed(standard_lengths) if length <= target_length),
-            standard_lengths[0],  # 兜底最小号
-        )
+        fits = [
+            length for length in reversed(standard_lengths) if length <= target_length
+        ]
+        if not fits:
+            return {}
+        match_length = fits[0]
 
         # 承重级别
         load_rating = "45kg" if width_mm > 600 else "30kg"

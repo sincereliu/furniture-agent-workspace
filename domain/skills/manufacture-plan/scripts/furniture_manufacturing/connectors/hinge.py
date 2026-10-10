@@ -54,16 +54,15 @@ class HingeConnector(Connector):
         cup_center_from_edge = edge_offset + cup_diameter / 2
         inner = panel.inner_face
 
-        # 铰链侧：优先使用显式字段，否则根据 X 位置推断
         hinge_side = panel.door_hinge_side
         if hinge_side == "left":
             x_local = cup_center_from_edge
         elif hinge_side == "right":
             x_local = panel.size_x - cup_center_from_edge
-        elif panel.pos_x < panel.size_x:
-            x_local = cup_center_from_edge  # 兜底：X 位置靠左 → 左铰链
         else:
-            x_local = panel.size_x - cup_center_from_edge  # 兜底：X 位置靠右 → 右铰链
+            raise ValueError(
+                "door_hinge_side must be 'left' or 'right' for a door"
+            )
 
         # Drill direction = 钻入方向（往板内）：杯孔从内侧面钻入，
         # 钻入方向 = inner_face 的反向（direction 语义统一约定，见 coordinate-naming.md）。

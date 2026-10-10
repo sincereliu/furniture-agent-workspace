@@ -108,7 +108,7 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
         door = next(p for p in bom.panels if p.panel_type == "door")
         self.assertEqual(door.door_hinge_side, "right")
 
-    def test_trinity_uses_two_depth_rows_and_explicit_hole_faces(self) -> None:
+    def test_panels_without_joints_get_no_trinity_holes(self) -> None:
         connector = TrinityConnector()
         side = panel_record(
             label="left_side_panel",
@@ -131,50 +131,41 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
             cam_face="-z",
         )
 
-        side_holes = connector.generate_holes(side)
-        self.assertEqual({hole.y_local for hole in side_holes}, {64.0, 536.0})
-        self.assertTrue(all(hole.is_face_hole for hole in side_holes))
-        self.assertTrue(all(hole.direction == "-x" for hole in side_holes))
+        self.assertEqual(connector.generate_holes(side), [])
+        self.assertEqual(connector.generate_holes_for_panels([side, top]), [])
+        self.assertEqual(connector.machining_operations(top), [])
 
-        top_holes = connector.generate_holes(top)
-        rod_holes = [
-            hole for hole in top_holes if hole.hole_type == "three_in_one_rod"
-        ]
-        cam_holes = [
-            hole for hole in top_holes if hole.hole_type == "three_in_one_cam"
-        ]
-        self.assertEqual({hole.y_local for hole in rod_holes}, {64.0, 536.0})
-        # 偏心轮 y 与连接杆同排；x 为端面 + cam_offset（= 插入深度 + 圆心到杆头端距离 = 33.5）
-        self.assertEqual({hole.y_local for hole in cam_holes}, {64.0, 536.0})
-        self.assertEqual({hole.x_local for hole in cam_holes}, {33.5, 764 - 33.5})
-        self.assertTrue(all(not hole.is_face_hole for hole in rod_holes))
-        self.assertTrue(all(hole.is_face_hole for hole in cam_holes))
-
-    def test_trinity_machining_operation_ids_are_unique_per_end(self) -> None:
-        """两端连接的三合一板，加工指令 id 必须含 x_local 以区分左右端。"""
-        connector = TrinityConnector()
-        top = panel_record(
-            label="top_panel",
-            name="顶板",
-            panel_type="top",
-            size_x=764,
-            size_y=600,
-            size_z=18,
-            pos_x=18,
-            pos_z=982,
-            cam_face="-z",
+    def test_joined_top_uses_two_depth_rows_and_distinct_ends(self) -> None:
+        spec = furniture_spec(
+            furniture_category="floor_cabinet",
+            width=800,
+            depth=600,
+            height=1000,
+            n_doors=2,
         )
-        ops = connector.machining_operations(top)
-        ids = [op.id for op in ops]
-        # 唯一性：旧实现 id 无 x_local 时，左右两端同 (z,y) 的孔 id 重复
-        self.assertEqual(len(ids), len(set(ids)))
-        # 同一深度排(y=64)的两个连接杆孔（左端 x=0 / 右端 x=764）id 必须不同
-        male_front = [
-            op for op in ops
-            if "three_in_one_rod" in op.id and "_64_" in op.id
+        placements = plan_panels(spec, CabinetStructure.from_spec(spec))
+        bom = plan_manufacturing(spec, placements)
+        top = next(panel for panel in bom.panels if panel.label.endswith("top_panel"))
+        holes = [
+            hole
+            for hole in TrinityConnector().generate_holes_for_panels(bom.panels)
+            if hole.panel_label == top.label
         ]
-        self.assertEqual(len(male_front), 2)
-        self.assertNotEqual(male_front[0].id, male_front[1].id)
+        rod_holes = [hole for hole in holes if hole.hole_type == "three_in_one_rod"]
+        cam_holes = [hole for hole in holes if hole.hole_type == "three_in_one_cam"]
+
+        self.assertEqual({hole.y_local for hole in rod_holes}, {64.0, top.size_y - 64})
+        self.assertEqual({hole.x_local for hole in rod_holes}, {0.0, top.size_x})
+        self.assertTrue(all(not hole.is_face_hole for hole in rod_holes))
+        self.assertEqual({hole.y_local for hole in cam_holes}, {64.0, top.size_y - 64})
+        self.assertEqual(
+            {hole.x_local for hole in cam_holes},
+            {33.5, top.size_x - 33.5},
+        )
+        self.assertTrue(all(hole.is_face_hole for hole in cam_holes))
+        front = [hole for hole in rod_holes if hole.y_local == 64.0]
+        self.assertEqual(len(front), 2)
+        self.assertNotEqual(front[0].x_local, front[1].x_local)
 
     def test_trinity_rod_cam_count_mismatch_is_rejected(self) -> None:
         """删掉一个连接杆孔后，校验必须报 TRINITY_ROD_CAM_COUNT_MISMATCH。
@@ -282,6 +273,15 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
             label="left_side_panel", name="左侧板", panel_type="side",
             size_x=18, size_y=600, size_z=1000,
         )]), [])
+        shallow = panel_record(
+            label="drawer_side_L_z100",
+            name="抽屉左板",
+            panel_type="drawer_side",
+            size_x=18,
+            size_y=200,
+            size_z=150,
+        )
+        self.assertEqual(DrawerSlideConnector().boms([shallow]), [])
         spec = furniture_spec(
             furniture_category="floor_cabinet",
             width=800, depth=600, height=1000, n_doors=2,
@@ -301,6 +301,18 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
             inner_face="-y",
             door_hinge_side="left",
         )
+
+        missing_side = panel_record(
+            label="left_door",
+            name="左门板",
+            panel_type="door",
+            size_x=397,
+            size_y=18,
+            size_z=948,
+            inner_face="-y",
+        )
+        with self.assertRaisesRegex(ValueError, "door_hinge_side"):
+            HingeConnector().generate_holes(missing_side)
 
         holes = HingeConnector().generate_holes(door)
 

@@ -84,10 +84,11 @@ class LayoutInputContractTests(unittest.TestCase):
         # 报错要指名道姓，不然一个项目里十几件没人知道改哪一件。
         with self.assertRaisesRegex(ValueError, r"items\[0\]\.id 'cabinet-1'"):
             plan_scene(ROOM, [{**ITEM, "id": "cabinet-1"}])
-        # **只校验输入，不校验读取**：库里已有的旧 id 仍然打得开（靠一次性迁移改名）。
+        # 读取已摆放结果用同一条规则。不合格的 id 打不开。
         legacy = plan_scene(ROOM, [ITEM]).to_dict()
         legacy["items"][0]["id"] = "cabinet-1"
-        self.assertEqual(RoomScene.from_dict(legacy).items[0].id, "cabinet-1")
+        with self.assertRaisesRegex(ValueError, "cabinet-1"):
+            RoomScene.from_dict(legacy)
 
     def test_placement_aliases_are_rejected(self) -> None:
         for alias in (

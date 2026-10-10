@@ -37,7 +37,7 @@ description: 用于 manufacture_plan 阶段。当用户说"用什么五金""三�
 
 ## 守住这些口径
 
-- 三合一在高度方向按系统 32 排钻分布，深度方向前后双排。铰链孔、背板槽、背板连接和封边的精确口径见 [制造规则](references/manufacturing-rules.md)。
+- 三合一只打在已接通的接触上，每个接触前后双排。铰链孔、背板槽、背板连接和封边的精确口径见 [制造规则](references/manufacturing-rules.md)。
 - 入槽背板不封边。其余背板及背拉条四边封边。cover 外盖螺钉与 groove 背拉条螺钉是组装现场工艺，不生成孔位与五金。
 
 ## 按触发词另外读

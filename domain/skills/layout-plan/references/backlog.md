@@ -8,7 +8,7 @@
 
 **问题**：下游 `admit_cabinet_id()` 要求 id 是**合法 Python 标识符且不含 `__`**（它还要拿来拼板件 id `{cabinet_id}__{role}`），但布局入口不校验——`cabinet-1` 这种 id 能建项目、能过摆放检查、能确认，**到板件阶段才报错**（实测：`admit_cabinet_id(None, fallback="cabinet-1")` → `ValueError`）。
 
-**已修（2026-10-02）**：`scene.parse_item_specs()` 在入口集中校验（全屋 / 单间 / 编辑三个入口共用 `plan_scene`），报错点名是哪一件并说清为什么；**只校验输入、不校验读取**（库里旧 id 仍打得开）。跨阶段规则一致性由 `tests/test_skill_architecture.py` 钉住——阶段之间不互相 import，所以两边各写一条规则，测试盯着不许漂移。家具 id 本身就要能当板件编号。
+**已修（2026-10-02，读取侧 2026-10-10 收紧）**：`scene.parse_item_specs()` 在入口集中校验（全屋 / 单间 / 编辑三个入口共用 `plan_scene`），报错点名是哪一件并说清为什么。读取已摆放结果（`PlacedItem.from_dict`）用同一条规则，不合格的 id 打不开。跨阶段规则一致性由 `tests/test_skill_architecture.py` 钉住——阶段之间不互相 import，所以两边各写一条规则，测试盯着不许漂移。家具 id 本身就要能当板件编号。
 
 **配套**：两个测试夹具（`test_room_level_confirmation`、`test_decision_log`）里的连字符 id 改成下划线；客户那个 `cabinet-1` 的工程用一次性脚本改名（几何不变，`working_ops` 的 `item_id` 一起改），**脚本不入库**——仓库不迁移旧数据（见编排层 backlog 已知缺口第 3 条）。
 

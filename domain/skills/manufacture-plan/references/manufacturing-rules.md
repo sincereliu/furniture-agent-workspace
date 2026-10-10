@@ -12,9 +12,10 @@
 
 ## 三合一打孔规则
 
-- 竖板（侧板/隔板）预埋螺母在高度方向按系统 32 排钻分布（首/末孔 64mm，间距≤512mm），深度方向前后双排（`[first_hole_mm, depth - last_hole_mm]`）。
-- 横板（顶板/底板/固定层板）连接杆在深度方向前后双排；偏心轮深度方向与连接杆同排，沿连接杆方向（x）距端面 `cam.hole.edge_offset_mm`（33.5mm）——即偏心轮圆心到连接杆端面（接触端面）的距离。
-- 所有孔位由 `Connector.generate_holes()` 生成 `HoleSpec`，标记 `is_face_hole=True`（板面钻孔）或 `False`（板边钻孔）。
+- 只给 `connection=on`、端面件有 `cam_face` 的接触打孔。没有接触就不打，不按板件类型补孔。
+- 每个这样的接触前后双排，距该方向两边 `first_hole_mm` / `last_hole_mm`（默认 64mm）。
+- 连接杆在端面。偏心轮与连接杆同排，沿连接杆方向距端面 `cam.hole.edge_offset_mm`（33.5mm）。
+- 成对孔由 `TrinityConnector.generate_holes_for_panels()` 生成。`is_face_hole=True` 是板面孔，`False` 是板边孔。
 
 ## 铰链打孔规则
 

@@ -434,14 +434,6 @@ def _manufacturing_panel(
                 if j.edge_axis == "x":
                     drill_length = placement.size_x
                     break
-    # fallback：无连接拓扑时退回 panel_type 判断
-    if drill_length == 0.0:
-        if placement.panel_type in ("side", "divider"):
-            drill_length = placement.size_z
-        elif placement.panel_type in ("top", "bottom", "fixed_shelf", "movable_shelf"):
-            drill_length = placement.size_x
-        elif placement.panel_type == "door":
-            drill_length = placement.size_z
     selection = material_selection or {}
     return PanelRecord(
         label=placement.id,

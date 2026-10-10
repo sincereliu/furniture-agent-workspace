@@ -29,19 +29,32 @@ def _load_device_config() -> dict[str, Any]:
     return cfg.get("panel_placement", {})
 
 
+# yaml 里名为 default 的那段轴，只给背板和背拉条。别的类型必须点名。
+_PLACEMENT_KEY = {
+    "side": "side",
+    "divider": "side",
+    "door": "door",
+    "top": "horizontal",
+    "bottom": "horizontal",
+    "fixed_shelf": "horizontal",
+    "movable_shelf": "horizontal",
+    "toe_kick": "toe_kick",
+    "back": "default",
+    "back_rail": "default",
+}
+
+
 def _resolve_placement(
     panel_type: str,
 ) -> dict[str, str]:
-    """根据 panel_type 返回对应的 placement 规则。
-
-    未匹配到具体类型时回退到 default。
-    """
+    """根据 panel_type 返回对应的 placement 规则。"""
     placement = _load_device_config()
-    if panel_type in ("divider",):
-        panel_type = "side"
-    if panel_type in ("top", "bottom", "fixed_shelf", "movable_shelf"):
-        panel_type = "horizontal"
-    return placement.get(panel_type, placement.get("default", {}))
+    key = _PLACEMENT_KEY.get(panel_type)
+    if key is None or key not in placement:
+        raise ValueError(
+            f"six-side drill has no placement for panel type {panel_type!r}"
+        )
+    return placement[key]
 
 
 def _box_value(box: dict[str, Any], key: str) -> float:
@@ -57,24 +70,20 @@ def _hole_value(hole: dict[str, Any], local_key: str) -> float:
 
 def _localize_holes(
     holes: list[dict[str, Any]],
-    box: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    """Fill missing local coordinates from global coordinates and panel origin."""
+    """Require panel-local coordinates. Do not invent them from world coordinates."""
     localized: list[dict[str, Any]] = []
     for hole in holes:
-        item = dict(hole)
-        for axis in ("x", "y", "z"):
-            local_key = f"local_{axis}"
-            if local_key in item:
-                continue
-            if axis not in item:
-                raise ValueError(
-                    f"hole is missing both {local_key!r} and global {axis!r}"
-                )
-            item[local_key] = float(item[axis]) - float(
-                box.get(f"pos_{axis}", 0)
+        missing = [
+            f"local_{axis}"
+            for axis in ("x", "y", "z")
+            if f"local_{axis}" not in hole
+        ]
+        if missing:
+            raise ValueError(
+                "hole is missing required coordinates " + ", ".join(missing)
             )
-        localized.append(item)
+        localized.append(dict(hole))
     return localized
 
 
@@ -148,7 +157,7 @@ def drill_json_to_xml_files(
             sixd_x=sixd_x,
             sixd_y=sixd_y,
             sixd_z=sixd_z,
-            holes=_localize_holes(panel.get("holes", []), box),
+            holes=_localize_holes(panel.get("holes", [])),
             slots=panel.get("slots", []),
             x1_key=x1_key,
             y1_key=y1_key,

@@ -41,45 +41,43 @@ def _trinity_female(
     panel: PanelRecord,
     by_label: Mapping[str, PanelRecord] | None = None,
 ) -> bool:
-    """x 轴方向、带 cam 的面接触方（侧板/隔板）。
+    """x 轴方向、带 cam 的面接触方。
 
-    优先从连接拓扑推导；无连接拓扑时退回 panel_type 判断。
+    只看已接通的接触。没有接触就不是母件。
     端面件必须有 cam_face，否则抽屉侧板等会被误判为三合一母件。
     """
-    if panel.joints:
-        lookup = dict(by_label or {})
-        lookup.setdefault(panel.label, panel)
-        return any(
-            j.bearing_id == panel.label
-            and j.face[1] == "x"
-            and _end_has_cam(j, lookup)
-            and joint_is_connected(j)
-            for j in _joints_of(panel)
-        )
-    # fallback: no joint topology available
-    return panel.panel_type in ("side", "divider")
+    if not panel.joints:
+        return False
+    lookup = dict(by_label or {})
+    lookup.setdefault(panel.label, panel)
+    return any(
+        j.bearing_id == panel.label
+        and j.face[1] == "x"
+        and _end_has_cam(j, lookup)
+        and joint_is_connected(j)
+        for j in _joints_of(panel)
+    )
 
 
 def _trinity_male(
     panel: PanelRecord,
     by_label: Mapping[str, PanelRecord] | None = None,
 ) -> bool:
-    """x 轴方向的边接触方（横板），端面在 x 轴且端面件有 cam_face。
+    """x 轴方向的边接触方，端面在 x 轴且端面件有 cam_face。
 
-    优先从连接拓扑推导；无连接拓扑时退回 panel_type 判断。
+    只看已接通的接触。没有接触就不是公件。
     """
-    if panel.joints:
-        lookup = dict(by_label or {})
-        lookup.setdefault(panel.label, panel)
-        return any(
-            j.end_id == panel.label
-            and j.edge_axis == "x"
-            and _end_has_cam(j, lookup)
-            and joint_is_connected(j)
-            for j in _joints_of(panel)
-        )
-    # fallback: no joint topology available
-    return panel.panel_type in ("top", "bottom", "fixed_shelf")
+    if not panel.joints:
+        return False
+    lookup = dict(by_label or {})
+    lookup.setdefault(panel.label, panel)
+    return any(
+        j.end_id == panel.label
+        and j.edge_axis == "x"
+        and _end_has_cam(j, lookup)
+        and joint_is_connected(j)
+        for j in _joints_of(panel)
+    )
 
 
 def _gather_joints(panels: list[PanelRecord]) -> list:
@@ -105,24 +103,6 @@ def _trinity_joints(panels: list[PanelRecord]) -> list:
         and j.edge_axis == "x"
         and _end_has_cam(j, by_label)
     ]
-
-
-def _male_edge_signs(panel: PanelRecord) -> Set[int]:
-    """male 面板的 x 轴端面连接方向（-1=左，+1=右）。
-
-    优先从连接拓扑推导；无连接拓扑时返回两端。
-    """
-    if panel.joints:
-        signs = {
-            j.edge_sign for j in _joints_of(panel)
-            if j.end_id == panel.label
-            and j.edge_axis == "x"
-            and joint_is_connected(j)
-        }
-        if signs:
-            return signs
-    # fallback: no joint topology → assume both ends
-    return {-1, 1}
 
 
 def _other_axis(a: str, t: str) -> str:

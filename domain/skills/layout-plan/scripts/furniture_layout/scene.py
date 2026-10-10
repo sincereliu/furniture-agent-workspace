@@ -386,8 +386,12 @@ class PlacedItem:
         raw_clearances = data.get("clearances_mm", {})
         if not isinstance(raw_clearances, Mapping):
             raise ValueError(f"items[{index}].clearances_mm must be an object")
+        item_id = require_identifier(
+            text(data, "id") or f"item_{index + 1}",
+            where=f"items[{index}].id",
+        )
         return cls(
-            id=text(data, "id") or f"item_{index + 1}",
+            id=item_id,
             label=text(data, "label") or text(data, "id") or f"item_{index + 1}",
             category=text(data, "category"),
             width=number(data, "width"),
@@ -550,12 +554,11 @@ def _against_target(value: Any, direction: str) -> AgainstTarget:
 
 
 def require_identifier(value: str, *, where: str) -> str:
-    """**家具单元 id** 的入口校验：合法标识符、不含 `__`。
+    """家具单元 id：合法标识符、不含 `__`。
 
-    为什么卡在入口：板件阶段用这个 id 拼板件编号（`{cabinet_id}__{role}`），
-    不合格的 id（`cabinet-1`、`1cabinet`、`a__b`）**建项目时看不出来**，
-    要跑到板件才炸。只校验**输入**，不校验读取——库里已有的旧 id 仍能打开，
-    由一次性迁移改名（见 references/backlog.md）。
+    板件阶段用这个 id 拼板件编号（`{cabinet_id}__{role}`）。
+    新建和读取已摆放结果都走这一条。不合格的 id 在这里拒绝。
+    改名用仓库外的一次性脚本，运行时不迁移旧数据。
 
     `against` 用 kind 区分墙和家具，因此家具 id 可以叫 `wall`。
     """

@@ -24,7 +24,7 @@
 - 具体连接件：`TrinityConnector`（三合一）、`HingeConnector`（铰链）、`TwoInOneConnector`（二合一）、`ShelfPinConnector`（层板托）、`BackMountConnector`（背板）、`DrawerSlideConnector`（滑轨）。
 - 新增五金：实现对应 `Connector` 并注册进 `ALL_CONNECTORS`。
 - 孔位用 `HoleSpec` 描述；`is_face_hole=True` 表示板面钻孔（导出 TypeNo=1 垂直孔），`False` 表示板边钻孔（TypeNo=2 水平孔）。
-- 铰链侧 `door_hinge_side` 由制造层派生：单门从 `requested_options` 输入（`left`/`right`），双门按门板 X 位置派生；`HingeConnector` 读 `PanelRecord.door_hinge_side`，缺省时按门板位置回退。
+- 铰链侧 `door_hinge_side` 由制造层派生：单门从 `requested_options` 输入（`left`/`right`），双门按门板 X 位置派生。`HingeConnector` 只接受 `left` / `right`，缺了就报错。
 
 ## 五金命名约定
 

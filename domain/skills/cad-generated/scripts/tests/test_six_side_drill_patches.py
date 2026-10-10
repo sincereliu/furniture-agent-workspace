@@ -101,9 +101,9 @@ class SixSideDrillPatchTests(unittest.TestCase):
                         },
                         {
                             "hole_type": "three_in_one_rod",
-                            "x": 98,
-                            "y": 97,
-                            "z": 39,
+                            "local_x": 88,
+                            "local_y": 77,
+                            "local_z": 9,
                             "diameter": 8,
                             "depth": 33,
                             "direction": "+x",
@@ -115,7 +115,7 @@ class SixSideDrillPatchTests(unittest.TestCase):
             ]
         }
 
-    def test_xml_uses_machine_axes_localizes_legacy_holes_and_closes_once(
+    def test_xml_uses_machine_axes_for_local_holes(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -161,6 +161,26 @@ class SixSideDrillPatchTests(unittest.TestCase):
         self.assertEqual(edge_hole.findtext("Y1"), "88.0")
         self.assertEqual(edge_hole.findtext("Z1"), "9.00")
         self.assertEqual(edge_hole.findtext("Quadrant"), "3")
+
+    def test_hole_without_local_coordinates_is_rejected(self) -> None:
+        data = self._sample_data()
+        del data["panels"][0]["holes"][1]["local_x"]
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            source = root / "drilled.json"
+            source.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "local_x"):
+                drill_json_to_xml_files(source, root / "xml")
+
+    def test_unknown_panel_type_is_rejected(self) -> None:
+        data = self._sample_data()
+        data["panels"][0]["panel_type"] = "drawer_side"
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            source = root / "drilled.json"
+            source.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "drawer_side"):
+                drill_json_to_xml_files(source, root / "xml")
 
     def test_slot_input_is_rejected_instead_of_silently_omitted(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
