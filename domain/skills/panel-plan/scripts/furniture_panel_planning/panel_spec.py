@@ -7,6 +7,7 @@ from math import isfinite
 from typing import Any, Mapping
 
 from .cabinet_envelope import CABINET_CATEGORIES, CabinetEnvelope
+from .panel_rules import default_toe_kick_support_count, even_shelf_gap
 
 
 VALID_BACK_MOUNTS = frozenset({"groove", "insert", "cover"})
@@ -57,8 +58,10 @@ def _coerce_shelves(raw: Any) -> list[ShelfSpec]:
         result.append(ShelfSpec(shelf_type=shelf_type, gap_below_mm=gap_below))
     return result
 
-# Construction fields that remain required on every proposal. Sheet-stock
-# fields may be omitted and are expanded from the shop process card.
+# Construction fields that remain required after proposal admission.
+# Sheet stock, an omitted toe-kick support count, and a fully omitted
+# shelf-gap set are expanded first. Serialized specs stay complete and
+# do not pass through that expansion.
 PANEL_REQUIRED_PARAMETER_FIELDS = frozenset(
     {
         "toe_kick_height", "back_offset", "front_face_margin", "front_gap",
@@ -151,7 +154,12 @@ class FurnitureSpec:
         envelope: CabinetEnvelope | Mapping[str, Any],
         options: Mapping[str, Any] | None,
     ) -> "FurnitureSpec":
-        """Admit a proposal against a cabinet envelope snapshot."""
+        """Admit a proposal against a cabinet envelope snapshot.
+
+        Omitted sheet stock, an omitted toe-kick support count, and a
+        fully omitted shelf-gap set are expanded here. Explicit numbers
+        are kept.
+        """
         unit = CabinetEnvelope.from_mapping(envelope)
         if not isinstance(options, Mapping):
             raise ValueError("panel proposal must be an object")
@@ -160,6 +168,9 @@ class FurnitureSpec:
         if unknown:
             raise ValueError("panel stage does not support: " + ", ".join(unknown))
         values = expand_sheet_stock(values)
+        values = expand_omitted_panel_geometry(
+            values, width=unit.width, height=unit.height,
+        )
         missing = sorted(PANEL_REQUIRED_PARAMETER_FIELDS - set(values))
         if missing:
             raise ValueError(
@@ -240,6 +251,80 @@ def expand_sheet_stock(options: Mapping[str, Any]) -> dict[str, Any]:
             frozenset({board}),
         )
     return values
+
+
+def expand_omitted_panel_geometry(
+    options: Mapping[str, Any],
+    *,
+    width: float,
+    height: float,
+) -> dict[str, Any]:
+    """Fill an omitted support count and a fully omitted shelf-gap set.
+
+    Structured protocol for proposal admission only. An explicit support
+    count is kept. Shelf openings are even-split only when every shelf
+    omits ``gap_below_mm`` and ``top_gap_mm`` is absent. Serialized specs
+    must already contain the concrete numbers and do not call this.
+    """
+    values = dict(options)
+    _fill_omitted_support_count(values, width)
+    _fill_omitted_even_shelves(values, height)
+    return values
+
+
+def _fill_omitted_support_count(values: dict[str, Any], width: float) -> None:
+    if "toe_kick_support_count" in values:
+        return
+    toe_kick_height = values.get("toe_kick_height")
+    if not _is_finite_number(toe_kick_height):
+        return
+    values["toe_kick_support_count"] = default_toe_kick_support_count(
+        width, float(toe_kick_height),
+    )
+
+
+def _fill_omitted_even_shelves(values: dict[str, Any], height: float) -> None:
+    if "top_gap_mm" in values:
+        return
+    shelves = values.get("shelves")
+    if not isinstance(shelves, (list, tuple)) or len(shelves) < 1:
+        return
+    if not all(_shelf_gap_unspecified(item) for item in shelves):
+        return
+    board_thickness = values.get("board_thickness")
+    toe_kick_height = values.get("toe_kick_height")
+    if not _is_finite_number(board_thickness) or not _is_finite_number(toe_kick_height):
+        return
+    internal_height = height - float(toe_kick_height) - 2 * float(board_thickness)
+    gap = even_shelf_gap(internal_height, len(shelves), float(board_thickness))
+    values["shelves"] = [_shelf_with_gap(item, gap) for item in shelves]
+    values["top_gap_mm"] = gap
+
+
+def _shelf_gap_unspecified(item: Any) -> bool:
+    if isinstance(item, ShelfSpec):
+        return item.gap_below_mm is None
+    if isinstance(item, Mapping):
+        return item.get("gap_below_mm") is None
+    return False
+
+
+def _shelf_with_gap(item: Any, gap: float) -> Any:
+    if isinstance(item, ShelfSpec):
+        return ShelfSpec(shelf_type=item.shelf_type, gap_below_mm=gap)
+    if isinstance(item, Mapping):
+        copied = dict(item)
+        copied["gap_below_mm"] = gap
+        return copied
+    return item
+
+
+def _is_finite_number(value: Any) -> bool:
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, (int, float))
+        and isfinite(value)
+    )
 
 
 def thickness_for_material_role(spec: FurnitureSpec, material_role: str) -> float:

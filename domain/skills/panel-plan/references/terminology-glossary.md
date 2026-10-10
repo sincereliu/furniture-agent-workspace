@@ -19,11 +19,11 @@
 | 柜门数量 | `n_doors` | 整数 | 柜体前脸门板数。本阶段不接受 `door_count`。房间门洞是 layout 的 `openings[].kind=door`，不是本字段。 |
 | 前脸四周边距 | `front_face_margin` | mm | 门板与抽屉前板共用的前脸边距。本阶段不接受 `door_margin`。 |
 | 层板列表 | `shelves` | 列表 | 从上到下排列的结构化层板列表。 |
-| 层板下净高 | `gap_below_mm` | mm 或 `null` | 字段名固定为 `gap_below_mm`；`null` 表示计算层。 |
-| 顶格净高 | `top_gap_mm` | mm | 最上层板顶面到顶板底面的净高。 |
+| 层板下净高 | `gap_below_mm` | mm 或 `null` | 字段名固定为 `gap_below_mm`。整组净高省略时，准入均分后写入毫米。单独一个 `null` 表示计算层。 |
+| 顶格净高 | `top_gap_mm` | mm | 最上层板顶面到顶板底面的净高。与层板净高整组省略时由准入写入。没有层板时提案必填。 |
 | 背板安装方式 | `back_mount` | 枚举 | 规范值 `groove` 入槽、`insert` 内嵌、`cover` 外盖。 |
 | 背板安装解析 | `back_mount_resolution.requested/effective` | 对象 | `requested` 保留请求值，`effective` 保留生效值。 |
-| 踢脚支撑数量 | `toe_kick_support_count` | 整数 | 必须是非负整数。无踢脚时为 `0`。 |
+| 踢脚支撑数量 | `toe_kick_support_count` | 整数 | 非负整数。无踢脚时为 `0`。提案可省略，由外形宽展开；写出的整数保持原值。 |
 | 柜体板厚 | `board_thickness` | mm | 柜体板厚，目录 `18/22`，工艺卡默认 `18`。侧板、顶底、层板、踢脚、背拉条和抽屉盒都用这一档。不是每块板的独立厚度。 |
 | 9 厘背板厚 | `back_thickness` | mm | `groove` 入槽 / `cover` 外盖为常量 `9`；`insert` 内嵌等于柜体板厚。提案可省略。 |
 | 门板厚 | `door_thickness` | mm | 柜体板目录 `18/22`。省略则等于 `board_thickness`。 |
@@ -79,7 +79,7 @@
 - `origin_x_mm`、`origin_y_mm`、`origin_z_mm`、`rotation_z_deg`、`room_id`：布局摆放字段。CAD 单元上出现时本阶段忽略，不得写入板件提案。
 - `movable_shelf_connector`、`door_hinge_side`：制造阶段输入，不是板件 spec 字段。
 - `back_mount=auto`、`gap_below_mm="auto"`：不再接受；背板必须写 `groove`/`insert`/`cover`，计算层只写 `null`。
-- `toe_kick_support_count=null`：不再接受；必须写非负整数。
+- `toe_kick_support_count=null`：不再接受。省略字段由外形宽展开；要指定数量就写非负整数。
 - `connection`：接触上的连不连。本阶段接触不接受该字段。
 - `female_id`、`male_id`：用 `bearing_id`/`end_id`。
 - `male_z`、`male_size_z`：用 `end_z`/`end_size_z`。

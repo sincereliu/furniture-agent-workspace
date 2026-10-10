@@ -40,3 +40,32 @@ def back_rail_clear_spacing(
     return (
         internal_height - rail_count * rail_height
     ) / rail_count
+
+
+def default_toe_kick_support_count(width: float, toe_kick_height: float) -> int:
+    """Support count from finished width when a proposal omits it.
+
+    ``width`` is the cabinet envelope width, not the internal width.
+    A toe kick of zero has no supports. Otherwise a width below 600 mm
+    has none, and every further 300 mm of finished width adds one:
+    ``1 + floor((width - 600) / 300)``.
+    """
+    if toe_kick_height <= 0:
+        return 0
+    if width < 600:
+        return 0
+    return 1 + int((width - 600) // 300)
+
+
+def even_shelf_gap(
+    internal_height: float,
+    shelf_count: int,
+    board_thickness: float,
+) -> float:
+    """Equal opening above the top shelf and below every shelf."""
+    if shelf_count < 1:
+        raise ValueError("even shelf gaps require at least one shelf")
+    gap = (internal_height - shelf_count * board_thickness) / (shelf_count + 1)
+    if gap < 0:
+        raise ValueError("even shelf gaps exceed the internal height")
+    return gap

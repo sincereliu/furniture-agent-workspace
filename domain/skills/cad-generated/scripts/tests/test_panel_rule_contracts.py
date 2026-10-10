@@ -30,6 +30,8 @@ from furniture_panel_planning.panel_pipeline import plan_panel_cabinets, plan_pa
 from furniture_panel_planning.panel_review import panel_review_from_output
 from furniture_panel_planning.panel_planning import plan_panels
 from furniture_panel_planning.panel_rules import (
+    default_toe_kick_support_count,
+    even_shelf_gap,
     toe_kick_support_clear_spacing,
 )
 from furniture_panel_planning.panel_spec import (
@@ -65,15 +67,177 @@ class PanelRuleContractTests(unittest.TestCase):
             [200.0, 410.0, 150.0],
         )
 
-    def test_toe_kick_support_count_must_be_explicit(self) -> None:
+    def test_omitted_toe_kick_support_count_follows_finished_width(self) -> None:
+        self.assertEqual(default_toe_kick_support_count(600, 50), 1)
+        self.assertEqual(default_toe_kick_support_count(800, 50), 1)
+        self.assertEqual(default_toe_kick_support_count(899, 50), 1)
+        self.assertEqual(default_toe_kick_support_count(900, 50), 2)
+        self.assertEqual(default_toe_kick_support_count(599, 50), 0)
+        self.assertEqual(default_toe_kick_support_count(800, 0), 0)
+        self.assertEqual(toe_kick_support_clear_spacing(764.0, 1, 18.0), 373.0)
+
+        admitted = self._admit_without_support_count()
+        self.assertEqual(admitted.toe_kick_support_count, 1)
         self.assertEqual(
-            toe_kick_support_clear_spacing(764.0, 1, 18.0),
-            373.0,
+            len(toe_kick_support_boxes(admitted, CabinetStructure.from_spec(admitted))),
+            1,
         )
+        self.assertEqual(
+            self._admit_without_support_count(width=599).toe_kick_support_count,
+            0,
+        )
+        self.assertEqual(
+            self._admit_without_support_count(width=600).toe_kick_support_count,
+            1,
+        )
+        self.assertEqual(
+            self._admit_without_support_count(width=900).toe_kick_support_count,
+            2,
+        )
+        wall = panel_parameters("wall_cabinet")
+        wall.pop("toe_kick_support_count")
+        hanging = FurnitureSpec.from_envelope(
+            cabinet_envelope(
+                furniture_category="wall_cabinet", depth=350, height=900,
+            ),
+            wall,
+        )
+        self.assertEqual(hanging.toe_kick_support_count, 0)
+
+    def test_explicit_toe_kick_support_count_is_kept(self) -> None:
+        params = panel_parameters()
+        params["toe_kick_support_count"] = 4
+        spec = FurnitureSpec.from_envelope(cabinet_envelope(), params)
+        self.assertEqual(spec.toe_kick_support_count, 4)
+
+    def test_null_toe_kick_support_count_is_rejected(self) -> None:
         params = panel_parameters()
         params["toe_kick_support_count"] = None
         with self.assertRaisesRegex(ValueError, "toe_kick_support_count"):
             FurnitureSpec.from_envelope(cabinet_envelope(), params)
+
+    def test_omitted_shelf_gaps_are_split_evenly(self) -> None:
+        params = panel_parameters()
+        params.pop("top_gap_mm")
+        params["shelves"] = [{"shelf_type": "fixed"} for _ in range(4)]
+        spec = FurnitureSpec.from_envelope(cabinet_envelope(), params)
+        structure = CabinetStructure.from_spec(spec)
+
+        gap = even_shelf_gap(914, 4, 18)
+        self.assertEqual(structure.internal_height, 914)
+        self.assertEqual(spec.top_gap_mm, gap)
+        self.assertEqual(round(spec.top_gap_mm, 1), 168.4)
+        self.assertEqual(
+            [item.gap_below_mm for item in spec.shelves],
+            [gap, gap, gap, gap],
+        )
+        self.assertEqual(
+            resolve_shelf_gaps(spec, structure.internal_height),
+            [gap, gap, gap, gap],
+        )
+
+    def test_all_null_shelf_gaps_without_top_are_split_evenly(self) -> None:
+        params = panel_parameters()
+        params.pop("top_gap_mm")
+        params["shelves"] = [
+            {"shelf_type": "movable", "gap_below_mm": None},
+        ]
+        spec = FurnitureSpec.from_envelope(cabinet_envelope(), params)
+        gap = even_shelf_gap(914, 1, 18)
+        self.assertEqual(spec.shelves[0].shelf_type, "movable")
+        self.assertEqual(spec.top_gap_mm, gap)
+        self.assertEqual(spec.shelves[0].gap_below_mm, gap)
+
+    def test_one_null_shelf_gap_still_absorbs_the_remainder(self) -> None:
+        params = panel_parameters()
+        params["top_gap_mm"] = 100.0
+        params["shelves"] = [
+            {"shelf_type": "fixed", "gap_below_mm": 200.0},
+            {"shelf_type": "movable", "gap_below_mm": None},
+            {"shelf_type": "fixed", "gap_below_mm": 150.0},
+        ]
+        spec = FurnitureSpec.from_envelope(cabinet_envelope(), params)
+        self.assertIsNone(spec.shelves[1].gap_below_mm)
+        self.assertEqual(
+            resolve_shelf_gaps(spec, CabinetStructure.from_spec(spec).internal_height),
+            [200.0, 410.0, 150.0],
+        )
+
+    def test_partial_shelf_gaps_do_not_even_split(self) -> None:
+        params = panel_parameters()
+        params.pop("top_gap_mm")
+        params["shelves"] = [
+            {"shelf_type": "fixed", "gap_below_mm": 200.0},
+            {"shelf_type": "fixed", "gap_below_mm": 200.0},
+        ]
+        with self.assertRaisesRegex(ValueError, "top_gap_mm"):
+            FurnitureSpec.from_envelope(cabinet_envelope(), params)
+
+        params = panel_parameters()
+        params["top_gap_mm"] = 100.0
+        params["shelves"] = [
+            {"shelf_type": "fixed", "gap_below_mm": None} for _ in range(4)
+        ]
+        with self.assertRaisesRegex(ValueError, "at most one shelf gap"):
+            FurnitureSpec.from_envelope(cabinet_envelope(), params)
+
+    def test_empty_shelves_still_require_top_gap(self) -> None:
+        params = panel_parameters()
+        params.pop("top_gap_mm")
+        with self.assertRaisesRegex(ValueError, "top_gap_mm"):
+            FurnitureSpec.from_envelope(cabinet_envelope(), params)
+
+    def test_negative_even_shelf_gap_is_rejected(self) -> None:
+        params = panel_parameters()
+        params.pop("top_gap_mm")
+        params["shelves"] = [{"shelf_type": "fixed"} for _ in range(4)]
+        with self.assertRaisesRegex(ValueError, "even shelf gaps exceed the internal height"):
+            FurnitureSpec.from_envelope(cabinet_envelope(height=100), params)
+
+    def test_omitted_geometry_follows_each_cabinet(self) -> None:
+        params = panel_parameters()
+        params.pop("top_gap_mm")
+        params.pop("toe_kick_support_count")
+        params["shelves"] = [{"shelf_type": "fixed"} for _ in range(4)]
+        output = plan_panel_stage(
+            [
+                cabinet_envelope(cabinet_id="narrow", width=599, height=1000),
+                cabinet_envelope(cabinet_id="wide", width=900, height=1200),
+            ],
+            {
+                "parameters": params,
+                "cabinets": {"wide": {"toe_kick_support_count": 4}},
+            },
+        )
+        by_id = {cabinet["id"]: cabinet["spec"] for cabinet in output["cabinets"]}
+        self.assertEqual(by_id["narrow"]["toe_kick_support_count"], 0)
+        self.assertEqual(by_id["wide"]["toe_kick_support_count"], 4)
+        self.assertEqual(by_id["narrow"]["top_gap_mm"], even_shelf_gap(914, 4, 18))
+        self.assertEqual(by_id["wide"]["top_gap_mm"], even_shelf_gap(1114, 4, 18))
+
+    def test_serialized_spec_does_not_expand_omitted_geometry(self) -> None:
+        params = panel_parameters()
+        params.pop("toe_kick_support_count")
+        params.pop("top_gap_mm")
+        params["shelves"] = [{"shelf_type": "fixed"} for _ in range(4)]
+        admitted = FurnitureSpec.from_envelope(cabinet_envelope(), params)
+        self.assertEqual(admitted.toe_kick_support_count, 1)
+        self.assertEqual(admitted.top_gap_mm, even_shelf_gap(914, 4, 18))
+        with self.assertRaisesRegex(ValueError, "serialized panel spec is incomplete"):
+            FurnitureSpec.from_dict(
+                {
+                    "furniture_category": "floor_cabinet",
+                    "width": 800,
+                    "depth": 600,
+                    "height": 1000,
+                    **params,
+                }
+            )
+
+    def _admit_without_support_count(self, **envelope: object) -> FurnitureSpec:
+        params = panel_parameters()
+        params.pop("toe_kick_support_count")
+        return FurnitureSpec.from_envelope(cabinet_envelope(**envelope), params)
 
     def test_cabinet_envelope_ignores_layout_placement_fields(self) -> None:
         envelope = CabinetEnvelope.from_mapping(
