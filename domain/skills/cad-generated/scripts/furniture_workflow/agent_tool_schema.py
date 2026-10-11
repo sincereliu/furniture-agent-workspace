@@ -388,8 +388,7 @@ _OPENAI_TOOLS: list[dict[str, Any]] = [
                 "Pass design choices only: which doors pair, which seam a divider "
                 "uses, and where a panel breaks. Do not send millimeters you calculated. "
                 "Read proceed_loss and stop_loss together when a finding is blocked. "
-                "Does not write the project or advance the stage. "
-                "The panel solver still materializes at most two doors."
+                "Does not write the project or advance the stage."
             ),
             "parameters": {
                 "type": "object",
@@ -399,9 +398,8 @@ _OPENAI_TOOLS: list[dict[str, Any]] = [
                     "interior": {
                         "type": "object",
                         "description": (
-                            "Front choices: width, door count, margin, side thickness, "
-                            "optional pairs, dividers, panels, breaks, and cavity needs. "
-                            "Door widths come back as whole millimeters."
+                            "Front choices: width, n_doors, margin, side thickness, "
+                            "optional pairs, dividers, panels, breaks, and cavity needs."
                         ),
                     },
                 },

@@ -16,7 +16,7 @@ _GRADES = frozenset({"confirmed", "typical", "unknown"})
 _SPEC_KEYS = frozenset(
     {
         "width_mm",
-        "door_count",
+        "n_doors",
         "margin_mm",
         "side_thickness_mm",
         "pairs",
@@ -50,9 +50,9 @@ def evaluate_interior(spec: Mapping[str, Any]) -> dict[str, Any]:
         raise ValueError("width_mm must be a multiple of 0.01")
     if width_u <= 0:
         raise ValueError("width_mm must be positive")
-    door_count = _integer(spec.get("door_count"), "door_count")
-    if door_count < 1:
-        raise ValueError("door_count must be at least 1")
+    n_doors = _integer(spec.get("n_doors"), "n_doors")
+    if n_doors < 1:
+        raise ValueError("n_doors must be at least 1")
     margin_u = _units(spec.get("margin_mm"), "margin_mm")
     if margin_u < 0:
         raise ValueError("margin_mm must be non-negative")
@@ -60,8 +60,8 @@ def evaluate_interior(spec: Mapping[str, Any]) -> dict[str, Any]:
     if side_u < 0:
         raise ValueError("side_thickness_mm must be non-negative")
 
-    pairs = _pairs(spec.get("pairs", ()), door_count)
-    doors = _layout_doors(width_u, door_count, margin_u)
+    pairs = _pairs(spec.get("pairs", ()), n_doors)
+    doors = _layout_doors(width_u, n_doors, margin_u)
     doors["pairs"] = [[left, right] for left, right in pairs]
     findings: list[dict[str, Any]] = []
     if any(width <= 0 for width in doors["width_u"]):
@@ -74,7 +74,7 @@ def evaluate_interior(spec: Mapping[str, Any]) -> dict[str, Any]:
                 "这一轮没有可审查的门",
             )
         )
-    dividers = _place_dividers(spec.get("dividers", ()), doors, door_count)
+    dividers = _place_dividers(spec.get("dividers", ()), doors, n_doors)
     _note_duplicate_seams(dividers, findings)
     cavities = _cavities(width_u, side_u, dividers)
     _note_negative_cavities(cavities, findings)
@@ -91,7 +91,7 @@ def evaluate_interior(spec: Mapping[str, Any]) -> dict[str, Any]:
 
 def _layout_doors(
     width_u: int,
-    door_count: int,
+    n_doors: int,
     margin_u: int,
 ) -> dict[str, Any]:
     """Whole-millimeter door widths. Inner gaps stay at twice the margin.
@@ -100,15 +100,15 @@ def _layout_doors(
     Anything under 1 mm stays on the right margin.
     """
     gap_u = 2 * margin_u
-    budget_u = width_u - door_count * gap_u
+    budget_u = width_u - n_doors * gap_u
     if budget_u <= 0:
-        widths = [budget_u // door_count] * door_count
+        widths = [budget_u // n_doors] * n_doors
     else:
         whole_mm, _fraction = divmod(budget_u, _UM)
-        base, extra = divmod(whole_mm, door_count)
+        base, extra = divmod(whole_mm, n_doors)
         widths = [
             (base + (1 if index < extra else 0)) * _UM
-            for index in range(door_count)
+            for index in range(n_doors)
         ]
     starts: list[int] = []
     gaps: list[int] = []
@@ -117,7 +117,7 @@ def _layout_doors(
     for index, door_u in enumerate(widths):
         starts.append(cursor)
         door_end = cursor + door_u
-        if index == door_count - 1:
+        if index == n_doors - 1:
             cursor = door_end
             break
         gaps.append(gap_u)
@@ -136,10 +136,10 @@ def _layout_doors(
 def _place_dividers(
     value: Any,
     doors: Mapping[str, Any],
-    door_count: int,
+    n_doors: int,
 ) -> list[dict[str, Any]]:
     items = _sequence(value, "dividers")
-    if items and door_count < 2:
+    if items and n_doors < 2:
         raise ValueError("a divider needs an inner seam")
     centers: list[int] = doors["seam_center_u"]
     placed: list[dict[str, Any]] = []
@@ -155,7 +155,7 @@ def _place_dividers(
             raise ValueError("divider id is duplicated")
         seen.add(divider_id)
         seam = _integer(item.get("seam_index"), "seam_index")
-        if seam < 0 or seam >= door_count - 1:
+        if seam < 0 or seam >= n_doors - 1:
             raise ValueError("seam_index is outside the inner seams")
         align = item.get("seam_align", "center")
         if align not in _ALIGNS:
@@ -565,7 +565,7 @@ def _report(
     }
 
 
-def _pairs(value: Any, door_count: int) -> list[tuple[int, int]]:
+def _pairs(value: Any, n_doors: int) -> list[tuple[int, int]]:
     parsed: list[tuple[int, int]] = []
     seen: set[int] = set()
     for item in _sequence(value, "pairs"):
@@ -579,7 +579,7 @@ def _pairs(value: Any, door_count: int) -> list[tuple[int, int]]:
         right = _integer(item[1], "pair door")
         if right != left + 1:
             raise ValueError("paired doors must be adjacent")
-        if left < 0 or right >= door_count:
+        if left < 0 or right >= n_doors:
             raise ValueError("pair is outside the door row")
         if left in seen or right in seen:
             raise ValueError("a door is in more than one pair")

@@ -182,7 +182,7 @@ class AgentToolSurfaceTests(unittest.TestCase):
                 "project_id": project_id,
                 "interior": {
                     "width_mm": 2400,
-                    "door_count": 7,
+                    "n_doors": 7,
                     "margin_mm": 1.5,
                     "side_thickness_mm": 18,
                     "pairs": [[0, 1]],

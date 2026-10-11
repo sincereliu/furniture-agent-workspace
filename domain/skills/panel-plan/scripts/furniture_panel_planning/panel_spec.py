@@ -453,10 +453,6 @@ def _validate_objective_invariants(spec: FurnitureSpec) -> None:
     if spec.drawer_count and (spec.shelves or spec.n_doors):
         raise ValueError("full-height drawers require no shelves and n_doors=0")
     if spec.n_doors > 2:
-        raise ValueError(
-            "current panel topology supports at most 2 doors; "
-            "furniture_evaluate_interior can size a wider front, "
-            "but those millimeters are not cabinet panels yet"
-        )
+        raise ValueError("current panel topology supports at most 2 doors")
     if sum(1 for s in spec.shelves if s.gap_below_mm is None) > 1:
         raise ValueError("at most one shelf gap may be null")

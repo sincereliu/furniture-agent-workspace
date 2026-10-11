@@ -19,7 +19,7 @@ from furniture_panel_planning.interior_structure import evaluate_interior
 def _front(**overrides: object) -> dict:
     spec = {
         "width_mm": 1200,
-        "door_count": 2,
+        "n_doors": 2,
         "margin_mm": 1.5,
         "side_thickness_mm": 18,
     }
@@ -30,7 +30,7 @@ def _front(**overrides: object) -> dict:
 class InteriorStructureTests(unittest.TestCase):
     def test_seven_doors_keep_a_3mm_gap_and_whole_millimeter_widths(self) -> None:
         report = evaluate_interior(
-            _front(width_mm=2400, door_count=7, pairs=[[0, 1]])
+            _front(width_mm=2400, n_doors=7, pairs=[[0, 1]])
         )
 
         self.assertFalse(report["blocked"])
@@ -43,9 +43,9 @@ class InteriorStructureTests(unittest.TestCase):
 
     def test_pairs_do_not_change_door_widths(self) -> None:
         paired = evaluate_interior(
-            _front(width_mm=2400, door_count=7, pairs=[[5, 6]])
+            _front(width_mm=2400, n_doors=7, pairs=[[5, 6]])
         )
-        plain = evaluate_interior(_front(width_mm=2400, door_count=7))
+        plain = evaluate_interior(_front(width_mm=2400, n_doors=7))
 
         self.assertEqual(
             paired["doors"]["door_widths_mm"],
@@ -54,21 +54,21 @@ class InteriorStructureTests(unittest.TestCase):
         self.assertEqual(paired["doors"]["gaps_mm"], plain["doors"]["gaps_mm"])
 
     def test_four_doors_give_the_extra_millimeters_to_the_left(self) -> None:
-        report = evaluate_interior(_front(width_mm=1211, door_count=4))
+        report = evaluate_interior(_front(width_mm=1211, n_doors=4))
 
         doors = report["doors"]
         self.assertEqual(doors["door_widths_mm"], [300, 300, 300, 299])
         self.assertEqual(doors["gaps_mm"], [3, 3, 3])
 
     def test_six_doors_leave_the_last_door_1mm_narrower(self) -> None:
-        report = evaluate_interior(_front(width_mm=1511, door_count=6))
+        report = evaluate_interior(_front(width_mm=1511, n_doors=6))
 
         doors = report["doors"]
         self.assertEqual(doors["door_widths_mm"], [249, 249, 249, 249, 249, 248])
         self.assertEqual(doors["gaps_mm"], [3, 3, 3, 3, 3])
 
     def test_submillimeter_width_stays_on_the_right_margin(self) -> None:
-        report = evaluate_interior(_front(width_mm=1200.3, door_count=4))
+        report = evaluate_interior(_front(width_mm=1200.3, n_doors=4))
 
         doors = report["doors"]
         self.assertEqual(doors["door_widths_mm"], [297, 297, 297, 297])
@@ -80,7 +80,7 @@ class InteriorStructureTests(unittest.TestCase):
         report = evaluate_interior(
             _front(
                 width_mm=1200,
-                door_count=3,
+                n_doors=3,
                 pairs=[[1, 2]],
                 dividers=[
                     {
@@ -110,7 +110,7 @@ class InteriorStructureTests(unittest.TestCase):
         report = evaluate_interior(
             _front(
                 width_mm=1200,
-                door_count=3,
+                n_doors=3,
                 pairs=[[1, 2]],
                 dividers=[
                     {
@@ -135,7 +135,7 @@ class InteriorStructureTests(unittest.TestCase):
         left = evaluate_interior(
             _front(
                 width_mm=1200,
-                door_count=3,
+                n_doors=3,
                 pairs=[[1, 2]],
                 dividers=[
                     {
@@ -150,7 +150,7 @@ class InteriorStructureTests(unittest.TestCase):
         right = evaluate_interior(
             _front(
                 width_mm=1200,
-                door_count=3,
+                n_doors=3,
                 pairs=[[1, 2]],
                 dividers=[
                     {
@@ -171,7 +171,7 @@ class InteriorStructureTests(unittest.TestCase):
         self._assert_mm(right_divider["end_mm"], 400)
 
     def test_integer_two_door_width_matches_the_shared_margin_formula(self) -> None:
-        report = evaluate_interior(_front(width_mm=1200, door_count=2))
+        report = evaluate_interior(_front(width_mm=1200, n_doors=2))
 
         doors = report["doors"]
         self.assertEqual(doors["door_widths_mm"], [597, 597])
@@ -180,7 +180,7 @@ class InteriorStructureTests(unittest.TestCase):
         self.assertEqual(doors["gaps_mm"], [3])
 
     def test_off_grid_width_keeps_whole_doors_and_grows_the_right_margin(self) -> None:
-        report = evaluate_interior(_front(width_mm=1800.5, door_count=2))
+        report = evaluate_interior(_front(width_mm=1800.5, n_doors=2))
 
         doors = report["doors"]
         self.assertEqual(doors["door_widths_mm"], [897, 897])
@@ -188,7 +188,7 @@ class InteriorStructureTests(unittest.TestCase):
         self._assert_mm(doors["right_margin_mm"], 2.0)
 
     def test_one_door_puts_the_fraction_on_the_right_margin(self) -> None:
-        report = evaluate_interior(_front(width_mm=800.25, door_count=1))
+        report = evaluate_interior(_front(width_mm=800.25, n_doors=1))
 
         doors = report["doors"]
         self.assertEqual(doors["door_widths_mm"], [797])
@@ -201,7 +201,7 @@ class InteriorStructureTests(unittest.TestCase):
         thin = evaluate_interior(
             _front(
                 width_mm=1200,
-                door_count=3,
+                n_doors=3,
                 pairs=[[1, 2]],
                 dividers=[
                     {
@@ -219,7 +219,7 @@ class InteriorStructureTests(unittest.TestCase):
         thick = evaluate_interior(
             _front(
                 width_mm=1200,
-                door_count=3,
+                n_doors=3,
                 pairs=[[1, 2]],
                 dividers=[
                     {
@@ -312,7 +312,7 @@ class InteriorStructureTests(unittest.TestCase):
         report = evaluate_interior(
             _front(
                 width_mm=1200,
-                door_count=3,
+                n_doors=3,
                 pairs=[[1, 2]],
                 dividers=[
                     {
@@ -336,7 +336,7 @@ class InteriorStructureTests(unittest.TestCase):
     def test_typical_shortfall_is_an_assumption_and_confirmed_blocks(self) -> None:
         common = _front(
             width_mm=1200,
-            door_count=3,
+            n_doors=3,
             pairs=[[1, 2]],
             dividers=[
                 {
@@ -384,7 +384,7 @@ class InteriorStructureTests(unittest.TestCase):
     def test_two_dividers_on_one_seam_block(self) -> None:
         report = evaluate_interior(
             _front(
-                door_count=3,
+                n_doors=3,
                 pairs=[[1, 2]],
                 dividers=[
                     {
@@ -409,9 +409,13 @@ class InteriorStructureTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unknown interior spec fields"):
             evaluate_interior(_front(door_width_mm=400))
 
+    def test_door_count_alias_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "unknown interior spec fields: door_count"):
+            evaluate_interior(_front(door_count=2))
+
     def test_non_adjacent_pair_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "adjacent"):
-            evaluate_interior(_front(door_count=4, pairs=[[0, 2]]))
+            evaluate_interior(_front(n_doors=4, pairs=[[0, 2]]))
 
     def _assert_mm(self, actual: float, expected: float) -> None:
         self.assertEqual(round(actual * 1000), round(expected * 1000))
