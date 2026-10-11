@@ -388,6 +388,9 @@ _OPENAI_TOOLS: list[dict[str, Any]] = [
                 "Pass design choices only: which doors pair, which seam a divider "
                 "uses, and where a panel breaks. Do not send millimeters you calculated. "
                 "Read proceed_loss and stop_loss together when a finding is blocked. "
+                "The reply also carries interior_review: a ready-to-show checklist of "
+                "front, dividers, cavities, segments, and findings. Show that instead "
+                "of reformatting the numbers yourself. "
                 "Does not write the project or advance the stage."
             ),
             "parameters": {

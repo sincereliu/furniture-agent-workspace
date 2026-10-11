@@ -58,7 +58,7 @@ result = session.call(name, arguments)  # arguments 为对象或 JSON 字符串
 
 ## 调用结果
 
-外层：`ok`、`tool`、`error`、`progressed`、`project`。`progressed` 表示这次调用是否把流程往前推进（新建、确认、生成下一步、改布局为真；只查状态或只换已有尝试为假）。`furniture_evaluate_interior` 成功时多一个 `interior`，里面是评估报告。
+外层：`ok`、`tool`、`error`、`progressed`、`project`。`progressed` 表示这次调用是否把流程往前推进（新建、确认、生成下一步、改布局为真；只查状态或只换已有尝试为假）。`furniture_evaluate_interior` 成功时多一个 `interior`，里面是评估报告；再多一个 `interior_review`，是同一份报告排好的清单（正面、中立板、腔、分段、findings）——**直接展示 `interior_review`，不要拿 `interior` 的毫米自己拼格式**。
 
 ## 快照字段
 

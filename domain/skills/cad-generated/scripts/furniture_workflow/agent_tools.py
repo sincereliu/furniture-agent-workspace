@@ -139,9 +139,14 @@ class FurnitureToolSession:
                 "interior must be an object",
             )
         from furniture_panel_planning.interior_structure import evaluate_interior
+        from furniture_panel_planning.panel_review import format_interior_review_markdown
 
         result = self._ok(tool=TOOL_EVALUATE_INTERIOR, project=project, include_view=False)
-        result["interior"] = evaluate_interior(interior)
+        report = evaluate_interior(interior)
+        result["interior"] = report
+        # 清单由代码排好，别让调用方拿 JSON 自己拼格式：腔/缝/段/findings 是一份
+        # 给人核对的东西，"人只说三件事"的前提是结果看得见。
+        result["interior_review"] = format_interior_review_markdown(report)
         return result
 
     def _dispatch_write(

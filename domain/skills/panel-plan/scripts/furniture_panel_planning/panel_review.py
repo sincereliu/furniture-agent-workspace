@@ -192,3 +192,107 @@ def _format_mm(value: Any) -> str:
     if number.is_integer():
         return str(int(number))
     return f"{number:.3f}".rstrip("0").rstrip(".")
+
+
+def format_interior_review_markdown(
+    report: Mapping[str, Any],
+    *,
+    title: str = "柜内结构评估",
+) -> str:
+    """把 `evaluate_interior` 的回报整理成给人核对的清单（腔 / 缝 / 段 / findings）。
+
+    **这是评估结果，不是已物化的板件**——标题底下就写明，免得读的人当成板件表。
+    评估器只算**宽度方向**：腔高、腔深由层板与用途规则另算，这里不编。
+    凑整口径保持中立：某条缝不等于 2×边距就标"吸收凑整零头"，左右边距不等就标
+    "零头在边距"——A/B 两种口径都显示得出来。
+    """
+    if not isinstance(report, Mapping):
+        raise ValueError("interior review requires the evaluator report")
+    doors = report.get("doors")
+    if not isinstance(doors, Mapping):
+        raise ValueError("interior review requires doors")
+
+    widths = [float(value) for value in doors.get("door_widths_mm", ())]
+    gaps = [float(value) for value in doors.get("gaps_mm", ())]
+    centers = [float(value) for value in doors.get("seam_centers_mm", ())]
+    left = float(doors.get("left_margin_mm", 0.0))
+    right = float(doors.get("right_margin_mm", 0.0))
+    base_gap = 2 * left
+
+    lines = [f"# {title}", "", "**评估结果：毫米按当前板厚算好，还没写进板件。**", ""]
+    pairs = doors.get("pairs") or []
+    pair_text = "、".join(f"{a}–{b}" for a, b in pairs)
+    lines.append(
+        f"正面 {len(widths)} 扇门 · 每扇 "
+        + " / ".join(_format_mm(width) for width in widths)
+        + (f" · 成对门 {pair_text}（从左起 0 开始）" if pair_text else " · 无成对门")
+    )
+    if centers:
+        bits = []
+        for index, center in enumerate(centers):
+            gap = gaps[index] if index < len(gaps) else base_gap
+            mark = "" if abs(gap - base_gap) < 1e-9 else " ← 吸收凑整零头"
+            bits.append(f"缝 {_format_mm(center)}（{_format_mm(gap)}）{mark}")
+        lines.append("　　" + " · ".join(bits))
+    else:
+        lines.append("　　无内缝（单扇门）")
+    note = "" if abs(left - right) < 1e-9 else " ← 零头在边距"
+    lines.append(f"　　边距 左 {_format_mm(left)} / 右 {_format_mm(right)}{note}")
+
+    lines.extend(["", "## 中立板", ""])
+    dividers = report.get("dividers") or []
+    if dividers:
+        lines.extend(["| 中立板 | 对齐 | 锚 mm | 区间 mm |", "| --- | --- | --- | --- |"])
+        for divider in dividers:
+            lines.append(
+                f"| {divider.get('id')} | 缝 {divider.get('seam_index')}"
+                f"（{divider.get('seam_align')}） | {_format_mm(divider.get('anchor_mm'))} | "
+                f"{_format_mm(divider.get('start_mm'))}~{_format_mm(divider.get('end_mm'))} |"
+            )
+    else:
+        lines.append("无")
+
+    lines.extend(["", "## 腔（净宽；腔高与腔深由层板、用途规则另算）", ""])
+    cavities = report.get("cavities") or []
+    if cavities:
+        lines.extend(["| 腔 | 净宽 mm | 判定 |", "| --- | --- | --- |"])
+        for cavity in cavities:
+            lines.append(
+                f"| {cavity.get('index')} | {_format_mm(cavity.get('clear_width_mm'))} | "
+                f"{cavity.get('status')} |"
+            )
+    else:
+        lines.append("无")
+
+    lines.extend(["", "## 分段", ""])
+    panels = report.get("panels") or []
+    if panels:
+        lines.extend(["| 板 | 段数 | 各段长 mm | 断口宽 mm |", "| --- | --- | --- | --- |"])
+        for panel in panels:
+            segments = [float(value) for value in panel.get("segments_mm", ())]
+            breaks = [float(value) for value in panel.get("break_widths_mm", ())]
+            break_text = " / ".join(_format_mm(value) for value in breaks) if breaks else "—"
+            lines.append(
+                f"| {panel.get('id')} | {len(segments)} | "
+                + " / ".join(_format_mm(value) for value in segments)
+                + f" | {break_text} |"
+            )
+    else:
+        lines.append("无")
+
+    lines.extend(["", "## findings", ""])
+    findings = report.get("findings") or []
+    if findings:
+        for finding in findings:
+            lines.append(
+                f"- **{finding.get('status')}** {finding.get('code')}：{finding.get('message')}"
+            )
+            lines.append(f"  - 继续的损失：{finding.get('proceed_loss')}")
+            lines.append(f"  - 停下的损失：{finding.get('stop_loss')}")
+    else:
+        lines.append("无")
+    lines.extend([
+        "",
+        f"总体：{'blocked（先别下料）' if report.get('blocked') else '没有 blocked'}",
+    ])
+    return "\n".join(lines)
