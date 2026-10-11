@@ -167,6 +167,38 @@ class AgentToolSurfaceTests(unittest.TestCase):
         self.assertTrue(confirmed["ok"], confirmed)
         self.assertTrue(confirmed["project"]["layout_confirmed"])
         self.assertEqual(confirmed["project"]["required_tool"], TOOL_RUN_NEXT)
+        self.assertNotIn(
+            "furniture_evaluate_interior",
+            created["project"]["allowed_tools"],
+        )
+        self.assertIn(
+            "furniture_evaluate_interior",
+            confirmed["project"]["allowed_tools"],
+        )
+
+        sized = self.session.call(
+            "furniture_evaluate_interior",
+            {
+                "project_id": project_id,
+                "interior": {
+                    "width_mm": 2400,
+                    "door_count": 7,
+                    "margin_mm": 1.5,
+                    "side_thickness_mm": 18,
+                    "pairs": [[0, 1]],
+                },
+            },
+        )
+        self.assertTrue(sized["ok"], sized)
+        self.assertFalse(sized["progressed"])
+        self.assertEqual(sized["project"]["revision_id"], confirmed["project"]["revision_id"])
+        self.assertEqual(sized["project"]["current_stage"], "layout_plan")
+        self.assertEqual(
+            sized["interior"]["doors"]["door_widths_mm"],
+            [340, 340, 340, 340, 340, 340, 339],
+        )
+        self.assertEqual(sized["interior"]["doors"]["gaps_mm"], [3, 3, 3, 3, 3, 3])
+        self.assertFalse(sized["interior"]["blocked"])
 
         generated = self.session.call(
             TOOL_RUN_NEXT,
@@ -179,6 +211,10 @@ class AgentToolSurfaceTests(unittest.TestCase):
         self.assertTrue(generated["progressed"])
         self.assertEqual(generated["project"]["current_stage"], "panel_plan")
         self.assertFalse(generated["project"]["current_stage_approved"])
+        self.assertIn(
+            "furniture_evaluate_interior",
+            generated["project"]["allowed_tools"],
+        )
         self.assertEqual(generated["project"]["required_tool"], TOOL_CONFIRM_STAGE)
         self.assertEqual(
             generated["project"]["current_view"]["cabinets"][0]["n_doors"],

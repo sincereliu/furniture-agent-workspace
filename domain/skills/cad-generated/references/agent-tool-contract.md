@@ -35,6 +35,7 @@ result = session.call(name, arguments)  # arguments 为对象或 JSON 字符串
 | `furniture_select_stage_attempt` | 选用某次通过的 attempt，再确认 |
 | `furniture_revise_layout` | 新 Revision，从 `layout_plan` 重来 |
 | `furniture_record_decision` | 只把客户说的话记进**决策台账**（追加）：不动布局、不动阶段，`progressed=false`。客户后来说了一句、但还不用改布局时用它 |
+| `furniture_evaluate_interior` | 计算一门柜的门宽、缝、中立板区间、腔净空和分段长度。只收设计选择，不收算好的毫米。不写项目、不推进阶段，`progressed=false`。布局已确认，或当前在 `panel_plan` 时，出现在 `allowed_tools` 里 |
 
 不提供：`CadBridge`、特征树发射器、一次性自动确认、压扁检查点的入口。房间编辑器仍可走 `layout-plan` HTTP，真源是 Project 的 `layout_plan`。
 
@@ -57,7 +58,7 @@ result = session.call(name, arguments)  # arguments 为对象或 JSON 字符串
 
 ## 调用结果
 
-外层：`ok`、`tool`、`error`、`progressed`、`project`。`progressed` 表示这次调用是否把流程往前推进（新建、确认、生成下一步、改布局为真；只查状态或只换已有尝试为假）。
+外层：`ok`、`tool`、`error`、`progressed`、`project`。`progressed` 表示这次调用是否把流程往前推进（新建、确认、生成下一步、改布局为真；只查状态或只换已有尝试为假）。`furniture_evaluate_interior` 成功时多一个 `interior`，里面是评估报告。
 
 ## 快照字段
 

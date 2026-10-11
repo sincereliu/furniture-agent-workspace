@@ -28,7 +28,7 @@ description: 用于 panel_plan 阶段。当用户说“几扇门”“几层板�
 按编号往下做。第 6 步是客户要另一版时的回头路。第 7 步是确认。
 
 1. **确认布局已经冻结。** 没有已确认的 `layout_plan` 就停。不要回布局里改外形尺寸。
-2. **把客户的话收成整份板件方案。** 这一步只整理，还不调用工具。没说清的构造值写成假设给客户看。客户没给层板净高和踢脚支撑数时，不要自己算，把这两项留空。不要在脚本里做关键词识别、同义词映射或开放方案排序。
+2. **把客户的话收成整份板件方案。** 这一步只整理，还不调用工具。没说清的构造值写成假设给客户看。客户没给层板净高和踢脚支撑数时，不要自己算，把这两项留空。中立板、成对门和分段按 [柜内结构契约](references/interior-structure-contract.md) 提交选择；门宽、缝、区间、净空和段长以 `furniture_evaluate_interior` 的回报为准。不要在脚本里做关键词识别、同义词映射或开放方案排序。
 3. **写入参数并调用 `furniture_run_next`。** 编排层从已确认布局读取柜体包络；`FurnitureSpec.from_envelope()` 校验提案字段完整、类型及客观结构冲突，按工艺卡展开省略的料档，并展开省略的层板均分净高和踢脚支撑数，首次物化完整规范。
 4. **代码生成柜体。** 依据 [背板结构规则](references/back-construction-rules.md)、[板件定义规则](references/panel-definition-rules.md)、[抽屉尺寸链](references/drawer-dimension-chain.md) 和 `references/cabinet-topologies/` 生成柜体实例及其 `spec` / `interior` / `back_mount_resolution` / `assemblies`。背板模式需要背拉条时，同一阶段把背拉条物化并纳入校验。运行时统一校验柜体身份、子装配归属、结构规格、精确净空、板件标识、尺寸、位置、依赖和背板几何。
 5. **展示后停。** 先给客户一份假设清单。清单只列没说清的构造选择，例如门数、层数、背板安装、踢脚高。省略的料厚、层板净高和踢脚支撑数不写进假设清单。代码准入后，展示工具快照 `current_view` 的确认审查清单：柜体、背板安装、内部净空、板件一行一条、接触去重。不要展开完整 `cabinets` 树。清单由运行时从检查点派生，见 [运行时映射](references/runtime-map.md)。每次规划是一次 attempt。
@@ -60,6 +60,7 @@ description: 用于 panel_plan 阶段。当用户说“几扇门”“几层板�
 - 柜体板/背板目录、工艺卡和角色绑定： [料档与工艺卡](references/sheet-stock-catalog.md)
 - 背板模式解析、背板基准、内部净深和背拉条约束： [背板结构规则](references/back-construction-rules.md)
 - 板件角色、门/层板/踢脚规则和柜型拓扑边界： [板件定义规则](references/panel-definition-rules.md)
+- 中立板、腔、分段和正面排版： [柜内结构契约](references/interior-structure-contract.md)
 - 层板列表、计算层与固定/活动层板物化： [层板规则](references/shelf-planning-rules.md)
 - 踢脚区、支撑数量公式和净距： [踢脚规则](references/toe-kick-rules.md)
 - 抽屉区尺寸链、适用条件和限制： [抽屉尺寸链](references/drawer-dimension-chain.md)

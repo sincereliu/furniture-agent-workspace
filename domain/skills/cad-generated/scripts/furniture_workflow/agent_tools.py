@@ -17,6 +17,7 @@ from furniture_layout.project_layout import ProjectLayout
 from .agent_tool_schema import (
     TOOL_CONFIRM_STAGE,
     TOOL_CREATE_PROJECT,
+    TOOL_EVALUATE_INTERIOR,
     TOOL_GET_PROJECT,
     TOOL_NAMES,
     TOOL_RECORD_DECISION,
@@ -27,6 +28,7 @@ from .agent_tool_schema import (
     _CONFIRM_KEYS,
     _CREATE_KEYS,
     _DEFAULT_CAD_OUTPUT_ROOT,
+    _EVALUATE_INTERIOR_KEYS,
     _GET_KEYS,
     _RETRYABLE_VALUES,
     _STAGE_VALUES,
@@ -108,6 +110,8 @@ class FurnitureToolSession:
                     default=True,
                 )
                 return self._ok(tool, project, include_view=include_view)
+            if tool == TOOL_EVALUATE_INTERIOR:
+                return self._evaluate_interior(project, payload)
             # 写动作前先接管编辑租约：人把活交给助手 = 授权让出（方案 B，不再问一遍）。
             # 页面会因此切成只读，所以结果里带一句 handover 让模型告诉人——
             # 见 references/runtime-contract.md「编辑租约」段。
@@ -120,6 +124,25 @@ class FurnitureToolSession:
             return self._error(tool, exc.code, exc.message, project=project)
         except (TypeError, ValueError, json.JSONDecodeError) as exc:
             return self._error(tool, "INVALID_ARGUMENT", str(exc), project=project)
+
+    def _evaluate_interior(
+        self,
+        project: Project,
+        payload: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        """Read-only front sizing. Does not take the edit lease or write the project."""
+        _reject_unknown_keys(payload, _EVALUATE_INTERIOR_KEYS)
+        interior = payload.get("interior")
+        if not isinstance(interior, Mapping):
+            raise ToolProtocolError(
+                "INVALID_ARGUMENT",
+                "interior must be an object",
+            )
+        from furniture_panel_planning.interior_structure import evaluate_interior
+
+        result = self._ok(tool=TOOL_EVALUATE_INTERIOR, project=project, include_view=False)
+        result["interior"] = evaluate_interior(interior)
+        return result
 
     def _dispatch_write(
         self,
@@ -543,6 +566,8 @@ def _lease_snapshot(project: Project, store: Any | None) -> dict[str, Any] | Non
 
 def allowed_tools(revision: Revision) -> list[str]:
     tools = [TOOL_GET_PROJECT, TOOL_REVISE_LAYOUT, TOOL_RECORD_DECISION]
+    if _interior_evaluation_allowed(revision):
+        tools.append(TOOL_EVALUATE_INTERIOR)
     current = revision.workflow.current
     if current == WorkflowStage.FAILED or current not in STAGE_SEQUENCE:
         return tools
@@ -584,6 +609,16 @@ def required_tool(revision: Revision) -> str | None:
     if next_stage in RETRYABLE_STAGES and revision.attempts_for(next_stage):
         return TOOL_RETRY_STAGE
     return TOOL_RUN_NEXT
+
+
+def _interior_evaluation_allowed(revision: Revision) -> bool:
+    current = revision.workflow.current
+    if current == WorkflowStage.PANELS_PLANNED:
+        return True
+    return (
+        current == WorkflowStage.LAYOUT_PLAN
+        and revision.is_stage_approved(current)
+    )
 
 
 def _has_passed_attempt(revision: Revision, stage: WorkflowStage) -> bool:
@@ -786,6 +821,7 @@ __all__ = [
     "FurnitureToolSession",
     "TOOL_CONFIRM_STAGE",
     "TOOL_CREATE_PROJECT",
+    "TOOL_EVALUATE_INTERIOR",
     "TOOL_GET_PROJECT",
     "TOOL_NAMES",
     "TOOL_RECORD_DECISION",

@@ -31,6 +31,7 @@
 | `panel_spec.py` | schema、完整性、客观冲突、`back_mount` 准入、料档工艺卡展开、省略的层板均分与踢脚支撑数 | schema / validation / calculation / structured_protocol |
 | `structure_planning.py` | 精确净空与柜体区域 | calculation |
 | `panel_rules.py` | 省略时的踢脚支撑数与层板均分、支撑净距、背拉条数量与净距 | calculation |
+| `interior_structure.py` | 正面缝、中立板区间、腔净空和分段长度；不物化柜体板件 | calculation |
 | `construction_geometry.py` | 层板/抽屉/踢脚/背拉条盒子 | calculation |
 | `topology_solver.py` | 读柜型 YAML，物化板件位置与语义面 | calculation |
 | `assembly_tree.py` | 把求解结果编成柜→子装配→板，并按装配收口接触 | calculation / schema |

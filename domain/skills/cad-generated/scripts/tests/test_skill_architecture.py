@@ -44,6 +44,7 @@ STAGE_REFERENCES = {
         "references/shelf-planning-rules.md",
         "references/toe-kick-rules.md",
         "references/drawer-dimension-chain.md",
+        "references/interior-structure-contract.md",
         "references/terminology-glossary.md",
         "references/panel-side-analyses.md",
         "references/runtime-map.md",

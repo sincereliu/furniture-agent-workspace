@@ -38,6 +38,18 @@
 | 板件全局标识 | `id` | 字符串 | `{cabinet_id}__{role}`。输出不得再写裸角色名。 |
 | 板件接触 | `joints` | 列表 | 检查点写在所属子装配上；交接派生列表才回贴到板上。每条是大面被端面顶住。 |
 
+## 柜内结构评估
+
+这些名字只用于 `evaluate_interior` 的输入和回报，不是 `FurnitureSpec` 字段，也不写入板件检查点。提交和代价见 [柜内结构契约](interior-structure-contract.md)。
+
+| 概念 | 规范名 | 单位/类型 | 说明 |
+| --- | --- | --- | --- |
+| 成对门 | `pairs` | 序号对列表 | 从左起、0 开始，两扇必须相邻。不改变门宽和门缝。 |
+| 缝锚 | `seam_align` | `center` / `left_face` / `right_face` | 缝落在中立板中心或某一侧面。 |
+| 中立板 | `dividers[]` | 对象 | `id`、`seam_index`、`seam_align`、`thickness_mm`。 |
+| 断口 | `breaks[]` | 对象 | `align_divider` 或 `at_mm`。段长是回报，不是输入。 |
+| 数据档 | `grade` | `confirmed` / `typical` / `unknown` | 用途净空和最小段宽用哪一档数据。 |
+
 ## 接触口径
 
 一条接触是定向面–端邻接：大面被端面顶住。角色属于这一条 `joints[]` 记录，不是板件属性。同一块板可以在不同接触里分别担任大面和端面。本阶段只推导接触，不解析连不连。输出键即下表规范名。

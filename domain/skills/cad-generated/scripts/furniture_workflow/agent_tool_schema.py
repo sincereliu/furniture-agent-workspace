@@ -16,6 +16,7 @@ TOOL_RETRY_STAGE = "furniture_retry_stage"
 TOOL_SELECT_ATTEMPT = "furniture_select_stage_attempt"
 TOOL_REVISE_LAYOUT = "furniture_revise_layout"
 TOOL_RECORD_DECISION = "furniture_record_decision"
+TOOL_EVALUATE_INTERIOR = "furniture_evaluate_interior"
 
 TOOL_NAMES = (
     TOOL_CREATE_PROJECT,
@@ -26,6 +27,7 @@ TOOL_NAMES = (
     TOOL_SELECT_ATTEMPT,
     TOOL_REVISE_LAYOUT,
     TOOL_RECORD_DECISION,
+    TOOL_EVALUATE_INTERIOR,
 )
 
 _STAGE_VALUES = tuple(stage.value for stage in STAGE_SEQUENCE)
@@ -33,6 +35,7 @@ _RETRYABLE_VALUES = tuple(stage.value for stage in RETRYABLE_STAGES)
 _CREATE_KEYS = frozenset({"name", "rooms", "decisions"})
 _REVISE_KEYS = frozenset({"project_id", "rooms", "decisions"})
 _RECORD_DECISION_KEYS = frozenset({"project_id", "decisions"})
+_EVALUATE_INTERIOR_KEYS = frozenset({"project_id", "interior"})
 _GET_KEYS = frozenset({"project_id", "include_view"})
 _CONFIRM_KEYS = frozenset({"project_id", "stage", "room_id"})
 _RUN_NEXT_KEYS = frozenset(
@@ -372,6 +375,37 @@ _OPENAI_TOOLS: list[dict[str, Any]] = [
                     },
                 },
                 "required": ["project_id", "decisions"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": TOOL_EVALUATE_INTERIOR,
+            "description": (
+                "Size one cabinet front and return door widths, seam gaps, "
+                "divider intervals, cavity clearances, and panel segment lengths. "
+                "Pass design choices only: which doors pair, which seam a divider "
+                "uses, and where a panel breaks. Do not send millimeters you calculated. "
+                "Read proceed_loss and stop_loss together when a finding is blocked. "
+                "Does not write the project or advance the stage. "
+                "The panel solver still materializes at most two doors."
+            ),
+            "parameters": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "project_id": {"type": "string"},
+                    "interior": {
+                        "type": "object",
+                        "description": (
+                            "Front choices: width, door count, margin, side thickness, "
+                            "optional pairs, dividers, panels, breaks, and cavity needs. "
+                            "Door widths come back as whole millimeters."
+                        ),
+                    },
+                },
+                "required": ["project_id", "interior"],
             },
         },
     },
