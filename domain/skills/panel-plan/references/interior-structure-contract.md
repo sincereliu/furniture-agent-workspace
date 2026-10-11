@@ -37,3 +37,7 @@
 ## 代码
 
 `scripts/furniture_panel_planning/interior_structure.py`。验收数字在 `domain/skills/cad-generated/scripts/tests/test_interior_structure.py`。
+
+## 下一步
+
+把评估结果写进板件（谁拥有哪些数、物化清单与分期）见 [柜内结构物化设计](interior-materialization-design.md)。

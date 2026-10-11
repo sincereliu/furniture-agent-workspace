@@ -15,4 +15,5 @@
 
 - 新增或搬移 `scripts/` 中的分支、映射、默认值或解析器前，必须完整读取 [LLM 与运行时边界](.agents/skills/furniture-agent/references/llm-runtime-boundary.md)，并按该文档完成边界审计。只改 Skill 文案、`references/`、测试数据或已有确定性计算时，不必先读该文档。
 - 测试只检查算得对不对、状态对不对、以及约定文件和链接还在不在。不要靠在代码里搜关键词，来判断「这段该不该进 Python」；那种判断改完后仍要自己看代码。
+- **动结构性代码前先确认回归基线**：改板件、制造这类会改变产物内容的代码之前，先跑 `domain/skills/cad-generated/scripts/tests/test_panel_output_baseline.py`。它红了先判断是不是**意外**变化——意外就改代码，**不要改基线**；确认是故意的才按该文件头部步骤重新生成，并在提交信息里写清「什么变了、为什么变」。
 - 不要自动写更新日志。只有用户明确要求写更新日志时，才在 `changelog/` 下为这一次更新新建一个 Markdown 文件；不要追加到已有文件，也不要维护根目录 `CHANGELOG.md`。文件名用 `YYYYMMDD.N.md`（同一天已有文件则 `N` 递增）。
