@@ -1,37 +1,48 @@
 ---
 name: layout-plan
-description: 用于 layout_plan 阶段，也是家具流水线的入口。当用户要给家里做家具、描述房间和家具怎么摆、或给出柜体外形尺寸时触发。按房间组织各件外形尺寸；可执行柜体作为 CAD 单元交给板件阶段。不生成柜体板件或柜体 STEP。
+description: 用于 layout_plan 阶段。当用户说「房间多大」「家具摆在哪」「靠哪面墙」「这面墙铺满」「门窗洞口在哪」「这件不做柜、只占位置」时触发。按房间整理各件外形尺寸和摆放，确认后把可执行柜体的宽、深、高交给板件。柜门、层板、抽屉、背板、踢脚、料厚不在本阶段。
 ---
 
 # 家具布局规划
 
 阶段：`layout_plan`
 
-本阶段整理房间、家具包络和摆放，交付待确认的布局；柜门、层板、材料和柜体模型留给下游阶段。
+**这一阶段只回答一件事：各间房里，每件家具的外形尺寸放在哪。** 交出去的是一版还没确认的布局。确认之后，要做的柜只交出柜类和宽、深、高。
 
-## 输入
+## 人要交什么
 
-- 项目统一整理成非空的 `rooms[]`，只有一件家具也要提供所属房间。每间房必须有 `id`、`width_mm`、`depth_mm`、`height_mm`；缺尺寸就问，不编造。家具写在该房间的 `items[]`，墙上的门窗写在 `openings[]`（`kind: door|window`）。
-- 每件家具给 `id`、`category`、深度、高度和 `placement`；固定宽度的件还要给 `width`。`category` 是给人看的种类，不决定是否制造。
-- 要做成柜的件写 `furniture_category: floor_cabinet|wall_cabinet`。`wall_cabinet` 表示吊柜，不表示靠墙摆放。只有客户点名某件不需要制造时才写 `manufacture: false`；该件仍参与摆放，但不进入板件阶段。
-- `placement.mode` 只有 `wall` 和 `free`。靠墙写 `host_wall`。某一头要贴到侧面的墙，或贴着另一台，写 `placement.against`：方向是 `east`/`south`/`west`/`north`，目标只接受 `{kind: wall}` 或 `{kind: item, id: 那台的id}`。家具 id 可以叫 `wall`，引用它写 `{kind: item, id: wall}`。输入与输出使用同一份显式对象，完整契约见[空间布局规则](references/spatial-layout-rules.md)。没写的一头仍按顺序占最早放得下的空段；`fill: true` 占剩下最长的一段，写了 `against` 就占贴着那一头的空段。自由摆写局部原点坐标和转角。沿墙偏移不在这一阶段。吊柜离地写 `placement.origin_z_mm`。
-- 客户已经说清某一台的宽度时，直接给这台的 `width`，不要铺满。
-- 客户没点名家具清单时，按[房间场景指南](references/room-scene-guide.md)列出待确认假设，得到客户认可后再调用工具。
+- 整理成非空的 `rooms[]`。只有一件家具也要有房间。每间要有 `id`、`width_mm`、`depth_mm`、`height_mm`；缺了先问，不编造。
+- 家具写在 `items[]`：`id`、`category`、深度、高度、`placement`。宽度已经说死的，写这台的 `width`，不要改成铺满。`category` 只是给人看的种类。
+- 要做成柜的写 `furniture_category: floor_cabinet|wall_cabinet`。`wall_cabinet` 是吊柜。靠墙摆放另写 `host_wall`。只有客户点名某件不做时才写 `manufacture: false`；该件仍参与摆放，确认后不进板件。
+- 墙上的门窗写在 `openings[]`，`kind` 为 `door` 或 `window`。
+- 摆法用靠墙（`host_wall`）、贴某一头（`against`）、铺满（`fill: true`）或自由摆。吊柜离地写 `origin_z_mm`。字段怎么填、怎么贴合，见 [空间布局规则](references/spatial-layout-rules.md)；写法例子见 [输入示例](references/input-examples.md)。
+- 客户没点名家具清单时，先按 [房间场景指南](references/room-scene-guide.md) 列出待确认假设，认可后再调用工具。
 
-输入写法见[示例](references/input-examples.md)。
+## 一步一步做什么
 
-## 操作流程
+1. **收齐房间和摆法。** 缺房间尺寸先问。清单是猜的，先给客户看。
+2. **调用 `furniture_create_project(name, rooms)`。** 运行时换算坐标并检查越界、家具干涉和门窗遮挡。失败就说明冲突，改提案后重试，不自行换墙重排。
+3. **展示 `project.current_view`，记下 `project.id`。** 预览页默认自动打开；只有打开失败才给 `preview.url`。
+4. **客户认可后再确认。** `furniture_confirm_stage(project_id, stage="layout_plan")`，也可带 `room_id` 逐间确认。所有待审房间都确认后，布局检查点才成立。
+5. **客户要改房间或家具。** 调用 `furniture_revise_layout(project_id, rooms)`，再展示新的 `current_view`。
+6. **布局确认后，客户要做柜体内部。** 按 [板件阶段](../panel-plan/SKILL.md) 准备 `stage_input` 并调用 `furniture_run_next`。每次成功调用后按 `required_tool` / `allowed_tools` 停在当前检查点。工具参数见 [交互工具面](../cad-generated/references/agent-tool-contract.md)。
 
-1. 整理客户给出的尺寸、家具和摆法；缺房间尺寸先问，猜测的清单先请客户确认。
-2. 调用 `furniture_create_project(name, rooms)`。运行时换算坐标并检查越界、家具干涉和门窗遮挡；失败时说明冲突，修改提案后重试，不自行换墙重排。
-3. 成功后展示 `project.current_view`，记下 `project.id`，等待客户审看。预览页默认自动打开；只有打开失败才给 `preview.url`。预览服务的操作见[预览维护](references/preview-ops.md)。
-4. 客户认可后调用 `furniture_confirm_stage(project_id, stage="layout_plan")`；也可带 `room_id` 逐间确认，所有待审房间都确认后布局检查点才成立。已确认且未标记 `manufacture: false` 的柜体包络成为下游只读单元。
-5. 客户要改房间或家具，调用 `furniture_revise_layout(project_id, rooms)`，再展示新版 `current_view` 等待确认。
-6. 布局确认后，客户要做柜体内部时才按[板件阶段](../panel-plan/SKILL.md)准备 `stage_input` 并调用 `furniture_run_next`。每次成功调用后按 `required_tool` / `allowed_tools` 停在当前检查点；工具参数见[交互工具面](../cad-generated/references/agent-tool-contract.md)。
+## 本阶段不做什么
 
-## 按需阅读
+- 柜门、层板、抽屉、背板、踢脚、料厚归 [板件阶段](../panel-plan/SKILL.md)。房间门窗仍写在 `openings[]`。
+- 材料、封边、五金、孔和 BOM 归制造阶段。
+- 柜体模型归后面的 CAD 阶段。
 
-- 改坐标、靠墙/自由摆、`fill` 或摆放检查：[空间布局规则](references/spatial-layout-rules.md)；定位实现文件与测试：[运行时映射](references/runtime-map.md)。
-- 改输入示例：[输入示例](references/input-examples.md)；客户没给清单：[房间场景指南](references/room-scene-guide.md)。
-- 排查房间页、预览服务或重开项目：[预览维护](references/preview-ops.md)。
-- 改可执行柜类：[可执行柜类](references/intake/catalog.yaml)。未落地需求才读 [backlog](references/backlog.md)。
+## 按这句话打开
+
+| 遇到 | 打开 |
+| --- | --- |
+| 客户没给家具清单 | [房间场景指南](references/room-scene-guide.md) |
+| 核对字段、`against` 或 `manufacture: false` 的写法 | [输入示例](references/input-examples.md) |
+| 靠墙、铺满、转角，或越界、干涉、遮挡洞口 | [空间布局规则](references/spatial-layout-rules.md) |
+| 预览打不开、页面不刷新、重开已有项目 | [预览维护](references/preview-ops.md) |
+| 改布局代码，或决定跑哪个测试 | [运行时映射](references/runtime-map.md) |
+| 改可执行柜类 | [可执行柜类](references/intake/catalog.yaml) |
+| 查还没做的需求 | [backlog](references/backlog.md) |
+
+日常做布局只打开表里对上的那一行。

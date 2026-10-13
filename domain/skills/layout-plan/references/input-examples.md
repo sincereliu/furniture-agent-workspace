@@ -1,6 +1,6 @@
 # 布局输入示例
 
-需要核对 `rooms[]` 的字段或 `manufacture: false` 的写法时再读。坐标和沿墙铺满的计算以[空间布局规则](spatial-layout-rules.md)为准。
+需要核对 `rooms[]` 的字段、`against` 或 `manufacture: false` 的写法时再读。坐标和沿墙铺满的计算以[空间布局规则](spatial-layout-rules.md)为准。
 
 一间卧室，一个要做的书柜靠北墙，一个要做的衣柜沿西墙铺满：
 

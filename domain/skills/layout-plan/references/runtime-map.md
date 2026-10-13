@@ -57,6 +57,44 @@
 
 预览几何与标签锚点统一使用房间坐标 `[x, y, z]`（宽、深、高，毫米）。进入 Three.js 时调用 `layout_frame.roomToThree()`，相机回读与拾取返回时调用 `threeToRoom()`；不在调用方手写换序。屏幕像素坐标与 Three.js 原生网格旋转仍由渲染层计算。固定轴和边线随场景内容构建，相机移动时只更新投影与墙面显示。
 
-[房间坐标行为测试](../../cad-generated/scripts/tests/test_room_coordinate_contract.py) 固定局部原点、足迹点序、正负转角、四面靠墙的正面方向、离地高度以及对称包络的序列化。通过 `run_tests.py -p test_room_coordinate_contract.py` 单独选择。前端的 [frame_check.mjs](../scripts/furniture_layout/static/frame_check.mjs) 检查三轴映射和标注；立方体占用空间相同但点序不同，也必须保留各自局部宽深方向。在仓库根目录运行 `node domain/skills/layout-plan/scripts/furniture_layout/static/frame_check.mjs`。
+## 维护时跑哪几个测试
+
+改了布局的哪一块，就只跑下面碰到的那几行。一次改动跨了几行，就跑这几行。不带 `-p` 的 `run_tests.py` 只用于专门的整库回归。
+
+Python 在仓库根目录：
+
+```powershell
+.\.venv\Scripts\python.exe domain\skills\cad-generated\scripts\run_tests.py -p <测试文件名>
+```
+
+前端检查同样在仓库根目录，把 `<检查脚本>` 换成表里的文件名：
+
+```powershell
+node domain/skills/layout-plan/scripts/furniture_layout/static/<检查脚本>
+```
+
+| 改了 | 跑 |
+| --- | --- |
+| `placement.py`、`placement_check.py`：干涉、贴边、门窗遮挡 | `test_room_scene_placement.py` |
+| 局部原点、足迹点序、正负转角、四面靠墙正面、离地高度、对称包络序列化 | `test_room_coordinate_contract.py` |
+| `static/layout_frame.js`、`static/layout_annotations.js`、`static/layout_payload.js`：三轴映射和标注。占用空间相同但点序不同的立方体，各自保留局部宽深方向 | `frame_check.mjs` |
+| `input_fields.py`，以及 `fill`、`against`、HTTP 准入 | `test_layout_input_contract.py` |
+| `validation.py`、`layout_figures.py`、`room_svg.py`、`room_shell.py`：建项前准入、铺满宽度、`manufacture`、房间外壳和 SVG | `test_room_layout_preview.py` |
+| `scene_edit.py`：移动、旋转、改尺寸 | `test_room_scene_edit.py` |
+| `project_edit.py`：项目内改布局、撤销、新修订 | `test_project_layout_edit.py` |
+| `room_http.py`：单间保存、读取、房间外壳接口 | `test_room_scene_api.py` |
+| `scene_store.py` | `test_room_scene_store.py` |
+| 单间草稿页 | `test_room_scene_editor.py` |
+| `open_preview.py`、`project_list.py`、项目预览、名单、分享、拖动回写 | `test_project_preview.py` |
+| 按房间确认 | `test_room_level_confirmation.py` |
+| `static/layout_drag.js` | `drag_check.mjs` |
+| `static/layout_labels.js` | `labels_check.mjs` |
+| `static/wall_view.js` | `wall_view_check.mjs` |
+| `cabinet_entry.py` | `test_cabinet_panel_page.py` |
+| `static/layout_scene.js` | `test_project_preview.py` |
+
+`scene.py`、`scene_planning.py`、`layout_entry.py`、`project_layout.py`、`room_page.py` 和 `templates/` 被上面多行用到。改它们时，跑它实际喂到的那些行。`scene.py` 的家具 id 规则还有板件阶段的对照，再加 `test_skill_architecture.py`。`templates/room_page.js` 里的拖动检查要和 `placement_check.py` 一起改，这时摆放检查和项目预览两行都跑。
+
+这些测试会引用布局类型，测的是别的面：`test_agent_tools.py`（工具面）、`test_decision_log.py`（决策记录）、`test_edit_lease.py`（编辑租约）、`test_revision_inheritance.py`（修订继承）、`test_entrypoint_architecture.py`（入口装配）。改摆放几何时不把它们算进这一次。
 
 未落地与待议需求见 [backlog](backlog.md)。改坐标、摆放检查或房间页时不必读。

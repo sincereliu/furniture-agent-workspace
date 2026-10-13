@@ -64,6 +64,8 @@ Get-ChildItem -Recurse -Directory -Filter .cadgen-store temp, generated -ErrorAc
 
 ## 跑测试
 
+布局阶段维护时，只跑 [布局运行时映射](../../../../domain/skills/layout-plan/references/runtime-map.md) 的「维护时跑哪几个测试」里这次改动碰到的行。下面不带 `-p` 的命令是整库回归。
+
 在仓库根目录、PowerShell：
 
 ```powershell
