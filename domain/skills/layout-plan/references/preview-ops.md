@@ -1,6 +1,6 @@
 # 布局预览维护
 
-`furniture_create_project` 成功后在本机打开项目预览页；设置 `FURNITURE_PREVIEW_BROWSER=0` 时不自动打开。只有打开失败时才把 `preview.url` 告诉客户，平时展示 `project.current_view` 即可。
+`furniture_create_project` 成功后在本机打开项目预览页；设置 `FURNITURE_PREVIEW_BROWSER=0` 时不自动打开。只有打开失败时才把 `preview.url` 告诉客户，平时展示 `project.current_view` 即可。Windows 上这个预览进程由 WMI 创建，调用方那条命令结束时不会把它一起杀掉。已经在跑的服务不会再拉一次。
 
 每次 `furniture_revise_layout` 后，已打开的房间页会自行更新包络，不需重开。客户关闭项目列表或房间页后，预览服务随后自行退出；房间页上的「退出」可立即停止。关机后要重看已有项目，在仓库根目录运行 `domain/skills/layout-plan/scripts/open_projects.py`，不要让客户去 CAD 阶段目录找。
 

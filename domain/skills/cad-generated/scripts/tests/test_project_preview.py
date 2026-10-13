@@ -570,7 +570,9 @@ class OpenProjectPreviewTests(unittest.TestCase):
                 "preview_server_is_up",
                 side_effect=lambda: next(checks),
             ):
-                with mock.patch.object(open_preview.subprocess, "Popen") as popen:
+                with mock.patch.object(
+                    open_preview, "_start_preview_process"
+                ) as start:
                     with mock.patch.object(
                         open_preview.webbrowser, "open", return_value=True
                     ) as opener:
@@ -579,11 +581,28 @@ class OpenProjectPreviewTests(unittest.TestCase):
                                 "project_abc",
                                 workspace_root=WORKSPACE_ROOT,
                             )
-        popen.assert_called_once()
-        command = popen.call_args.args[0]
+        start.assert_called_once()
+        command = start.call_args.args[0]
         self.assertTrue(str(command[1]).endswith("open_projects.py"))
         opener.assert_called_once()
         self.assertTrue(result["opened"])
+
+    def test_windows_preview_spawn_is_created_by_wmi(self) -> None:
+        """命令结束就杀掉子进程的作业留不住预览服务，所以 Windows 走 WMI。"""
+        with mock.patch.object(open_preview.sys, "platform", "win32"):
+            with mock.patch.object(open_preview.subprocess, "run") as run:
+                run.return_value = mock.Mock(returncode=0, stderr="", stdout="")
+                open_preview._start_preview_process(
+                    [r"C:\venv\python.exe", r"C:\repo\open_projects.py"],
+                    r"C:\repo",
+                )
+        run.assert_called_once()
+        argv = run.call_args.args[0]
+        self.assertEqual(argv[0], "powershell.exe")
+        self.assertIn("Win32_Process", argv[-1])
+        env = run.call_args.kwargs["env"]
+        self.assertIn("open_projects.py", env["FURNITURE_PREVIEW_COMMAND"])
+        self.assertEqual(env["FURNITURE_PREVIEW_CWD"], r"C:\repo")
 
     def test_shutdown_refuses_remote_and_stops_a_local_server(self) -> None:
         class Dummy:

@@ -127,6 +127,58 @@ def _python_executable(workspace_root: Path) -> Path:
     return Path(sys.executable)
 
 
+def _start_preview_process(command: list[str], cwd: str) -> None:
+    """拉起预览进程，并让它在这次命令结束后继续跑。"""
+    if sys.platform == "win32":
+        _spawn_outside_windows_job(command, cwd)
+        return
+    subprocess.Popen(
+        command,
+        cwd=cwd,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
+
+def _spawn_outside_windows_job(command: list[str], cwd: str) -> None:
+    """用 WMI 创建进程。调用方的作业在命令结束时会杀掉自己的子进程。
+
+    `DETACHED_PROCESS` 和 `CREATE_BREAKAWAY_FROM_JOB` 都还留在那个作业里，
+    进程会被一起杀掉。`Win32_Process.Create` 由 WMI 服务创建，新进程不在作业里。
+    命令行经环境变量交给 PowerShell，避免引号被拆开。
+    """
+    script = (
+        "$created = Invoke-CimMethod -ClassName Win32_Process -MethodName Create "
+        "-Arguments @{ CommandLine = $env:FURNITURE_PREVIEW_COMMAND; "
+        "CurrentDirectory = $env:FURNITURE_PREVIEW_CWD }; "
+        "if ($created.ReturnValue -ne 0) { exit $created.ReturnValue }"
+    )
+    env = os.environ.copy()
+    env["FURNITURE_PREVIEW_COMMAND"] = subprocess.list2cmdline(command)
+    env["FURNITURE_PREVIEW_CWD"] = cwd
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            script,
+        ],
+        env=env,
+        cwd=cwd,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout).strip()
+        raise OSError(
+            detail or f"preview process was not created ({completed.returncode})"
+        )
+
+
 def ensure_preview_server(workspace_root: Path) -> bool:
     """预览进程没起来时，用布局阶段的入口把它拉起来。"""
     if preview_server_is_up():
@@ -139,23 +191,9 @@ def ensure_preview_server(workspace_root: Path) -> bool:
         / "scripts"
         / "open_projects.py"
     )
-    popen_kwargs: dict[str, Any] = {
-        "cwd": str(workspace_root),
-        "stdin": subprocess.DEVNULL,
-        "stdout": subprocess.DEVNULL,
-        "stderr": subprocess.DEVNULL,
-    }
-    if sys.platform == "win32":
-        popen_kwargs["creationflags"] = (
-            subprocess.CREATE_NEW_PROCESS_GROUP
-            | subprocess.DETACHED_PROCESS
-            | subprocess.CREATE_NO_WINDOW
-        )
-    else:
-        popen_kwargs["start_new_session"] = True
-    subprocess.Popen(
+    _start_preview_process(
         [str(_python_executable(workspace_root)), str(server)],
-        **popen_kwargs,
+        str(workspace_root),
     )
     deadline = time.monotonic() + _SERVER_READY_SECONDS
     while time.monotonic() < deadline:
