@@ -35,6 +35,7 @@
 | 保存的只读预览、单间草稿、项目预览和分享共用一个模板。Python 读 `templates/room_page.html` 填上当前房间。原点三轴、光标坐标、房间药丸、`?room=`、页眉牌子都在模板里。`templates/room_page.js` 里的拖动检查必须与 `placement_check.py` 同步 | `room_page.py` | calculation |
 | 做过的项目名单 | `project_list.py` | calculation |
 | 把预览页打开，并准备这一页要读的数据 | `open_preview.py` | side_effect |
+| 从最新布局取出一台已保存外形，供板件页使用。不要求整份布局已确认 | `cabinet_entry.py` | validation |
 | 房间页上的三维盒子 | `static/layout_scene.js` | calculation |
 | 页面入口将规范布局输出一次转换为画布模型；渲染层只读取该模型 | `static/layout_payload.js` | calculation |
 | 房间的东、南、上怎么画到屏幕上 | `static/layout_frame.js` | calculation |

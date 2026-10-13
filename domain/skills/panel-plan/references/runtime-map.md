@@ -37,6 +37,7 @@
 | `assembly_tree.py` | 把求解结果编成柜→子装配→板，并按装配收口接触 | calculation / schema |
 | `joint_topology.py` | 大面–端面接触几何；不解析连不连 | calculation |
 | `panel_review.py` | 确认审查清单：净空、板件一行一条、接触去重；不含连不连 | calculation / structured_protocol |
+| `cabinet_panel_page.py` | 一台柜子的板件页：只画布局里已保存的外形。不确认布局，不生成门和层板 | structured_protocol |
 | `validation.py` | 检查点入口；柜体/装配在 `validation_cabinet.py`，板件角色在 `validation_panels.py` | validation |
 | `quantitative_audit.py` / `design_optimization.py` | 旁路分析 | 只写 `stage_analyses` |
 

@@ -9,6 +9,7 @@ const PRESENCE=__PRESENCE__;
 // 项目页（服务端按权限渲染成可编辑）用这两个地址写回；草稿页写场景源，两者都空。
 const PROJECT_EDIT_URL=__EDIT_URL__;
 const PROJECT_UNDO_URL=__UNDO_URL__;
+const PANEL_URL_BASE=__PANEL_URL_BASE__;
 const POLL_URL=__POLL_URL__;
 let rooms=__ROOMS_JSON__;
 let layoutVersion=__VERSION_JSON__;
@@ -515,7 +516,49 @@ function detailMarkup(item){
     <dt>离顶</dt><dd><span data-field="ceiling"></span> mm</dd>
     ${gapRow("西距","west")}${gapRow("东距","east")}${gapRow("北距","north")}${gapRow("南距","south")}
   </dl>
+  ${panelPlanBlock(item)}
   ${hint}`;
+}
+function plansPanels(item){
+  return !!item && item.manufacture!==false
+    && (item.furniture_category==="floor_cabinet" || item.furniture_category==="wall_cabinet");
+}
+function panelPlanBlock(item){
+  if(!PANEL_URL_BASE)return "";
+  if(item.manufacture===false)return `<p class="hint-inline">这件只占位置</p>`;
+  if(!plansPanels(item))return "";
+  return `<p class="panel-entry"><button type="button" data-panel-plan>板件规划</button></p><p class="hint-inline" data-panel-note hidden>先保存外形</p>`;
+}
+function sizeInputsDirty(item){
+  const detail=document.getElementById("detail");
+  if(!detail)return false;
+  const saved={width:Math.round(item.width),depth:Math.round(item.depth),height:Math.round(item.height)};
+  for(const key of ["width","depth","height"]){
+    const input=detail.querySelector(`[data-size="${key}"]`);
+    if(!input)continue;
+    const typed=Number(input.value);
+    if(!Number.isFinite(typed)||Math.round(typed)!==saved[key])return true;
+  }
+  return false;
+}
+function syncPanelPlan(item){
+  const button=document.querySelector("#detail [data-panel-plan]");
+  const note=document.querySelector("#detail [data-panel-note]");
+  if(!button)return;
+  const dirty=sizeInputsDirty(item);
+  button.disabled=dirty;
+  if(note)note.hidden=!dirty;
+}
+function openPanelPlan(item){
+  if(!PANEL_URL_BASE||!plansPanels(item)||sizeInputsDirty(item)){
+    setStatus("先保存外形","warn");
+    return;
+  }
+  const params=new URLSearchParams();
+  if(scene.room&&scene.room.id)params.set("room",scene.room.id);
+  if(SHARE_FORM)params.set("mode","view");
+  const query=params.toString();
+  location.assign(`${PANEL_URL_BASE}/${encodeURIComponent(item.id)}/panels${query?`?${query}`:""}`);
 }
 // 只在换选中件时才重建 DOM，之后一律就地改值。
 // 早先的做法是「焦点在面板里就整块不刷新」，结果点了 −/＋ 之后数字不跟着动，
@@ -562,6 +605,7 @@ function applyDetailValues(detail,item,force){
     set(`[data-gap="${key}"]`,values.gaps[key]);
     set(`[data-who="${key}"]`,values.who[key]);
   }
+  syncPanelPlan(item);
 }
 function selectItem(id){
   state.selectedId=id;state.blocked=null;
@@ -1123,6 +1167,7 @@ if(detailBox&&detailBox.addEventListener){
     if(!button)return;
     const item=scene.items.find(candidate=>candidate.id===state.selectedId);
     if(!item)return;
+    if(button.dataset.panelPlan!==undefined){openPanelPlan(item);return}
     if(button.dataset.height!==undefined)nudgeHeight(item,Number(button.dataset.height));
     else if(button.dataset.gapStep)setGap(item,button.dataset.gapStep,
       distancesOf(item)[button.dataset.gapStep].gap+Number(button.dataset.delta));
@@ -1145,6 +1190,12 @@ if(detailBox&&detailBox.addEventListener){
     else return;
     // 落定后把输入框校正到实际达到的值（可能因为被挡住而不等于输入）
     applyDetailValues(detailBox,item,true);
+  });
+  detailBox.addEventListener("input",event=>{
+    const input=event.target;
+    if(!input||!input.dataset||!input.dataset.size)return;
+    const item=scene.items.find(candidate=>candidate.id===state.selectedId);
+    if(item)syncPanelPlan(item);
   });
 }
 bindRoom();

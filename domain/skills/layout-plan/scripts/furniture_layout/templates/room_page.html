@@ -90,7 +90,7 @@ canvas.panning{cursor:grabbing}
 .item-row:hover{background:#f8fafc}
 .item-row.active{background:var(--accent-soft);border-color:#c7d2fe;color:#3730a3;font-weight:600}
 .item-row .dot{width:9px;height:9px;border-radius:3px;background:#8ea9e8;box-shadow:inset 0 0 0 1px rgba(15,23,42,.14);flex:none}
-.item-row.active .dot{background:var(--amber)}
+.item-row.active .dot{background:var(--accent)}
 .item-row .name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .item-row .mode{font-size:10.5px;font-weight:600;color:#94a3b8;border:1px solid var(--line);border-radius:999px;padding:1px 7px;flex:none}
 .item-row.active .mode{color:#6366f1;border-color:#c7d2fe;background:#fff}
@@ -113,7 +113,7 @@ canvas.panning{cursor:grabbing}
 .legend li{display:flex;align-items:center;gap:9px}
 .chip{width:14px;height:10px;border-radius:3px;flex:none;box-shadow:inset 0 0 0 1px rgba(15,23,42,.16)}
 .chip.furniture{background:#8ea9e8}
-.chip.selected{background:var(--amber)}
+.chip.selected{background:#f5c400}
 .chip.height{background:#3b82f6}
 .chip.dim{background:#a78bfa}
 .chip.size{background:#334155}
@@ -123,6 +123,9 @@ canvas.panning{cursor:grabbing}
 .chip.axes{background:#0f172a}
 .tips{margin:11px 0 0;padding-top:10px;border-top:1px dashed var(--line);font-size:11.5px;line-height:1.7;color:#94a3b8}
 .hint-inline{margin:8px 0 0;font-size:11.5px;color:#94a3b8;line-height:1.6}
+.panel-entry{margin:10px 0 0}
+.panel-entry button{appearance:none;border:0;background:var(--accent);color:#fff;border-radius:8px;padding:7px 12px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer}
+.panel-entry button:disabled{background:#cbd5e1;color:#64748b;cursor:not-allowed}
 @media (max-width:980px){.workspace{grid-template-columns:minmax(0,1fr)}.stage{min-height:420px}.app{height:auto}}
 </style>
 </head>
@@ -161,7 +164,7 @@ canvas.panning{cursor:grabbing}
   </header>
   <div class="workspace">
     <section class="stage">
-      <canvas id="scene" width="960" height="600" aria-label="房间与家具外形尺寸；点选家具后可拖动移动、拖橙点旋转、拖蓝点改离地高度"></canvas>
+      <canvas id="scene" width="960" height="600" aria-label="房间与家具外形尺寸；点选家具后可拖动移动、拖柜顶圆环箭头改朝向、拖蓝点改离地高度"></canvas>
       <div class="toast" id="status">点击一件家具开始</div>
       <div class="coord" id="coord" hidden></div>
     </section>
@@ -178,7 +181,7 @@ canvas.panning{cursor:grabbing}
         <h2>图例</h2>
         <ul class="legend">
           <li><i class="chip furniture"></i>家具外形尺寸</li>
-          <li data-edit-only><i class="chip selected"></i>选中 / 旋转环与手柄（橙）</li>
+          <li data-edit-only><i class="chip selected"></i>柜顶两段黄色圆弧箭头（拖了转向）</li>
           <li data-edit-only><i class="chip height"></i>离地高度手柄（蓝）</li>
           <li><i class="chip dim"></i>离东/南/西/北墙净距（紫）</li>
           <li><i class="chip size"></i>本体尺寸 宽/深/高（深灰）</li>

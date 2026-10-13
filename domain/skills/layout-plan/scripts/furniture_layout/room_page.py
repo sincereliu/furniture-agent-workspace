@@ -1,9 +1,9 @@
 """浏览器里打开的房间页。可拖、只读预览、分享都是这一页。
 
 点选一件家具后拖动：靠墙件不沿墙滑动，沿墙位置由包络贴合算出；往房间内拖过
-阈值就改成自由摆放。自由件平面移动（发 `origin_x_mm`/`origin_y_mm`）。选中后
-家具上方有两个手柄——橙色圆点拖了是旋转（发 `rotation_z_deg`），蓝色圆点拖了
-改离地高度（发 `origin_z_mm`）；墙摆的旋转由 `host_wall` 派生，所以旋转墙摆会
+阈值就改成自由摆放。自由件平面移动（发 `origin_x_mm`/`origin_y_mm`）。
+选中后，柜顶有两小段贴平的黄色圆弧箭头，绕着这件的外廓，拖它改朝向（发
+`rotation_z_deg`）；柜顶中央的蓝色小圆点改离地高度（发 `origin_z_mm`）。墙摆的旋转由 `host_wall` 派生，所以旋转墙摆会
 在同一个 op 里改成自由摆放。
 
 画面、转视角、缩放和点选由 three.js 负责。房间坐标仍是 X 东、Y 南、Z 上。
@@ -58,6 +58,12 @@ def room_page_payload(scene: RoomScene) -> dict[str, Any]:
     }
 
 
+def _layout_scene_src() -> str:
+    """画面脚本带文件时间，避免浏览器一直用旧的旋转箭头。"""
+    script = Path(__file__).resolve().parent / "static" / "layout_scene.js"
+    return f"/layout-view/layout_scene.js?v={int(script.stat().st_mtime)}"
+
+
 def _json_for_script(payload: object) -> str:
     return (
         json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
@@ -70,7 +76,7 @@ def _json_for_script(payload: object) -> str:
 _EDITOR_TIPS = (
     "拖动时干涉、越界或遮挡门窗洞口会停在接触处<br>"
     "选中件：紫线是四向净距，灰线是本体宽/深/高<br>"
-    "橙点或旋转环拖了调朝向（Shift 1°）· 蓝点调离地高度<br>"
+    "拖柜顶的圆环箭头改朝向（Shift 1°）· 蓝点调离地高度<br>"
     "前/后/左/右视里上下拖 = 改高度<br>"
     "右侧的距离 / 朝向 / 离地 / 宽深高可输入，回车保存；也可用 − / ＋ 走整数档<br>"
     "空白处拖拽转视角（保留选中）· 右键/中键/Shift+左键拖拽平移 · 滚轮缩放 · Esc 取消选中<br>"
@@ -78,7 +84,7 @@ _EDITOR_TIPS = (
 )
 
 _PREVIEW_TIPS = (
-    "只读预览，位置由对话更新。<br>"
+    "只读预览，位置由对话更新。选中要做的柜子，可打开它的板件页。<br>"
     "空白处拖拽转视角 · 右键/中键/Shift+左键拖拽平移 · 滚轮缩放<br>"
     "双击切正视图，再双击回原视角；保留缩放与选中 · Esc 取消选中<br>"
     "有多间房时点上方房间名切换，地址栏 ?room= 直接指向某间房<br>"
@@ -99,7 +105,8 @@ _STORED_VIEWER_TIPS = (
 #: 可编辑的项目页（本机来源）——提示语要说清"什么时候要审、什么时候算数"。
 _PROJECT_EDITOR_TIPS = (
     "拖动改位置（与别的家具或障碍物干涉、越出房间或遮挡门窗洞口时停在接触处）<br>"
-    "选中件：橙点或旋转环改朝向 · 蓝点改离地高度 · 右侧宽/深/高回车后保存<br>"
+    "选中件：拖柜顶的圆环箭头改朝向 · 蓝点改离地高度 · 右侧宽/深/高回车后保存<br>"
+    "选中要做的柜子，按「板件规划」进入这一台。外形还没回车时按钮停着<br>"
     "还没跑下游时，改动就落在**这一版**上（版号不变）；改到哪一间，哪一间就要重看一眼<br>"
     "空白处拖拽转视角 · 双击吸到最近的正视图 · 滚轮缩放<br>"
     "多间房时点上方房间名切换，地址栏 ?room= 直接指向某间房"
@@ -134,6 +141,7 @@ def _render_canvas_html(
     share_form: bool = False,
     edit_url: str = "",
     undo_url: str = "",
+    panel_url_base: str = "",
     presence: bool = True,
 ) -> str:
     room_name = str(scene_payload["room"]["name"])
@@ -153,12 +161,14 @@ def _render_canvas_html(
         .replace("__POLL_URL__", _json_for_script(poll_url))
         .replace("__EDIT_URL__", _json_for_script(edit_url))
         .replace("__UNDO_URL__", _json_for_script(undo_url))
+        .replace("__PANEL_URL_BASE__", _json_for_script(panel_url_base))
         .replace("__ROOMS_JSON__", _json_for_script(rooms))
         .replace("__VERSION_JSON__", _json_for_script(version))
         .replace("__BODY_CLASS__", body_class)
         .replace("__APP_LABEL__", escape(app_label, quote=True))
         .replace("__TIPS__", tips)
         .replace("__SHUTDOWN_BUTTON__", shutdown_button)
+        .replace("/layout-view/layout_scene.js", _layout_scene_src())
     )
 
 
@@ -206,7 +216,7 @@ def render_draft_page(scene_id: str, scene: RoomScene) -> dict[str, object]:
         "alt_text": (
             f"{scene.room.name}的可编辑外形尺寸视图；点击家具外形尺寸任意位置可选中，"
             "拖动改位置（与别的家具或障碍物干涉、越出房间或遮挡门窗洞口时停在接触处），"
-            "拖橙点或旋转环改朝向、拖蓝点改离地高度；"
+            "拖柜顶的圆环箭头改朝向、拖蓝点改离地高度；"
             "每件的正面用绿色描边标出（约定：局部 +Y 为正面），选中件还有指向正面的箭头；"
             "选中件四周显示到最近邻的净距，并沿自身局部轴标出宽/深/高；"
             "净距、朝向、离地高度都能在右侧直接输入；"
@@ -278,6 +288,7 @@ def render_project_page(
         poll_url=f"/api/project/{project_id}/layout",
         edit_url=f"/api/project/{project_id}/layout/edit",
         undo_url=f"/api/project/{project_id}/layout/undo",
+        panel_url_base=f"/api/project/{project_id}/cabinets",
         heading_suffix="布局预览",
         tips=_SHARE_TIPS if share_form else (
             _PREVIEW_TIPS if read_only else _PROJECT_EDITOR_TIPS

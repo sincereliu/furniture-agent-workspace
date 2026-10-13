@@ -644,31 +644,16 @@ export function mountLayout(canvas) {
       }
       if (!selected) continue;
       const center = footprintCenter(item.footprint);
-      const midZ = (itemZStart + itemZEnd) / 2;
       if (!readOnly) {
         const fillsWall = item.placement && item.placement.fill;
-        if (!fillsWall) {
-          const ring = new THREE.Mesh(
-            new THREE.TorusGeometry(Math.max(180, width * 0.06), 14, 8, 48),
-            new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.4, metalness: 0 }),
-          );
-          ring.rotation.x = Math.PI / 2;
-          ring.position.set(...roomToThree(center[0], center[1], midZ));
-          ring.userData = { kind: "ring", itemId: item.id };
-          addMesh(content, ring, pickables);
-          const rotateHandle = new THREE.Mesh(
-            new THREE.SphereGeometry(70, 16, 12),
-            new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.35, metalness: 0 }),
-          );
-          rotateHandle.position.set(...roomToThree(center[0] + 220, center[1], itemZEnd + 160));
-          rotateHandle.userData = { kind: "rotate", itemId: item.id };
-          addMesh(content, rotateHandle, pickables);
+        if (!fillsWall && item.footprint.length >= 4) {
+          addRotateDial(content, pickables, item, itemZEnd + 40);
         }
         const heightHandle = new THREE.Mesh(
-          new THREE.SphereGeometry(64, 16, 12),
-          new THREE.MeshStandardMaterial({ color: 0x3b82f6, roughness: 0.35, metalness: 0 }),
+          new THREE.SphereGeometry(26, 16, 12),
+          new THREE.MeshStandardMaterial({ color: 0x3b82f6, roughness: 0.45, metalness: 0 }),
         );
-        heightHandle.position.set(...roomToThree(center[0] - 220, center[1], itemZEnd + 160));
+        heightHandle.position.set(...roomToThree(center[0], center[1], itemZEnd + 72));
         heightHandle.userData = { kind: "height", itemId: item.id };
         addMesh(content, heightHandle, pickables);
       }
@@ -744,6 +729,82 @@ export function mountLayout(canvas) {
     controls, resize, setView, readView, basis, project, ground, pick, sync: syncCached, draw, setEnabled, setShiftPan,
     setFovForZoom, elevationPull,
   };
+}
+
+const DIAL_COLOR = 0xf5c400;
+
+/** 柜顶两小段贴平的黄色圆弧箭头，相对而放，都顺着同一个转向。 */
+function addRotateDial(parent, pickables, item, z) {
+  const center = footprintCenter(item.footprint);
+  const a = item.footprint[3];
+  const b = item.footprint[2];
+  let fx = (a[0] + b[0]) / 2 - center[0];
+  let fy = (a[1] + b[1]) / 2 - center[1];
+  const length = Math.hypot(fx, fy) || 1;
+  fx /= length;
+  fy /= length;
+  const px = -fy;
+  const py = fx;
+  let radius = 160;
+  for (const [x, y] of item.footprint) {
+    radius = Math.max(radius, Math.hypot(x - center[0], y - center[1]));
+  }
+  const at = (angle, distance, height) => {
+    const c = Math.cos(angle);
+    const s = Math.sin(angle);
+    return roomToThree(
+      center[0] + (fx * c + px * s) * distance,
+      center[1] + (fy * c + py * s) * distance,
+      height,
+    );
+  };
+  // 环和箭头都留在外廓外面，再抬到柜顶之上，避免和柜体叠在同一个面上。
+  const band = Math.min(48, Math.max(18, radius * 0.04));
+  const head = Math.min(120, Math.max(band * 2.6, radius * 0.12));
+  const gap = 160;
+  radius += gap + band / 2 + head * 0.72;
+  const positions = [];
+  const sweep = 0.72;
+  const pushArrow = (mid) => {
+    const steps = 8;
+    const tail = mid - sweep / 2;
+    const neck = mid + sweep / 2 - 0.26;
+    for (let i = 0; i < steps; i += 1) {
+      const a0 = tail + (neck - tail) * (i / steps);
+      const a1 = tail + (neck - tail) * ((i + 1) / steps);
+      const inner0 = at(a0, radius - band / 2, z);
+      const outer0 = at(a0, radius + band / 2, z);
+      const inner1 = at(a1, radius - band / 2, z);
+      const outer1 = at(a1, radius + band / 2, z);
+      positions.push(...inner0, ...outer0, ...outer1, ...inner0, ...outer1, ...inner1);
+    }
+    const tip = at(mid + sweep / 2, radius, z);
+    const baseIn = at(neck, radius - head * 0.72, z);
+    const baseOut = at(neck, radius + head * 0.72, z);
+    positions.push(...tip, ...baseOut, ...baseIn);
+  };
+  pushArrow(Math.PI / 2);
+  pushArrow(Math.PI * 1.5);
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  const arrow = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({
+    color: DIAL_COLOR,
+    side: THREE.DoubleSide,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1,
+  }));
+  arrow.userData = { kind: "rotate", itemId: item.id };
+  addMesh(parent, arrow, pickables);
+
+  const grab = new THREE.Mesh(
+    new THREE.TorusGeometry(radius, band, 6, 64),
+    new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
+  );
+  grab.rotation.x = Math.PI / 2;
+  grab.position.set(...roomToThree(center[0], center[1], z));
+  grab.userData = { kind: "ring", itemId: item.id };
+  addMesh(parent, grab, pickables);
 }
 
 function footprintCenter(footprint) {

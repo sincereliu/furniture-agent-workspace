@@ -32,7 +32,13 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from furniture_layout.cabinet_entry import (
+    CabinetNotExecutable,
+    CabinetNotFound,
+    cabinet_for_panel_page,
+)
 from furniture_layout.room_page import render_project_page
+from furniture_panel_planning.cabinet_panel_page import render_cabinet_panel_page
 from furniture_layout.project_list import render_project_list
 from furniture_layout.open_preview import (
     preview_server_is_up,
@@ -115,7 +121,16 @@ LAYOUT_PAGE = (
     / "static"
 )
 app.mount("/vendor/three/0.186.0", StaticFiles(directory=str(THREE_DIST)), name="three_0_186_0")
-app.mount("/layout-view", StaticFiles(directory=str(LAYOUT_PAGE)), name="layout_view")
+class _FreshStaticFiles(StaticFiles):
+    """画面脚本每次都重新取，避免改了旋转箭头浏览器还画旧的。"""
+
+    async def get_response(self, path: str, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+
+app.mount("/layout-view", _FreshStaticFiles(directory=str(LAYOUT_PAGE)), name="layout_view")
 
 def _room_output_root() -> Path:
     return OUTPUT_ROOT
@@ -418,6 +433,32 @@ async def project_layout(project_id: str):
     return _preview_page_data(project_id)
 
 
+@app.get(
+    "/api/project/{project_id}/cabinets/{cabinet_id}/panels",
+    response_class=HTMLResponse,
+)
+async def project_cabinet_panels(
+    project_id: str,
+    cabinet_id: str,
+    mode: str | None = None,
+) -> HTMLResponse:
+    """这一台的板件页。读最新布局里已保存的外形，不确认布局，不写板件。"""
+    project = _load_project(project_id)
+    try:
+        cabinet = cabinet_for_panel_page(project.latest.layout, cabinet_id)
+    except CabinetNotFound as exc:
+        raise HTTPException(status_code=404, detail="这一台不在布局里") from exc
+    except CabinetNotExecutable as exc:
+        raise HTTPException(status_code=422, detail="这件只占位置") from exc
+    return HTMLResponse(
+        content=render_cabinet_panel_page(
+            project_id,
+            cabinet,
+            share=mode == "view",
+        )
+    )
+
+
 @app.get("/api/project/{project_id}/preview", response_class=HTMLResponse)
 async def project_preview(project_id: str, request: Request, mode: str | None = None) -> HTMLResponse:
     """布局页。打开后每秒再读 layout，版本变了就换包络并保持相机。
@@ -437,7 +478,7 @@ async def project_preview(project_id: str, request: Request, mode: str | None = 
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return HTMLResponse(content=html)
+    return HTMLResponse(content=html, headers={"Cache-Control": "no-store"})
 
 
 @app.post("/api/project/{project_id}/layout/edit")
