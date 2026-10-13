@@ -647,7 +647,7 @@ export function mountLayout(canvas) {
       if (!readOnly) {
         const fillsWall = item.placement && item.placement.fill;
         if (!fillsWall && item.footprint.length >= 4) {
-          addRotateDial(content, pickables, item, itemZEnd + 40);
+          addRotateDial(content, pickables, item, (itemZStart + itemZEnd) / 2);
         }
         const heightHandle = new THREE.Mesh(
           new THREE.SphereGeometry(26, 16, 12),
@@ -733,7 +733,7 @@ export function mountLayout(canvas) {
 
 const DIAL_COLOR = 0xf5c400;
 
-/** 柜顶两小段贴平的黄色圆弧箭头，相对而放，都顺着同一个转向。 */
+/** 高度正中两小段贴平的黄色圆弧箭头，相对而放，都顺着同一个转向。 */
 function addRotateDial(parent, pickables, item, z) {
   const center = footprintCenter(item.footprint);
   const a = item.footprint[3];
@@ -758,7 +758,7 @@ function addRotateDial(parent, pickables, item, z) {
       height,
     );
   };
-  // 环和箭头都留在外廓外面，再抬到柜顶之上，避免和柜体叠在同一个面上。
+  // 环和箭头留在外廓外面，高度取这件的正中，避免和柜体侧面叠在同一个面上。
   const band = Math.min(48, Math.max(18, radius * 0.04));
   const head = Math.min(120, Math.max(band * 2.6, radius * 0.12));
   const gap = 160;
