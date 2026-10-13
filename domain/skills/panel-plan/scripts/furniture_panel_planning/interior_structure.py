@@ -26,6 +26,9 @@ _SPEC_KEYS = frozenset(
         "cavity_needs",
         "min_segment_mm",
         "min_segment_grade",
+        "min_door_width_mm",
+        "max_door_width_mm",
+        "door_width_grade",
     }
 )
 _DIVIDER_KEYS = frozenset({"id", "seam_index", "seam_align", "thickness_mm"})
@@ -86,6 +89,7 @@ def evaluate_interior(spec: Mapping[str, Any]) -> dict[str, Any]:
         findings,
     )
     _apply_min_segment(spec, panels, findings)
+    _apply_door_width_range(spec, doors, findings)
     return _report(doors, dividers, cavities, panels, findings)
 
 
@@ -512,11 +516,81 @@ def _apply_min_segment(
         )
 
 
+def _apply_door_width_range(
+    spec: Mapping[str, Any],
+    doors: Mapping[str, Any],
+    findings: list[dict[str, Any]],
+) -> None:
+    """判门宽是否落在车间推荐区间里（下限 350、上限 450 那类数据）。
+
+    只判，不给方案：太窄或太重怎么办由所属 Skill 说明，代码不替人挑扇数。
+    区间可以只给一头（只给上限或只给下限）。
+
+    **一头都不给就是不判**，不报 `unjudged`：门是必填项，每次调用都带一条
+    "没有车间数据"会变成噪音。未判这件事写在提案契约里，不在回报里刷。
+    """
+    has_min = "min_door_width_mm" in spec
+    has_max = "max_door_width_mm" in spec
+    has_grade = "door_width_grade" in spec
+    if not has_min and not has_max:
+        if has_grade:
+            raise ValueError("door_width_grade needs a door width bound")
+        return
+    if not has_grade:
+        raise ValueError("a door width bound needs door_width_grade")
+    grade = spec.get("door_width_grade")
+    if grade not in {"confirmed", "typical"}:
+        raise ValueError("door_width_grade must be confirmed or typical")
+    minimum = _units(spec.get("min_door_width_mm"), "min_door_width_mm") if has_min else None
+    maximum = _units(spec.get("max_door_width_mm"), "max_door_width_mm") if has_max else None
+    for bound in (minimum, maximum):
+        if bound is not None and bound <= 0:
+            raise ValueError("door width bounds must be positive")
+    if minimum is not None and maximum is not None and minimum >= maximum:
+        raise ValueError("min_door_width_mm must be under max_door_width_mm")
+    if grade == "confirmed":
+        status = "blocked"
+        narrow_proceed = "按这个门宽下料，门偏窄、容易变形"
+        wide_proceed = "按这个门宽下料，门偏重、铰链吃力"
+    else:
+        status = "assumption"
+        narrow_proceed = "低于推荐下限，照做可能不好看或变形"
+        wide_proceed = "高于推荐上限，照做可能下垂"
+    widths = [int(value) for value in doors["width_u"]]
+    if minimum is not None:
+        narrow = [(index, width) for index, width in enumerate(widths) if width < minimum]
+        if narrow:
+            index, width = min(narrow, key=lambda pair: pair[1])
+            count = f"（{len(narrow)} 扇）" if len(narrow) > 1 else ""
+            findings.append(
+                _loss(
+                    "door_width_narrow",
+                    status,
+                    f"门 {index} 宽 {_mm(width)} mm{count}，窄于 {_mm(minimum)} mm",
+                    narrow_proceed,
+                    "这一轮没有可审查的门",
+                )
+            )
+    if maximum is not None:
+        wide = [(index, width) for index, width in enumerate(widths) if width > maximum]
+        if wide:
+            index, width = max(wide, key=lambda pair: pair[1])
+            count = f"（{len(wide)} 扇）" if len(wide) > 1 else ""
+            findings.append(
+                _loss(
+                    "door_width_wide",
+                    status,
+                    f"门 {index} 宽 {_mm(width)} mm{count}，宽于 {_mm(maximum)} mm",
+                    wide_proceed,
+                    "这一轮没有可审查的门",
+                )
+            )
+
+
 def _report(
     doors: Mapping[str, Any],
     dividers: Sequence[Mapping[str, Any]],
-    cavities: Sequence[Mapping[str, Any]],
-    panels: Sequence[Mapping[str, Any]],
+    cavities: Sequence[Mapping[str, Any]],    panels: Sequence[Mapping[str, Any]],
     findings: list[dict[str, Any]],
 ) -> dict[str, Any]:
     return {

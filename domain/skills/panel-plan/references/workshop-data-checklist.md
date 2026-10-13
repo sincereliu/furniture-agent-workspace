@@ -19,7 +19,7 @@
 | 1 | **各用途的最小净宽** | `cavity_needs[].min_clear_width_mm` + `grade: confirmed` | 评估只能给 `assumption`（典型值）或 `unjudged` |
 | 2 | **各用途的最小净高** | **字段还没有**（建议加 `min_clear_height_mm`） | **挂长衣/被褥/叠放的高度需求现在无处表达** |
 | 3 | **最小段宽**（门 / 分段板的最小可用宽） | `min_segment_mm` + `min_segment_grade` | 分段后太窄的段判不出来，会进车间 |
-| 4 | **门宽上限** | **字段还没有** | 今天只有"门数 > 2 直接拒"这条实现限制，不是工艺上限 |
+| 4 | **门宽区间**（下限 / 上限） | ✅ **已给：350 ~ 450 mm（含首尾），`typical` 档**，字段 `min_door_width_mm` / `max_door_width_mm` + `door_width_grade` | 已落地；口径与出路见 [门宽与边界件](door-width-and-boundary-pieces.md) |
 | 5 | **板长上限**（如 2440） | **字段还没有** | 超长需要拼板/分段的判断做不了 |
 | 6 | **可达高度带**（踩着凳子够得到的高度） | **字段还没有** | 推荐/审图都用不了它 |
 

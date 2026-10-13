@@ -14,6 +14,7 @@
 - 中立板：`seam_index`、`seam_align`（不写则 `center`）、`thickness_mm`。缝定锚。侧面锚就是那个侧面。
 - 分段：板的 `start_mm` / `end_mm`。断口要么 `align_divider`，要么 `at_mm`（可带 `width_mm`，不带则为 0）。
 - 腔的用途净空：`cavity_needs`，每条带 `grade`。
+- 门宽推荐区间：`min_door_width_mm` / `max_door_width_mm` + `door_width_grade`。可只给一头；**一头都不给就是不判**（不报 `unjudged`）。口径见 [门宽与边界件](door-width-and-boundary-pieces.md)。
 - 侧板厚用已准入的 `board_thickness`，字段名 `side_thickness_mm`。评估不另设边距或板厚默认值。
 
 ## 三步
@@ -31,6 +32,9 @@
 | `unknown` | `blocked` | 没有依据就下料 | 这一轮不出板；已经算出的净空仍在报告里 |
 | 两块中立板抢同一条缝、断口重叠或落在板外、段短于 `confirmed` 最小段 | `blocked` | 对不齐或短板进车间 | 这一轮定不下这块板 |
 | 最小段宽没给 | `unjudged` | 把没判当成做得出 | 没有车间数据就整单停住 |
+| 门宽超出推荐区间（`typical` 档） | `assumption` | 低于推荐下限，照做可能不好看或变形 / 高于推荐上限，照做可能下垂 | 这一轮没有可审查的门 |
+| 门宽超出推荐区间（`confirmed` 档） | `blocked` | 按这个门宽下料，门偏窄、容易变形 / 门偏重、铰链吃力 | 这一轮没有可审查的门 |
+| 门宽区间一头都没给 | 不判 | ——（门是必填项，每次报会变成噪音） | —— |
 
 最小段宽和用途净空没有数据时，不拿典型值冒充确认值。
 
