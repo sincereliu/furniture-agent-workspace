@@ -21,7 +21,7 @@ orchestrator.run_next(project, output_root="generated", generate_cad=True)
 
 不要直调发射器或 `CadBridge`。没有一次性批处理入口；必须确认 `feature_tree_planned` 后再生成 CAD。交互工具面见 [交互工具面](references/agent-tool-contract.md)。
 
-契约见 [运行时契约](references/runtime-contract.md)。实现在 `scripts/furniture_cad/` 与 `scripts/furniture_workflow/`。展示 `stage_outputs.cad_generated` 后暂停；交付验证归 `domain/skills/delivery-validated/SKILL.md`。
+契约见 [运行时契约](references/runtime-contract.md)。实现在 `scripts/furniture_cad/` 与 `scripts/furniture_workflow/`。展示 `stage_outputs.cad_generated`。客户要做交付验证且 `cad_generated` 已确认时，再打开 `domain/skills/delivery-validated/SKILL.md`。
 
 **多柜（2026-10-02 起逐柜）**：制造、特征树、**CAD 与交付清单都已逐柜**——布局里有几台柜，就出几套柜级产物（`bom.<cabinet_id>.md`、`<cabinet_id>.step`、`<cabinet_id>.drilled-holes.*`、`六面钻文件/{cabinet_id}__{role}.xml`），manifest 的柜级记录带 `cabinet_id`，交付验证会拦住"规划了三台、只有一台有文件"。产物形状是 `{"cabinets": [{"id", "bom"|"tree"|"bridge"}]}`，与板件 `cabinets[]` 一一对应。
 

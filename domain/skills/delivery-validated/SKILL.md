@@ -13,7 +13,7 @@ description: 用于 delivery_validated 阶段。当用户说"检查一下产物"
 
 `cad_generated` 已确认，而且产物来自当前 Revision。房间场景不属于交付前置检查点。
 
-核对时读 [交付验证清单](references/delivery-checklist.md) 和 `../cad-generated/references/runtime-contract.md`。
+核对时读 [交付验证清单](references/delivery-checklist.md)。产物路径、冻结文件或逐柜清单对不上时，再读 `../cad-generated/references/runtime-contract.md` 里写冻结布局、冻结板件、逐柜产物和生成目录的部分。
 
 ## 一步一步做什么
 
@@ -21,7 +21,7 @@ description: 用于 delivery_validated 阶段。当用户说"检查一下产物"
 2. **调用 `FurnitureOrchestrator.run_next()`。** 它走到 `scripts/furniture_delivery_validation/validation.py`。前五个串联阶段都要在当前 Revision 里有输出、已确认，并且最近一次验证通过。然后再查必需产物是否存在、非空、大小、SHA-256、是否 stale，以及 Revision 谱系。
 3. **核对制造接受程度。** `manufacture_plan.readiness` 必须与 manufacture-plan 的 BOM 清单元数据一致。仍为 `preliminary` 时报告警告。交付完整不等于可以直接投产。
 4. **若这一版有 `stage_analyses`，逐条核对。** 每条记录要带上 Revision、来源阶段和 `source_sha256`。`unavailable` / `descriptive_only` 只作警告。旁路分析不是必需交付物。
-5. **展示后停。** 把 `stage_outputs.delivery_validated` 给客户看。没有实际跑过的 STEP 几何测量、快照或 Viewer 人工审查，写成未验证。
+5. **展示验证结果。** 把 `stage_outputs.delivery_validated` 给客户看。没有实际跑过的 STEP 几何测量、快照或 Viewer 人工审查，写成未验证。客户已经要求确认这一版时再确认。未跑过的几何审查不能写成已验证。
 
 ## 本阶段不做什么
 

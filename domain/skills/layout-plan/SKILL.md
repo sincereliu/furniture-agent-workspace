@@ -20,12 +20,12 @@ description: 用于 layout_plan 阶段。当用户说「房间多大」「家具
 
 ## 一步一步做什么
 
-1. **收齐房间和摆法。** 缺房间尺寸先问。清单是猜的，先给客户看。
+1. **收齐房间和摆法。** 客户已经给出的房间尺寸、家具清单和摆法直接写入。缺房间的宽、深或高时先问，不编造。清单是按场景指南猜的、客户还没点名时，先把假设给客户看，认可后再调用工具。
 2. **调用 `furniture_create_project(name, rooms)`。** 运行时换算坐标并检查越界、家具干涉和门窗遮挡。失败就说明冲突，改提案后重试，不自行换墙重排。
 3. **展示 `project.current_view`，记下 `project.id`。** 预览页默认自动打开；只有打开失败才给 `preview.url`。
 4. **客户认可后再确认。** `furniture_confirm_stage(project_id, stage="layout_plan")`，也可带 `room_id` 逐间确认。所有待审房间都确认后，布局检查点才成立。
 5. **客户要改房间或家具。** 调用 `furniture_revise_layout(project_id, rooms)`，再展示新的 `current_view`。
-6. **布局确认后，客户要做柜体内部。** 按 [板件阶段](../panel-plan/SKILL.md) 准备 `stage_input` 并调用 `furniture_run_next`。每次成功调用后按 `required_tool` / `allowed_tools` 停在当前检查点。工具参数见 [交互工具面](../cad-generated/references/agent-tool-contract.md)。
+6. **布局确认后，客户要做柜体内部。** 打开 [板件阶段](../panel-plan/SKILL.md)，用已确认的柜类和宽、深、高准备 `stage_input`，再调用 `furniture_run_next`。下一步是否确认或继续，以返回的 `required_tool` 为准，见 [交互工具面](../cad-generated/references/agent-tool-contract.md)。
 
 ## 本阶段不做什么
 

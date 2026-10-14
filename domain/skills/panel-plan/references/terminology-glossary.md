@@ -12,7 +12,7 @@
 
 | 概念 | 规范名 | 单位/类型 | 说明 |
 | --- | --- | --- | --- |
-| 家具类别 | `furniture_category` | 枚举 | 板件柜型，来自已确认外形尺寸；本阶段不接受 `furniture_type` 或 `type`，也不读房间或摆放字段。 |
+| 家具类别 | `furniture_category` | 枚举 | 板件柜型，来自已确认外形尺寸；本阶段不接受 `furniture_type` 或 `type`。房间和摆放字段不属于板件提案。 |
 | 外形尺寸宽 | `width` | mm | 已确认外形尺寸。布局 `rooms[].items[]` 写 `width`，本阶段序列化 `FurnitureSpec` 只写 `width`。 |
 | 外形尺寸深 | `depth` | mm | 已确认外形尺寸。布局 `rooms[].items[]` 写 `depth`，本阶段序列化 `FurnitureSpec` 只写 `depth`。 |
 | 外形尺寸高 | `height` | mm | 已确认外形尺寸。布局 `rooms[].items[]` 写 `height`，本阶段序列化 `FurnitureSpec` 只写 `height`。 |

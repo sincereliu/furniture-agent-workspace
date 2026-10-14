@@ -54,7 +54,7 @@ result = session.call(name, arguments)  # arguments 为对象或 JSON 字符串
   只追加：改主意是加一条并用 `targets` 指回被改的那几条，绝不改写旧条目。校验在动项目之前完成，
   不合法整批拒绝、不留半成品。口径见 [决策台账设计](decision-log-design.md)。
 - 失败 Revision 只能 `furniture_revise_layout`。
-- 每次成功调用后展示 `project.current_view`，按 `required_tool` / `allowed_tools` 停，不要连跳。`panel_plan` 展示审查清单的 `markdown` 或板件/接触表，不要把冻结 `cabinets[]` 树当确认界面。
+- 每次成功调用后展示 `project.current_view`。下一步只从 `allowed_tools` 里选，并优先 `required_tool`。客户还没接受当前结果时，不要代为 `furniture_confirm_stage`，也不要连跳到后面的阶段。客户已经接受，或这次明确要求做下一阶段时，展示当前结果后可以继续调用，不必再问一次。`panel_plan` 展示审查清单的 `markdown` 或板件/接触表，不要把冻结 `cabinets[]` 树当确认界面。
 
 ## 调用结果
 

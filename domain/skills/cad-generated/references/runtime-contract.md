@@ -44,7 +44,7 @@ result = orchestrator.run_next(
 )
 ```
 
-`run_next()`/`run_until()` 不越过未确认检查点。返回当前输出后等待确认。
+`run_next()`/`run_until()` 不越过未确认检查点。当前阶段已有输出且客户还没接受时，下一步是确认，不要代为确认。内容与已确认上一版逐字节相同、因而继承进 `approved_stages` 时，不必再等一次确认。客户已经接受当前输出并要求下一阶段时，确认后可以继续调用。
 
 - 布局确认：`confirm_stage(project, "layout_plan")` 把确认后的布局冻成 `store/<project-id>/layouts/<layout-sha256>.json`。之后板件只读这份冻结布局里的可执行 CAD 单元。
 - **房间级确认**：布局检查点是"**每间都审过**"的派生值——`confirm_room(project, room_id)` 审一间，`pending_room_ids()` 说还差哪几间，全部审过时布局才 `confirmed` 并进 `approved_stages`（下游仍只认这一个闸门，panel / 制造 / CAD 的契约没改）。`confirm_stage(layout_plan)` 一次确认全部，等价于把剩下的房间一次审完。**没动过的房间，确认跟着走**：新 Revision 里某间房的内容与父修订**逐字节相同**且父修订审过它，就自动记入 `approved_rooms` 并在 `inherited_rooms[room_id] = {sha256, from_revision}` 留痕；若这样凑齐了每一间，布局检查点当场成立（不必再让人点一次头）。所以"改一间只审一间"成立，而"改的是没审过的那间"仍要人看。持久化修订必须明确保存 `approved_rooms`；`layout.confirmed` 不用于补造房间确认记录。

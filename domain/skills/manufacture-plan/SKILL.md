@@ -15,7 +15,7 @@ description: 用于 manufacture_plan 阶段。当用户说"用什么五金""三�
 
 有 Project Store 时，制造按确认时记下的 `confirmed_panel_sha256` 读 `store/<project-id>/panels/<sha256>.json`。文件缺失就失败。不改用内存里的板件，也不重跑 `panel-plan`。无 Store 时读内存中已确认的 `stage_outputs.panel_plan`。
 
-由 LLM 根据完整上下文理解制造需求，提出整份策略草案，并把未明确的假设逐项列出给用户确认。策略覆盖：
+由客户这句话、已确认板件，以及下面已点名的目录提出整份策略。目录或规则表已经写明的默认值直接采用，不逐项追问。没有点名默认、且会改变孔位或连接的选择，随结果一次列出。策略覆盖：
 
 - 材料：类别、等级、厚度、纹理、可见面、饰面。材质选型按角色（柜体/门板/背板）引用 `materials_catalog.yaml` 的 `substrate` / `surface` 键，经 `appearance` 输入，由代码查表准入。材料厚度来自已确认的 `panel_plan`，不在这里另写一套。
 - 封边：封哪些边、封边条材质和厚度。选型 `{material, thickness}` 经 `requested_options.edge_banding` 输入（默认 ABS 1.0mm），由代码查表准入。封边宽度（等于板厚）和颜色（同色取 surface 的花色）由代码派生。
@@ -24,14 +24,14 @@ description: 用于 manufacture_plan 阶段。当用户说"用什么五金""三�
 - 五金：铰链、滑轨、拉手、层板托、固定、防倾倒及荷载。单门铰链侧 `door_hinge_side`（`left` / `right`）是制造输入。双门由制造按门板位置派生。不从意图重建，也不硬编码覆盖。
 - 公差和净空：门缝、安装/设备缝隙、地墙不平、安全余量。
 
-口径见 [制造规则](references/manufacturing-rules.md)。不做关键词识别、同义词映射或开放方案排序。五金变体与打孔参数以 `scripts/furniture_manufacturing/hardware_catalog.yaml`、`hardware_rules.yaml` 为准：LLM 只选变体，并把数值假设标为待确认，不硬编码或猜测参数。
+口径见 [制造规则](references/manufacturing-rules.md)。同义说法由 LLM 对到目录里的变体；脚本不做关键词识别、同义词映射或开放方案排序。五金变体与打孔参数以 `scripts/furniture_manufacturing/hardware_catalog.yaml`、`hardware_rules.yaml` 为准：LLM 只选变体，孔的数值用目录里该变体的数，不另写一套坐标。目录没有的数值不要猜进工具参数，标在结果旁待确认。
 
 ## 一步一步做什么
 
 1. **确认板件文件还在。** 两段前置都已确认。有 Store 时，冻结板件文件缺失就停，不要改读内存。
-2. **把制造需求收成整份策略。** 这一步只整理，还不调用工具。假设逐项给客户看。
+2. **把制造需求收成整份策略。** 用客户已经说的选择、[连接与接触默认规则](references/connection-contact-defaults.md) 和已点名的默认值（封边未另选时为 ABS 1.0mm）。有活动层板而客户没选 `movable_shelf_connector` 时，先问这一项再调用工具；运行时不补这个值。其余已有默认的项不单独设问。
 3. **调用 `FurnitureOrchestrator.run_next()`。** 代码生成孔位、封边、槽和 BOM，并由运行时校验。
-4. **展示后停。** 把整套制造方案给客户看。`readiness` 默认 `preliminary`。它表示整份方案和 BOM 的接受程度，不是每条五金或封边各自审批过。
+4. **展示结果。** 把整套制造方案给客户看。`readiness` 保持 `preliminary`，直到客户接受整份方案。它表示整份方案和 BOM 的接受程度，不是每条五金或封边各自审批。客户这次已经明确接受时，按下一步升到 `accepted`，不要再问一次。
 5. **客户明确接受，才升 `accepted`。** 工厂确认之后才升 `factory_ready`。
 6. **同一批已确认板件上再试。** 调用 `retry_stage("manufacture_plan")`。冻结板件文件保持不变。直接改已有制造结果用 `revise_stage_output()`，本阶段及下游失效。
 

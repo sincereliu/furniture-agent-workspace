@@ -22,7 +22,7 @@ description: 用于 feature_tree_planned 阶段。当用户说"建模顺序""哪
 3. **用 Feature Tree v2 表达。** `box` 表示板件。带 `target` 的 `cut_box` 表示切削。槽包络的主校验在制造阶段。本阶段再核对目标是否存在、切削包络是否说得通。
 4. **只有 `groove` 的四条背板槽写成 `cut_box`。** `insert` / `cover` 的连接孔和背拉条端孔保留为 drilled-holes，不写成方盒切削。
 5. **调用 `FurnitureOrchestrator.run_next()` 生成。** `scripts/furniture_feature_tree/validation.py` 调用公开的 `validate_feature_tree()` 做校验。
-6. **展示后停。** 把 `stage_outputs.feature_tree_planned` 给客户看。这一步不生成 CAD。
+6. **展示结果。** 把 `stage_outputs.feature_tree_planned` 给客户看。客户已经接受这一版时再确认。还没接受时不确认，也不生成 CAD。
 7. **要再试或要改。** 同一份已确认制造结果上再试，用 `retry_stage()`。直接改已有特征树，用 `revise_stage_output()`，本阶段及下游失效。
 
 ## 本阶段不做什么

@@ -1,9 +1,9 @@
 # 仓库约定
 
 - 做家具或查找阶段入口时，读 [家具智能体](.agents/skills/furniture-agent/SKILL.md)。
-- 搜索与列目录默认只针对 `domain/` 与 `.agents/`。不要扫 `store/`、`generated/`、`temp/`、`changelog/`、`external/`、`vendor/`。不要先读 `README.md` 或整份 `domain/skills/cad-generated/references/runtime-contract.md`。
-- `external/` 是用子模块跟踪的上游整仓。只有用户点名 CAD 桥或科学分析时，才打开里面对应的那一个 Skill。升级是移动子模块指针。
-- `vendor/` 是本仓库自己提供、版本钉死的第三方构建文件。现在是 `vendor/three/0.186.0/`，预览服务按同名 URL 挂出。升级是替换这些文件。默认不读里面的库源码。
+- 搜索与列目录默认只针对 `domain/` 与 `.agents/`。`store/`、`generated/`、`temp/`、`changelog/`、`external/`、`vendor/` 只在当前任务、阶段技能或工具结果点名该路径时打开，并且只打开点名的文件或目录。`README.md` 和 `domain/skills/cad-generated/references/runtime-contract.md` 同样：没有点名就不要打开；点名了就读被点到的部分。
+- `external/` 是用子模块跟踪的上游整仓。用户点名某一个 CAD 桥或科学分析 Skill，或当前阶段技能的触发表写了该文件时，只打开那一个 Skill，不浏览子模块的其余部分。升级是移动子模块指针。
+- `vendor/` 是本仓库自己提供、版本钉死的第三方构建文件。现在是 `vendor/three/0.186.0/`，预览服务按同名 URL 挂出。升级是替换这些文件。默认不读里面的库源码；要核对某个已点名的构建文件时，只打开那个文件。
 - 改代码先打开对应阶段包，再按该 Skill 的参考导航打开具体文件：
   - 布局、房间门窗（`openings[]`）→ `domain/skills/layout-plan/`
   - 柜门、层板、抽屉、背板、踢脚、料厚 → `domain/skills/panel-plan/`
@@ -13,8 +13,8 @@
   - CAD/STEP → `domain/skills/cad-generated/TOOL.md` 与 `scripts/furniture_cad/`
   - 交付 → `domain/skills/delivery-validated/`
 
-- 维护某一个阶段的 Skill 时，只改该阶段自己的目录，不要改其他阶段的 Skill。六个阶段目录是 `domain/skills/` 下的 `layout-plan/`、`panel-plan/`、`manufacture-plan/`、`feature-tree/`、`cad-generated/`、`delivery-validated/`（含各自的 `SKILL.md` 或 `TOOL.md`、`references/`、`scripts/`、`agents/`）。如果一定要改到其他阶段，先列出计划：要改哪些阶段、哪些文件、为什么不能只留在当前阶段。等开发者看过计划再决定；开发者可以判定改动过大，不改其他阶段的 Skill。决定之前不要先改那些文件。
+- 维护某一个阶段的 Skill 时，只改该阶段自己的目录。六个阶段目录是 `domain/skills/` 下的 `layout-plan/`、`panel-plan/`、`manufacture-plan/`、`feature-tree/`、`cad-generated/`、`delivery-validated/`（含各自的 `SKILL.md` 或 `TOOL.md`、`references/`、`scripts/`、`agents/`）。改动必须落到另一个阶段时，先列出要改哪些阶段、哪些文件、为什么不能只留在当前阶段，等开发者看过再改那些文件。用户这次已经点名这些文件，或明确要求跨阶段调整指令和说明时，按该范围改指令和说明，不必再等一次；这个授权不包含改其他阶段的 `scripts/`。
 - 新增或搬移 `scripts/` 中的分支、映射、默认值或解析器前，必须完整读取 [LLM 与运行时边界](.agents/skills/furniture-agent/references/llm-runtime-boundary.md)，并按该文档完成边界审计。只改 Skill 文案、`references/`、测试数据或已有确定性计算时，不必先读该文档。
-- 测试只检查算得对不对、状态对不对、以及约定文件和链接还在不在。不要靠在代码里搜关键词，来判断「这段该不该进 Python」；那种判断改完后仍要自己看代码。
+- 测试只检查算得对不对、状态对不对，以及约定文件和链接还在不在。新增或搬移上述运行时逻辑时，「这段该不该进 Python」只按该边界文档里的边界审计判断。
 - **动结构性代码前先确认回归基线**：改板件、制造这类会改变产物内容的代码之前，先跑 `domain/skills/cad-generated/scripts/tests/test_panel_output_baseline.py`。它红了先判断是不是**意外**变化——意外就改代码，**不要改基线**；确认是故意的才按该文件头部步骤重新生成，并在提交信息里写清「什么变了、为什么变」。
 - 不要自动写更新日志。只有用户明确要求写更新日志时，才在 `changelog/` 下为这一次更新新建一个 Markdown 文件；不要追加到已有文件，也不要维护根目录 `CHANGELOG.md`。文件名用 `YYYYMMDD.N.md`（同一天已有文件则 `N` 递增）。
