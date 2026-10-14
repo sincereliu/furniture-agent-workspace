@@ -13,6 +13,7 @@
   - CAD/STEP → `domain/skills/cad-generated/TOOL.md` 与 `scripts/furniture_cad/`
   - 交付 → `domain/skills/delivery-validated/`
 
+- 维护某一个阶段的 Skill 时，只改该阶段自己的目录，不要改其他阶段的 Skill。六个阶段目录是 `domain/skills/` 下的 `layout-plan/`、`panel-plan/`、`manufacture-plan/`、`feature-tree/`、`cad-generated/`、`delivery-validated/`（含各自的 `SKILL.md` 或 `TOOL.md`、`references/`、`scripts/`、`agents/`）。如果一定要改到其他阶段，先列出计划：要改哪些阶段、哪些文件、为什么不能只留在当前阶段。等开发者看过计划再决定；开发者可以判定改动过大，不改其他阶段的 Skill。决定之前不要先改那些文件。
 - 新增或搬移 `scripts/` 中的分支、映射、默认值或解析器前，必须完整读取 [LLM 与运行时边界](.agents/skills/furniture-agent/references/llm-runtime-boundary.md)，并按该文档完成边界审计。只改 Skill 文案、`references/`、测试数据或已有确定性计算时，不必先读该文档。
 - 测试只检查算得对不对、状态对不对、以及约定文件和链接还在不在。不要靠在代码里搜关键词，来判断「这段该不该进 Python」；那种判断改完后仍要自己看代码。
 - **动结构性代码前先确认回归基线**：改板件、制造这类会改变产物内容的代码之前，先跑 `domain/skills/cad-generated/scripts/tests/test_panel_output_baseline.py`。它红了先判断是不是**意外**变化——意外就改代码，**不要改基线**；确认是故意的才按该文件头部步骤重新生成，并在提交信息里写清「什么变了、为什么变」。
