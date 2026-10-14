@@ -417,6 +417,91 @@ class InteriorStructureTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "adjacent"):
             evaluate_interior(_front(n_doors=4, pairs=[[0, 2]]))
 
+    def test_door_widths_inside_the_shop_range_raise_nothing(self) -> None:
+        report = evaluate_interior(
+            _front(
+                width_mm=1200,
+                n_doors=3,
+                min_door_width_mm=350,
+                max_door_width_mm=450,
+                door_width_grade="typical",
+            )
+        )
+
+        self.assertFalse(report["blocked"])
+        self.assertEqual(report["findings"], [])
+
+    def test_narrow_doors_are_reported_once_with_the_count(self) -> None:
+        report = evaluate_interior(
+            _front(
+                width_mm=1000,
+                n_doors=3,
+                min_door_width_mm=350,
+                max_door_width_mm=450,
+                door_width_grade="typical",
+            )
+        )
+
+        self.assertFalse(report["blocked"], "推荐档只提示，不拦")
+        finding = self._finding(report, "door_width_narrow")
+        self.assertEqual(finding["status"], "assumption")
+        self.assertIn("330", finding["message"])
+        self.assertIn("350", finding["message"])
+        self.assertIn("3 扇", finding["message"])
+
+    def test_wide_doors_are_reported_with_only_an_upper_bound(self) -> None:
+        report = evaluate_interior(
+            _front(
+                width_mm=1500,
+                n_doors=2,
+                max_door_width_mm=450,
+                door_width_grade="typical",
+            )
+        )
+
+        self.assertFalse(report["blocked"])
+        finding = self._finding(report, "door_width_wide")
+        self.assertIn("450", finding["message"])
+
+    def test_a_confirmed_range_blocks(self) -> None:
+        report = evaluate_interior(
+            _front(
+                width_mm=1000,
+                n_doors=3,
+                min_door_width_mm=350,
+                max_door_width_mm=450,
+                door_width_grade="confirmed",
+            )
+        )
+
+        self.assertTrue(report["blocked"])
+        self.assertEqual(self._finding(report, "door_width_narrow")["status"], "blocked")
+
+    def test_a_missing_range_is_silent_not_unjudged(self) -> None:
+        """没给区间就是不判：门是必填项，每次都报会变成噪音。"""
+        report = evaluate_interior(_front(width_mm=1000, n_doors=3))
+
+        self.assertEqual(report["findings"], [])
+        self.assertFalse(report["blocked"])
+
+    def test_a_bound_without_grade_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "needs door_width_grade"):
+            evaluate_interior(_front(min_door_width_mm=350))
+
+    def test_grade_without_a_bound_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "needs a door width bound"):
+            evaluate_interior(_front(door_width_grade="typical"))
+
+    def test_reversed_bounds_are_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "must be under max_door_width_mm"):
+            evaluate_interior(
+                _front(
+                    min_door_width_mm=450,
+                    max_door_width_mm=350,
+                    door_width_grade="typical",
+                )
+            )
+
     def _assert_mm(self, actual: float, expected: float) -> None:
         self.assertEqual(round(actual * 1000), round(expected * 1000))
 
