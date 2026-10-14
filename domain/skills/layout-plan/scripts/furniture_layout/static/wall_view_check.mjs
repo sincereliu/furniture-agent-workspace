@@ -36,9 +36,9 @@ function expect(condition, message) {
   expect(result.elevation === false, "透视视角不该被判成立面");
   expect(visibleIds(result) === "north,west", `应只留北墙与西墙，实际 ${visibleIds(result)}`);
   expect(state(result, "north").opacity === WALL_BACK_OPACITY, "北墙是背景墙，应最实");
-  expect(state(result, "north").color === WALL_BACK_COLOR, "背景墙要用中灰，不能用浅灰（浅灰压浅底看不见）");
+  expect(state(result, "north").color === WALL_BACK_COLOR, "背景墙要用暖色，压在夜色上才看得清室内");
   expect(state(result, "west").opacity === WALL_SIDE_OPACITY, "西墙是侧墙，应最淡");
-  expect(state(result, "west").color === null, "侧墙沿用默认浅灰");
+  expect(state(result, "west").color === null, "侧墙沿用墙面默认色");
 }
 
 // 2) 相机在房间内部靠南：四面墙都不在"中心与相机之间"，一面都不剔

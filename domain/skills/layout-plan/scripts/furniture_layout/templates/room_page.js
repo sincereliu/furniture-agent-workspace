@@ -27,12 +27,12 @@ const view=mountLayout(canvas);
 let placing=false;
 let room=scene.room;
 // 视图中心跟随平移；切角度保留它，只有「复位」回 HOME_TARGET。
-let HOME_TARGET=[room.width_mm/2,room.depth_mm/2,room.height_mm*.42];
+let HOME_TARGET=[room.width_mm/2,room.depth_mm/2,room.height_mm*.3];
 const target=[...HOME_TARGET];
 let diagonal=Math.hypot(room.width_mm,room.depth_mm,room.height_mm);
 function bindRoom(){
   room=scene.room;
-  HOME_TARGET=[room.width_mm/2,room.depth_mm/2,room.height_mm*.42];
+  HOME_TARGET=[room.width_mm/2,room.depth_mm/2,room.height_mm*.3];
   diagonal=Math.hypot(room.width_mm,room.depth_mm,room.height_mm);
   const roomMeta=document.getElementById("room-meta");
   if(roomMeta){
@@ -45,8 +45,8 @@ function bindRoom(){
     document.title=heading.textContent;
   }
 }
-// 默认视角：正南偏东 15°（yaw=75°）看向北偏西，北墙几乎正对、仍留一点纵深；俯仰 0.35 rad（≈20°）。
-const DEFAULT_YAW=Math.PI*5/12,DEFAULT_PITCH=.35;
+// 默认视角：正南偏东 15°（yaw=75°），俯仰 0.72 rad（≈41°）。从斜上方看整座夜景底座。
+const DEFAULT_YAW=Math.PI*5/12,DEFAULT_PITCH=.72;
 // 立面视图把相机放到水平（pitch 0）并从四个方向看；前视=站在南边往北看，依此类推。
 // 正视图预设：四个立面（pitch 0）+ 俯视/仰视（对称的 ±1.48，避开正好 90° 的退化）。
 // default_view 是「复位」回到的那一眼，不是"正交/透视"之分——这张画布永远是透视投影。
@@ -196,7 +196,8 @@ function baseFit(pitch,yaw){
   const aspect=(canvas.clientWidth||960)/Math.max(canvas.clientHeight||600,1);
   const vFov=48*Math.PI/180;
   const limit=Math.min(vFov,2*Math.atan(Math.tan(vFov/2)*aspect));
-  return diagonal*0.5/Math.sin(limit/2)*1.25;
+  // 1.32：斜上方看时，房间和正方形夜景底座一起落在画面里。
+  return diagonal*0.5/Math.sin(limit/2)*1.32;
 }
 function fitDistance(pitch,yaw,viewName){
   return baseFit(pitch,yaw)*((viewName&&isOrthoView(viewName))?view.elevationPull():1);

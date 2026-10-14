@@ -58,10 +58,14 @@ function line(points, color) {
   return new THREE.Line(geometry, material);
 }
 
-function lineSegments(values, color) {
+function lineSegments(values, color, opacity = 1) {
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(values, 3));
-  return new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ color }));
+  return new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({
+    color,
+    transparent: opacity < 1,
+    opacity,
+  }));
 }
 
 /**
@@ -93,12 +97,12 @@ function makeLabelElement(layer, label) {
     "left:0",
     "top:0",
     "font:700 12px/1.25 Inter,Microsoft YaHei,system-ui,sans-serif",
-    `color:#${label.color.toString(16).padStart(6, "0")}`,
-    "background:rgba(255,255,255,.82)",
+    `color:#f7f1e6`,
+    "background:rgba(16,14,26,.78)",
+    "border:1px solid rgba(255,214,160,.35)",
     "border-radius:4px",
     "padding:1px 4px",
     "white-space:nowrap",
-    "text-shadow:0 1px 0 rgba(255,255,255,.9)",
     "transform:translate(0,0)",
     "will-change:transform",
   ].join(";");
@@ -133,9 +137,273 @@ function addMesh(parent, mesh, pickables) {
   return mesh;
 }
 
+// 室内和夜景分开受光。家具、地板、墙在 ROOM_LAYER，只吃暖光；
+// 底座和室外小景留在 0 层，只吃夜光。相机和拾取两层都看。
+const ROOM_LAYER = 1;
+const INK = 0x2a2118;
+const BASE_SCALE = 1.22;
+
+const CEL_RAMP = (() => {
+  const data = new Uint8Array([152, 196, 226, 255]);
+  const texture = new THREE.DataTexture(data, 4, 1);
+  texture.format = THREE.RedFormat;
+  texture.magFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.NearestFilter;
+  texture.needsUpdate = true;
+  return texture;
+})();
+
+function celMaterial(color, extra) {
+  return new THREE.MeshToonMaterial(Object.assign({
+    color,
+    gradientMap: CEL_RAMP,
+    side: THREE.DoubleSide,
+  }, extra));
+}
+
+function paintTexture(width, height, draw) {
+  const board = document.createElement("canvas");
+  board.width = width;
+  board.height = height;
+  draw(board.getContext("2d"), width, height);
+  const texture = new THREE.CanvasTexture(board);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function woodTexture() {
+  return paintTexture(256, 256, (ctx) => {
+    ctx.fillStyle = "#f0d2a4";
+    ctx.fillRect(0, 0, 256, 256);
+    for (let row = 0; row < 8; row += 1) {
+      ctx.fillStyle = row % 2 ? "#f6ddb6" : "#e4c08a";
+      ctx.fillRect(0, row * 32, 256, 30);
+      ctx.fillStyle = "rgba(92, 58, 28, 0.16)";
+      ctx.fillRect(0, row * 32 + 30, 256, 2);
+      ctx.fillStyle = "rgba(255, 244, 220, 0.28)";
+      ctx.fillRect(18 + (row % 3) * 40, row * 32 + 8, 70, 3);
+    }
+  });
+}
+
+function pavementTexture() {
+  return paintTexture(256, 256, (ctx) => {
+    ctx.fillStyle = "#141a2c";
+    ctx.fillRect(0, 0, 256, 256);
+    ctx.strokeStyle = "rgba(120, 146, 186, 0.16)";
+    ctx.lineWidth = 2;
+    for (let i = 0; i <= 4; i += 1) {
+      ctx.beginPath();
+      ctx.moveTo(0, i * 64);
+      ctx.lineTo(256, i * 64);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(i * 64, 0);
+      ctx.lineTo(i * 64, 256);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "rgba(103, 232, 249, 0.18)";
+    ctx.fillRect(0, 148, 256, 9);
+    ctx.fillStyle = "rgba(244, 114, 182, 0.16)";
+    ctx.fillRect(24, 42, 190, 7);
+    ctx.fillStyle = "rgba(255, 214, 160, 0.08)";
+    ctx.fillRect(0, 204, 256, 16);
+  });
+}
+
+function markRoom(mesh) {
+  mesh.layers.set(ROOM_LAYER);
+  return mesh;
+}
+
+function addInk(mesh, color = INK) {
+  const ink = new THREE.LineSegments(
+    new THREE.EdgesGeometry(mesh.geometry, 25),
+    new THREE.LineBasicMaterial({
+      color,
+      transparent: true,
+      polygonOffset: true,
+      polygonOffsetFactor: -3,
+      polygonOffsetUnits: -3,
+    }),
+  );
+  ink.raycast = () => {};
+  mesh.add(ink);
+  mesh.userData.ink = ink;
+  return ink;
+}
+
+function furnitureColor(item, selected, blocked) {
+  if (blocked) return 0xd64545;
+  if (selected) return 0xf2c56b;
+  const category = String(item.category || "");
+  if (category === "sofa" || category === "chair") return 0xd48984;
+  if (category === "bed") return 0xecd8c8;
+  if (category === "coffee_table" || category === "table" || category === "desk") return 0xc9956a;
+  if (item.furniture_category === "wall_cabinet") return 0xf0d5b0;
+  return 0xd7a36a;
+}
+
+function addSky() {
+  const sky = new THREE.Mesh(
+    new THREE.SphereGeometry(180000, 28, 18),
+    new THREE.ShaderMaterial({
+      side: THREE.BackSide,
+      depthWrite: false,
+      vertexShader: `
+        varying vec3 vDir;
+        void main() {
+          vDir = normalize(position);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vDir;
+        float hash(vec3 p) {
+          p = fract(p * vec3(123.34, 345.45, 678.91));
+          p += dot(p, p + 34.45);
+          return fract(p.x * p.y);
+        }
+        void main() {
+          vec3 n = normalize(vDir);
+          float h = clamp(n.y * 0.5 + 0.5, 0.0, 1.0);
+          vec3 zenith = vec3(0.035, 0.05, 0.11);
+          vec3 mid = vec3(0.09, 0.11, 0.24);
+          vec3 horizon = vec3(0.36, 0.18, 0.40);
+          vec3 col = mix(horizon, mid, smoothstep(0.02, 0.38, h));
+          col = mix(col, zenith, smoothstep(0.32, 0.92, h));
+          float band = pow(1.0 - abs(n.y), 10.0);
+          col += vec3(0.15, 0.45, 0.62) * band * 0.22;
+          col += vec3(0.85, 0.25, 0.55) * band * 0.08;
+          vec3 moon = normalize(vec3(-0.45, 0.78, -0.28));
+          col += vec3(0.86, 0.91, 1.0) * smoothstep(0.9972, 0.9992, dot(n, moon));
+          float stars = step(0.997, hash(floor(n * 180.0)));
+          col += vec3(0.9, 0.93, 1.0) * stars * step(0.18, n.y);
+          gl_FragColor = vec4(col, 1.0);
+        }
+      `,
+    }),
+  );
+  sky.frustumCulled = false;
+  sky.renderOrder = -2;
+  return sky;
+}
+
+function addBuilding(parent, east, south, spanEast, spanSouth, height, color, windowColor) {
+  const mesh = new THREE.Mesh(
+    new THREE.BoxGeometry(spanEast, height, spanSouth),
+    celMaterial(color),
+  );
+  mesh.position.set(...roomToThree(east, south, height / 2));
+  parent.add(mesh);
+  addInk(mesh, 0x0c1018);
+  const windows = new THREE.Mesh(
+    new THREE.PlaneGeometry(spanEast * 0.62, height * 0.42),
+    new THREE.MeshBasicMaterial({ color: windowColor, transparent: true, opacity: 0.9 }),
+  );
+  // 平面默认朝 +Z，也就是房间的南向。默认相机在南边，看见的是楼的南立面。
+  windows.position.set(...roomToThree(east, south + spanSouth / 2 + 2, height * 0.58));
+  parent.add(windows);
+}
+
+function addLamp(parent, east, south, glow) {
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(14, 20, 640, 8), celMaterial(0x242b3d));
+  pole.position.set(...roomToThree(east, south, 320));
+  parent.add(pole);
+  const bulb = new THREE.Mesh(
+    new THREE.SphereGeometry(34, 12, 10),
+    new THREE.MeshBasicMaterial({ color: glow }),
+  );
+  bulb.position.set(...roomToThree(east, south, 680));
+  parent.add(bulb);
+}
+
+function addNeonRim(parent, width, depth, side) {
+  const x0 = width / 2 - side / 2;
+  const y0 = depth / 2 - side / 2;
+  const specs = [
+    [width / 2, y0 + 16, side, 32, 0x67e8f9],
+    [width / 2, y0 + side - 16, side, 32, 0xf472b6],
+    [x0 + 16, depth / 2, 32, side, 0xf472b6],
+    [x0 + side - 16, depth / 2, 32, side, 0x67e8f9],
+  ];
+  for (const [cx, cy, east, south, color] of specs) {
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(east, 18, south),
+      new THREE.MeshBasicMaterial({ color }),
+    );
+    mesh.position.set(...roomToThree(cx, cy, 6));
+    parent.add(mesh);
+  }
+}
+
+function addTown(parent, width, depth, side) {
+  const x0 = width / 2 - side / 2;
+  const y0 = depth / 2 - side / 2;
+  const northGap = -y0;
+  const southGap = y0 + side - depth;
+  const westGap = -x0;
+  const eastGap = x0 + side - width;
+  if (northGap > 240) {
+    const span = Math.min(northGap - 70, 720);
+    const south = -36 - span / 2;
+    const colors = [0x1a2236, 0x261c38, 0x172433, 0x2c2140];
+    const heights = [1100, 1560, 860, 1280];
+    const windows = [0xffd2a4, 0x8be7ff, 0xf9a8d4, 0xffe1b0];
+    let cursor = Math.max(40, width * 0.06);
+    for (let index = 0; index < 4 && cursor < width * 0.92; index += 1) {
+      const spanEast = Math.min(520 + (index % 2) * 220, width * 0.92 - cursor);
+      if (spanEast < 180) break;
+      addBuilding(parent, cursor + spanEast / 2, south, spanEast, span, heights[index], colors[index], windows[index]);
+      cursor += spanEast + 80;
+    }
+  }
+  if (westGap > 240) {
+    const span = Math.min(westGap - 70, 640);
+    const east = -36 - span / 2;
+    addBuilding(parent, east, depth * 0.72, span, Math.min(480, depth * 0.22), 1320, 0x1b243c, 0xf9a8d4);
+    addBuilding(parent, east, depth * 0.28, span, Math.min(420, depth * 0.18), 900, 0x241832, 0x8be7ff);
+  }
+  if (southGap > 180) {
+    const hedgeDepth = Math.min(120, southGap * 0.28);
+    const hedge = new THREE.Mesh(
+      new THREE.BoxGeometry(width * 0.42, 140, hedgeDepth),
+      celMaterial(0x1d3a32),
+    );
+    hedge.position.set(...roomToThree(width * 0.5, depth + 48 + hedgeDepth / 2, 70));
+    parent.add(hedge);
+    addInk(hedge, 0x0e1c18);
+    addLamp(parent, width * 0.18, depth + southGap * 0.62, 0xffd7a8);
+    addLamp(parent, width * 0.78, depth + southGap * 0.5, 0x9aefff);
+  }
+  if (eastGap > 200) addLamp(parent, width + eastGap * 0.55, depth * 0.3, 0xffb7d5);
+}
+
+/** 正方形厚底座。房间和室外小景都落在它上面，夜色停在底座边缘。 */
+function addDiorama(parent, width, depth) {
+  const side = Math.max(width, depth) * BASE_SCALE;
+  const thick = Math.min(340, Math.max(200, side * 0.05));
+  const pavement = pavementTexture();
+  pavement.repeat.set(side / 900, side / 900);
+  const topZ = -8;
+  const top = new THREE.Mesh(new THREE.PlaneGeometry(side, side), celMaterial(0xffffff, { map: pavement }));
+  top.rotation.x = -Math.PI / 2;
+  top.position.set(...roomToThree(width / 2, depth / 2, topZ + 1));
+  parent.add(top);
+  const plinth = new THREE.Mesh(new THREE.BoxGeometry(side, thick, side), celMaterial(0x121722));
+  plinth.position.set(...roomToThree(width / 2, depth / 2, topZ - thick / 2));
+  parent.add(plinth);
+  addInk(plinth, 0x07080e);
+  addNeonRim(parent, width, depth, side);
+  addTown(parent, width, depth, side);
+}
+
 export function mountLayout(canvas) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-  renderer.setClearColor(0xeef1f6, 1);
+  renderer.setClearColor(0x070b16, 1);
   const camera = new THREE.PerspectiveCamera(48, 1, 10, 500000);
   camera.up.set(0, 1, 0);
   /**
@@ -150,10 +418,17 @@ export function mountLayout(canvas) {
   const LENS_BASE = 48;          // 自由视角的 fov（度）
   const ELEVATION_PULL = 8;      // 正视图把相机拉远的倍数（越大越接近正交）
   const scene = new THREE.Scene();
-  scene.add(new THREE.HemisphereLight(0xffffff, 0xc5d0dc, 1.2));
-  const sun = new THREE.DirectionalLight(0xffffff, 0.85);
-  sun.position.set(...roomToThree(4000, 2000, 8000));
-  scene.add(sun);
+  const sky = addSky();
+  scene.add(sky);
+  const nightFill = new THREE.HemisphereLight(0x31456e, 0x121624, 0.85);
+  nightFill.layers.set(0);
+  const moon = new THREE.DirectionalLight(0xd5e2ff, 0.42);
+  moon.layers.set(0);
+  const roomFill = new THREE.HemisphereLight(0xfff6e4, 0xe8a15a, 0.48);
+  roomFill.layers.set(ROOM_LAYER);
+  const roomKey = new THREE.DirectionalLight(0xffe3b0, 0.42);
+  roomKey.layers.set(ROOM_LAYER);
+  scene.add(nightFill, moon, roomFill, roomKey);
   const content = new THREE.Group();
   scene.add(content);
   const controls = new OrbitControls(camera, canvas);
@@ -168,7 +443,9 @@ export function mountLayout(canvas) {
   };
   controls.minPolarAngle = 0.02;
   controls.maxPolarAngle = Math.PI - 0.02;
+  camera.layers.enable(ROOM_LAYER);
   const raycaster = new THREE.Raycaster();
+  raycaster.layers.enable(ROOM_LAYER);
   const ndc = new THREE.Vector2();
   const floor = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   const hitPoint = new THREE.Vector3();
@@ -244,6 +521,10 @@ export function mountLayout(canvas) {
     ctx.clearRect(0, 0, S, S);
     ctx.save();
     ctx.translate(S * 0.46, S * 0.60);
+    ctx.beginPath();
+    ctx.arc(0, 0, 42, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(8, 10, 20, 0.55)";
+    ctx.fill();
     camera.updateMatrixWorld(true);
     // 相机的屏幕基：right / up（用真实矩阵列，不手写映射）
     const m = camera.matrixWorld;
@@ -270,7 +551,7 @@ export function mountLayout(canvas) {
       // 标签沿箭头方向错开，避免三条挤在原点处
       ctx.fillText(axis.label, dx + anchor * 26 + 5, dy + anchor * 26);
     }
-    ctx.fillStyle = "#0f172a";
+    ctx.fillStyle = "#f6efe4";
     ctx.beginPath();
     ctx.arc(0, 0, 2.8, 0, Math.PI * 2);
     ctx.fill();
@@ -287,7 +568,7 @@ export function mountLayout(canvas) {
     const { width } = content.userData.outline;
     content.add(lineSegments([
       ...roomToThree(0, 0, 0), ...roomToThree(width, 0, 0),
-    ], 0x64748b));
+    ], 0x6b4e32));
   }
 
   /** 轴端点与标签共享房间坐标定义；实体网格仅在场景内容更新时构建。 */
@@ -375,8 +656,12 @@ export function mountLayout(canvas) {
       // 完全透明才真正不画；否则留着，让渐变可见
       wall.visible = opacity > 0.002;
       wall.material.opacity = opacity;
-      // 颜色由判据一起给：背景墙用中灰。浅灰压浅色背景等于看不见。
+      // 背景墙用更亮的暖石膏色。侧墙沿用材质上的浅暖色。
       wall.material.color.setHex(state.color === null ? wall.userData.baseColor : state.color);
+      if (wall.userData.ink) {
+        wall.userData.ink.visible = wall.visible;
+        wall.userData.ink.material.opacity = Math.min(1, opacity * 1.35);
+      }
     });
   }
 
@@ -486,6 +771,7 @@ export function mountLayout(canvas) {
    * 现在正视图靠"相机拉远 + fov 同比例收窄"逼近正交，没有切换，也就没有那一下。
    */
   function draw() {
+    sky.position.copy(controls.target);
     renderer.autoClear = true;
     renderer.render(scene, camera);
   }
@@ -531,37 +817,60 @@ export function mountLayout(canvas) {
     const width = room.width_mm;
     const depth = room.depth_mm;
     const height = room.height_mm;
-    const floorMesh = new THREE.Mesh(
+    roomKey.position.set(...roomToThree(width * 0.15, depth * 1.35, height * 2.4));
+    moon.position.set(...roomToThree(-width, -depth * 0.4, height * 4));
+    addDiorama(content, width, depth);
+    const boards = woodTexture();
+    boards.repeat.set(Math.max(width / 700, 1), Math.max(depth / 700, 1));
+    const floorMesh = markRoom(new THREE.Mesh(
       new THREE.PlaneGeometry(width, depth),
-      new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 1, metalness: 0, side: THREE.DoubleSide }),
-    );
+      celMaterial(0xffffff, { map: boards }),
+    ));
     floorMesh.rotation.x = -Math.PI / 2;
     floorMesh.position.set(...roomToThree(width / 2, depth / 2, 0));
     content.add(floorMesh);
+    addInk(floorMesh, 0x6b4e32);
+    const lamp = new THREE.Mesh(
+      new THREE.SphereGeometry(Math.min(width, depth) * 0.025, 16, 12),
+      new THREE.MeshBasicMaterial({ color: 0xfff1d4 }),
+    );
+    lamp.position.set(...roomToThree(width / 2, depth / 2, Math.max(height - 180, height * 0.72)));
+    content.add(lamp);
+    const pool = new THREE.Mesh(
+      new THREE.CircleGeometry(Math.min(width, depth) * 0.22, 28),
+      new THREE.MeshBasicMaterial({
+        color: 0xffd7a1,
+        transparent: true,
+        opacity: 0.32,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      }),
+    );
+    pool.rotation.x = -Math.PI / 2;
+    pool.position.set(...roomToThree(width / 2, depth / 2, 6));
+    content.add(pool);
     const step = [200, 250, 500, 1000, 2000, 5000].find((value) => Math.max(width, depth) / value <= 14) || 5000;
     const grid = [];
-    for (let x = step; x < width; x += step) grid.push(...roomToThree(x, 0, 0.4), ...roomToThree(x, depth, 0.4));
-    for (let y = step; y < depth; y += step) grid.push(...roomToThree(0, y, 0.4), ...roomToThree(width, y, 0.4));
-    if (grid.length) content.add(lineSegments(grid, 0xcbd5e1));
+    for (let x = step; x < width; x += step) grid.push(...roomToThree(x, 0, 2), ...roomToThree(x, depth, 2));
+    for (let y = step; y < depth; y += step) grid.push(...roomToThree(0, y, 2), ...roomToThree(width, y, 2));
+    if (grid.length) content.add(lineSegments(grid, 0xd7b48a, 0.28));
     // outline 内的几何和标注定义都使用房间坐标。
     content.userData.outline = {
       width, depth, height, axes: roomAxes(room),
     };
     // 相机到目标的距离下限用房间对角线：保证相机始终在房间外（见 applyRoomLimits）。
     content.userData.roomDiagonal = Math.hypot(width, depth, height);
-    const wallMaterial = new THREE.MeshStandardMaterial({
-      color: 0xdbe3ee,
+    const wallMaterial = celMaterial(0xf4e0c8, {
       transparent: true,
       opacity: 0.22,
-      roughness: 1,
-      metalness: 0,
-      side: THREE.DoubleSide,
       depthWrite: false,
     });
     // 墙的显隐与透明度按人眼习惯逐帧算（见 wall_view.js）
     const shells = [];
     const addWall = (mesh, center, normal, wallId) => {
       mesh.material = wallMaterial.clone();     // 每面墙单独一份材质，透明度各算各的
+      markRoom(mesh);
+      addInk(mesh, 0x6a5344);
       mesh.userData.wallCenter = new THREE.Vector3(...roomToThree(...center));
       mesh.userData.wallNormal = new THREE.Vector3(...roomToThree(...normal)).normalize();
       mesh.userData.wallId = wallId;
@@ -586,6 +895,7 @@ export function mountLayout(canvas) {
     west.rotation.y = -Math.PI / 2;
     west.position.set(...roomToThree(0, depth / 2, height / 2));
     addWall(west, [0, depth / 2, 0], [-1, 0, 0], "west");
+    wallMaterial.dispose();
     wallShells = shells;
     for (const opening of data.openings || []) {
       const span = opening.offset_mm;
@@ -597,33 +907,37 @@ export function mountLayout(canvas) {
       else if (opening.wall === "south") box = [width - end, depth - 30, z0, width - span, depth, z1];
       else if (opening.wall === "east") box = [width - 30, span, z0, width, end, z1];
       else box = [0, depth - end, z0, 30, depth - span, z1];
+      const windowGlow = opening.kind === "window";
       const mesh = new THREE.Mesh(
         new THREE.BoxGeometry(...roomToThree(box[3] - box[0], box[4] - box[1], box[5] - box[2])),
-        new THREE.MeshStandardMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.55, roughness: 0.4, metalness: 0, side: THREE.DoubleSide }),
+        new THREE.MeshBasicMaterial({
+          color: windowGlow ? 0xffe1b0 : 0xc4956a,
+          transparent: true,
+          opacity: windowGlow ? 0.94 : 0.88,
+          side: THREE.DoubleSide,
+        }),
       );
       mesh.position.set(...roomToThree((box[0] + box[3]) / 2, (box[1] + box[4]) / 2, (box[2] + box[5]) / 2));
       content.add(mesh);
     }
     for (const obstacle of data.obstacles || []) {
-      content.add(new THREE.Mesh(
+      const obstacleMesh = markRoom(new THREE.Mesh(
         prismGeometry(obstacle.footprint, obstacle.z_start, obstacle.z_end),
-        new THREE.MeshStandardMaterial({ color: 0xdc6b6b, roughness: 0.7, metalness: 0, side: THREE.DoubleSide }),
+        celMaterial(0xd98986),
       ));
+      addInk(obstacleMesh, 0x6a3030);
+      content.add(obstacleMesh);
     }
     for (const item of data.items || []) {
       const selected = item.id === selectedId;
       const blocked = selected && options.blockedId === item.id;
       // 页面边界已把规范字段转换成画布模型。
       const itemZStart = item.z_start, itemZEnd = item.z_end;
-      const mesh = new THREE.Mesh(
+      const mesh = markRoom(new THREE.Mesh(
         prismGeometry(item.footprint, itemZStart, itemZEnd),
-        new THREE.MeshStandardMaterial({
-          color: blocked ? 0xdc2626 : (selected ? 0x1d4ed8 : 0x3b6fd8),
-          roughness: 0.55,
-          metalness: 0.02,
-          side: THREE.DoubleSide,
-        }),
-      );
+        celMaterial(furnitureColor(item, selected, blocked)),
+      ));
+      addInk(mesh, selected ? 0x6a4520 : INK);
       mesh.userData = { kind: "item", itemId: item.id };
       addMesh(content, mesh, pickables);
       if (item.footprint.length >= 4) {
@@ -651,7 +965,7 @@ export function mountLayout(canvas) {
         }
         const heightHandle = new THREE.Mesh(
           new THREE.SphereGeometry(26, 16, 12),
-          new THREE.MeshStandardMaterial({ color: 0x3b82f6, roughness: 0.45, metalness: 0 }),
+          new THREE.MeshBasicMaterial({ color: 0x3b82f6 }),
         );
         heightHandle.position.set(...roomToThree(center[0], center[1], itemZEnd + 72));
         heightHandle.userData = { kind: "height", itemId: item.id };

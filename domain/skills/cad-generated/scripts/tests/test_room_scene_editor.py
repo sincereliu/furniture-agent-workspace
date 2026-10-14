@@ -153,8 +153,8 @@ class RoomSceneEditorTests(unittest.TestCase):
         # 回默认视角的那个按钮叫「复位」；内部预设名是 default_view（视角名 ≠ 动作名）。
         self.assertIn('data-view="default_view" aria-pressed="true">复位</button>', html)
         self.assertNotIn('data-view="reset"', html)
-        # 默认视角：正南偏东 15°、俯仰压低。
-        self.assertIn("const DEFAULT_YAW=Math.PI*5/12,DEFAULT_PITCH=.35", html)
+        # 默认视角：正南偏东 15°，斜上方看整座底座。
+        self.assertIn("const DEFAULT_YAW=Math.PI*5/12,DEFAULT_PITCH=.72", html)
         # 立面视图必须落在 pitch 0，编辑器据此切换成竖直平面拖动；俯视/仰视对称。
         self.assertIn("front:{yaw:Math.PI/2,pitch:0}", html)
         self.assertIn("left:{yaw:Math.PI,pitch:0}", html)

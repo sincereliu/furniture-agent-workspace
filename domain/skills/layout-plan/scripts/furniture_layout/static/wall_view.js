@@ -10,12 +10,12 @@
  */
 
 // 三档要**渐变**而不是跳变：背景墙 > 立面墙 > 侧墙，数值彼此靠近。
-// 另外浅灰(0xdbe3ee)压浅底(0xeef1f6)只差约 8 个色阶，所以背景墙必须用中灰才读得出来。
+// 室外是夜色深底。墙用暖石膏色，背景墙再亮一档，室内和夜景才分得开。
 export const WALL_SIDE_OPACITY = 0.25;        // 侧墙：轻，但不至于消失
 export const WALL_BACK_OPACITY = 0.55;        // 背景墙：读得出门窗，又不是一堵实墙
-export const WALL_BACK_COLOR = 0xc2ccd9;      // 背景墙用中灰
+export const WALL_BACK_COLOR = 0xfff3df;      // 背景墙：暖石膏
 export const WALL_ELEVATION_OPACITY = 0.45;   // 立面视图：正对那面
-export const WALL_ELEVATION_COLOR = 0xbfc9d6; // 立面视图墙面：与背景墙同一档
+export const WALL_ELEVATION_COLOR = 0xf6e6cc; // 立面视图墙面：同一档暖色
 export const ELEVATION_PITCH = 0.12;          // 与 room_page.html 的 ELEVATION_MAX_PITCH 一致
 
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
