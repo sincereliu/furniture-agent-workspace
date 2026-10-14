@@ -132,7 +132,7 @@ def _render_canvas_html(
     rooms: list[dict[str, Any]],
     version: str,
     read_only: bool,
-    poll_url: str,
+    layout_url: str,
     heading_suffix: str,
     tips: str,
     app_label: str,
@@ -142,7 +142,6 @@ def _render_canvas_html(
     edit_url: str = "",
     undo_url: str = "",
     panel_url_base: str = "",
-    presence: bool = True,
 ) -> str:
     room_name = str(scene_payload["room"]["name"])
     heading = f"{room_name} · {heading_suffix}"
@@ -157,8 +156,7 @@ def _render_canvas_html(
         .replace("__MODE_BADGE__", escape(mode_badge, quote=True))
         .replace("__READ_ONLY__", "true" if read_only else "false")
         .replace("__SHARE_FORM__", "true" if share_form else "false")
-        .replace("__PRESENCE__", "true" if presence else "false")
-        .replace("__POLL_URL__", _json_for_script(poll_url))
+        .replace("__LAYOUT_URL__", _json_for_script(layout_url))
         .replace("__EDIT_URL__", _json_for_script(edit_url))
         .replace("__UNDO_URL__", _json_for_script(undo_url))
         .replace("__PANEL_URL_BASE__", _json_for_script(panel_url_base))
@@ -181,7 +179,7 @@ def render_draft_page(scene_id: str, scene: RoomScene) -> dict[str, object]:
         rooms=[],
         version="",
         read_only=False,
-        poll_url="",
+        layout_url="",
         heading_suffix="布局编辑",
         tips=_EDITOR_TIPS,
         app_label="可编辑家具布局",
@@ -246,13 +244,12 @@ def render_viewer(scene: RoomScene) -> dict[str, object]:
             rooms=[],
             version="",
             read_only=True,
-            poll_url="",
+            layout_url="",
             heading_suffix="布局预览",
             tips=_STORED_VIEWER_TIPS,
             app_label="只读家具布局",
             mode_badge="只读布局",
             shutdown_button="",
-            presence=False,
         ),
     }
 
@@ -285,7 +282,7 @@ def render_project_page(
         rooms=rooms,
         version=str(document["version"]),
         read_only=read_only,
-        poll_url=f"/api/project/{project_id}/layout",
+        layout_url=f"/api/project/{project_id}/layout",
         edit_url=f"/api/project/{project_id}/layout/edit",
         undo_url=f"/api/project/{project_id}/layout/undo",
         panel_url_base=f"/api/project/{project_id}/cabinets",

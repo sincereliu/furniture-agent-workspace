@@ -87,6 +87,7 @@ class RoomSceneEditorTests(unittest.TestCase):
             "__READ_ONLY__",
             "__PRESENCE__",
             "__POLL_URL__",
+            "__LAYOUT_URL__",
             "__ROOMS_JSON__",
             "__VERSION_JSON__",
             "__BODY_CLASS__",
@@ -96,6 +97,9 @@ class RoomSceneEditorTests(unittest.TestCase):
         ):
             self.assertNotIn(placeholder, html)
         self.assertNotIn('id="shutdown-preview"', html)
+        self.assertNotIn('fetch("/api/preview/presence"', html)
+        self.assertNotIn("POLL_URL", html)
+        self.assertIn('const LAYOUT_URL=""', html)
 
     def test_editor_also_carries_room_axes_and_coordinate_readout(self) -> None:
         """坐标层长在共用画布上，可编辑页同样要有。"""

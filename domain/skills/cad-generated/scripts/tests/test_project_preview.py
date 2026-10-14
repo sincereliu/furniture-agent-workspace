@@ -27,6 +27,13 @@ import server
 from fake_request_support import local_request, remote_request
 from furniture_layout.project_layout import ProjectLayout
 from furniture_layout import open_preview
+from furniture_layout.layout_events import (
+    iter_layout_events,
+    layout_file_stamp,
+    notice_for_change,
+    project_layout_events,
+)
+from furniture_workflow.workflow_lease import acquire
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from furniture_workflow.workflow_store import JsonProjectStore
 
@@ -131,7 +138,7 @@ class ProjectPreviewTests(unittest.TestCase):
         self.assertNotIn("<svg", encoded)
         self.assertNotIn("text/html", encoded)
 
-    def test_preview_embeds_first_room_and_polls_layout(self) -> None:
+    def test_preview_embeds_first_room_and_watches_layout_events(self) -> None:
         project = self.orchestrator.create_project("家", home_layout(bed_origin_z_mm=200))
         response = asyncio.run(
             server.project_preview(project.id, remote_request())
@@ -149,12 +156,97 @@ class ProjectPreviewTests(unittest.TestCase):
         self.assertIn('id="shutdown-preview"', html)
         self.assertIn('fetch("/api/preview/shutdown"', html)
         self.assertIn('cache:"no-store"', html)
-        self.assertIn("setInterval(pollLayout,1000)", html)
-        self.assertIn("layoutVersionOf(payload)===layoutVersion", html)
+        self.assertIn('new EventSource(LAYOUT_URL+"/events")', html)
+        self.assertNotIn("POLL_URL", html)
+        self.assertNotIn("setInterval(pollLayout,1000)", html)
+        self.assertNotIn("typeof EventSource", html)
+        self.assertNotIn('fetch("/api/preview/presence"', html)
+        self.assertIn("layoutVersionOf(notice)===layoutVersion", html)
         self.assertIn("drag||state.orbiting||state.panning", html)
         self.assertIn("if(READ_ONLY)return false", html)
         self.assertNotIn("__SCENE_JSON__", html)
         self.assertNotIn("__POLL_URL__", html)
+        self.assertNotIn("__PRESENCE__", html)
+        self.assertNotIn("__LAYOUT_URL__", html)
+
+    def test_layout_events_push_when_a_watched_file_changes(self) -> None:
+        project = self.orchestrator.create_project("家", home_layout(bed_origin_z_mm=200))
+        stamp = layout_file_stamp(self.root, project.id)
+        first = notice_for_change(self.root, project.id, None, stamp)
+        assert first is not None
+        self.assertEqual(first["version"], f"{project.latest.layout_sha256}:0")
+        self.assertNotIn("rooms", first)
+        self.assertIsNone(notice_for_change(self.root, project.id, stamp, stamp))
+
+        acquire(self.root, project.id, holder="agent", label="助手")
+        leased = layout_file_stamp(self.root, project.id)
+        lease_only = notice_for_change(self.root, project.id, stamp, leased)
+        assert lease_only is not None
+        self.assertEqual(set(lease_only), {"lease"})
+        self.assertEqual(lease_only["lease"]["holder"], "agent")
+        self.assertNotIn("token", lease_only["lease"])
+
+        self.store.save(project)
+        rewritten = layout_file_stamp(self.root, project.id)
+        again = notice_for_change(self.root, project.id, leased, rewritten)
+        assert again is not None
+        self.assertEqual(again["version"], first["version"])
+        self.assertNotIn("rooms", again)
+
+        async def one_event(request):
+            response = await project_layout_events(project.id, request)
+            self.assertEqual(response.media_type, "text/event-stream")
+            self.assertEqual(response.headers["cache-control"], "no-store")
+            iterator = response.body_iterator
+            try:
+                chunk = await iterator.__anext__()
+            finally:
+                await iterator.aclose()
+            if isinstance(chunk, bytes):
+                chunk = chunk.decode("utf-8")
+            self.assertTrue(str(chunk).startswith("data: "))
+            return json.loads(str(chunk).removeprefix("data: ").strip())
+
+        server.app.state.preview_presence_at = None
+        remote_payload = asyncio.run(one_event(remote_request()))
+        self.assertEqual(remote_payload["version"], first["version"])
+        self.assertNotIn("rooms", remote_payload)
+        self.assertIsNone(server.app.state.preview_presence_at)
+
+        before = time.monotonic()
+        local_payload = asyncio.run(one_event(local_request()))
+        self.assertEqual(local_payload["version"], first["version"])
+        self.assertGreaterEqual(server.app.state.preview_presence_at, before)
+
+        async def follow_file() -> None:
+            seen: list[str] = []
+            stream = iter_layout_events(project.id, local_request(), interval=0.05)
+
+            async def collect() -> None:
+                async for chunk in stream:
+                    seen.append(str(chunk))
+
+            task = asyncio.create_task(collect())
+            await asyncio.sleep(0.18)
+            self.assertEqual(len(seen), 1)
+            self.store.save(project)
+            await asyncio.sleep(0.35)
+            self.assertGreaterEqual(len(seen), 2)
+            payload = json.loads(seen[-1].removeprefix("data: ").strip())
+            self.assertEqual(payload["version"], first["version"])
+            self.assertNotIn("rooms", payload)
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+
+        asyncio.run(follow_file())
+
+        with self.assertRaises(HTTPException) as missing:
+            asyncio.run(project_layout_events("project_missing", local_request()))
+        self.assertEqual(missing.exception.status_code, 404)
+        with self.assertRaises(HTTPException) as escaped:
+            asyncio.run(project_layout_events("../store", local_request()))
+        self.assertEqual(escaped.exception.status_code, 422)
 
     def test_local_preview_is_rendered_editable(self) -> None:
         """本机来源 → 可编辑页：写入地址、租约、工作副本状态都在；只读那支不再出现。"""
@@ -455,7 +547,7 @@ class ProjectPreviewTests(unittest.TestCase):
         self.assertIn("这一版布局给板件用", html)
         self.assertIn('href="/projects"', html)
         self.assertIn("function setSize(", html)
-        self.assertIn('fetch("/api/preview/presence"', html)
+        self.assertNotIn('fetch("/api/preview/presence"', html)
 
     def test_closed_preview_page_is_what_stops_the_server(self) -> None:
         grace = server.PRESENCE_GRACE_SECONDS

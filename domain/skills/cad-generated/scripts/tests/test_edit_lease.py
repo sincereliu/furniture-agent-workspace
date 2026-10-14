@@ -369,7 +369,7 @@ class LeaseIsVisibleTests(unittest.TestCase):
         self.addCleanup(self._store_patch.stop)
 
     def test_preview_page_data_carries_the_lease_snapshot(self) -> None:
-        """页面每秒轮询这个文档——"助手正在处理"不需要再多发一个请求。"""
+        """布局事件和整份布局都带租约快照——"助手正在处理"不另开一个读接口。"""
         document = asyncio.run(server.project_layout(self.project.id))
         self.assertIsNone(document["lease"])
         handover_to_agent(self.root, self.project.id, label="助手")

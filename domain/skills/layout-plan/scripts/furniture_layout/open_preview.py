@@ -29,36 +29,29 @@ _LOCAL_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 def layout_version(revision: Revision) -> str:
     """布局的内容版本：内容摘要 + 确认位（如 `5d28c9b6…:0`）。
 
-    两处用它，必须是同一个字符串：页面轮询靠它决定要不要重画；页面写回时把它
+    两处用它，必须是同一个字符串：打开的布局页靠它决定要不要重画；页面写回时把它
     当作 `expected_version`。不要把修订号编进去。
     """
     return f"{revision.layout_sha256}:{int(bool(revision.layout.confirmed))}"
 
 
-def preview_page_data(
+def layout_page_meta(
     project: Project,
     *,
     store_root: str | Path | None = None,
 ) -> dict[str, Any]:
-    """预览页要读的那份数据。不含预览 HTML。给了 `store_root` 就带上编辑租约快照。"""
+    """布局页在文件变化时要看的那一笔。不含房间几何。
+
+    房间包络仍由 `preview_page_data` 给出。事件里带上这一笔，页面只有 `version`
+    变了才再取整份布局。
+    """
     revision = project.latest
-    confirmed = bool(revision.layout.confirmed)
-    approved = revision.approved_room_ids()
-    rooms = [
-        {
-            "id": scene.room.id,
-            "name": scene.room.name,
-            "approved": scene.room.id in approved,
-            "scene": room_page_payload(scene),
-        }
-        for scene in revision.layout.rooms
-    ]
     lease = read_lease(store_root, project.id) if store_root is not None else None
     return {
         "project_id": project.id,
         "revision_id": revision.id,
         "revision_number": revision.number,
-        "layout_confirmed": confirmed,
+        "layout_confirmed": bool(revision.layout.confirmed),
         "working": {
             "open": not revision.has_downstream_artifacts(),
             "ops": len(revision.working_ops),
@@ -87,8 +80,28 @@ def preview_page_data(
         "inherited_rooms": deepcopy(revision.inherited_rooms),
         "version": layout_version(revision),
         "inherited": deepcopy(revision.inherited),
-        "rooms": rooms,
     }
+
+
+def preview_page_data(
+    project: Project,
+    *,
+    store_root: str | Path | None = None,
+) -> dict[str, Any]:
+    """预览页要读的那份数据。不含预览 HTML。给了 `store_root` 就带上编辑租约快照。"""
+    revision = project.latest
+    approved = revision.approved_room_ids()
+    document = layout_page_meta(project, store_root=store_root)
+    document["rooms"] = [
+        {
+            "id": scene.room.id,
+            "name": scene.room.name,
+            "approved": scene.room.id in approved,
+            "scene": room_page_payload(scene),
+        }
+        for scene in revision.layout.rooms
+    ]
+    return document
 
 
 def project_list_url() -> str:

@@ -122,18 +122,19 @@ store/<project-id>/
 | POST | `/api/room-scene/{scene_id}/edit` | 应用**一次**编辑 op（写 · 本机） |
 | GET | `/api/room-scene/{scene_id}/editor` | 可编辑视图（自包含 HTML） |
 | GET | `/api/project/{project_id}/layout` | 读项目最新布局：房间与已摆放包络 |
+| GET | `/api/project/{project_id}/layout/events` | 布局页的事件流。`project.json` 或编辑租约变了才推一笔（含 `version` 与 `lease`，不含房间几何）。本机连接还在就当作这一页还开着 |
 | POST | `/api/project/{project_id}/layout/edit` | 页面上改一件的摆放：工作副本原地改，否则落成新 Revision（写 · 本机 · 灰度） |
 | POST | `/api/project/{project_id}/layout/undo` | 撤销工作副本上的最后 N 步（写 · 本机 · 灰度） |
 | POST | `/api/project/{project_id}/decisions` | 页面上对一条待确认的说法表态：确认 / 划掉（写 · 本机 · 灰度 · 编辑租约） |
 | POST | `/api/project/{project_id}/edit-lease` | 申请 / 续租编辑权（写 · 本机） |
 | DELETE | `/api/project/{project_id}/edit-lease` | 归还编辑权（写 · 本机） |
 | POST | `/api/project/{project_id}/edit-lease/takeover` | 强制收回编辑权（写 · 本机） |
-| GET | `/api/project/{project_id}/preview` | 布局页，按版本号自行刷新。本机来源可改，其余只读 |
+| GET | `/api/project/{project_id}/preview` | 布局页。订阅事件，版本变了才重画。本机来源可改，其余只读 |
 | GET | `/api/project/{project_id}/cabinets/{cabinet_id}/panels` | 这一台的板件页。读最新布局里已保存的外形，不确认布局，不写板件 |
 | GET | `/projects` | 已有项目名单：名字、日期、布局已确认或还没确认 |
 | GET | `/api/projects` | 同一份名单的 JSON。读不动的 `project.json` 跳过 |
 | POST | `/api/preview/shutdown` | 本机请求后让预览服务干净退出（写 · 本机） |
-| POST | `/api/preview/presence` | 预览页每秒报一次还在。最后一页关掉约 5 秒后进程退出（写 · 本机） |
+| POST | `/api/preview/presence` | 项目列表和板件页每秒报一次还在。布局页由打开着的事件连接续上。最后一页关掉约 5 分钟后进程退出（写 · 本机） |
 
 另有 `GET /health` 与 `GET /`（链到项目列表和 Swagger）。直接运行 `domain/skills/layout-plan/scripts/open_projects.py` 时浏览器打开 `/projects`，并在这个进程里打开页面写回（`FURNITURE_PROJECT_LAYOUT_EDIT=1`）。项目名单页由布局阶段的 `furniture_layout/project_list.py` 画出。不经过这个入口时，写回仍默认关闭。缺场景或项目返回 404，参数或校验不通过返回 422。`project_id` 只允许英文字母、数字、`-` 和 `_`。
 
@@ -143,7 +144,7 @@ store/<project-id>/
 
 板件页 `GET /api/project/{project_id}/cabinets/{cabinet_id}/panels` 只读最新布局里这一台已经保存的宽、深、高，并画出外形。不要求 `layout.confirmed`，不写 `stage_outputs`，也不代替 `run_next`。整份布局确认之前，下游板件阶段仍然不跑。`manufacture: false` 或不是落地柜/吊柜时返回 422，文案是「这件只占位置」。布局页选中这台、外形已经回车保存时才链过来；输入框里还没保存的数进不了这一页。
 
-项目预览读 `store/<project-id>/project.json` 的最新 Revision，不写 `stage_outputs`，也不写 `generated/room-scenes/`。`layout` 返回 `revision_id`、`revision_number`、`layout_confirmed`、`version` 和每间房的已摆放包络，不含预览 HTML。`version` 是**内容版本**，不是修订号：它是 `layout_sha256:确认位`（如 `5d28c9b6…:0`），同一份布局换个修订号不会让它变，页面刷新靠它判断"要不要重画"。别把它当成给人看的版本号（给人看的是 `revision_number`），也别把 `revision_id` 编进去——那会让每次重读都像变了。`preview` 打开时带上当前第一间房，之后每秒再读 `layout`：`version` 没变不重画；变了且没有正在转视角或平移，就换上新包络并保持相机角度。多间房在页上按**药丸按钮**切换（只有一间房时整条藏掉），默认第一间；当前那间写进地址栏 `?room=<id>`，切房间时用 `history.replaceState` 跟着改，所以链接能分享、能复现。页眉挂一块**身份牌**（预览页「只读预览 · 由对话更新」，草稿页「草稿 · 不影响项目」）——一眼说清这一页能不能改、改了算不算数。预览页带 `?mode=view` 时出**分享形态**：牌子换「只读分享 · 链接可转发」（琥珀色），提示语改成"只看不改"，且**不生成「退出」按钮**（那按钮能停掉本机预览服务，不该给拿到链接的人）；写链接用 `open_preview.preview_url(id, mode="view")` 或 `open_project_preview(id, share=True)`。这一页不把拖动写回项目。页上的「退出」向 `POST /api/preview/shutdown` 发本机请求，服务发完响应后结束进程。项目列表和房间页每秒报一次还在；最后一页关掉约 5 秒后预览服务自己退出。点「退出」则马上停。项目文件仍留在 `store/`。非本机来源返回 403。
+项目预览读 `store/<project-id>/project.json` 的最新 Revision，不写 `stage_outputs`，也不写 `generated/room-scenes/`。`layout` 返回 `revision_id`、`revision_number`、`layout_confirmed`、`version` 和每间房的已摆放包络，不含预览 HTML。`version` 是**内容版本**，不是修订号：它是 `layout_sha256:确认位`（如 `5d28c9b6…:0`），同一份布局换个修订号不会让它变，页面刷新靠它判断"要不要重画"。别把它当成给人看的版本号（给人看的是 `revision_number`），也别把 `revision_id` 编进去——那会让每次重读都像变了。`preview` 打开时带上当前第一间房，并订阅 `GET /api/project/{project_id}/layout/events`。服务端看见 `project.json` 或 `edit-lease.json` 变了才推一笔通知（含 `version` 与 `lease`，不含每件家具）。`version` 变了且没有正在转视角或平移，页面再读一次 `layout`，换上新包络并保持相机角度。版本没变就不重画。多间房在页上按**药丸按钮**切换（只有一间房时整条藏掉），默认第一间；当前那间写进地址栏 `?room=<id>`，切房间时用 `history.replaceState` 跟着改，所以链接能分享、能复现。页眉挂一块**身份牌**（预览页「只读预览 · 由对话更新」，草稿页「草稿 · 不影响项目」）——一眼说清这一页能不能改、改了算不算数。预览页带 `?mode=view` 时出**分享形态**：牌子换「只读分享 · 链接可转发」（琥珀色），提示语改成"只看不改"，且**不生成「退出」按钮**（那按钮能停掉本机预览服务，不该给拿到链接的人）；写链接用 `open_preview.preview_url(id, mode="view")` 或 `open_project_preview(id, share=True)`。这一页不把拖动写回项目。页上的「退出」向 `POST /api/preview/shutdown` 发本机请求，服务发完响应后结束进程。项目列表和板件页每秒报一次还在；布局页用这条打开着的事件连接表示还在。最后一页关掉约 5 分钟后预览服务自己退出。点「退出」则马上停。项目文件仍留在 `store/`。非本机来源返回 403。
 
 页面写项目（`POST /api/project/{project_id}/layout/edit`）：改**一件**家具的摆放，一次请求只改一处。body = `{op, item_id, expected_version, …op 字段}`；op 词表与字段白名单**复用房间场景编辑**（`scene_edit.apply_edit`，只有 `move` / `rotate` / `resize`），这里不另写一份判断。三道门按顺序，任何一道不过都**不落盘**：① 本机来源（`may_edit`）→ 403；② 灰度开关 `FURNITURE_PROJECT_LAYOUT_EDIT=1`（不设就是关，`true` / `yes` / 空一律当关）→ 403，理由里点名变量；③ `expected_version` 必须等于页面最近一次看到的 `version` → 不符回 409，detail 里带 `current_version`，页面刷新后重试。
 

@@ -35,6 +35,7 @@
 | 保存的只读预览、单间草稿、项目预览和分享共用一个模板。Python 读 `templates/room_page.html` 填上当前房间。原点三轴、光标坐标、房间药丸、`?room=`、页眉牌子都在模板里。`templates/room_page.js` 里的拖动检查必须与 `placement_check.py` 同步 | `room_page.py` | calculation |
 | 做过的项目名单 | `project_list.py` | calculation |
 | 把预览页打开，并准备这一页要读的数据 | `open_preview.py` | side_effect |
+| 布局页订阅项目文件和编辑租约。变了才通知，版本变了才重读整份布局 | `layout_events.py` | structured_protocol / side_effect |
 | 从最新布局取出一台已保存外形，供板件页使用。不要求整份布局已确认 | `cabinet_entry.py` | validation |
 | 房间页上的三维盒子 | `static/layout_scene.js` | calculation |
 | 页面入口将规范布局输出一次转换为画布模型；渲染层只读取该模型 | `static/layout_payload.js` | calculation |
@@ -85,7 +86,7 @@ node domain/skills/layout-plan/scripts/furniture_layout/static/<检查脚本>
 | `room_http.py`：单间保存、读取、房间外壳接口 | `test_room_scene_api.py` |
 | `scene_store.py` | `test_room_scene_store.py` |
 | 单间草稿页 | `test_room_scene_editor.py` |
-| `open_preview.py`、`project_list.py`、项目预览、名单、分享、拖动回写 | `test_project_preview.py` |
+| `open_preview.py`、`layout_events.py`、`project_list.py`、项目预览、名单、分享、拖动回写 | `test_project_preview.py` |
 | 按房间确认 | `test_room_level_confirmation.py` |
 | `static/layout_drag.js` | `drag_check.mjs` |
 | `static/layout_labels.js` | `labels_check.mjs` |

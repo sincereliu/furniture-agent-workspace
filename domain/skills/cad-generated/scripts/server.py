@@ -46,6 +46,7 @@ from furniture_layout.open_preview import (
     project_list_url,
 )
 from furniture_layout import room_http
+from furniture_layout.layout_events import bind_layout_events, router as layout_event_router
 from furniture_workflow.project_layout_edit import (
     LAYOUT_EDIT_ENV,
     LayoutEditDisabled,
@@ -69,10 +70,11 @@ API_VERSION = "0.8.0"
 # 取值理由（两次调大的经过）：
 #   · 5 秒 → 30 秒：进程常是"起服务 + 开浏览器"两步，5 秒内浏览器还没发出第一次 presence，
 #     服务就自杀了，人看到的现象是"页面打不开"。
-#   · 30 秒 → 300 秒：页面每 1 秒报一次心跳，但**浏览器会把后台标签页的定时器限流**
+#   · 30 秒 → 300 秒：项目列表和板件页每 1 秒报一次心跳，但**浏览器会把后台标签页的定时器限流**
 #     （Chrome 可降到每分钟一次）。宽限期 30 秒时，页面切到后台超过半分钟就会被判为"页面都关了"，
 #     切回来已经连不上——现象同样是"页面过一会就无法访问"。
-#     5 分钟足以覆盖后台限流，同时仍然能在真正关掉页面后自动回收进程。
+#     布局页的事件连接由服务端在连接还在时自己续上，不受这个限流影响。
+#     5 分钟足以覆盖列表和板件页的后台限流，同时仍然能在真正关掉页面后自动回收进程。
 PRESENCE_GRACE_SECONDS = 300.0
 SAFE_PROJECT_ID = re.compile(r"^[A-Za-z0-9_-]+$")
 _LOCAL_HOSTS = {"127.0.0.1", "::1"}
@@ -142,6 +144,18 @@ room_http.bind_room_host(
     may_edit=may_edit,
 )
 app.include_router(room_http.router)
+
+
+def _touch_preview_presence() -> None:
+    app.state.preview_presence_at = time.monotonic()
+
+
+bind_layout_events(
+    store_root=lambda: STORE_ROOT,
+    may_edit=may_edit,
+    touch_presence=_touch_preview_presence,
+)
+app.include_router(layout_event_router)
 
 # 测试和项目编辑请求仍用这些名字。实现在布局阶段。
 RoomOpeningRequest = room_http.RoomOpeningRequest
@@ -248,7 +262,7 @@ async def preview_presence(request: Request):
     """A preview page is still open. The last page closing stops this process."""
     if not may_edit(request):
         raise HTTPException(status_code=403, detail="preview presence is local only")
-    app.state.preview_presence_at = time.monotonic()
+    _touch_preview_presence()
     return {"status": "ok"}
 
 
@@ -461,7 +475,7 @@ async def project_cabinet_panels(
 
 @app.get("/api/project/{project_id}/preview", response_class=HTMLResponse)
 async def project_preview(project_id: str, request: Request, mode: str | None = None) -> HTMLResponse:
-    """布局页。打开后每秒再读 layout，版本变了就换包络并保持相机。
+    """布局页。打开后订阅 layout/events，文件变了才换包络并保持相机。
 
     **能不能编辑由服务端按权限渲染**：本机来源（`may_edit`）给可编辑页，其余给只读页。
     `?mode=view` 在此之上强制只读（分享形态：换牌子、去掉「退出」）——**URL 参数不是权限**：

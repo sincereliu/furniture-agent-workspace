@@ -5,14 +5,18 @@ const SCENE_ID="__SCENE_ID__";
 const READ_ONLY=__READ_ONLY__;
 // 分享形态（预览页 ?mode=view）：只影响文案，不改权限。
 const SHARE_FORM=__SHARE_FORM__;
-const PRESENCE=__PRESENCE__;
 // 项目页（服务端按权限渲染成可编辑）用这两个地址写回；草稿页写场景源，两者都空。
 const PROJECT_EDIT_URL=__EDIT_URL__;
 const PROJECT_UNDO_URL=__UNDO_URL__;
 const PANEL_URL_BASE=__PANEL_URL_BASE__;
-const POLL_URL=__POLL_URL__;
+// 项目布局文档。有地址才订事件、版本变了才再取这一份。草稿页和只读存档页留空。
+const LAYOUT_URL=__LAYOUT_URL__;
 let rooms=__ROOMS_JSON__;
 let layoutVersion=__VERSION_JSON__;
+let layoutDirty=false;
+let layoutEpoch=0;
+let layoutFetchEpoch=-1;
+let layoutEvents=null;
 let roomIndex=0;
 const scene=JSON.parse(document.getElementById("scene-data").textContent);
 scene.items=normalizeItems(scene.items);
@@ -856,10 +860,15 @@ function applyDocument(payload){
   showRoom(index,true);
 }
 async function refreshProjectDocument(){
+  const epoch=layoutEpoch;
   try{
-    const response=await fetch(POLL_URL,{cache:"no-store",headers:{Accept:"application/json"}});
+    const response=await fetch(LAYOUT_URL,{cache:"no-store",headers:{Accept:"application/json"}});
     if(!response.ok)return false;
-    applyDocument(await response.json());
+    const payload=await response.json();
+    // 等待期间又来了新通知：这一份可能已旧，丢掉，让后到的那次取。
+    if(epoch!==layoutEpoch)return false;
+    applyDocument(payload);
+    layoutDirty=false;
     return true;
   }catch(error){return false}
 }
@@ -969,8 +978,8 @@ canvas.addEventListener("pointerup",event=>{
     drag=null;state.blocked=null;canvas.classList.remove("moving");
     view.setEnabled(true);
     canvas.releasePointerCapture(event.pointerId);
-    if(moved&&!unchanged){persist(item,kind).then(()=>{render()})}
-    else{setStatus(selectHint(item));render()}
+    if(moved&&!unchanged){persist(item,kind).then(()=>{render();flushLayoutNotice()})}
+    else{setStatus(selectHint(item));render();flushLayoutNotice()}
     return;
   }
   view.setEnabled(true);
@@ -996,7 +1005,11 @@ canvas.addEventListener("pointerleave",()=>{
   const box=document.getElementById("coord");
   if(box)box.hidden=true;
 });
-canvas.addEventListener("pointercancel",()=>{drag=null;state.blocked=null;state.panning=false;canvas.classList.remove("moving","orbiting","panning")});
+canvas.addEventListener("pointercancel",()=>{
+  drag=null;state.blocked=null;state.orbiting=false;state.panning=false;
+  canvas.classList.remove("moving","orbiting","panning");
+  flushLayoutNotice();
+});
 // 右键要用来平移，别弹系统菜单。
 canvas.addEventListener("contextmenu",event=>event.preventDefault());
 window.addEventListener("keydown",event=>{
@@ -1240,6 +1253,7 @@ view.controls.addEventListener("end",()=>{
   target[0]=pose.target[0];target[1]=pose.target[1];target[2]=pose.target[2];
   state.orbiting=false;state.panning=false;
   canvas.classList.remove("orbiting","panning");
+  flushLayoutNotice();
   if(before&&(Math.abs(pose.yaw-before.yaw)>0.01||Math.abs(pose.pitch-before.pitch)>0.01)){
     state.active="free";syncViewControls();
   }
@@ -1332,9 +1346,9 @@ function layoutVersionOf(payload){
 // 编辑租约：同一时刻只有一个写者能动这个项目。页面这一侧只做两件事——
 // **看得见**（谁在写）与**抢回来**（人永远抢得回来）。裁定在服务端，
 // 见 references/runtime-contract.md「编辑租约」段。
-const LEASE_URL=POLL_URL?POLL_URL.replace(/\/layout$/,"/edit-lease"):"";
+const LEASE_URL=LAYOUT_URL?LAYOUT_URL.replace(/\/layout$/,"/edit-lease"):"";
 // 对一条待确认的说法表态（确认 / 划掉）：与布局编辑同一套门。
-const DECISIONS_URL=POLL_URL?POLL_URL.replace(/\/layout$/,"/decisions"):"";
+const DECISIONS_URL=LAYOUT_URL?LAYOUT_URL.replace(/\/layout$/,"/decisions"):"";
 const LEASE_TOKEN_KEY="dsh-edit-lease:"+SCENE_ID;
 const LEASE_ID_KEY=LEASE_TOKEN_KEY+":id";
 const LEASE_LABEL_KEY=LEASE_TOKEN_KEY+":label";
@@ -1482,21 +1496,38 @@ async function decideBasis(target,action){
   applyDecisions(document);
   setStatus(action==="confirm"?"已记下：客户确认了这条":"已记下：客户划掉了这条");
 }
+let shownLease=null;
+let leaseShownAt=0;
+let paintedLease="";
 function applyLease(lease){
+  shownLease=lease||null;
+  leaseShownAt=Date.now();
+  paintedLease="";
+  paintLease();
+}
+function paintLease(){
   const badge=document.getElementById("lease-badge");
   const button=document.getElementById("take-lease");
   if(!badge||!button)return;
+  const lease=shownLease;
   const mine=Boolean(lease&&leaseToken&&lease.id===leaseId);
   if(!lease){
+    if(paintedLease==="none")return;
+    paintedLease="none";
     badge.hidden=true;badge.classList.remove("mine");button.hidden=true;return;
   }
+  const left=Math.max(0,Math.round((lease.expires_in||0)-(Date.now()-leaseShownAt)/1000));
   const who=lease.holder==="agent"?"助手正在处理":(mine?"编辑权在你手上":"另一窗口正在编辑");
-  badge.textContent=`${who} · ${Math.round(lease.expires_in||0)} 秒后自动释放`;
+  const signature=`${who}|${left}|${mine}|${lease.holder}`;
+  if(signature===paintedLease)return;
+  paintedLease=signature;
+  badge.textContent=`${who} · ${left} 秒后自动释放`;
   badge.hidden=false;
   badge.classList.toggle("mine",mine);
   // 助手拿着时给一个出口；自己拿着不用抢，分享形态不给外人这个按钮。
   button.hidden=SHARE_FORM||lease.holder!=="agent";
 }
+if(LAYOUT_URL)setInterval(paintLease,1000);
 async function leasePost(path,body){
   const headers={"Content-Type":"application/json"};
   if(leaseToken)headers["X-Edit-Lease"]=leaseToken;
@@ -1558,6 +1589,7 @@ function heartbeatLease(){
 if(LEASE_URL)setInterval(heartbeatLease,5000);
 // 关页面就还回去；带 keepalive 让请求在卸载后仍能发出。
 window.addEventListener("pagehide",()=>{
+  if(layoutEvents)layoutEvents.close();
   if(!leaseToken||!LEASE_URL)return;
   try{
     fetch(LEASE_URL,{
@@ -1566,27 +1598,37 @@ window.addEventListener("pagehide",()=>{
     });
   }catch(error){}
 });
-async function pollLayout(){
-  if(!POLL_URL)return;
-  if(drag||state.orbiting||state.panning)return;
-  try{
-    const response=await fetch(POLL_URL,{cache:"no-store",headers:{Accept:"application/json"}});
-    if(!response.ok)return;
-    const payload=await response.json();
-    // 租约与版本无关：助手接管或让出时布局一个字没变，也必须立刻显示出来。
-    applyLease(payload.lease||null);
-    applyWorking(payload);
-    applyDecisions(payload);
-    if(layoutVersionOf(payload)===layoutVersion)return;
-    if(drag||state.orbiting||state.panning)return;
-    layoutVersion=layoutVersionOf(payload);
-    rooms=payload.rooms||[];
-    const currentId=scene.room&&scene.room.id;
-    let index=rooms.findIndex(entry=>entry.id===currentId);
-    let keepCamera=true;
-    if(index<0){index=0;keepCamera=false}
-    showRoom(index,keepCamera);
-  }catch(error){}
+function sceneBusy(){
+  return Boolean(drag||state.orbiting||state.panning);
+}
+function applyLayoutNotice(notice){
+  if(!notice||typeof notice!=="object")return;
+  // 租约与版本无关：助手接管或让出时布局一个字没变，也必须立刻显示出来。
+  if(Object.prototype.hasOwnProperty.call(notice,"lease"))applyLease(notice.lease||null);
+  if(notice.working)applyWorking(notice);
+  if(notice.decisions)applyDecisions(notice);
+  if(notice.version===undefined)return;
+  if(layoutVersionOf(notice)===layoutVersion){layoutDirty=false;return}
+  layoutEpoch+=1;
+  layoutDirty=true;
+  if(!sceneBusy())flushLayoutNotice();
+}
+function flushLayoutNotice(){
+  if(!layoutDirty||sceneBusy()||!LAYOUT_URL)return;
+  if(layoutFetchEpoch===layoutEpoch)return;
+  const epoch=layoutEpoch;
+  layoutFetchEpoch=epoch;
+  refreshProjectDocument().then(ok=>{
+    if(!ok&&layoutFetchEpoch===epoch)layoutFetchEpoch=-1;
+  });
+}
+function watchLayout(){
+  if(!LAYOUT_URL)return;
+  const source=new EventSource(LAYOUT_URL+"/events");
+  source.onmessage=event=>{
+    try{applyLayoutNotice(JSON.parse(event.data))}catch(error){}
+  };
+  layoutEvents=source;
 }
 const roomBand=document.getElementById("room-band");
 if(roomBand){
@@ -1600,8 +1642,7 @@ if(roomBand){
 }
 syncRoomBand();
 syncRoomUrl();
-let pollTimer=0;
-if(POLL_URL)pollTimer=setInterval(pollLayout,1000);
+if(LAYOUT_URL)watchLayout();
 // ---------------------------------------------------------------- 项目页的编辑权
 // 服务端按权限把这一页渲染成可编辑；能不能**真的写**由编辑租约说话（同一时刻只有一个写者）。
 // 页面只负责：申请、心跳、闲置让出、被抢走/被收回时跟着变。
@@ -1653,18 +1694,11 @@ if(PROJECT_EDIT_URL&&!READ_ONLY){
   });
   refreshProjectDocument();
 }
-function pulsePreview(){
-  fetch("/api/preview/presence",{method:"POST",cache:"no-store",keepalive:true}).catch(()=>{});
-}
-if(PRESENCE){
-  pulsePreview();
-  setInterval(pulsePreview,1000);
-}
 const shutdownButton=document.getElementById("shutdown-preview");
 if(shutdownButton){
   shutdownButton.addEventListener("click",async()=>{
     shutdownButton.disabled=true;
-    if(pollTimer)clearInterval(pollTimer);
+    if(layoutEvents){layoutEvents.close();layoutEvents=null}
     try{
       await fetch("/api/preview/shutdown",{method:"POST",cache:"no-store"});
       setStatus("预览服务已退出，可以关闭这个标签页");
