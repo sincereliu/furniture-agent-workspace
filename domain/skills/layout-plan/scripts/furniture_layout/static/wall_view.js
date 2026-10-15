@@ -9,12 +9,12 @@
  * 立面视图例外：只留正对相机的那面墙。
  */
 
-// 三档要**渐变**而不是跳变：背景墙 > 立面墙 > 侧墙，数值彼此靠近。
-// 室外是夜色深底。墙用暖石膏色，背景墙再亮一档，室内和夜景才分得开。
-export const WALL_SIDE_OPACITY = 0.25;        // 侧墙：轻，但不至于消失
-export const WALL_BACK_OPACITY = 0.55;        // 背景墙：读得出门窗，又不是一堵实墙
+// 留下的墙一律不透明。挡在人和房间之间的那面已经剔掉，室内从缺口看进去。
+// 室外是夜色深底。背景墙再亮一档，靠颜色和侧墙分开，不再靠透明度。
+export const WALL_SIDE_OPACITY = 1;
+export const WALL_BACK_OPACITY = 1;
 export const WALL_BACK_COLOR = 0xfff3df;      // 背景墙：暖石膏
-export const WALL_ELEVATION_OPACITY = 0.45;   // 立面视图：正对那面
+export const WALL_ELEVATION_OPACITY = 1;
 export const WALL_ELEVATION_COLOR = 0xf6e6cc; // 立面视图墙面：同一档暖色
 export const ELEVATION_PITCH = 0.12;          // 与 room_page.html 的 ELEVATION_MAX_PITCH 一致
 
@@ -53,7 +53,7 @@ export function wallVisibility(walls, cameraPosition, viewDirection, options = {
     };
   });
 
-  // 可见的墙里，离相机最远的那面当背景墙（更实），同屏其它可见墙当侧墙（更淡）
+  // 可见的墙里，离相机最远的那面当背景墙（更亮）。透明度都是实的。
   const shown = states.filter((state) => state.visible);
   const farthest = shown.reduce((max, state) => Math.max(max, state.distance), -Infinity);
 
@@ -62,7 +62,7 @@ export function wallVisibility(walls, cameraPosition, viewDirection, options = {
     walls: states.map((state) => ({
       id: state.id,
       visible: state.visible,
-      // 背景墙 / 侧墙 / 立面墙三档，颜色与不透明度一起给（浅色 + 低透明度等于看不见）
+      // 可见墙不透明。背景墙和立面墙换暖色，侧墙沿用材质本色。
       opacity: elevation
         ? WALL_ELEVATION_OPACITY
         : (state.distance === farthest ? WALL_BACK_OPACITY : WALL_SIDE_OPACITY),

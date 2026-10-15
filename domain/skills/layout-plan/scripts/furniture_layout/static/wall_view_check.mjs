@@ -1,6 +1,6 @@
 /**
- * 墙显隐判据的断言：横在人和房间之间的那面墙不画、背景墙最实、侧墙最淡；
- * 立面视图只留正对相机那面。
+ * 墙显隐判据的断言：横在人和房间之间的那面墙不画，留下的墙不透明；
+ * 背景墙靠更亮的颜色区分。立面视图只留正对相机那面。
  * 运行：node domain/skills/layout-plan/scripts/furniture_layout/static/wall_view_check.mjs
  * （与 frame_check.mjs 同类：纯几何，不需要浏览器）
  */
@@ -29,6 +29,10 @@ function expect(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+expect(WALL_SIDE_OPACITY === 1, "侧墙应不透明");
+expect(WALL_BACK_OPACITY === 1, "背景墙应不透明");
+expect(WALL_ELEVATION_OPACITY === 1, "立面墙应不透明");
+
 // 1) 默认那一眼：相机在房间外东南上方看向西北 → 南墙、东墙横在人和房间之间，不画
 {
   const position = [1200 + 2100, 1100 + 800, 1260 + 2000];
@@ -37,7 +41,7 @@ function expect(condition, message) {
   expect(visibleIds(result) === "north,west", `应只留北墙与西墙，实际 ${visibleIds(result)}`);
   expect(state(result, "north").opacity === WALL_BACK_OPACITY, "北墙是背景墙，应最实");
   expect(state(result, "north").color === WALL_BACK_COLOR, "背景墙要用暖色，压在夜色上才看得清室内");
-  expect(state(result, "west").opacity === WALL_SIDE_OPACITY, "西墙是侧墙，应最淡");
+  expect(state(result, "west").opacity === WALL_SIDE_OPACITY, "西墙是侧墙，同样不透明");
   expect(state(result, "west").color === null, "侧墙沿用墙面默认色");
 }
 
@@ -47,7 +51,7 @@ function expect(condition, message) {
   const result = wallVisibility(walls, position, [0, 0, -1], { elevation: false });
   expect(visibleIds(result) === "north,east,south,west", `房间内不该剔墙，实际 ${visibleIds(result)}`);
   expect(state(result, "north").opacity === WALL_BACK_OPACITY, "北墙离相机最远，当背景墙");
-  expect(state(result, "south").opacity === WALL_SIDE_OPACITY, "南墙贴脸，当侧墙提示");
+  expect(state(result, "south").opacity === WALL_SIDE_OPACITY, "贴脸的南墙也是不透明侧墙");
 }
 
 // 3) 相机在房间外南侧高处：只有南墙横在中间 → 剔南墙，其余三面都在
@@ -70,7 +74,7 @@ function expect(condition, message) {
   expect(state(result, "south").visible === false, "相机身后的南墙不该画（顶边会跑到房间上方）");
   expect(
     state(result, "north").opacity === WALL_ELEVATION_OPACITY,
-    `立面视图那面墙要用 ${WALL_ELEVATION_OPACITY} 的透明度，实际 ${state(result, "north").opacity}`,
+    "立面视图那面墙应不透明",
   );
 }
 
@@ -108,7 +112,8 @@ function expect(condition, message) {
     }
     const shown = result.walls.filter((wall) => wall.visible);
     expect(shown.length >= 2, `第 ${step} 步：外围视角至少该看到两面墙，实际 ${shown.length} 面`);
-    const backs = shown.filter((wall) => wall.opacity === WALL_BACK_OPACITY);
+    expect(shown.every((wall) => wall.opacity === 1), `第 ${step} 步：可见墙应不透明`);
+    const backs = shown.filter((wall) => wall.color === WALL_BACK_COLOR);
     expect(backs.length === 1, `第 ${step} 步：背景墙应恰好一面，实际 ${backs.length} 面`);
   }
 }

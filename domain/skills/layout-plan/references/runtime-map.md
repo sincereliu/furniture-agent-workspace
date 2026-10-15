@@ -38,6 +38,10 @@
 | 布局页订阅项目文件和编辑租约。变了才通知，版本变了才重读整份布局 | `layout_events.py` | structured_protocol / side_effect |
 | 从最新布局取出一台已保存外形，供板件页使用。不要求整份布局已确认 | `cabinet_entry.py` | validation |
 | 房间页上的三维盒子 | `static/layout_scene.js` | calculation |
+| 预览围墙的厚度、转角和门窗洞，房间坐标 | `static/wall_solid.js` | calculation |
+| 不进生产的沙发在预览里的靠背、扶手和坐垫。要做成柜的沙发仍是盒子 | `static/sofa_solid.js` | calculation |
+| 不进生产的茶几在预览里的桌面、腿和层板。要做成柜的茶几仍是盒子 | `static/coffee_table_solid.js` | calculation |
+| 预览边线沿视线拉近 1 毫米，贴墙时仍画在墙前面 | `static/ink_depth.js` | calculation |
 | 页面入口将规范布局输出一次转换为画布模型；渲染层只读取该模型 | `static/layout_payload.js` | calculation |
 | 房间的东、南、上怎么画到屏幕上 | `static/layout_frame.js` | calculation |
 | 房间轴、家具尺寸线和标签锚点；全部用房间坐标计算 | `static/layout_annotations.js` | calculation |
@@ -91,6 +95,10 @@ node domain/skills/layout-plan/scripts/furniture_layout/static/<检查脚本>
 | `static/layout_drag.js` | `drag_check.mjs` |
 | `static/layout_labels.js` | `labels_check.mjs` |
 | `static/wall_view.js` | `wall_view_check.mjs` |
+| `static/wall_solid.js` | `wall_solid_check.mjs` |
+| `static/sofa_solid.js` | `sofa_solid_check.mjs` |
+| `static/coffee_table_solid.js` | `coffee_table_check.mjs` |
+| `static/ink_depth.js`、`static/layout_scene.js` 的边线深度 | `ink_depth_check.mjs` |
 | `cabinet_entry.py` | `test_cabinet_panel_page.py` |
 | `static/layout_scene.js` | `test_project_preview.py` |
 

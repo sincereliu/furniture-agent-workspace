@@ -4,6 +4,10 @@ import { cameraFov, cameraThreePosition, roomToThree, threeToRoom } from "./layo
 import { ROOM_AXES, roomAxes, dimensionAnnotations } from "./layout_annotations.js";
 import { placeLabels } from "./layout_labels.js";
 import { ELEVATION_PITCH, wallVisibility } from "./wall_view.js";
+import { WALL_THICKNESS_MM, openingSolids, wallSolids } from "./wall_solid.js";
+import { isFixedCoffeeTable, coffeeTableParts } from "./coffee_table_solid.js";
+import { isFixedSofa, sofaFrame, sofaLocalBox, sofaMount, sofaParts } from "./sofa_solid.js";
+import { inkViewBiasGlsl } from "./ink_depth.js";
 
 export { cameraThreePosition, roomToThree };
 
@@ -15,6 +19,7 @@ function disposeObject(object) {
       ? (Array.isArray(node.material) ? node.material : [node.material])
       : [];
     for (const material of list) materials.add(material);
+    if (node.userData && node.userData.material) materials.add(node.userData.material);
   });
   for (const material of materials) {
     if (material.map) material.map.dispose();
@@ -131,6 +136,33 @@ function makeAxisGizmo() {
   return { el, ctx: board.getContext("2d") };
 }
 
+/** 房间坐标 AABB [x0, y0, z0, x1, y1, z1] 变成轴对齐盒子。 */
+function addRoomBox(parent, box, material) {
+  const [x0, y0, z0, x1, y1, z1] = box;
+  const mesh = new THREE.Mesh(
+    new THREE.BoxGeometry(x1 - x0, z1 - z0, y1 - y0),
+    material,
+  );
+  mesh.position.set(...roomToThree((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2));
+  parent.add(mesh);
+  return mesh;
+}
+
+/** 门窗比洞口略收 1 mm，侧边不和墙垛共面。厚度方向不收，仍填满墙厚。 */
+function insetOpening(wall, box) {
+  const gap = 1;
+  const shrink = (a, b) => (b - a > gap * 2 + 1 ? [a + gap, b - gap] : [a, b]);
+  const [x0, y0, z0, x1, y1, z1] = box;
+  if (wall === "north" || wall === "south") {
+    const [xa, xb] = shrink(x0, x1);
+    const [za, zb] = shrink(z0, z1);
+    return [xa, y0, za, xb, y1, zb];
+  }
+  const [ya, yb] = shrink(y0, y1);
+  const [za, zb] = shrink(z0, z1);
+  return [x0, ya, za, x1, yb, zb];
+}
+
 function addMesh(parent, mesh, pickables) {
   parent.add(mesh);
   if (mesh.userData && mesh.userData.kind) pickables.push(mesh);
@@ -219,16 +251,26 @@ function markRoom(mesh) {
   return mesh;
 }
 
+function inkMaterial(color) {
+  const material = new THREE.LineBasicMaterial({
+    color,
+    transparent: true,
+  });
+  // 相同拉近量共用一个程序。颜色仍由各自的材质 uniform 决定。
+  material.customProgramCacheKey = () => "ink-view-bias";
+  material.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader.replace(
+      "#include <project_vertex>",
+      inkViewBiasGlsl(),
+    );
+  };
+  return material;
+}
+
 function addInk(mesh, color = INK) {
   const ink = new THREE.LineSegments(
     new THREE.EdgesGeometry(mesh.geometry, 25),
-    new THREE.LineBasicMaterial({
-      color,
-      transparent: true,
-      polygonOffset: true,
-      polygonOffsetFactor: -3,
-      polygonOffsetUnits: -3,
-    }),
+    inkMaterial(color),
   );
   ink.raycast = () => {};
   mesh.add(ink);
@@ -245,6 +287,66 @@ function furnitureColor(item, selected, blocked) {
   if (category === "coffee_table" || category === "table" || category === "desk") return 0xc9956a;
   if (item.furniture_category === "wall_cabinet") return 0xf0d5b0;
   return 0xd7a36a;
+}
+
+/** 按足迹摆一组外形块。放不进外形尺寸时返回 false，调用方改画盒子。 */
+function addShapedItem(parent, pickables, item, parts, materials, selected) {
+  const frame = sofaFrame(item.footprint, item.z_start);
+  if (!parts || !frame) return false;
+  const mount = sofaMount(frame);
+  const group = new THREE.Group();
+  group.position.set(...roomToThree(...mount.origin));
+  group.setRotationFromMatrix(new THREE.Matrix4().makeBasis(
+    new THREE.Vector3(...mount.x),
+    new THREE.Vector3(...mount.y),
+    new THREE.Vector3(...mount.z),
+  ));
+  parent.add(group);
+  const ink = selected ? 0x6a4520 : INK;
+  for (const part of parts) {
+    const local = sofaLocalBox(part.box);
+    const mesh = markRoom(new THREE.Mesh(
+      new THREE.BoxGeometry(...local.size),
+      materials[part.role],
+    ));
+    mesh.position.set(...local.center);
+    mesh.userData = { kind: "item", itemId: item.id };
+    addInk(mesh, ink);
+    group.add(mesh);
+    pickables.push(mesh);
+  }
+  return true;
+}
+
+/** 固定沙发：靠背、扶手、坐垫。 */
+function addSofa(parent, pickables, item, selected, blocked) {
+  const parts = sofaParts(item.width, item.depth, item.height);
+  const base = furnitureColor(item, selected, blocked);
+  const fabric = celMaterial(base);
+  const materials = selected || blocked
+    ? { fabric, deck: fabric, cushion: fabric, wood: fabric }
+    : {
+        fabric,
+        deck: celMaterial(0xb56d68),
+        cushion: celMaterial(0xf0c2ba),
+        wood: celMaterial(0x5c4030),
+      };
+  return addShapedItem(parent, pickables, item, parts, materials, selected);
+}
+
+/** 固定茶几：桌面、四条腿、下层板。 */
+function addCoffeeTable(parent, pickables, item, selected, blocked) {
+  const parts = coffeeTableParts(item.width, item.depth, item.height);
+  const base = furnitureColor(item, selected, blocked);
+  const top = celMaterial(base);
+  const materials = selected || blocked
+    ? { top, leg: top, shelf: top }
+    : {
+        top,
+        leg: celMaterial(0x6e4b2e),
+        shelf: celMaterial(0xd8b48a),
+      };
+  return addShapedItem(parent, pickables, item, parts, materials, selected);
 }
 
 function addSky() {
@@ -347,25 +449,31 @@ function addTown(parent, width, depth, side) {
   const southGap = y0 + side - depth;
   const westGap = -x0;
   const eastGap = x0 + side - width;
+  // 围墙在室内边界外占一个墙厚。室外小景沿用原来离墙面的空隙，改从外墙面起算。
+  const yard = WALL_THICKNESS_MM;
   if (northGap > 240) {
-    const span = Math.min(northGap - 70, 720);
-    const south = -36 - span / 2;
-    const colors = [0x1a2236, 0x261c38, 0x172433, 0x2c2140];
-    const heights = [1100, 1560, 860, 1280];
-    const windows = [0xffd2a4, 0x8be7ff, 0xf9a8d4, 0xffe1b0];
-    let cursor = Math.max(40, width * 0.06);
-    for (let index = 0; index < 4 && cursor < width * 0.92; index += 1) {
-      const spanEast = Math.min(520 + (index % 2) * 220, width * 0.92 - cursor);
-      if (spanEast < 180) break;
-      addBuilding(parent, cursor + spanEast / 2, south, spanEast, span, heights[index], colors[index], windows[index]);
-      cursor += spanEast + 80;
+    const span = Math.min(northGap - 70, 720) - yard;
+    if (span > 120) {
+      const south = -(36 + yard) - span / 2;
+      const colors = [0x1a2236, 0x261c38, 0x172433, 0x2c2140];
+      const heights = [1100, 1560, 860, 1280];
+      const windows = [0xffd2a4, 0x8be7ff, 0xf9a8d4, 0xffe1b0];
+      let cursor = Math.max(40, width * 0.06);
+      for (let index = 0; index < 4 && cursor < width * 0.92; index += 1) {
+        const spanEast = Math.min(520 + (index % 2) * 220, width * 0.92 - cursor);
+        if (spanEast < 180) break;
+        addBuilding(parent, cursor + spanEast / 2, south, spanEast, span, heights[index], colors[index], windows[index]);
+        cursor += spanEast + 80;
+      }
     }
   }
   if (westGap > 240) {
-    const span = Math.min(westGap - 70, 640);
-    const east = -36 - span / 2;
-    addBuilding(parent, east, depth * 0.72, span, Math.min(480, depth * 0.22), 1320, 0x1b243c, 0xf9a8d4);
-    addBuilding(parent, east, depth * 0.28, span, Math.min(420, depth * 0.18), 900, 0x241832, 0x8be7ff);
+    const span = Math.min(westGap - 70, 640) - yard;
+    if (span > 120) {
+      const east = -(36 + yard) - span / 2;
+      addBuilding(parent, east, depth * 0.72, span, Math.min(480, depth * 0.22), 1320, 0x1b243c, 0xf9a8d4);
+      addBuilding(parent, east, depth * 0.28, span, Math.min(420, depth * 0.18), 900, 0x241832, 0x8be7ff);
+    }
   }
   if (southGap > 180) {
     const hedgeDepth = Math.min(120, southGap * 0.28);
@@ -373,13 +481,14 @@ function addTown(parent, width, depth, side) {
       new THREE.BoxGeometry(width * 0.42, 140, hedgeDepth),
       celMaterial(0x1d3a32),
     );
-    hedge.position.set(...roomToThree(width * 0.5, depth + 48 + hedgeDepth / 2, 70));
+    hedge.position.set(...roomToThree(width * 0.5, depth + yard + 48 + hedgeDepth / 2, 70));
     parent.add(hedge);
     addInk(hedge, 0x0e1c18);
-    addLamp(parent, width * 0.18, depth + southGap * 0.62, 0xffd7a8);
-    addLamp(parent, width * 0.78, depth + southGap * 0.5, 0x9aefff);
+    const lampOut = (gap) => Math.max(gap, yard + 48);
+    addLamp(parent, width * 0.18, depth + lampOut(southGap * 0.62), 0xffd7a8);
+    addLamp(parent, width * 0.78, depth + lampOut(southGap * 0.5), 0x9aefff);
   }
-  if (eastGap > 200) addLamp(parent, width + eastGap * 0.55, depth * 0.3, 0xffb7d5);
+  if (eastGap > 200) addLamp(parent, width + Math.max(eastGap * 0.55, yard + 48), depth * 0.3, 0xffb7d5);
 }
 
 /** 正方形厚底座。房间和室外小景都落在它上面，夜色停在底座边缘。 */
@@ -402,7 +511,12 @@ function addDiorama(parent, width, depth) {
 }
 
 export function mountLayout(canvas) {
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  // 对数深度：房间以毫米计，正视图相机又拉得很远。普通深度分不出贴墙的边和墙面。
+  const renderer = new THREE.WebGLRenderer({
+    canvas,
+    antialias: true,
+    logarithmicDepthBuffer: true,
+  });
   renderer.setClearColor(0x070b16, 1);
   const camera = new THREE.PerspectiveCamera(48, 1, 10, 500000);
   camera.up.set(0, 1, 0);
@@ -602,10 +716,12 @@ export function mountLayout(canvas) {
    * 把当前的墙与相机喂给纯函数 wallVisibility()，再把结果写回材质。
    *
    * **加一层短时渐变**（约 150ms）：判据本身是二值的（`visible: !cameraOutside`），
-   * 相机一越过阈值，墙就会在**某一帧**瞬间出现/消失，同时透明度从侧墙 0.25 跳到背景墙 0.55。
+   * 相机一越过阈值，墙就会在**某一帧**瞬间出现/消失。留下的墙是不透明的，
+   * 渐变只发生在 0 和 1 之间。
    * 实测这一步没有掉帧（变化帧 16.4~17.0ms，与其它帧一致，着色器程序数恒为 5），
    * 所以那个"顿"是**画面突变**而不是卡顿。把突变摊成 150ms 的过渡即可。
-   * 墙一律用 `opacity` 表达（不靠 visible 开关），这样渐变过程中不会出现"半透明突然变实"。
+   * 墙一律用 `opacity` 表达（不靠 visible 开关）。落到不透明才写入深度，
+   * 渐变中途的半透明墙不会把后面的家具从深度缓冲里抠掉。
    */
   function refreshWalls() {
     if (!wallShells.length) return;
@@ -655,12 +771,14 @@ export function mountLayout(canvas) {
       const opacity = wallFade[index];
       // 完全透明才真正不画；否则留着，让渐变可见
       wall.visible = opacity > 0.002;
-      wall.material.opacity = opacity;
-      // 背景墙用更亮的暖石膏色。侧墙沿用材质上的浅暖色。
-      wall.material.color.setHex(state.color === null ? wall.userData.baseColor : state.color);
-      if (wall.userData.ink) {
-        wall.userData.ink.visible = wall.visible;
-        wall.userData.ink.material.opacity = Math.min(1, opacity * 1.35);
+      wall.userData.material.opacity = opacity;
+      wall.userData.material.depthWrite = opacity >= 0.999;
+      // 背景墙用更亮的暖石膏色。侧墙沿用材质上的浅暖色。留下的墙都不透明。
+      wall.userData.material.color.setHex(state.color === null ? wall.userData.baseColor : state.color);
+      for (const ink of wall.userData.inks) {
+        ink.visible = wall.visible;
+        ink.material.opacity = Math.min(1, opacity * 1.35);
+        ink.material.depthWrite = opacity >= 0.999;
       }
     });
   }
@@ -862,54 +980,36 @@ export function mountLayout(canvas) {
     content.userData.roomDiagonal = Math.hypot(width, depth, height);
     const wallMaterial = celMaterial(0xf4e0c8, {
       transparent: true,
-      opacity: 0.22,
-      depthWrite: false,
+      opacity: 1,
+      depthWrite: true,
     });
-    // 墙的显隐与透明度按人眼习惯逐帧算（见 wall_view.js）
+    // 墙的显隐与透明度按人眼习惯逐帧算（见 wall_view.js）。
+    // 每面墙是一组有厚度的盒子（见 wall_solid.js），共用一份材质。
     const shells = [];
-    const addWall = (mesh, center, normal, wallId) => {
-      mesh.material = wallMaterial.clone();     // 每面墙单独一份材质，透明度各算各的
-      markRoom(mesh);
-      addInk(mesh, 0x6a5344);
-      mesh.userData.wallCenter = new THREE.Vector3(...roomToThree(...center));
-      mesh.userData.wallNormal = new THREE.Vector3(...roomToThree(...normal)).normalize();
-      mesh.userData.wallId = wallId;
-      mesh.userData.baseColor = wallMaterial.color.getHex();
-      shells.push(mesh);
-      content.add(mesh);
-    };
-    // 北墙：先设 position 再 addWall。漏掉 position 会让它落在世界原点（房间中心）——
-    // 表现就是"北墙跑到房间中间、只有一半落在地板上"。
-    const north = new THREE.Mesh(new THREE.PlaneGeometry(width, height), wallMaterial);
-    north.position.set(...roomToThree(width / 2, 0, height / 2));
-    addWall(north, [width / 2, 0, 0], [0, -1, 0], "north");
-    const east = new THREE.Mesh(new THREE.PlaneGeometry(depth, height), wallMaterial);
-    east.rotation.y = Math.PI / 2;
-    east.position.set(...roomToThree(width, depth / 2, height / 2));
-    addWall(east, [width, depth / 2, 0], [1, 0, 0], "east");
-    const south = new THREE.Mesh(new THREE.PlaneGeometry(width, height), wallMaterial);
-    south.rotation.y = Math.PI;
-    south.position.set(...roomToThree(width / 2, depth, height / 2));
-    addWall(south, [width / 2, depth, 0], [0, 1, 0], "south");
-    const west = new THREE.Mesh(new THREE.PlaneGeometry(depth, height), wallMaterial);
-    west.rotation.y = -Math.PI / 2;
-    west.position.set(...roomToThree(0, depth / 2, height / 2));
-    addWall(west, [0, depth / 2, 0], [-1, 0, 0], "west");
+    for (const solid of wallSolids(width, depth, height, data.openings || [])) {
+      const material = wallMaterial.clone();
+      const group = new THREE.Group();
+      const inks = [];
+      for (const box of solid.boxes) {
+        const mesh = markRoom(addRoomBox(group, box, material));
+        inks.push(addInk(mesh, 0x6a5344));
+      }
+      group.userData.material = material;
+      group.userData.inks = inks;
+      group.userData.wallCenter = new THREE.Vector3(...roomToThree(...solid.center));
+      group.userData.wallNormal = new THREE.Vector3(...roomToThree(...solid.normal)).normalize();
+      group.userData.wallId = solid.id;
+      group.userData.baseColor = wallMaterial.color.getHex();
+      shells.push(group);
+      content.add(group);
+    }
     wallMaterial.dispose();
     wallShells = shells;
-    for (const opening of data.openings || []) {
-      const span = opening.offset_mm;
-      const end = span + opening.width_mm;
-      const z0 = opening.sill_height_mm || 0;
-      const z1 = z0 + opening.height_mm;
-      let box;
-      if (opening.wall === "north") box = [span, 0, z0, end, 30, z1];
-      else if (opening.wall === "south") box = [width - end, depth - 30, z0, width - span, depth, z1];
-      else if (opening.wall === "east") box = [width - 30, span, z0, width, end, z1];
-      else box = [0, depth - end, z0, 30, depth - span, z1];
+    for (const opening of openingSolids(width, depth, data.openings || [])) {
       const windowGlow = opening.kind === "window";
-      const mesh = new THREE.Mesh(
-        new THREE.BoxGeometry(...roomToThree(box[3] - box[0], box[4] - box[1], box[5] - box[2])),
+      addRoomBox(
+        content,
+        insetOpening(opening.wall, opening.box),
         new THREE.MeshBasicMaterial({
           color: windowGlow ? 0xffe1b0 : 0xc4956a,
           transparent: true,
@@ -917,8 +1017,6 @@ export function mountLayout(canvas) {
           side: THREE.DoubleSide,
         }),
       );
-      mesh.position.set(...roomToThree((box[0] + box[3]) / 2, (box[1] + box[4]) / 2, (box[2] + box[5]) / 2));
-      content.add(mesh);
     }
     for (const obstacle of data.obstacles || []) {
       const obstacleMesh = markRoom(new THREE.Mesh(
@@ -933,13 +1031,17 @@ export function mountLayout(canvas) {
       const blocked = selected && options.blockedId === item.id;
       // 页面边界已把规范字段转换成画布模型。
       const itemZStart = item.z_start, itemZEnd = item.z_end;
-      const mesh = markRoom(new THREE.Mesh(
-        prismGeometry(item.footprint, itemZStart, itemZEnd),
-        celMaterial(furnitureColor(item, selected, blocked)),
-      ));
-      addInk(mesh, selected ? 0x6a4520 : INK);
-      mesh.userData = { kind: "item", itemId: item.id };
-      addMesh(content, mesh, pickables);
+      const drewShape = (isFixedSofa(item) && addSofa(content, pickables, item, selected, blocked))
+        || (isFixedCoffeeTable(item) && addCoffeeTable(content, pickables, item, selected, blocked));
+      if (!drewShape) {
+        const mesh = markRoom(new THREE.Mesh(
+          prismGeometry(item.footprint, itemZStart, itemZEnd),
+          celMaterial(furnitureColor(item, selected, blocked)),
+        ));
+        addInk(mesh, selected ? 0x6a4520 : INK);
+        mesh.userData = { kind: "item", itemId: item.id };
+        addMesh(content, mesh, pickables);
+      }
       if (item.footprint.length >= 4) {
         const frontZ = (itemZStart + itemZEnd) / 2;
         const a = item.footprint[3];
