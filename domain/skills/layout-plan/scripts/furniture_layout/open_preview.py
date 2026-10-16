@@ -19,6 +19,7 @@ from furniture_layout.room_page import room_page_payload
 from furniture_workflow.workflow_decisions import pending_decision_views
 from furniture_workflow.workflow_lease import read_lease
 from furniture_workflow.workflow_project import Project, Revision
+from furniture_workflow.workflow_state import WorkflowStage
 
 PREVIEW_PORT = 8000
 _SERVER_READY_SECONDS = 20.0
@@ -33,6 +34,17 @@ def layout_version(revision: Revision) -> str:
     当作 `expected_version`。不要把修订号编进去。
     """
     return f"{revision.layout_sha256}:{int(bool(revision.layout.confirmed))}"
+
+
+def panel_version(revision: Revision) -> str:
+    """**板件**产物的版本：板件摘要 + 确认位。
+
+    板件页改顺纹要用这个，不能用 `layout_version()`——改的只是板件，布局摘要一个字不变，
+    于是"版本对不上就拒"这道门等于没有：别人拿着旧画面照样能覆盖（实测旧版本重放拿到 200）。
+    同一个字符串两端共用：页面渲染时印进去，保存时带回来比对。
+    """
+    approved = revision.is_stage_approved(WorkflowStage.PANELS_PLANNED)
+    return f"{revision.panel_sha256 or ''}:{int(approved)}"
 
 
 def layout_page_meta(

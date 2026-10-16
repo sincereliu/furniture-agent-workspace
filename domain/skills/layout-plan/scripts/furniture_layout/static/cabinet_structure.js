@@ -20,38 +20,87 @@ const SELECT_COLOR = 0x1d4ed8;
 const HOVER_COLOR = 0xf59e0b;
 const FLOOR_COLOR = 0xdfe5ee;
 
-function makeWoodTexture() {
-  const canvas = document.createElement("canvas");
-  canvas.width = 256;
-  canvas.height = 256;
+// 木纹图：纹路是**沿贴图 u 轴**的一条条细线（y 固定，x 从画布左外连到右外）。
+//
+// 这条约定和板件阶段的 `_grain_uv()` 绑死：那个函数按「这个面的 u 轴是不是顺纹轴」
+// 逐个面决定转不转。两边任何一个翻转，症状都是某一类板「纹理横竖不对」：
+//   * 只翻贴图方向 → 顺着高的板件（侧板 / 背板）先错；
+//   * 只翻旋转方向 → 顺着宽的板件（顶底 / 层板 / 踢脚）先错。
+// 所以两处都各有一条测试钉住，改一处必须同步改另一处，并在页面上量一遍：
+// 侧板与背板该是竖纹，顶底板 / 层板 / 踢脚板该是横纹。量法见
+// `test_wood_grain_is_drawn_along_the_texture_u_axis` 的说明。
+//
+// 纹理外观是**固定的几张常量**，页面上不提供调节（预设、深浅、粗细那些只是看效果用的，
+// 真正要改的是每块板的**顺纹方向**——那是板件的属性，见下面的 `grainEdits`）。
+const GRAIN_CYCLE_MM = 220; // 与板件阶段的 `GRAIN_CYCLE_MM` 一致：一张图铺多长
+const GRAIN_SIZE = 256; // 贴图边长（像素）。木纹是噪声，256 够用；调大更细也更费显存
+const GRAIN_LINES = 12; // 220 / 12 ≈ 18mm 一道：有木纹的样子，也不至于糊成一团
+const GRAIN_TONE = "#ddc19b"; // 底色（浅木）
+const GRAIN_WIDTH = [2.4, 6.8]; // [最细, 最粗] 线宽（像素）
+const GRAIN_DARK_INK = ["158,120,80", 0.16]; // 深纹：颜色 + 基础不透明度
+const GRAIN_LIGHT_INK = ["255,248,234", 0.16]; // 浅纹：同上
+const GRAIN_DARK_SHARE = 0.68; // 深色线占比
+const GRAIN_JITTER = [5, 7, 24, 72]; // 横向 ±px、纵向 ±px、折点步长 [min, max] px
+//: 随机种子。固定住 = 每次刷新画出同一张纹理，截图核对才对得上（别换回 `Math.random()`）。
+const GRAIN_SEED = 20261016;
+
+function clamp(value, low, high) {
+  return Math.min(high, Math.max(low, value));
+}
+
+// 固定种子的伪随机：同一个种子永远画出同一张纹理（截图核对靠它）。
+// 不用 `Math.random()`——那样每次刷新纹理都不同，两张截图对不上。
+function makeRandom(seed) {
+  let state = (seed >>> 0) || 1;
+  return () => {
+    state ^= state << 13;
+    state >>>= 0;
+    state ^= state >> 17;
+    state ^= state << 5;
+    state >>>= 0;
+    return state / 4294967296;
+  };
+}
+
+// 往画布上画木纹。纹路是**沿贴图 u 轴**的一条条横线（y 固定、x 一路延伸），
+// 面转不转由板件阶段按「这个面的 u 是不是顺纹轴」定（`_grain_uv()`）。
+function paintGrain(canvas) {
   const context = canvas.getContext("2d");
-  if (!context) return null;
-  context.fillStyle = "#ddc19b";
-  context.fillRect(0, 0, 256, 256);
-  // 细密顺纹 + 几道浅色宽纹：浅木（白橡之类）的样子，纹路对比不能太大。
-  for (let index = 0; index < 220; index += 1) {
-    const x = Math.random() * 256;
-    const width = 0.5 + Math.random() * 1.7;
-    const dark = Math.random() < 0.68;
-    context.strokeStyle = dark
-      ? `rgba(160,124,84,${0.05 + Math.random() * 0.11})`
-      : `rgba(255,247,232,${0.05 + Math.random() * 0.11})`;
-    context.lineWidth = width;
+  if (!context) throw new Error("2d context unavailable");
+  const random = makeRandom(GRAIN_SEED);
+  context.fillStyle = GRAIN_TONE;
+  context.fillRect(0, 0, GRAIN_SIZE, GRAIN_SIZE);
+  for (let index = 0; index < GRAIN_LINES; index += 1) {
+    const y = ((index + 0.5) * GRAIN_SIZE) / GRAIN_LINES + (random() - 0.5) * GRAIN_JITTER[0];
+    const ink = random() < GRAIN_DARK_SHARE ? GRAIN_DARK_INK : GRAIN_LIGHT_INK;
+    context.strokeStyle = `rgba(${ink[0]},${(ink[1] + random() * 0.2).toFixed(3)})`;
+    context.lineWidth = GRAIN_WIDTH[0] + random() * (GRAIN_WIDTH[1] - GRAIN_WIDTH[0]);
     context.beginPath();
-    context.moveTo(x, -10);
-    let y = 0;
-    while (y < 266) {
-      const step = 8 + Math.random() * 20;
-      y += step;
-      context.lineTo(x + (Math.random() - 0.5) * 8, y);
+    context.moveTo(-10, y + (random() - 0.5) * 2);
+    let x = 0;
+    while (x < GRAIN_SIZE + 10) {
+      x += GRAIN_JITTER[2] + random() * (GRAIN_JITTER[3] - GRAIN_JITTER[2]);
+      context.lineTo(x, y + (random() - 0.5) * GRAIN_JITTER[1]);
     }
     context.stroke();
   }
+}
+
+function makeWoodTexture() {
+  const canvas = document.createElement("canvas");
+  canvas.width = GRAIN_SIZE;
+  canvas.height = GRAIN_SIZE;
+  paintGrain(canvas);
+  return canvas;
+}
+
+function textureFromCanvas(canvas) {
   const texture = new THREE.CanvasTexture(canvas);
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = 4;
+  texture.center.set(0.5, 0.5); // 每个面的旋转都绕贴图中心，转完还铺满整面
   return texture;
 }
 
@@ -90,7 +139,7 @@ export function triple(values) {
 export function panelCounts(panels) {
   const counts = {};
   for (const panel of panels) {
-    counts[panel.group] = (counts[panel.group] || 0) + 1;
+    counts[panel.assembly] = (counts[panel.assembly] || 0) + 1;
   }
   return counts;
 }
@@ -100,6 +149,14 @@ const MATERIAL_LABELS = { wood: "柜体木纹", white: "门板白色" };
 
 export function materialLabel(material) {
   return MATERIAL_LABELS[material] || "柜体木纹";
+}
+
+// 顺纹方向：柜体坐标里的轴。规则与判据在板件阶段的 `grain_rules.py`。
+// `y`（沿深）不在默认表里，但订单可以特意改成它——所以标签必须认全，不能漏。
+const GRAIN_LABELS = { x: "沿宽", y: "沿深", z: "沿高", none: "不限" };
+
+export function grainLabel(axis) {
+  return GRAIN_LABELS[axis] || `未知(${axis})`;
 }
 
 // 环顾一圈的方向（three.js 坐标，已经含 Z 朝上 → Y 朝上的那次旋转）。
@@ -129,6 +186,7 @@ export function mountCabinetStructure(options) {
     filters = [],
     viewButtons = [],
     toggles = {},
+    grainSave = {},
   } = options;
 
   const panelList = Array.isArray(payload.panels) ? payload.panels : [];
@@ -236,22 +294,37 @@ export function mountCabinetStructure(options) {
   const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
   const edgeGeometry = new THREE.EdgesGeometry(boxGeometry);
 
-  const woodTexture = makeWoodTexture();
+  // 板件的种类只看 payload 里的 `panel_type`（`cabinet_panel_page.py` 给的那个字段）。
+  // 这里曾经读 `panel.group`——payload 里从来没有这个字段，于是「门板」「背板」两个开关
+  // 和透视都作用在 `undefined` 上，等于没接线（页面上按了没反应）。改字段前先看投影。
+  const FRONT_TYPES = new Set(["door", "drawer_front"]);
+  const BACK_TYPES = new Set(["back", "back_rail"]);
+
+  const isFrontPanel = (panel) => FRONT_TYPES.has(panel.panel_type);
+
+  // 材料只有两种，所以「白色」直接用投影给的材料名。
+  const isWhitePanel = (panel) => panel.material === "white";
+
+  // 每块板错开一点贴图原点用的随机数：也跟着种子走，所以同一份配置画出来完全一样。
+  const grainRandom = makeRandom(GRAIN_SEED ^ 0x9e3779b9);
+  const grainCanvas = makeWoodTexture();
+  const woodTexture = textureFromCanvas(grainCanvas);
   const meshes = [];
   for (const panel of panelList) {
     const [sx, sy, sz] = panel.size_mm.map(Number);
     const [px, py, pz] = panel.pos_mm.map(Number);
-    const white = panel.material === "white";
+    const white = isWhitePanel(panel);
     const material = materialFor(panel.material, woodTexture);
-    if (!white && material.map) {
+    if (!white) {
       // 一块板一份贴图：整台柜子共用一张图的话，每块板的花纹位置会一模一样。
-      // 盒子几何的 UV 每面都是 0–1，重复次数按长边给，木纹才不会被拉成条纹。
+      // 怎么转、每个面铺几遍都由投影算好（`grain.faces`，键是板件六个面的名字）：
+      // 木纹在图上沿贴图的 u 轴画，面转不转由板件阶段按「u 是不是顺纹轴」定。
+      // 规则与换算在 `panel_grain_axis()` / `_grain_uv()`，这里只照着摆。
+      // 克隆共用同一张画布，所以纹理只画一次、每块板只错开原点。
       const map = material.map.clone();
-      map.needsUpdate = true;
-      const along = Math.max(sx, sy, sz);
-      const repeat = Math.min(4.5, Math.max(1, along / 220));
-      map.repeat.set(repeat, repeat);
-      map.offset.set(Math.random() * 0.5, Math.random() * 0.5);
+      map.rotation = panel.grain.rotation;
+      // 每块板错开一点贴图原点，花纹才不会块块对齐得像印刷品。
+      map.offset.set(grainRandom() * 0.5, grainRandom() * 0.5);
       material.map = map;
     }
     const mesh = new THREE.Mesh(boxGeometry, material);
@@ -274,6 +347,10 @@ export function mountCabinetStructure(options) {
       // 本色与那张木纹图：悬停/选中时把 map 摘掉，回到纯色才不会花。
       baseColor: white ? WHITE_FACE : WOOD_BASE,
       woodMap: white ? null : material.map,
+      // 这块板六个面各铺几遍、朝哪转（由投影给）。见 `paint()`。
+      grainFaces: white ? null : panel.grain.faces,
+      // 最大面的名字（投影给的是**面名**，不是那个面的数据）：不指着某块板时按它铺。
+      homeFace: white ? null : panel.grain.home,
       edgeMaterial: edges.material,
     };
     record.exploded.copy(home).sub(center);
@@ -293,26 +370,21 @@ export function mountCabinetStructure(options) {
     wire: false,
     explode: 0,
     hovered: null,
+    // 鼠标压在哪一块板的哪一个面上（'px'/'nx'/'py'/'ny'/'pz'/'nz'）。只看方向，不看位置。
+    hoverFace: null,
     selected: null,
   };
 
-  const isFrontPanel = (panel) =>
-    panel.group === "door" || panel.group === "drawer_front";
-
-  // 材料只有两种，所以「透视」只用材质名判断；旧数据没有 material 时退回角色判断。
-  const isWhitePanel = (panel) =>
-    panel.material ? panel.material === "white" : isFrontPanel(panel);
-
+  // 开关作用在哪些板上：门板 / 抽屉面一组，背板 / 背拉条一组。
   const isSuppressed = (panel) =>
-    (!state.doors && isFrontPanel(panel)) ||
-    (!state.back && (panel.group === "back" || panel.group === "rail"));
+    (!state.doors && isFrontPanel(panel)) || (!state.back && BACK_TYPES.has(panel.panel_type));
 
-  // 三种状态：本色（木纹或白门）、悬停（琥珀色）、选中（蓝）。悬停/选中都把纹理压掉，
-  // 只留下纯色 + 自发光，鼠标扫到哪里一眼就能看出来。
+  // 三种状态：本色（木纹或白门）、悬停（描边琥珀 + 一点自发光）、选中（描边蓝 + 自发光）。
+  // **不换掉 `map`**：纹理要一直看得见，否则点一块板就看不见它的纹理方向了（踩过）。
   const LOOK = {
     normal: { emissive: 0x000000, emissiveIntensity: 1, edge: EDGE_COLOR, edgeOpacity: EDGE_OPACITY },
-    hover: { color: HOVER_COLOR, emissive: 0x8a4d00, emissiveIntensity: 0.85, edge: HOVER_COLOR, edgeOpacity: 1 },
-    select: { color: SELECT_COLOR, emissive: SELECT_COLOR, emissiveIntensity: 0.5, edge: SELECT_COLOR, edgeOpacity: 1 },
+    hover: { emissive: 0x8a4d00, emissiveIntensity: 0.22, edge: HOVER_COLOR, edgeOpacity: 1 },
+    select: { emissive: SELECT_COLOR, emissiveIntensity: 0.1, edge: SELECT_COLOR, edgeOpacity: 1 },
   };
 
   function paint() {
@@ -343,8 +415,26 @@ export function mountCabinetStructure(options) {
       const look = selected ? LOOK.select : hovered ? LOOK.hover : LOOK.normal;
       const highlighted = selected || hovered;
 
-      record.material.map = highlighted || isWhitePanel(panel) ? null : record.woodMap;
-      record.material.color.setHex(highlighted ? look.color : record.baseColor);
+      // 换到哪个面就看哪个面的重复次数。盒子的六个面各有各的 (u, v) 轴，同一块板上
+      // 「大面」和「小边」的尺寸差十倍，用同一组重复次数必然有一面被拉成条纹。
+      // 鼠标停在某块板上时，整体按它那个面的数铺——旁边一块板可能跟着变一下比例，
+      // 停手就复原；换来的是「手指哪儿，哪儿的纹理就是对的」。
+      //
+      // 重复次数改的是**那张木纹图**，所以不看 `material.map` 当前挂没挂：悬停/选中时
+      // map 会被摘掉回到纯色，若用 `material.map` 当条件，手指到哪块板，那块板的
+      // 比例就停在最后一次没被高亮时的数（踩过）。
+      if (record.grainFaces) {
+        const face = panel.id === state.hovered ? state.hoverFace : null;
+        const target = (face && record.grainFaces[face]) || record.grainFaces[record.homeFace];
+        record.woodMap.repeat.fromArray(target.repeat);
+      }
+
+      // 悬停 / 选中**保留木纹**，只加自发光并把描边换成醒目色。
+      //
+      // 原来这里是把 `map` 摘掉、整块涂成纯色——点一块板就看不见它的纹理了，
+      // 而"点板件 = 翻纹理"正是靠看纹理才能确认，于是现象成了「只有文字变了」。
+      record.material.map = isWhitePanel(panel) ? null : record.woodMap;
+      record.material.color.setHex(record.baseColor);
       record.material.emissive.setHex(highlighted ? look.emissive : 0x000000);
       record.material.emissiveIntensity = highlighted ? look.emissiveIntensity : 1;
       record.material.transparent = faded;
@@ -487,8 +577,219 @@ export function mountCabinetStructure(options) {
       dd.textContent = value;
       list.append(dt, dd);
     }
+    // 顺纹方向：这是**板件的属性**，点一下就在竖纹 / 横纹之间切换（不是查看器上的显示开关）。
+    // 只读分享的那一页不给改：`grainSave.editor` 缺了就当普通一行文字。
+    const grainDt = document.createElement("dt");
+    grainDt.textContent = "顺纹方向";
+    const grainDd = document.createElement("dd");
+    const direction = grainDirectionOf(panel);
+    const label = direction
+      ? `${GRAIN_DIRECTION_LABEL[direction]}${grainIsPending(panel.id) ? "（待保存）" : ""}`
+      : grainLabel(panel.grain.axis);
+    if (grainSave.editor && direction) {
+      // **点这一行才改纹理**（文字和画面同时变）。点板件只是选中——改数据不能和点选同一个动作。
+      const button = document.createElement("span");
+      button.className = "grainrow";
+      button.setAttribute("role", "button");
+      button.tabIndex = 0;
+      button.title = "点一下把这块板的纹理翻成另一种（竖纹 ⇄ 横纹）";
+      button.textContent = label;
+      button.addEventListener("click", () => toggleGrainDirection(panel.id));
+      grainDd.append(button);
+    } else {
+      grainDd.textContent = label;
+    }
+    list.append(grainDt, grainDd);
     detail.append(title, list);
+    renderGrainEditor();
   }
+
+  // 顺纹编辑：先攒着，点一次「保存并冻结」才提交一次修订。
+  // 攒的是「板件 id → 新轴」，只记**和当前不一样**的那些。
+  const grainEdits = new Map();
+
+  // 换个顺纹轴之后，六个面怎么摆——**口径由板件阶段给**（`grain_axes` / `grain_cycle_mm`
+  // 跟着投影来），这里只照着算，不自己定义规则。缺了那两项（旧投影）就不预览，
+  // 直接提交后由服务端算准的。
+  //
+  // 这条规则我在 Python 那边错过两次（「修好侧板就坏背板」），所以这里刻意做成
+  // 「数据驱动」：面是 u 还是 v 由投影说，转不转只看 u 是不是顺纹轴。
+  function grainUvFor(axis, panel) {
+    const table = panel.grain_axes;
+    const cycle = panel.grain_cycle_mm;
+    if (!Array.isArray(table) || !cycle) return null;
+    const index = { x: 0, y: 1, z: 2 }[axis];
+    const size = panel.size_mm;
+    const repeat = (span) => Math.min(4.5, Math.max(1, Math.abs(span) / cycle));
+    const faces = {};
+    let home = "";
+    let homeArea = -1;
+    for (const [face, [u, v]] of table) {
+      const rotate = index !== undefined && u !== index;
+      const [first, second] = rotate ? [v, u] : [u, v];
+      faces[face] = {
+        rotation: rotate ? Math.PI / 2 : 0,
+        repeat: [repeat(size[first]), repeat(size[second])],
+      };
+      const area = Math.abs(size[u]) * Math.abs(size[v]);
+      if (area > homeArea) {
+        home = face;
+        homeArea = area;
+      }
+    }
+    return { axis, rotation: faces[home].rotation, home, faces };
+  }
+
+  // 大面的长短边各落在柜体哪根轴上。
+  function grainPlaneAxes(panel) {
+    const table = panel.grain_axes;
+    const pair = Array.isArray(table) ? table.find(([face]) => face === panel.grain.home) : null;
+    if (!pair) return null;
+    const [, [u, v]] = pair;
+    const axisOf = { 0: "x", 1: "y", 2: "z" };
+    const spanOf = (index) => Math.abs(Number(panel.size_mm[index])) || 0;
+    const first = { axis: axisOf[u], span: spanOf(u) };
+    const second = { axis: axisOf[v], span: spanOf(v) };
+    return first.span >= second.span
+      ? { long: first.axis, short: second.axis }
+      : { long: second.axis, short: first.axis };
+  }
+
+  // 「竖纹」要的那根轴（长边）、「横纹」要的那根轴（短边）。
+  function grainPlaneAxis(panel, direction) {
+    const plane = grainPlaneAxes(panel);
+    if (!plane) return null;
+    return direction === "vertical" ? plane.long : plane.short;
+  }
+
+  // 这块板现在是竖纹还是横纹。
+  function grainDirectionOf(panel) {
+    const plane = grainPlaneAxes(panel);
+    if (!plane) return null;
+    return grainAxisOf(panel) === plane.long ? "vertical" : "horizontal";
+  }
+
+  const GRAIN_DIRECTION_LABEL = { vertical: "竖纹", horizontal: "横纹" };
+
+  function grainIsPending(panelId) {
+    return grainEdits.has(panelId);
+  }
+
+  function panelById(panelId) {
+    return panelList.find((panel) => panel.id === panelId) || null;
+  }
+
+  // 当前生效的方向：攒过的看攒的值，否则看板件自己的。
+  function grainAxisOf(panel) {
+    const edit = grainEdits.get(panel.id);
+    return edit ? edit.axis : panel.grain.axis;
+  }
+
+  // 点一下就在**竖纹 / 横纹**之间切一次，可以反复切。
+  //
+  // 「竖纹」= 顺这块板的**长边**、「横纹」= 顺短边。用长边而不是"柜体高"当判据，是因为
+  // 水平放的板（顶板 / 层板 / 底板 / 踢脚）大面在水平面里，两根轴都不落在柜体高上——
+  // "竖"对它们没有意义；而长边口径正好复现出那张默认表（侧板 580×1000、顶板 764×580、
+  // 背板 776×926 的长边分别是高、宽、高）。
+  //
+  // 攒的是「板件 id → {axis, from}」：`from` 是**切换后**的方向（清单里要显示）。
+  function toggleGrainDirection(panelId) {
+    const panel = panelById(panelId);
+    if (!panel) return;
+    const next = grainDirectionOf(panel) === "vertical" ? "horizontal" : "vertical";
+    const axis = grainPlaneAxis(panel, next);
+    if (axis === null) return;
+    if (axis === panel.grain_default) {
+      // 切回这种板的默认方向 = 这条改动没必要留着（存下去也是原样）。
+      grainEdits.delete(panelId);
+    } else {
+      grainEdits.set(panelId, { axis, from: next });
+    }
+    applyGrainAxis(panel);
+    if (state.selected === panelId) renderDetail(panel);
+    else renderGrainEditor();
+    paint();
+  }
+
+  // 画面跟着改：把新轴换算成六个面的摆法。
+  //
+  // **不要动 `panel.grain.axis`**（板件自己的那个值）。它是"改之前"的依据：改一次就把它
+  // 覆盖掉的话，再点一次算出来的"下一个方向"还是同一个，看起来就是"只能切一次、再点没反应"。
+  // 当前生效的方向一律由 `grainAxisOf()` 决定（攒过看攒的，否则看板件自己的）。
+  function applyGrainAxis(panel) {
+    const axis = grainAxisOf(panel);
+    const faces = grainUvFor(axis, panel);
+    if (!faces) return;
+    panel.grainView = { axis, faces: faces.faces, rotation: faces.rotation, home: faces.home };
+    const record = meshes.find((item) => item.panel.id === panel.id);
+    if (record && record.grainFaces) {
+      record.grainFaces = faces.faces;
+      record.homeFace = faces.home;
+      record.woodMap.rotation = faces.rotation;
+    }
+  }
+
+  // 「待保存」清单 + 保存按钮的可用状态。
+  //
+  // 这块区域**不属于顺纹**：以后别的板件属性也从这里改、一起存，所以它只显示"还没保存的
+  // 改动"和一颗「保存并冻结」，不叫「保存顺纹」。没有"放弃改动"——再点一次就切回去了，
+  // 想撤销直接切回原样即可。
+  function renderGrainEditor() {
+    const { editor, pending, save, status } = grainSave;
+    if (!editor) return;
+    editor.hidden = grainEdits.size === 0;
+    if (pending) {
+      pending.replaceChildren();
+      for (const [panelId, edit] of grainEdits) {
+        const panel = panelById(panelId);
+        const item = document.createElement("li");
+        const name = document.createElement("b");
+        name.textContent = panel ? panel.name : panelId;
+        // 说人话：这块板改成竖纹还是横纹，以及具体落在柜体哪根轴上。
+        item.append(
+          name,
+          document.createTextNode(
+            `${GRAIN_DIRECTION_LABEL[edit.from]}（${grainLabel(edit.axis)}）`
+          )
+        );
+        pending.append(item);
+      }
+    }
+    if (save) save.disabled = grainEdits.size === 0;
+    if (status) status.textContent = "";
+  }
+
+  // 保存这一页上所有还没落盘的改动，然后重新冻结。目前只有顺纹方向一种，
+  // 但接口本身就是"把攒下的改动一次提交"，别的属性接进来不用改这里。
+  async function saveChanges() {
+    const { url, version, save, status } = grainSave;
+    if (!url || !version || grainEdits.size === 0) return;
+    if (save) save.disabled = true;
+    if (status) status.textContent = "正在保存…";
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({
+          expected_version: version,
+          axes: Object.fromEntries([...grainEdits].map(([id, edit]) => [id, edit.axis])),
+        }),
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({}));
+        throw new Error(detail.detail?.message || detail.detail || `HTTP ${response.status}`);
+      }
+      // 存下去的是新的一版冻结板件：这一页读的还是旧的，所以直接刷新把新事实拉回来。
+      if (status) status.textContent = "已保存，正在重新载入…";
+      window.location.reload();
+    } catch (error) {
+      if (status) status.textContent = `没保存成功：${error.message}`;
+      if (save) save.disabled = false;
+    }
+  }
+
+  if (grainSave.save) grainSave.save.addEventListener("click", saveChanges);
 
   function select(panelId) {
     state.selected = panelId;
@@ -538,6 +839,19 @@ export function mountCabinetStructure(options) {
   const pointer = new THREE.Vector2();
   let downAt = null;
 
+  // 命中记录里的法线是**板件自己的**坐标（raycaster 换算过），盒子又是轴对齐缩放，
+  // 所以分量最大的那根轴、加上正负号，就是打在哪个面上。六个名字和 `grain.faces` 一致。
+  function faceKey(hit) {
+    const normal = hit.face.normal;
+    const axes = ["x", "y", "z"];
+    let best = 0;
+    for (let index = 1; index < 3; index += 1) {
+      if (Math.abs(normal[axes[index]]) > Math.abs(normal[axes[best]])) best = index;
+    }
+    return (normal[axes[best]] >= 0 ? "p" : "n") + axes[best];
+  }
+
+  // 返回 { panel, face }；没打到就是 null。面板页只关心这两样。
   function pick(event) {
     const rect = canvas.getBoundingClientRect();
     pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -547,7 +861,9 @@ export function mountCabinetStructure(options) {
       meshes.filter((record) => record.mesh.visible).map((record) => record.mesh),
       false
     );
-    return hits.length ? hits[0].object.userData.record.panel : null;
+    if (!hits.length) return null;
+    const hit = hits[0];
+    return { panel: hit.object.userData.record.panel, face: faceKey(hit) };
   }
 
   canvas.addEventListener("pointerdown", (event) => {
@@ -558,14 +874,19 @@ export function mountCabinetStructure(options) {
     const moved = Math.hypot(event.clientX - downAt.x, event.clientY - downAt.y);
     downAt = null;
     if (moved > 4) return;
-    const panel = pick(event);
-    select(panel && panel.id !== state.selected ? panel.id : null);
+    const found = pick(event);
+    // 点板件**只选中**，不改任何东西。改纹理在右边「顺纹方向」那一行上——
+    // 点一下就改数据太容易误伤（点选本来是最常用的动作）。
+    select(found ? found.panel.id : null);
   });
   canvas.addEventListener("pointermove", (event) => {
-    const panel = pick(event);
+    const found = pick(event);
+    const panel = found ? found.panel : null;
     const hoveredId = panel ? panel.id : null;
-    if (hoveredId !== state.hovered) {
+    const face = found ? found.face : null;
+    if (hoveredId !== state.hovered || face !== state.hoverFace) {
       state.hovered = hoveredId;
+      state.hoverFace = face;
       paint();
     }
     if (hover) {
@@ -581,8 +902,9 @@ export function mountCabinetStructure(options) {
     }
   });
   canvas.addEventListener("pointerleave", () => {
-    if (state.hovered !== null) {
+    if (state.hovered !== null || state.hoverFace !== null) {
       state.hovered = null;
+      state.hoverFace = null;
       paint();
     }
     if (hover) hover.style.display = "none";
@@ -618,6 +940,7 @@ export function mountCabinetStructure(options) {
     renderer.setSize(canvas.clientWidth || 960, canvas.clientHeight || 640, false);
   });
 
+
   // 地址栏可以指点初始状态：`?view=front&doors=0&wire=1&explode=60`。
   // 只影响打开时看哪一面，不改数据——分享一个视角、或者截图核对都靠它。
   const query = new URLSearchParams(window.location.search);
@@ -650,6 +973,10 @@ export function mountCabinetStructure(options) {
       color: record.material.color.hex,
       size: record.mesh.scale.toArray(),
       pos: record.mesh.position.toArray(),
+      // 顺纹方向与当前实际用的重复次数：核对「横纹的板有没有转 90°」靠这两个。
+      grain: record.panel.grain.axis,
+      mapRotation: record.material.map ? record.material.map.rotation : null,
+      mapRepeat: record.material.map ? record.material.map.repeat.toArray() : null,
     }));
     document.title = `PROBE ${JSON.stringify({
       camera: camera.position.toArray().map((value) => Math.round(value)),
@@ -664,8 +991,9 @@ export function mountCabinetStructure(options) {
     toggle,
     setExplode,
     /** 页面上由指针位置驱动；这里留一个入口，验收脚本才能核对变色。 */
-    hover(panelId) {
+    hover(panelId, face) {
       state.hovered = panelId || null;
+      state.hoverFace = face || null;
       paint();
     },
     state,

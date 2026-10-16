@@ -17,6 +17,13 @@
 
 **覆盖**：单柜双门 / 带层板的衣柜 / 吊柜 / 两台柜的工程。
 下游（制造、特征树、CAD、交付）由板件派生，不在这里单独钉。
+
+**改动记录**
+
+- 2026-10-16：给每块板加了 `grain_axis`（顺纹方向），于是四份摘要全变。
+  已核对**只多了这个字段**：把 `grain_axis` 递归摘掉之后，四份摘要与改之前的基线
+  逐字相同（尺寸、位置、接触、装配一个都没动）。加它是因为顺纹方向是板件的属性，
+  要能按订单改、并随板件一起冻结；默认值由板件类型在 `grain_rules.GRAIN_BY_TYPE` 给。
 """
 
 from __future__ import annotations
@@ -44,11 +51,12 @@ from panel_fixtures import panel_parameters
 from workflow_test_support import confirm_through
 
 #: 冻结的板件产出摘要。改动它之前先读文件头部的"重新生成"一节。
+#: 2026-10-16 因新增 `grain_axis` 字段重新生成（见头部"改动记录"）。
 _BASELINE = {
-    "single_double_door": "16bbd676f15a289d6d15bb6342ae86ddcdf970d803b606ca58209990ffd6c5e5",
-    "wardrobe_with_shelves": "30aa5f2cb906e35fb8b29d569c438c4c36e90439fbc7814c637290be4a67b82b",
-    "wall_cabinet": "950c0f88ccbabbd742464daacfe3c733406c8caefd50f2d3da73296750c2fb16",
-    "two_cabinets": "5fd88a69b61c4f70d20edbc02f7d8feca94af4c453038df6d834f68409b0091b",
+    "single_double_door": "8a00bdbaf38e7e92eef1024bc00331e55ae3048765670e275e283ba1b3dc321c",
+    "wardrobe_with_shelves": "b8ea2f82c35583a2397d7bba66aab54b988dd5d87aabc6dfc43c0ab92a74a688",
+    "wall_cabinet": "588de00c090b44219543367f616f689c207cdefd7ccaa5eafc52a003485347a6",
+    "two_cabinets": "9182789556d708b85f4db88bc4dd5bc116365f3425195f804b99e4a355113c79",
 }
 
 

@@ -46,6 +46,7 @@ from furniture_panel_planning.cabinet_panel_page import (
 )
 from furniture_layout.project_list import render_project_list
 from furniture_layout.open_preview import (
+    panel_version,
     preview_server_is_up,
     preview_page_data,
     project_list_url,
@@ -58,6 +59,7 @@ from furniture_workflow.project_layout_edit import (
     VersionConflict,
     edit_project_decisions,
     edit_project_layout,
+    save_cabinet_grain,
     undo_layout_edit,
 )
 from furniture_workflow.workflow_lease import (
@@ -246,6 +248,20 @@ class ProjectDecisionRequest(BaseModel):
     expected_version: str = Field(..., min_length=1, description="页面最近看到的 version")
     action: str = Field(..., pattern="^(confirm|withdraw)$")
     target: str = Field(..., min_length=1, description="要表态的那条 decision id")
+
+
+class CabinetGrainSaveRequest(BaseModel):
+    """页面上改若干块板的**顺纹方向**，然后重新冻结板件。
+
+    `axes` 是「板件 id → 顺纹轴」：`x` 沿宽 / `y` 沿深 / `z` 沿高 / `none` 不限。
+    只递板件 id 和轴，其它一律由服务端按冻结结构自己去查——页面递不进自由文本，
+    也改不了尺寸位置。一次请求只改这一台柜。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_version: str = Field(..., min_length=1, description="页面最近看到的 version")
+    axes: dict[str, str] = Field(..., min_length=1, description="板件 id → 顺纹轴")
 
 
 @app.get("/health")
@@ -583,6 +599,7 @@ def structure_for_panel_page(
 async def project_cabinet_panels(
     project_id: str,
     cabinet_id: str,
+    request: Request,
     mode: str | None = None,
 ) -> HTMLResponse:
     """这一台的板件页。外形来自最新布局；结构来自已确认冻结板件（没有就只画外形）。"""
@@ -594,6 +611,11 @@ async def project_cabinet_panels(
     except CabinetNotExecutable as exc:
         raise HTTPException(status_code=422, detail="这件只占位置") from exc
     structure, stage_note = structure_for_panel_page(project, cabinet_id)
+    # 「保存并冻结」要带 version 回来，服务端据此拒绝拿过期画面覆盖新内容。
+    # 这里给的是**板件**版本（`panel_version`），不是布局版本——改的只有板件，
+    # 布局摘要不会动，拿它当版本号这道门等于没有。
+    # 只读分享那一页不给——它也不显示保存入口（门在 `may_edit()`）。
+    editable = may_edit(request) and mode != "view"
     return HTMLResponse(
         content=render_cabinet_panel_page(
             project_id,
@@ -601,6 +623,7 @@ async def project_cabinet_panels(
             share=mode == "view",
             structure=structure,
             stage_note=stage_note,
+            expected_version=panel_version(project.latest) if editable else "",
         )
     )
 
@@ -649,6 +672,50 @@ async def edit_project_layout_endpoint(
             project,
             payload,
             expected_version=expected_version,
+            workspace_root=WORKSPACE_ROOT,
+            store_root=STORE_ROOT,
+            lease_token=request.headers.get(_LEASE_HEADER) or None,
+        )
+    except LeaseHeld as exc:
+        raise HTTPException(status_code=423, detail=_lease_held_detail(exc)) from exc
+    except LayoutEditDisabled as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except VersionConflict as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": str(exc),
+                "current_version": exc.current_version,
+            },
+        ) from exc
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/api/project/{project_id}/cabinets/{cabinet_id}/grain")
+async def save_cabinet_grain_endpoint(
+    project_id: str,
+    cabinet_id: str,
+    req: CabinetGrainSaveRequest,
+    request: Request,
+):
+    """改一台柜子里若干块板的顺纹方向：落一个新 Revision 并**重新冻结**板件。
+
+    与布局编辑同一套门：本机来源 → 灰度开关 → 编辑租约 → 版本对得上。任何一步不过都不落盘。
+
+    注意它会**作废下游**（制造 / BOM / CAD / 交付）：顺纹方向是板件的属性，改了它，
+    依赖板件的那几份产物就不再对应当前板件。这是有意的——页面上的「保存并冻结」
+    必须把这件事说清楚。
+    """
+    if not may_edit(request):
+        raise HTTPException(status_code=403, detail="changing panel grain is local only")
+    project = _load_project(project_id)
+    try:
+        return save_cabinet_grain(
+            project,
+            cabinet_id,
+            req.axes,
+            expected_version=req.expected_version,
             workspace_root=WORKSPACE_ROOT,
             store_root=STORE_ROOT,
             lease_token=request.headers.get(_LEASE_HEADER) or None,

@@ -130,7 +130,8 @@ store/<project-id>/
 | DELETE | `/api/project/{project_id}/edit-lease` | 归还编辑权（写 · 本机） |
 | POST | `/api/project/{project_id}/edit-lease/takeover` | 强制收回编辑权（写 · 本机） |
 | GET | `/api/project/{project_id}/preview` | 布局页。订阅事件，版本变了才重画。本机来源可改，其余只读 |
-| GET | `/api/project/{project_id}/cabinets/{cabinet_id}/panels` | 这一台的板件页。读最新布局里已保存的外形，不确认布局，不写板件 |
+| GET | `/api/project/{project_id}/cabinets/{cabinet_id}/panels` | 这一台的板件页。读最新布局里已保存的外形，不确认布局，不写板件；本机来源的页面上可以改**顺纹方向**并保存（见下） |
+| POST | `/api/project/{project_id}/cabinets/{cabinet_id}/grain` | 改这一台里若干块板的顺纹方向：落新 Revision 并**重新冻结**板件（写 · 本机 · 灰度 · 编辑租约 · 版本对得上） |
 | GET | `/projects` | 已有项目名单：名字、日期、布局已确认或还没确认 |
 | GET | `/api/projects` | 同一份名单的 JSON。读不动的 `project.json` 跳过 |
 | POST | `/api/preview/shutdown` | 本机请求后让预览服务干净退出（写 · 本机） |
@@ -139,7 +140,12 @@ store/<project-id>/
 
 另有 `GET /health` 与 `GET /`（链到项目列表和 Swagger）。直接运行 `domain/skills/layout-plan/scripts/open_projects.py` 时浏览器打开 `/projects`，并在这个进程里打开页面写回（`FURNITURE_PROJECT_LAYOUT_EDIT=1`）。项目名单页由布局阶段的 `furniture_layout/project_list.py` 画出。不经过这个入口时，写回仍默认关闭。缺场景或项目返回 404，参数或校验不通过返回 422。`project_id` 只允许英文字母、数字、`-` 和 `_`。
 
-写权限（`may_edit`）：**有副作用的端点只对本机来源开放**——停进程（`/api/preview/shutdown`）、页面在场（`/api/preview/presence`）、保存场景（`/api/room-scene/save`）、编辑场景（`/api/room-scene/{scene_id}/edit`）、出房间 CAD（`/api/plan-room/cad`，会写源文件与 STEP）、改项目布局（`/api/project/{project_id}/layout/edit`）、编辑租约三个端点。非本机来源一律 403，且在动手之前就拒（不能先写一半再报错）。判据只有 `server.access_scope()` 一处，只看 `request.client.host`；**URL 参数不是权限**——`?mode=view` 这类只是页面表达，地址栏谁都能改，门必须在服务端。将来要给外人只读分享，在这一处多认一种凭证（新增 `shared` 来源），各端点不用动。读端点不受限（服务本来只监听 `127.0.0.1`）。外网分享的 token 形态与开门顺序见 [访问模式与外网分享](preview-access-design.md)。
+写权限（`may_edit`）：**有副作用的端点只对本机来源开放**——停进程（`/api/preview/shutdown`）、页面在场（`/api/preview/presence`）、保存场景（`/api/room-scene/save`）、编辑场景（`/api/room-scene/{scene_id}/edit`）、出房间 CAD（`/api/plan-room/cad`，会写源文件与 STEP）、改项目布局（`/api/project/{project_id}/layout/edit`）、改板件顺纹（`/api/project/{project_id}/cabinets/{cabinet_id}/grain`）、编辑租约三个端点。非本机来源一律 403，且在动手之前就拒（不能先写一半再报错）。判据只有 `server.access_scope()` 一处，只看 `request.client.host`；**URL 参数不是权限**——`?mode=view` 这类只是页面表达，地址栏谁都能改，门必须在服务端。将来要给外人只读分享，在这一处多认一种凭证（新增 `shared` 来源），各端点不用动。读端点不受限（服务本来只监听 `127.0.0.1`）。外网分享的 token 形态与开门顺序见 [访问模式与外网分享](preview-access-design.md)。
+
+**改顺纹方向（板件的属性，不是显示开关）**：`grain_axis` 是**板件自己的字段**（`x` 沿宽 / `y` 沿深 / `z` 沿高 / `none` 不限），默认值由板件类型在 `furniture_panel_planning/grain_rules.py` 给，随板件一起进冻结文件。板件页上在 3D 里**点板件只是选中**，改纹理要点右侧详情里的**顺纹方向**那一行（竖纹 ⇄ 横纹，可反复点），改的那些先攒在页面上，点一次**保存并冻结**才提交一次：
+`POST /api/project/{project_id}/cabinets/{cabinet_id}/grain`，body = `{expected_version, axes: {板件 id: 轴}}`，与布局编辑同一套门（本机来源 → `FURNITURE_PROJECT_LAYOUT_EDIT=1` → 编辑租约 → 版本对得上），任何一道不过都不落盘。
+**这里的 `expected_version` 是板件版本（`open_preview.panel_version()`），不是布局版本**：改的只有板件，`layout_sha256` 一个字不变，拿布局版本比的话这道门等于没有（旧画面重放会通过——实测拿到过 200）。布局编辑那两个端点仍用 `layout_version()`。
+落法**不是**原地改冻结文件，而是 `revise_stage_output(panel_plan)` 追加一个新 Revision（按规矩作废下游产出与确认）后立刻重新确认，把新内容冻成新的 `<sha256>.json`——**只留一处事实**：制造 / BOM / CAD / 交付读的就是这一份，不必知道有"顺纹覆盖"这种东西。所以要清楚它的代价：**改一块板的顺纹 = 下游（制造 / BOM / CAD / 交付）全部作废**，页面上那句提示就是这个意思。板件 id 由服务端在冻结结构里查，页面递不进自由文本，也改不了尺寸与位置。**已知缺口**：制造阶段还没有消费这个字段（`ConfirmedPanel` 里没有它，`admit_panels()` 静默忽略多余字段），要做"按顺纹排版/开料"得先扩那个模型。
 
 **编辑租约（谁在写）**：写权限回答"这台机器上能不能写"，租约回答"**此刻轮到谁写**"。同一个项目的页面（拖动）与助手（对话）都能改，两边同时改就会互相覆盖——`expected_version` 只能事后发现（409），租约事前就分开。它落在 `<store>/<project-id>/edit-lease.json`（tmp + replace 原子写），**因为写者不在同一个进程里**：页面走 HTTP 服务进程、助手直接调 orchestrator，内存里的锁互相看不见。规矩三条：① 助手的锁 `LEASE_TTL_SECONDS=45`，一步一续；布局页的锁在事件连接打开时钉一次，连接结束就归还，中间不改文件（套接字一直没断时，这次写下的时间到了才失效）；② 被别人持有就是 `LeaseHeld`，**不静默接管**——人把活交给助手 = 授权让出，由 `handover_to_agent()` 显式转移并让页面显示「助手正在处理」，页面拿到的是 **423**（带 `holder` / `label` / `expires_in`）；③ `transfer()` 让人**随时抢得回来**（页面的「收回编辑权」按钮走 `/edit-lease/takeover`）——租约不是用来把主人关在门外的。写请求带 `X-Edit-Lease: <token>`；租约空闲或持在调用方手里才放行。状态码分工：**403** 不许写 · **409** 信息过期 · **422** 改动不合法 · **423** 编辑权在别人手里。
 

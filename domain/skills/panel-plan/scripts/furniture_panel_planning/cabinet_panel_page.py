@@ -7,11 +7,17 @@
 from __future__ import annotations
 
 import json
+import math
 from html import escape
 from typing import Any, Mapping, Sequence
 from urllib.parse import urlencode
 
 from .assembly_tree import flatten_panels_for_handoff
+from .grain_rules import (
+    default_grain_axis,
+    grain_axis_index,
+    grain_axis_of,
+)
 
 #: 板件角色 → 页面上的**材质**。整台柜子只有两种材料：柜体一种木纹，门板白色纯色。
 #: 角色仍然逐块带在数据里、列在清单里，只是不再各画一个颜色。
@@ -34,6 +40,82 @@ _ASSEMBLY_KINDS = (
     ("fronts", "门板"),
     ("drawers", "抽屉盒"),
 )
+
+# 顺纹方向的**默认值**在板件阶段自己的 `grain_rules.py`（那是板件的属性，会进冻结文件）。
+# 这里只负责把它换算成「每个面怎么摆贴图」。别把那张表搬回来——页面模块不该是它的家。
+
+#: 一张木纹图在真实世界里铺多长（毫米）。贴图重复次数按板件的实际尺寸算，
+#: 尺寸不同的板才算得出同一套纹理比例。
+GRAIN_CYCLE_MM = 220.0
+
+#: 盒子几何每个面的 (u 轴, v 轴) 在**板件自己的尺寸**里的下标（x=0 / y=1 / z=2）。
+#: u 是贴图横向、v 是贴图纵向。
+#:
+#: 这张表是**在页面上量出来的**，不是从 three.js 源码推的——推那一次推反了，
+#: 侧板木纹由竖变横。可复现的量法：把木纹图画成「一条从左上到右下的对角线」，
+#: 看它在板件上朝哪边斜（对角线不会和它转 90° 的样子混淆），再配上左右/等轴视图
+#: 数一下横向与纵向的相邻像素差。量出来的结论就是下面这张表：三根轴的 v 分别落在
+#: 柜体高(y)、柜体宽(z)、柜体高(y) 上。
+_FACE_AXES: dict[str, tuple[int, int]] = {
+    "px": (2, 1),
+    "nx": (2, 1),
+    "py": (0, 2),
+    "ny": (0, 2),
+    "pz": (0, 1),
+    "nz": (0, 1),
+}
+
+
+def panel_grain_axis(panel: Mapping[str, Any]) -> str:
+    """这块板的顺纹方向。
+
+    板上带着就用板上的（那是它冻结时定下的属性，可能是这个订单特意改过的）；
+    没带（旧冻结文件）按类型取默认。实现在板件阶段的 `grain_rules.py`。
+    """
+    return grain_axis_of(panel)
+
+
+def _grain_uv(grain_axis: str, size: Sequence[float]) -> dict[str, Any]:
+    """顺纹轴 → **每个面**怎么铺这张木纹图（转多少、重复几次）。
+
+    木纹在贴图上画成一条条横线，线的方向是贴图的 **u 轴**（横向）。所以要让纹路顺着
+    柜体的某根轴走，就得让那根轴落在贴图的 u 上：**面的 u 轴不是顺纹轴时，把这个面转
+    90°**。每个面单独判，不能整台柜子用一个旋转值——`px`（侧板大面）的 u 是柜体高、
+    `py`（背板大面）的 u 是柜体宽，同一个「顺纹沿高」在两张面上要的旋转正好相反。
+    这里用一个全局旋转值错过两次，症状是「修好侧板就坏背板」。
+
+    顺纹轴是**板件的属性**（`grain_axis`），这个函数只负责换算成摆法。
+
+    重复次数给的是（按贴图横向、纵向各铺几遍）。纹路画在贴图横向上、又是无方向噪声，
+    所以两组数只决定纹理在板上的疏密，不影响横竖。
+    """
+    want = grain_axis_index(grain_axis)
+    faces: dict[str, Any] = {}
+    home = ""
+    home_area = -1.0
+    for face, (u, v) in _FACE_AXES.items():
+        rotate = want is not None and u != want
+        first, second = (u, v) if not rotate else (v, u)
+        faces[face] = {
+            "rotation": math.pi / 2 if rotate else 0.0,
+            "repeat": [_grain_repeat(size[first]), _grain_repeat(size[second])],
+        }
+        area = abs(size[u]) * abs(size[v])
+        if area > home_area:
+            home, home_area = face, area
+    #: `home` 是面积最大的那个面——不指着任何一块板的时候，整台柜子就按它铺。
+    #: 转不转跟着那个面自己走，所以顺纹方向仍然由板件带的那根轴决定。
+    return {
+        "axis": grain_axis,
+        "rotation": faces[home]["rotation"],
+        "home": home,
+        "faces": faces,
+    }
+
+
+def _grain_repeat(span_mm: float) -> float:
+    """这根轴铺几遍。夹在 1–4.5 之间：太小看不出是木纹，太大就成了密条纹。"""
+    return min(4.5, max(1.0, abs(span_mm) / GRAIN_CYCLE_MM))
 
 
 def panel_material(panel: Mapping[str, Any]) -> str:
@@ -110,6 +192,13 @@ def _panel_view(panel: Mapping[str, Any], kinds: Mapping[str, str]) -> dict[str,
     assembly = kinds.get(assembly_id)
     if assembly is None:
         assembly = "drawers" if str(panel.get("panel_type", "")).startswith("drawer") else "carcass"
+    size = [
+        _number(panel.get("size_x")),
+        _number(panel.get("size_y")),
+        _number(panel.get("size_z")),
+    ]
+    # 顺纹轴是板件自己的属性；页面上要能看出哪几块是这个订单特意改过的。
+    grain_axis = panel_grain_axis(panel)
     return {
         "id": panel_id,
         "name": str(panel.get("name") or panel_id),
@@ -118,16 +207,18 @@ def _panel_view(panel: Mapping[str, Any], kinds: Mapping[str, str]) -> dict[str,
         "assembly": assembly,
         "material": panel_material(panel),
         "material_role": str(panel.get("material_role") or ""),
-        "size_mm": [
-            _number(panel.get("size_x")),
-            _number(panel.get("size_y")),
-            _number(panel.get("size_z")),
-        ],
+        "size_mm": size,
         "pos_mm": [
             _number(panel.get("pos_x")),
             _number(panel.get("pos_y")),
             _number(panel.get("pos_z")),
         ],
+        "grain": _grain_uv(grain_axis, size),
+        #: 该类型的**默认**方向；和 `grain.axis` 不同就说明这块被改过（页面据此标记）。
+        "grain_default": default_grain_axis(str(panel.get("panel_type") or "")),
+        #: 六个面的 (u 轴, v 轴) 与换算口径（`panel_grain_uv()`），左右跟着投影走。
+        "grain_axes": list(_FACE_AXES.items()),
+        "grain_cycle_mm": GRAIN_CYCLE_MM,
         "inner_face": str(panel.get("inner_face") or ""),
         "outer_face": str(panel.get("outer_face") or ""),
         "depends_on": [str(item) for item in panel.get("depends_on") or []],
@@ -232,6 +323,11 @@ canvas{width:100%;height:100%;display:block;touch-action:none}
 .chip[aria-pressed="true"]{background:#2563eb;border-color:#2563eb;color:#fff}
 .slider{display:flex;align-items:center;gap:8px;font-size:12px;color:#334155;padding:2px 6px}
 .slider input{width:120px}
+/* 木纹调节：预设一行、滑杆一行，展开后占满 tools 那一列的宽度。 */
+.grainbox{display:flex;flex-direction:column;gap:6px;width:100%;padding-top:2px}
+.grainline{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.grainline .slider input[type=range]{width:90px}
+.grainline input[type=color]{width:34px;height:22px;padding:0;border:1px solid var(--line);border-radius:5px;background:#fff;cursor:pointer}
 .hint{left:12px;bottom:12px;background:rgba(255,255,255,.94);border:1px solid var(--line);border-radius:10px;padding:7px 11px;font-size:11.5px;color:#475569;max-width:60%}
 .hint b{color:var(--ink)}
 .legend{right:12px;bottom:12px;background:rgba(255,255,255,.94);border:1px solid var(--line);border-radius:10px;padding:8px 11px;font-size:11.5px;color:#475569;max-width:40%}
@@ -240,6 +336,8 @@ canvas{width:100%;height:100%;display:block;touch-action:none}
 .swatch{width:11px;height:11px;border-radius:3px;border:1px solid rgba(15,23,42,.25);flex:none}
 .swatch.wood{background:repeating-linear-gradient(115deg,#c79a63 0 2px,#b98b52 2px 4px,#c99f6c 4px 7px)}
 .swatch.white{background:linear-gradient(150deg,#ffffff,#e8eaee)}
+/* 图例上的顺纹方向：跟画面一样，横纹转 90°，竖纹不转。 */
+.swatch.across{background:repeating-linear-gradient(0deg,#c79a63 0 2px,#b98b52 2px 4px,#c99f6c 4px 7px)}
 #hover{position:absolute;pointer-events:none;z-index:4;background:#0f172a;color:#fff;font-size:11px;padding:4px 8px;border-radius:6px;display:none;white-space:nowrap;transform:translate(10px,10px)}
 aside{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px;overflow-y:auto;min-height:0}
 aside h2{font-size:12.5px;margin:16px 0 8px;color:#334155}
@@ -265,6 +363,19 @@ p{margin:12px 0 0;font-size:12.5px;line-height:1.6;color:var(--muted)}
 .empty{border-left:3px solid #f59e0b;background:#fffbeb;border-radius:8px;padding:10px 12px;font-size:12.5px;line-height:1.7;color:#78350f}
 #detail{border:1px solid var(--line);border-radius:11px;padding:10px 12px;margin-top:10px;background:#f8fafc}
 #detail strong{display:block;font-size:13px;margin-bottom:6px}
+/* 顺纹编辑：改的是板件属性、要重新冻结，所以和「调整木纹」那种只看效果的控件分开。 */
+#grain-editor{margin-top:14px;border-top:1px solid var(--line);padding-top:10px}
+#grain-editor h2{margin-top:0}
+ul.grainpending{list-style:none;margin:8px 0;padding:0;display:grid;gap:4px;font-size:12px}
+ul.grainpending li{display:flex;align-items:center;gap:6px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:7px;padding:4px 8px}
+ul.grainpending b{font-weight:600}
+.grainactions{display:flex;gap:8px;margin-top:8px}
+.chip.primary{background:#2563eb;border-color:#2563eb;color:#fff}
+.chip.primary:disabled{background:#94a3b8;border-color:#94a3b8;cursor:default}
+p.warn{color:#92400e;background:#fffbeb;border-left:3px solid #f59e0b;border-radius:6px;padding:8px 10px;margin-top:8px}
+/* 详情里可点的「顺纹方向」：点一下换纹理。 */
+.grainrow{cursor:pointer;border-bottom:1px dashed #94a3b8}
+.grainrow:hover{color:#1d4ed8;border-bottom-color:#1d4ed8}
 @media (max-width:1000px){.workspace{grid-template-columns:minmax(0,1fr)}}
 """
 
@@ -278,6 +389,7 @@ def _render_structure_page(
     back_href: str,
     shutdown: str,
     badge: str,
+    expected_version: str = "",
 ) -> str:
     title = escape(f"{label} · 柜体结构")
     payload = _json_for_script(structure)
@@ -285,6 +397,12 @@ def _render_structure_page(
         f'<li><span class="swatch {escape(str(item["material"]), quote=True)}"></span>'
         f'{escape(str(item["label"]))} <span class="num">×{int(item["count"])}</span></li>'
         for item in structure["materials"]
+    )
+    # 顺纹方向也画在图例上：竖纹不转、横纹转 90°，跟画面用的是同一条规则。
+    legend += (
+        '<li><span class="swatch wood"></span>顺纹沿高（侧板·门板·背板）</li>'
+        '<li><span class="swatch across"></span>顺纹沿宽（层板·顶底·踢脚）</li>'
+        '<li><span class="swatch wood"></span>背拉条不限方向</li>'
     )
     filters = "".join(
         f'<label><input type="checkbox" data-assembly="{escape(str(item["kind"]), quote=True)}" checked>'
@@ -314,7 +432,7 @@ def _render_structure_page(
   </header>
   <div class="workspace">
     <section class="stage">
-      <canvas id="scene" aria-label="这台柜子已确认的板件结构。拖动转动，滚轮缩放，点板件看尺寸。"></canvas>
+      <canvas id="scene" aria-label="这台柜子已确认的板件结构。拖动转动，滚轮缩放，点板件看尺寸与顺纹方向。"></canvas>
       <div class="overlay tools">
         <div class="panelbox">
           <span class="title">视角</span>
@@ -333,11 +451,26 @@ def _render_structure_page(
           <span class="slider">拆开 <input type="range" id="explode" min="0" max="100" value="0" step="1"></span>
         </div>
       </div>
-      <div class="overlay hint"><b>拖动</b>转动 · <b>滚轮</b>缩放 · <b>点板件</b>看尺寸，鼠标扫过会变色。柜体一种木纹，门板白色，这里读的是已确认冻结的板件。</div>
+      <div class="overlay hint"><b>点板件</b>只选中（不改任何东西）· <b>拖动</b>转动 · <b>滚轮</b>缩放。要改纹理，选中后在右侧详情的<b>顺纹方向</b>上点一下：竖纹 ⇄ 横纹。</div>
       <div class="overlay legend"><ul>{legend}</ul></div>
       <div id="hover"></div>
     </section>
     <aside>
+      <!-- 选中一块板之后，「详情」要立刻看得见：放在板件清单**上面**，
+           不然它落在清单下面、要滚动才看得到（点了一行却像没反应）。 -->
+      <div id="detail" hidden></div>
+      <!-- 这块是「这一页上还没落盘的改动」，不是顺纹专用的：以后别的板件属性也从这里改、
+           一起冻结，所以按钮叫「保存并冻结」而不是「保存顺纹」。没有放弃按钮——再点一次
+           就切回去了。 -->
+      <div id="grain-editor" hidden>
+        <h2>待保存的改动</h2>
+        <ul class="grainpending" id="grain-pending"></ul>
+        <div class="grainactions">
+          <button type="button" class="chip primary" id="grain-save">保存并冻结</button>
+        </div>
+        <p class="warn">保存会落一个新版本、重新冻结板件，并按规矩作废下游（制造 / BOM / CAD / 交付）——改了板件的属性，那些产物就不再对应当前的板件。</p>
+        <p id="grain-status"></p>
+      </div>
       <h2>外形与构造</h2>
       <dl class="kv" id="summary"></dl>
       <h2>按装配筛选</h2>
@@ -347,8 +480,7 @@ def _render_structure_page(
         <thead><tr><th>板件</th><th class="num">尺寸 mm</th><th class="num">位置 mm</th></tr></thead>
         <tbody id="panel-rows"></tbody>
       </table>
-      <div id="detail" hidden></div>
-      <p>位置是板件原点（左后下角）在柜体坐标里的毫米数。颜色按角色分组，只用于看清结构。</p>
+      <p>位置是板件原点（左后下角）在柜体坐标里的毫米数。颜色区分材料：柜体木纹，门板白色。选中一块板后，详情里的<b>顺纹方向</b>可以点：<b>竖纹 ⇄ 横纹</b>；改过的在上面列出来，点「保存并冻结」才落盘。</p>
     </aside>
   </div>
 </main>
@@ -358,7 +490,8 @@ def _render_structure_page(
 </script>
 <script type="module">
 import {{ mountCabinetStructure }} from "/layout-view/cabinet_structure.js";
-mountCabinetStructure({{
+// 挂到 window 上，方便在控制台核对：`page.__test`。
+const page = mountCabinetStructure({{
   canvas: document.getElementById("scene"),
   payload: JSON.parse(document.getElementById("cabinet-structure").textContent),
   hover: document.getElementById("hover"),
@@ -374,7 +507,16 @@ mountCabinetStructure({{
     wire: document.getElementById("toggle-wire"),
     explode: document.getElementById("explode"),
   }},
+  grainSave: {{
+    url: "/api/project/{escape(project_id, quote=True)}/cabinets/{escape(str(structure["cabinet_id"]), quote=True)}/grain",
+    version: {json.dumps(expected_version)},
+    editor: document.getElementById("grain-editor"),
+    pending: document.getElementById("grain-pending"),
+    save: document.getElementById("grain-save"),
+    status: document.getElementById("grain-status"),
+  }},
 }});
+window.page = page;
 function pulse(){{
   fetch("/api/preview/presence", {{method:"POST", cache:"no-store", keepalive:true}}).catch(()=>{{}});
 }}
@@ -530,12 +672,17 @@ def render_cabinet_panel_page(
     share: bool = False,
     structure: Mapping[str, Any] | None = None,
     stage_note: str = "",
+    expected_version: str = "",
 ) -> str:
     """这一台的板件页。
 
     `structure` 是已确认冻结板件的投影（`panel_structure_view()` 的结果）。给了就画结构，
     没给只画外形——**页面不自己去读冻结文件，也不替板件阶段生成**。`stage_note` 说明
     为什么没有结构（未确认 / 冻结文件缺了 / 冻结文件里没有这台柜）。
+
+    `expected_version` 是这份**板件**画面的版本号（`open_preview.panel_version()`），
+    交给页面在「保存并冻结」时带回去：服务端据此拒绝拿过期画面覆盖新内容。
+    只读分享（`share`）不给它，那一页也不显示保存入口。
     """
     back_query = {"room": cabinet["room_id"], "item": cabinet["id"]}
     if share:
@@ -557,7 +704,7 @@ def render_cabinet_panel_page(
     badge = (
         "只读分享 · 链接可转发"
         if share
-        else "已确认冻结板件 · 点板件看尺寸，透视看内部"
+        else "已确认冻结板件 · 点板件看尺寸，点「顺纹方向」可改；透视看内部"
     )
     return _render_structure_page(
         project_id=project_id,
@@ -567,4 +714,5 @@ def render_cabinet_panel_page(
         back_href=back_href,
         shutdown=shutdown,
         badge=badge,
+        expected_version=expected_version,
     )

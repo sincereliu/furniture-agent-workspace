@@ -22,14 +22,16 @@
 from __future__ import annotations
 
 import os
+from copy import deepcopy
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
 from furniture_layout.project_edit import apply_layout_edit
+from furniture_panel_planning.grain_rules import normalize_grain_axis
 
-from furniture_layout.open_preview import layout_version, preview_page_data
+from furniture_layout.open_preview import layout_version, panel_version, preview_page_data
 from .workflow_decisions import (
     admit_decisions,
     append_decisions,
@@ -187,6 +189,106 @@ def edit_project_decisions(
     document = preview_page_data(project, store_root=store_root)
     document["decided"] = added
     return document
+
+
+def save_cabinet_grain(
+    project: Project,
+    cabinet_id: str,
+    axes: Mapping[str, str],
+    *,
+    expected_version: str,
+    workspace_root: str | Path,
+    store_root: str | Path,
+    lease_token: str | None = None,
+) -> dict[str, Any]:
+    """改一台柜子里若干块板的**顺纹方向**，并重新冻结板件。
+
+    和布局编辑同一套门：本机来源（端点那边判）→ 灰度开关 → 编辑租约 → 版本对得上。
+    任何一步不过都**不落盘**。
+
+    与布局编辑不同，这里**不改工作副本**：顺纹方向是板件的属性，板件产物已经被确认冻结，
+    改它就是改一份别人依赖的产物。所以走 `revise_stage_output(panel_plan)`——它会追加一个
+    Revision、按规矩作废下游产出与确认——然后立刻重新确认板件阶段，把新内容冻成新的一份
+    冻结文件。制造 / BOM / CAD 读的就是这一份，不必知道还有"顺纹覆盖"这种东西。
+
+    抛：`LayoutEditDisabled`、`LeaseHeld`、`VersionConflict`、`ValueError`（柜子或板件找不到、
+    方向值不合法）。
+    """
+    if not layout_edit_enabled():
+        raise LayoutEditDisabled(f"{LAYOUT_EDIT_ENV} is not set to 1")
+    check_write(store_root, project.id, token=lease_token)
+    revision = project.latest
+    # 比的是**板件**版本，不是布局版本：改的只有板件，布局摘要一个字不变，
+    # 用 `layout_version()` 的话这道门等于没有（旧画面重放照样通过）。
+    current = panel_version(revision)
+    if expected_version != current:
+        raise VersionConflict(current)
+
+    output = revision.stage_outputs.get(WorkflowStage.PANELS_PLANNED.value)
+    if not isinstance(output, Mapping):
+        raise ValueError("this project has no panel plan to change")
+
+    # 先把要改的都对一遍，再动任何东西——校验不过整体拒绝，不留半改状态。
+    cabinets = output.get("cabinets")
+    if not isinstance(cabinets, list):
+        raise ValueError("panel plan has no cabinets")
+    target = next(
+        (item for item in cabinets if str(item.get("id") or "") == cabinet_id), None
+    )
+    if target is None:
+        raise ValueError(f"no such cabinet in the panel plan: {cabinet_id}")
+
+    by_id = {str(panel.get("id") or ""): panel for panel in _iter_panel_dicts(target)}
+    wanted: dict[str, str] = {}
+    for panel_id, axis in axes.items():
+        if panel_id not in by_id:
+            raise ValueError(f"no such panel in {cabinet_id}: {panel_id}")
+        wanted[panel_id] = normalize_grain_axis(axis, str(by_id[panel_id].get("panel_type") or ""))
+    if not wanted:
+        raise ValueError("nothing to change")
+
+    changed = deepcopy(dict(output))
+    for cabinet in changed["cabinets"]:
+        if str(cabinet.get("id") or "") != cabinet_id:
+            continue
+        for panel in _iter_panel_dicts(cabinet):
+            panel_id = str(panel.get("id") or "")
+            if panel_id in wanted:
+                panel["grain_axis"] = wanted[panel_id]
+
+    orchestrator = FurnitureOrchestrator(
+        workspace_root=workspace_root,
+        project_store=JsonProjectStore(store_root),
+    )
+    revised = orchestrator.revise_stage_output(
+        project, WorkflowStage.PANELS_PLANNED, changed
+    )
+    # 改完立刻重新确认：这一步会把新内容冻成新的 `<sha256>.json`。
+    orchestrator.confirm_stage(project, WorkflowStage.PANELS_PLANNED)
+    JsonProjectStore(store_root).save(project)
+    return {
+        "revision": revised.number,
+        "panels": sorted(wanted),
+        "confirmed_panel_sha256": project.latest.confirmed_panel_sha256,
+    }
+
+
+def _iter_panel_dicts(cabinet: Mapping[str, Any]):
+    """走一台柜子的所有板件（柜体 / 底座 / 门板 / 抽屉盒）。"""
+    assemblies = cabinet.get("assemblies")
+    if not isinstance(assemblies, Mapping):
+        return
+    for name, unit in assemblies.items():
+        if name == "drawers":
+            if not isinstance(unit, list):
+                continue
+            for drawer in unit:
+                box = drawer.get("box") if isinstance(drawer, Mapping) else None
+                if isinstance(box, Mapping):
+                    yield from box.get("panels") or []
+            continue
+        if isinstance(unit, Mapping):
+            yield from unit.get("panels") or []
 
 
 def undo_layout_edit(
