@@ -28,7 +28,8 @@ def _front(**overrides: object) -> dict:
 
 
 class InteriorStructureTests(unittest.TestCase):
-    def test_seven_doors_keep_a_3mm_gap_and_whole_millimeter_widths(self) -> None:
+    def test_seven_doors_absorb_the_fraction_next_to_the_middle_door(self) -> None:
+        """奇数扇：中间那扇门是单开时，零头就近进它左边那条缝。"""
         report = evaluate_interior(
             _front(width_mm=2400, n_doors=7, pairs=[[0, 1]])
         )
@@ -36,12 +37,15 @@ class InteriorStructureTests(unittest.TestCase):
         self.assertFalse(report["blocked"])
         self.assertEqual(report["findings"], [])
         doors = report["doors"]
-        self.assertEqual(doors["door_widths_mm"], [340, 340, 340, 340, 340, 340, 339])
-        self.assertEqual(doors["gaps_mm"], [3, 3, 3, 3, 3, 3])
+        self.assertEqual(
+            doors["door_widths_mm"], [339.8, 339.8, 339.8, 339.8, 339.8, 339.8, 339.8]
+        )
+        self.assertEqual(doors["gaps_mm"], [3, 3, 3.4, 3, 3, 3])
         self._assert_mm(doors["left_margin_mm"], 1.5)
         self._assert_mm(doors["right_margin_mm"], 1.5)
 
     def test_pairs_do_not_change_door_widths(self) -> None:
+        """成对只决定零头进哪条缝，门宽各扇始终等宽。"""
         paired = evaluate_interior(
             _front(width_mm=2400, n_doors=7, pairs=[[5, 6]])
         )
@@ -51,30 +55,32 @@ class InteriorStructureTests(unittest.TestCase):
             paired["doors"]["door_widths_mm"],
             plain["doors"]["door_widths_mm"],
         )
-        self.assertEqual(paired["doors"]["gaps_mm"], plain["doors"]["gaps_mm"])
 
-    def test_four_doors_give_the_extra_millimeters_to_the_left(self) -> None:
+    def test_four_doors_absorb_the_fraction_at_the_centre_seam(self) -> None:
         report = evaluate_interior(_front(width_mm=1211, n_doors=4))
 
         doors = report["doors"]
-        self.assertEqual(doors["door_widths_mm"], [300, 300, 300, 299])
-        self.assertEqual(doors["gaps_mm"], [3, 3, 3])
+        self.assertEqual(doors["door_widths_mm"], [299.7, 299.7, 299.7, 299.7])
+        self.assertEqual(doors["gaps_mm"], [3, 3.2, 3])
 
-    def test_six_doors_leave_the_last_door_1mm_narrower(self) -> None:
+    def test_six_doors_absorb_the_fraction_at_the_centre_seam(self) -> None:
         report = evaluate_interior(_front(width_mm=1511, n_doors=6))
 
         doors = report["doors"]
-        self.assertEqual(doors["door_widths_mm"], [249, 249, 249, 249, 249, 248])
-        self.assertEqual(doors["gaps_mm"], [3, 3, 3, 3, 3])
+        self.assertEqual(
+            doors["door_widths_mm"], [248.8, 248.8, 248.8, 248.8, 248.8, 248.8]
+        )
+        self.assertEqual(doors["gaps_mm"], [3, 3, 3.2, 3, 3])
 
-    def test_submillimeter_width_stays_on_the_right_margin(self) -> None:
+    def test_submillimeter_width_goes_to_the_centre_seam(self) -> None:
+        """柜体宽带 0.05 尾数时：门宽仍等宽，零头落到中心那条缝，边距不动。"""
         report = evaluate_interior(_front(width_mm=1200.3, n_doors=4))
 
         doors = report["doors"]
         self.assertEqual(doors["door_widths_mm"], [297, 297, 297, 297])
-        self.assertEqual(doors["gaps_mm"], [3, 3, 3])
+        self.assertEqual(doors["gaps_mm"], [3, 3.3, 3])
         self._assert_mm(doors["left_margin_mm"], 1.5)
-        self._assert_mm(doors["right_margin_mm"], 1.8)
+        self._assert_mm(doors["right_margin_mm"], 1.5)
 
     def test_single_and_pair_divider_reports_intervals_and_clearances(self) -> None:
         report = evaluate_interior(
@@ -179,21 +185,23 @@ class InteriorStructureTests(unittest.TestCase):
         self._assert_mm(doors["door_starts_mm"][1], 601.5)
         self.assertEqual(doors["gaps_mm"], [3])
 
-    def test_off_grid_width_keeps_whole_doors_and_grows_the_right_margin(self) -> None:
+    def test_off_grid_width_truncates_the_slot_to_a_tenth(self) -> None:
+        """两扇：槽位截断到 0.1，唯一那条缝吸收零头。"""
         report = evaluate_interior(_front(width_mm=1800.5, n_doors=2))
 
         doors = report["doors"]
-        self.assertEqual(doors["door_widths_mm"], [897, 897])
-        self.assertEqual(doors["gaps_mm"], [3])
-        self._assert_mm(doors["right_margin_mm"], 2.0)
+        self.assertEqual(doors["door_widths_mm"], [897.2, 897.2])
+        self.assertEqual(doors["gaps_mm"], [3.1])
+        self._assert_mm(doors["right_margin_mm"], 1.5)
 
-    def test_one_door_puts_the_fraction_on_the_right_margin(self) -> None:
+    def test_one_door_keeps_the_exact_width(self) -> None:
+        """一扇门不截断：算下来是多少就是多少，边距两边不动。"""
         report = evaluate_interior(_front(width_mm=800.25, n_doors=1))
 
         doors = report["doors"]
-        self.assertEqual(doors["door_widths_mm"], [797])
+        self.assertEqual(doors["door_widths_mm"], [797.25])
         self._assert_mm(doors["left_margin_mm"], 1.5)
-        self._assert_mm(doors["right_margin_mm"], 1.75)
+        self._assert_mm(doors["right_margin_mm"], 1.5)
         self.assertEqual(doors["gaps_mm"], [])
 
     def test_divider_break_follows_thickness_and_segments_sum_to_the_span(self) -> None:

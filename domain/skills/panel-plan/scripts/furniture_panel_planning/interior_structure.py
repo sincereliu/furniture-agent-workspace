@@ -64,7 +64,7 @@ def evaluate_interior(spec: Mapping[str, Any]) -> dict[str, Any]:
         raise ValueError("side_thickness_mm must be non-negative")
 
     pairs = _pairs(spec.get("pairs", ()), n_doors)
-    doors = _layout_doors(width_u, n_doors, margin_u)
+    doors = _layout_doors(width_u, n_doors, margin_u, pairs)
     doors["pairs"] = [[left, right] for left, right in pairs]
     findings: list[dict[str, Any]] = []
     if any(width <= 0 for width in doors["width_u"]):
@@ -97,23 +97,28 @@ def _layout_doors(
     width_u: int,
     n_doors: int,
     margin_u: int,
+    pairs: Sequence[tuple[int, int]],
 ) -> dict[str, Any]:
-    """Whole-millimeter door widths. Inner gaps stay at twice the margin.
+    """Equal door widths truncated to 0.1 mm; the leftover goes to one seam.
 
-    Extra whole millimeters go to the leftmost doors, one millimeter each.
-    Anything under 1 mm stays on the right margin.
+    - 一扇门**不截断**：门宽取精确值（柜体宽 − 2×边距）。
+    - 两扇以上：槽位 = 柜体宽/扇数 **截断到 0.1**，门宽 = 槽位 − 2×边距（各扇等宽），
+      零头 = 柜体宽 − 扇数×槽位。
+    - 零头归宿按**柜体中心线**：偶数扇时中心线一定落在第 n/2 条缝上；
+      奇数扇时看中间那扇门属于谁 —— 属于对开门就给它那组的中缝，
+      是单开就取它左边的缝（右边等价，取左定死）。边距不动。
     """
     gap_u = 2 * margin_u
-    budget_u = width_u - n_doors * gap_u
-    if budget_u <= 0:
-        widths = [budget_u // n_doors] * n_doors
+    step_u = _HUNDREDTH * 10  # 0.1 mm
+    if n_doors == 1:
+        widths = [width_u - gap_u]
+        leftover_u = 0
+        absorb: int | None = None
     else:
-        whole_mm, _fraction = divmod(budget_u, _UM)
-        base, extra = divmod(whole_mm, n_doors)
-        widths = [
-            (base + (1 if index < extra else 0)) * _UM
-            for index in range(n_doors)
-        ]
+        slot_u = (width_u // n_doors // step_u) * step_u
+        widths = [slot_u - gap_u] * n_doors
+        leftover_u = width_u - n_doors * slot_u
+        absorb = _leftover_seam(n_doors, pairs)
     starts: list[int] = []
     gaps: list[int] = []
     centers: list[int] = []
@@ -124,9 +129,10 @@ def _layout_doors(
         if index == n_doors - 1:
             cursor = door_end
             break
-        gaps.append(gap_u)
-        centers.append(door_end + gap_u // 2)
-        cursor = door_end + gap_u
+        gap = gap_u + (leftover_u if index == absorb else 0)
+        gaps.append(gap)
+        centers.append(door_end + gap // 2)
+        cursor = door_end + gap
     return {
         "width_u": widths,
         "left_margin_u": margin_u,
@@ -135,6 +141,17 @@ def _layout_doors(
         "gap_u": gaps,
         "seam_center_u": centers,
     }
+
+
+def _leftover_seam(n_doors: int, pairs: Sequence[tuple[int, int]]) -> int:
+    """哪条缝吸收凑整零头：按柜体中心线定。缝 i 在门 i 与门 i+1 之间。"""
+    if n_doors % 2 == 0:
+        return n_doors // 2 - 1
+    middle = (n_doors - 1) // 2
+    for left, right in pairs:
+        if left == middle or right == middle:
+            return left if right == middle else right - 1
+    return middle - 1 if middle > 0 else 0
 
 
 def _place_dividers(

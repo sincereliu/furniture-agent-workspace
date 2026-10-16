@@ -195,9 +195,10 @@ class AgentToolSurfaceTests(unittest.TestCase):
         self.assertEqual(sized["project"]["current_stage"], "layout_plan")
         self.assertEqual(
             sized["interior"]["doors"]["door_widths_mm"],
-            [340, 340, 340, 340, 340, 340, 339],
+            [339.8, 339.8, 339.8, 339.8, 339.8, 339.8, 339.8],
         )
-        self.assertEqual(sized["interior"]["doors"]["gaps_mm"], [3, 3, 3, 3, 3, 3])
+        # 门宽等宽、槽位截断到 0.1；零头 0.4 按柜体中心线落在第 3 条缝上。
+        self.assertEqual(sized["interior"]["doors"]["gaps_mm"], [3, 3, 3.4, 3, 3, 3])
         self.assertFalse(sized["interior"]["blocked"])
 
         generated = self.session.call(
