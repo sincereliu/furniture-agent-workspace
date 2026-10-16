@@ -9,8 +9,9 @@
 
 三条规矩：
 
-- **有 TTL**：多久没续租就算掉线。页面每 5 秒心跳，助手每步续一次；`LEASE_TTL_SECONDS`
-  之内没人续，租约自动失效（关标签页、崩溃、断网都不用管）。
+- **助手的锁有 TTL**：`LEASE_TTL_SECONDS` 之内没再续，就算助手掉线。助手每一步续一次。
+  布局页不按钟点续。它的事件连接打开时把这把页面锁钉一次
+  （`LEASE_CONNECTION_HOLD_SECONDS`），连接结束就归还，中间不改文件。
 - **不静默接管**：被别人持有就是 `LeaseHeld`，调用方要么等、要么明说"让出"。
   助手在这一层之上做的是"人把活交给我 = 授权"，由 `handover_to_agent()` 显式转移，
   并让页面看得见"助手正在处理"。
@@ -31,10 +32,11 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-#: 多久没续租就算掉线。页面心跳 5 秒一次（容 9 次丢失），助手每一步续一次。
+#: 助手这把锁多久没再续就算掉线。页面不靠它打卡。
 LEASE_TTL_SECONDS = 45
-#: 页面心跳间隔——只给页面用，助手按步续租。
-LEASE_HEARTBEAT_SECONDS = 5
+#: 布局页的事件连接打开时，把这把页面锁的到期时间写成这么远，只写这一次。
+#: 连接结束会立刻归还。这个数只兜「套接字断了、服务还没察觉」。
+LEASE_CONNECTION_HOLD_SECONDS = 24 * 60 * 60
 
 HOLDER_PAGE = "page"
 HOLDER_AGENT = "agent"
@@ -115,13 +117,8 @@ def lease_path(store_root: str | Path, project_id: str) -> Path:
     return Path(store_root) / project_id / LEASE_FILE_NAME
 
 
-def read_lease(
-    store_root: str | Path,
-    project_id: str,
-    *,
-    now: float | None = None,
-) -> Lease | None:
-    """当前有效的租约；过期文件视作没有（但不删——留着当痕迹，下次申请覆盖）。"""
+def stored_lease(store_root: str | Path, project_id: str) -> Lease | None:
+    """文件里的那一把，过期也返回。没有文件、或文件读不动，就 `None`。"""
     path = lease_path(store_root, project_id)
     if not path.is_file():
         return None
@@ -131,7 +128,7 @@ def read_lease(
         return None
     if not isinstance(payload, dict) or not payload.get("token"):
         return None
-    lease = Lease(
+    return Lease(
         token=str(payload["token"]),
         holder=str(payload.get("holder") or HOLDER_PAGE),
         label=str(payload.get("label") or ""),
@@ -140,7 +137,68 @@ def read_lease(
         expires_at=str(payload.get("expires_at") or ""),
         history=tuple(payload.get("history") or ()),
     )
-    return lease if lease.is_active(now=now) else None
+
+
+def read_lease(
+    store_root: str | Path,
+    project_id: str,
+    *,
+    now: float | None = None,
+) -> Lease | None:
+    """当前有效的租约；过期文件视作没有（但不删——留着当痕迹，下次申请覆盖）。"""
+    lease = stored_lease(store_root, project_id)
+    if lease is None or not lease.is_active(now=now):
+        return None
+    return lease
+
+
+def hold_connection(
+    store_root: str | Path,
+    project_id: str,
+    lease_id: str,
+    *,
+    now: float | None = None,
+) -> tuple[str, str]:
+    """布局页的事件连接打开：这把页面锁钉一次。
+
+    已经钉过、锁号对不上、或持有者不是页面，就不改文件，返回 `("", "")`。
+    调用方只在返回的 `expires_at` 还没被别人改过时归还。
+    """
+    current = stored_lease(store_root, project_id)
+    if current is None or current.id != lease_id or current.holder != HOLDER_PAGE:
+        return "", ""
+    moment = _now() if now is None else now
+    if current.is_active(now=moment) and current.expires_in(now=moment) > LEASE_TTL_SECONDS:
+        return "", ""
+    lease = _build(
+        token=current.token,
+        holder=HOLDER_PAGE,
+        label=current.label,
+        id=current.id,
+        moment=moment,
+        history=current.history,
+        action="hold",
+        ttl_seconds=LEASE_CONNECTION_HOLD_SECONDS,
+    )
+    _write(store_root, project_id, lease)
+    return lease.token, lease.expires_at
+
+
+def release_if_unchanged(
+    store_root: str | Path,
+    project_id: str,
+    *,
+    token: str,
+    expires_at: str,
+    now: float | None = None,
+) -> bool:
+    """连接结束时归还。期间被续过、被抢走或已经归还，就不动文件。"""
+    if not token or not expires_at:
+        return False
+    current = read_lease(store_root, project_id, now=now)
+    if current is None or current.token != token or current.expires_at != expires_at:
+        return False
+    return release(store_root, project_id, token=token, now=now)
 
 
 def acquire(
@@ -308,8 +366,9 @@ def _build(
     action: str,
     id: str = "",
     expired: bool = False,
+    ttl_seconds: float = LEASE_TTL_SECONDS,
 ) -> Lease:
-    expires = moment if expired else moment + LEASE_TTL_SECONDS
+    expires = moment if expired else moment + ttl_seconds
     entry = {
         "at": _iso(moment),
         "action": action,
@@ -366,7 +425,7 @@ __all__ = [
     "HOLDER_AGENT",
     "HOLDER_PAGE",
     "HOLDERS",
-    "LEASE_HEARTBEAT_SECONDS",
+    "LEASE_CONNECTION_HOLD_SECONDS",
     "LEASE_TTL_SECONDS",
     "Lease",
     "LeaseHeld",
@@ -374,8 +433,11 @@ __all__ = [
     "acquire",
     "check_write",
     "handover_to_agent",
+    "hold_connection",
     "lease_path",
     "read_lease",
     "release",
+    "release_if_unchanged",
+    "stored_lease",
     "transfer",
 ]

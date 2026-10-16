@@ -32,12 +32,17 @@
 | 一整套房子的摆放。确认后冻出给板件的盒子：宽、深、高和柜类。这里不画房间页，也不写房间外壳 | `project_layout.py` | schema |
 | 给这套摆放配上每个房间的图，确认时核对图是不是刚算出来的 | `layout_figures.py` | calculation |
 | 配进去的那张 SVG | `room_svg.py` | calculation |
-| 保存的只读预览、单间草稿、项目预览和分享共用一个模板。Python 读 `templates/room_page.html` 填上当前房间。原点三轴、光标坐标、房间药丸、`?room=`、页眉牌子都在模板里。`templates/room_page.js` 里的拖动检查必须与 `placement_check.py` 同步 | `room_page.py` | calculation |
+| 保存的只读预览、单间草稿、项目预览和分享共用一个模板。Python 读 `templates/room_page.html` 填上当前房间。原点三轴、光标坐标、房间药丸、`?room=`、页眉牌子都在模板里。前端拖动检查在 `static/layout_solver.js`，必须与 `placement_check.py` 同步 | `room_page.py` | calculation |
 | 做过的项目名单 | `project_list.py` | calculation |
 | 把预览页打开，并准备这一页要读的数据 | `open_preview.py` | side_effect |
 | 布局页订阅项目文件和编辑租约。变了才通知，版本变了才重读整份布局 | `layout_events.py` | structured_protocol / side_effect |
 | 从最新布局取出一台已保存外形，供板件页使用。不要求整份布局已确认 | `cabinet_entry.py` | validation |
-| 房间页上的三维盒子 | `static/layout_scene.js` | calculation |
+| 房间页三维视口组装、相机控制、射线拾取与句柄同步 | `static/layout_scene.js` | calculation |
+| 天空球、夜景微缩底座、卡通光照材质与缓存化木纹/路面贴图 | `static/layout_diorama.js` | calculation |
+| 文字标签 DOM 层、SVG 引线与左下角坐标轴角标 | `static/layout_overlay.js` | calculation |
+| 围墙/地板台子、家具棱柱、沙发/茶几网格、旋转环与尺寸标注线 | `static/layout_meshes.js` | calculation |
+| 前端碰撞、越界、门窗遮挡、四向净距与整数毫米二分拖拽求解（对应 `placement_check.py`） | `static/layout_solver.js` | calculation |
+| 正视图预设、基准取景距离、立面竖直平面比例与旋转方向符号 | `static/layout_camera.js` | calculation |
 | 预览围墙的厚度、转角和门窗洞，房间坐标 | `static/wall_solid.js` | calculation |
 | 不进生产的沙发在预览里的靠背、扶手和坐垫。要做成柜的沙发仍是盒子 | `static/sofa_solid.js` | calculation |
 | 不进生产的茶几在预览里的桌面、腿和层板。要做成柜的茶几仍是盒子 | `static/coffee_table_solid.js` | calculation |
@@ -54,9 +59,9 @@
 | 单间只存客户原来写的那份，打开时再算 | `scene_store.py` | side_effect |
 | 房间外壳的 STEP：地、墙、门窗洞。不是柜体模型 | `room_shell.py` | side_effect |
 
-页面结构在 `templates/room_page.html`，交互脚本在 `templates/room_page.js`。`room_page.py` 读入两份模板后填充参数，保存预览与实时页面使用同一份组装结果；模板不作为静态资源直接发布。
+页面结构在 `templates/room_page.html`，交互胶水在 `templates/room_page.js`，碰撞与拖拽求解在 `static/layout_solver.js`，相机取景辅助在 `static/layout_camera.js`。`room_page.py` 读入两份模板后填充参数，保存预览与实时页面使用同一份组装结果；模板不作为静态资源直接发布。
 
-房间页上拖动只是本地先画，松手后后端再换算并检查。改 `placement_check.py` 必须同步改 `templates/room_page.js` 里的脚本。
+房间页上拖动只是本地先画，松手后后端再换算并检查。改 `placement_check.py` 必须同步改 `static/layout_solver.js`。
 
 数据链路为 `规范请求 → scene_planning.plan_scene → RoomScene → layout_figures / room_page`。项目读取只接受带明确 `schema_version` 的当前检查点；房间源与已摆放输出是两份明确契约。编辑通过 `PlacedItem.to_source()` 去掉派生字段，重算后才交给项目编排层保存。没有历史字段别名、自动推断摆放模式、扁平房间输出或旧预览页面分支。
 
@@ -92,6 +97,7 @@ node domain/skills/layout-plan/scripts/furniture_layout/static/<检查脚本>
 | 单间草稿页 | `test_room_scene_editor.py` |
 | `open_preview.py`、`layout_events.py`、`project_list.py`、项目预览、名单、分享、拖动回写 | `test_project_preview.py` |
 | 按房间确认 | `test_room_level_confirmation.py` |
+| `static/layout_solver.js` | `solver_check.mjs` |
 | `static/layout_drag.js` | `drag_check.mjs` |
 | `static/layout_labels.js` | `labels_check.mjs` |
 | `static/wall_view.js` | `wall_view_check.mjs` |
@@ -100,9 +106,9 @@ node domain/skills/layout-plan/scripts/furniture_layout/static/<检查脚本>
 | `static/coffee_table_solid.js` | `coffee_table_check.mjs` |
 | `static/ink_depth.js`、`static/layout_scene.js` 的边线深度 | `ink_depth_check.mjs` |
 | `cabinet_entry.py` | `test_cabinet_panel_page.py` |
-| `static/layout_scene.js` | `test_project_preview.py` |
+| `static/layout_scene.js`、`static/layout_diorama.js`、`static/layout_overlay.js`、`static/layout_meshes.js` | `test_project_preview.py` |
 
-`scene.py`、`scene_planning.py`、`layout_entry.py`、`project_layout.py`、`room_page.py` 和 `templates/` 被上面多行用到。改它们时，跑它实际喂到的那些行。`scene.py` 的家具 id 规则还有板件阶段的对照，再加 `test_skill_architecture.py`。`templates/room_page.js` 里的拖动检查要和 `placement_check.py` 一起改，这时摆放检查和项目预览两行都跑。
+`scene.py`、`scene_planning.py`、`layout_entry.py`、`project_layout.py`、`room_page.py` 和 `templates/` 被上面多行用到。改它们时，跑它实际喂到的那些行。`scene.py` 的家具 id 规则还有板件阶段的对照，再加 `test_skill_architecture.py`。`static/layout_solver.js` 里的拖动检查要和 `placement_check.py` 一起改，这时 `solver_check.mjs`、摆放检查和项目预览三行都跑。
 
 这些测试会引用布局类型，测的是别的面：`test_agent_tools.py`（工具面）、`test_decision_log.py`（决策记录）、`test_edit_lease.py`（编辑租约）、`test_revision_inheritance.py`（修订继承）、`test_entrypoint_architecture.py`（入口装配）。改摆放几何时不把它们算进这一次。
 

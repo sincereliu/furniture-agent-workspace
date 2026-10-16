@@ -29,7 +29,7 @@ from runtime_paths import bootstrap_runtime_paths
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -76,9 +76,9 @@ API_VERSION = "0.8.0"
 # 取值理由（两次调大的经过）：
 #   · 5 秒 → 30 秒：进程常是"起服务 + 开浏览器"两步，5 秒内浏览器还没发出第一次 presence，
 #     服务就自杀了，人看到的现象是"页面打不开"。
-#   · 30 秒 → 300 秒：项目列表和板件页每 1 秒报一次心跳，但**浏览器会把后台标签页的定时器限流**
-#     （Chrome 可降到每分钟一次）。宽限期 30 秒时，页面切到后台超过半分钟就会被判为"页面都关了"，
-#     切回来已经连不上——现象同样是"页面过一会就无法访问"。
+#   · 30 秒 → 300 秒：列表页和板件页靠一条开着的 presence 流续上，不再自己定时打卡。
+#     浏览器会把后台标签页的定时器限流（Chrome 可降到每分钟一次）。宽限期 30 秒时，
+#     页面切到后台超过半分钟就会被判为"页面都关了"，切回来已经连不上。
 #     布局页的事件连接由服务端在连接还在时自己续上，不受这个限流影响。
 #     5 分钟足以覆盖列表和板件页的后台限流，同时仍然能在真正关掉页面后自动回收进程。
 PRESENCE_GRACE_SECONDS = 300.0
@@ -156,10 +156,28 @@ def _touch_preview_presence() -> None:
     app.state.preview_presence_at = time.monotonic()
 
 
+def _preview_pages() -> int:
+    return int(getattr(app.state, "preview_page_count", 0) or 0)
+
+
+def note_preview_page_opened() -> None:
+    """一条页面连接打开了。开着的时候进程不因为空闲退出。"""
+    app.state.preview_page_count = _preview_pages() + 1
+    _touch_preview_presence()
+
+
+def note_preview_page_closed() -> None:
+    """这条连接断了。最后一页关掉，宽限期从这一刻算。"""
+    app.state.preview_page_count = max(0, _preview_pages() - 1)
+    if app.state.preview_page_count == 0:
+        _touch_preview_presence()
+
+
 bind_layout_events(
     store_root=lambda: STORE_ROOT,
     may_edit=may_edit,
-    touch_presence=_touch_preview_presence,
+    touch_presence=note_preview_page_opened,
+    release_presence=note_preview_page_closed,
 )
 app.include_router(layout_event_router)
 
@@ -240,8 +258,11 @@ def preview_should_stop(
     now: float,
     *,
     grace: float = PRESENCE_GRACE_SECONDS,
+    pages: int = 0,
 ) -> bool:
-    """True once a page has checked in and then gone quiet."""
+    """True once every page connection is gone and the grace has elapsed."""
+    if pages > 0:
+        return False
     return last is not None and now - last >= grace
 
 
@@ -272,6 +293,42 @@ async def preview_presence(request: Request):
     return {"status": "ok"}
 
 
+async def _until_http_disconnect(request: Request) -> None:
+    """等到客户端把这条连接关掉。没有接收通道就立刻返回。"""
+    receive = getattr(request, "receive", None)
+    if receive is None:
+        return
+    while True:
+        message = await receive()
+        if not isinstance(message, dict) or message.get("type") == "http.disconnect":
+            return
+
+
+async def iter_preview_presence(request: Request):
+    """打开算还在，断开就不算。中间不发打卡。"""
+    note_preview_page_opened()
+    try:
+        yield ": open\n\n"
+        await _until_http_disconnect(request)
+    finally:
+        note_preview_page_closed()
+
+
+@app.get("/api/preview/presence/stream")
+async def preview_presence_stream(request: Request):
+    """列表页和板件页打开这一条。连接不断就表示还在。"""
+    if not may_edit(request):
+        raise HTTPException(status_code=403, detail="preview presence is local only")
+    return StreamingResponse(
+        iter_preview_presence(request),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-store",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @app.on_event("startup")
 async def watch_preview_presence() -> None:
     """After the first open page, exit once every page has been closed."""
@@ -281,7 +338,7 @@ async def watch_preview_presence() -> None:
         while True:
             await asyncio.sleep(1)
             last = getattr(app.state, "preview_presence_at", None)
-            if preview_should_stop(last, time.monotonic()):
+            if preview_should_stop(last, time.monotonic(), pages=_preview_pages()):
                 stop_preview_server()
                 return
 

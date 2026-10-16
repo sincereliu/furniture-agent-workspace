@@ -24,16 +24,24 @@ from runtime_paths import bootstrap_runtime_paths
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 import server
-from fake_request_support import local_request, remote_request
+from fake_request_support import FakeRequest, local_request, remote_request
 from furniture_layout.project_layout import ProjectLayout
 from furniture_layout import open_preview
 from furniture_layout.layout_events import (
     iter_layout_events,
     layout_file_stamp,
     notice_for_change,
+    pin_page_lease,
     project_layout_events,
+    same_lease_renewal,
 )
-from furniture_workflow.workflow_lease import acquire
+from furniture_workflow.workflow_lease import (
+    LEASE_TTL_SECONDS,
+    acquire,
+    hold_connection,
+    read_lease,
+    release_if_unchanged,
+)
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from furniture_workflow.workflow_store import JsonProjectStore
 
@@ -156,7 +164,7 @@ class ProjectPreviewTests(unittest.TestCase):
         self.assertIn('id="shutdown-preview"', html)
         self.assertIn('fetch("/api/preview/shutdown"', html)
         self.assertIn('cache:"no-store"', html)
-        self.assertIn('new EventSource(LAYOUT_URL+"/events")', html)
+        self.assertIn('new EventSource(LAYOUT_URL+"/events"+query)', html)
         self.assertNotIn("POLL_URL", html)
         self.assertNotIn("setInterval(pollLayout,1000)", html)
         self.assertNotIn("typeof EventSource", html)
@@ -248,6 +256,55 @@ class ProjectPreviewTests(unittest.TestCase):
             asyncio.run(project_layout_events("../store", local_request()))
         self.assertEqual(escaped.exception.status_code, 422)
 
+    def test_open_connection_pins_its_lease_once_and_releases_on_close(self) -> None:
+        project = self.orchestrator.create_project("家", home_layout(bed_origin_z_mm=200))
+        lease = acquire(self.root, project.id, holder="page", label="窗口")
+        self.assertEqual(pin_page_lease(self.root, project.id, "not-a-lease"), ("", ""))
+        token, until = hold_connection(self.root, project.id, lease.id)
+        self.assertEqual(token, lease.token)
+        pinned = read_lease(self.root, project.id)
+        assert pinned is not None
+        self.assertEqual(pinned.id, lease.id)
+        self.assertEqual(pinned.expires_at, until)
+        self.assertGreater(pinned.expires_in(), LEASE_TTL_SECONDS)
+        self.assertEqual(hold_connection(self.root, project.id, lease.id), ("", ""))
+        self.assertEqual(read_lease(self.root, project.id).expires_at, until)
+        self.assertFalse(
+            release_if_unchanged(
+                self.root, project.id, token=token, expires_at="someone-else-wrote-this"
+            )
+        )
+        self.assertIsNotNone(read_lease(self.root, project.id))
+        self.assertTrue(same_lease_renewal({"lease": pinned.snapshot()}, (lease.id, "page")))
+        self.assertFalse(
+            same_lease_renewal(
+                {"lease": pinned.snapshot(), "version": "x"},
+                (lease.id, "page"),
+            )
+        )
+        self.assertTrue(
+            release_if_unchanged(self.root, project.id, token=token, expires_at=until)
+        )
+        self.assertIsNone(read_lease(self.root, project.id))
+
+        fresh = acquire(self.root, project.id, holder="page", label="窗口")
+
+        class Closed(FakeRequest):
+            def __init__(self) -> None:
+                super().__init__()
+                self.query_params = {"lease_id": fresh.id}
+
+            def is_disconnected(self) -> bool:
+                return True
+
+        async def close_immediately() -> None:
+            async for _chunk in iter_layout_events(project.id, Closed(), interval=0.05):
+                pass
+
+        asyncio.run(close_immediately())
+        self.assertIsNone(read_lease(self.root, project.id))
+        self.assertEqual(server.app.state.preview_page_count, 0)
+
     def test_local_preview_is_rendered_editable(self) -> None:
         """本机来源 → 可编辑页：写入地址、租约、工作副本状态都在；只读那支不再出现。"""
         project = self.orchestrator.create_project("家", home_layout(bed_origin_z_mm=200))
@@ -262,6 +319,10 @@ class ProjectPreviewTests(unittest.TestCase):
         self.assertIn("第 ${payload.revision_number} 版", html)
         self.assertIn("function reportWriteFailure(status,detail,item)", html)
         self.assertIn("const IDLE_YIELD_SECONDS=300", html)
+        self.assertIn("function armIdle()", html)
+        self.assertIn("?lease_id=", html)
+        self.assertNotIn("heartbeatLease", html)
+        self.assertNotIn("setInterval(", html)
 
     def test_preview_shows_room_axes_and_cursor_coordinates(self) -> None:
         """房间坐标要看得见：原点三轴（带总宽/总深/总高）+ 光标读数 + 右栏坐标行。"""
@@ -481,7 +542,8 @@ class ProjectPreviewTests(unittest.TestCase):
         self.assertNotIn("<h2 id=\"projects-heading\">已保存的工程</h2>", server_source)
         self.assertIn("furniture_layout.project_list", server_source)
         self.assertIn("关掉最后一页后，预览服务会自己停", page)
-        self.assertIn("/api/preview/presence", page)
+        self.assertIn('new EventSource("/api/preview/presence/stream")', page)
+        self.assertNotIn("setInterval(pulsePreview", page)
         self.assertIn('id="project-search"', page)
         self.assertIn("张家卧室", page)
         self.assertIn("工作室", page)
@@ -556,6 +618,8 @@ class ProjectPreviewTests(unittest.TestCase):
         self.assertFalse(server.preview_should_stop(90, 90 + grace - 0.1))
         # 过了宽限期：最后一页确实走了
         self.assertTrue(server.preview_should_stop(90, 90 + grace))
+        # 还有页面连着：到点也不停
+        self.assertFalse(server.preview_should_stop(90, 90 + grace, pages=1))
         # 宽限期要够人手开浏览器：起服务到页面发出第一次 presence 之间的余量
         self.assertGreaterEqual(grace, 10.0)
         with self.assertRaises(HTTPException) as remote:
@@ -565,6 +629,16 @@ class ProjectPreviewTests(unittest.TestCase):
         body = asyncio.run(server.preview_presence(local_request()))
         self.assertEqual(body["status"], "ok")
         self.assertGreaterEqual(server.app.state.preview_presence_at, before)
+        server.app.state.preview_page_count = 0
+
+        async def one_open_comment():
+            chunks = []
+            async for chunk in server.iter_preview_presence(local_request()):
+                chunks.append(chunk)
+            return chunks
+
+        self.assertEqual(asyncio.run(one_open_comment()), [": open\n\n"])
+        self.assertEqual(server.app.state.preview_page_count, 0)
 
     def test_local_server_entry_enables_edit_and_opens_the_list(self) -> None:
         with mock.patch.dict(os.environ, {"FURNITURE_PREVIEW_BROWSER": "1"}):
@@ -805,7 +879,7 @@ class OpenProjectPreviewTests(unittest.TestCase):
         self.assertEqual(
             source.count("if not may_edit(request):")
             + room_http.count("if not may_edit(request):"),
-            11,
+            12,
         )
         self.assertNotIn("def access_scope", room_http)
         endpoints = source.split("def may_edit")[1]

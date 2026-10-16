@@ -2,7 +2,8 @@
 
 项目文件或编辑租约变了才推一笔。
 房间几何不在这一笔里：`version` 变了，页面再读 `GET /layout`。
-本机打开的连接同时表示这一页还开着。
+本机打开的连接同时表示这一页还开着。连接断开就不再算。
+拿着编辑权的那一页：连接打开时把锁钉一次，连接结束就归还。中间不改文件。
 """
 
 from __future__ import annotations
@@ -18,12 +19,19 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from furniture_layout.open_preview import layout_page_meta
-from furniture_workflow.workflow_lease import lease_path, read_lease
+from furniture_workflow.workflow_lease import (
+    LeaseLost,
+    hold_connection,
+    lease_path,
+    read_lease,
+    release_if_unchanged,
+)
 from furniture_workflow.workflow_store import JsonProjectStore, project_preview_status
 
 # 只用来发现磁盘上的替换。页面不按这个节拍重画。
 LAYOUT_WATCH_SECONDS = 0.4
 _PROJECT_ID = re.compile(r"^[A-Za-z0-9_-]+$")
+_LEASE_ID = re.compile(r"^lease-[0-9a-f]{8}$")
 
 router = APIRouter()
 
@@ -32,6 +40,7 @@ class _Host:
     store_root: Callable[[], Path] | None = None
     may_edit: Callable[[Request], bool] | None = None
     touch_presence: Callable[[], None] | None = None
+    release_presence: Callable[[], None] | None = None
 
 
 _host = _Host()
@@ -42,11 +51,13 @@ def bind_layout_events(
     store_root: Callable[[], Path],
     may_edit: Callable[[Request], bool],
     touch_presence: Callable[[], None],
+    release_presence: Callable[[], None] | None = None,
 ) -> None:
-    """本机进程启动时注入项目目录、写权限，以及「这一页还开着」。"""
+    """本机进程启动时注入项目目录、写权限，以及「这一页打开了 / 关掉了」。"""
     _host.store_root = store_root
     _host.may_edit = may_edit
     _host.touch_presence = touch_presence
+    _host.release_presence = release_presence
 
 
 def _store_root() -> Path:
@@ -79,6 +90,36 @@ def read_layout_notice(store_root: str | Path, project_id: str) -> dict[str, Any
     if availability != "ready":
         raise ValueError(reason)
     return layout_page_meta(project, store_root=store_root)
+
+
+def _lease_identity(lease: dict[str, Any] | None) -> tuple[str, str] | None:
+    if not lease:
+        return None
+    return (str(lease.get("id") or ""), str(lease.get("holder") or ""))
+
+
+def same_lease_renewal(
+    notice: dict[str, Any],
+    pushed: tuple[str, str] | None,
+) -> bool:
+    """同一把锁只是把到期时间往后推。页面已经知道谁拿着，不必再推一笔。"""
+    if set(notice) != {"lease"}:
+        return False
+    return _lease_identity(notice.get("lease")) == pushed
+
+
+def pin_page_lease(store_root: str | Path, project_id: str, lease_id: str) -> tuple[str, str]:
+    """连接打开时钉一次。锁号不像公开 id 就不碰文件。"""
+    if not _LEASE_ID.fullmatch(lease_id):
+        return "", ""
+    return hold_connection(store_root, project_id, lease_id)
+
+
+def _query_lease_id(request: Request) -> str:
+    params = getattr(request, "query_params", None)
+    if params is None:
+        return ""
+    return str(params.get("lease_id") or "")
 
 
 def notice_for_change(
@@ -134,24 +175,54 @@ async def iter_layout_events(
     *,
     interval: float = LAYOUT_WATCH_SECONDS,
 ) -> AsyncIterator[str]:
-    """先推当前这一笔，之后只在两个文件之一被替换时再推。"""
+    """先推当前这一笔，之后只在两个文件之一被替换时再推。
+
+    同一把锁只是到期时间变了，不推。查询串里的 `lease_id` 就是这把页面锁时，
+    连接打开钉一次，连接结束归还。循环里不再改租约文件。
+    `interval` 只用来发现磁盘上的替换，文件没变就不往外发。
+    """
     previous: tuple[Any, Any] | None = None
+    pushed_lease: tuple[str, str] | None = None
     local = bool(_host.may_edit and _host.may_edit(request))
-    while True:
-        if local and _host.touch_presence is not None:
-            _host.touch_presence()
-        if await _disconnected(request):
-            return
-        root = _store_root()
-        current = layout_file_stamp(root, project_id)
-        try:
-            notice = notice_for_change(root, project_id, previous, current)
-        except (OSError, ValueError, KeyError, TypeError, AttributeError):
-            notice = None
-        if notice is not None:
-            previous = current
-            yield _sse(notice)
-        await asyncio.sleep(interval)
+    lease_id = _query_lease_id(request) if local else ""
+    if local and _host.touch_presence is not None:
+        _host.touch_presence()
+    held_token = ""
+    held_until = ""
+    try:
+        if lease_id:
+            try:
+                held_token, held_until = pin_page_lease(_store_root(), project_id, lease_id)
+            except (OSError, ValueError):
+                held_token, held_until = "", ""
+        while True:
+            if await _disconnected(request):
+                return
+            root = _store_root()
+            current = layout_file_stamp(root, project_id)
+            try:
+                notice = notice_for_change(root, project_id, previous, current)
+            except (OSError, ValueError, KeyError, TypeError, AttributeError):
+                notice = None
+            if notice is not None:
+                previous = current
+                if not same_lease_renewal(notice, pushed_lease):
+                    pushed_lease = _lease_identity(notice.get("lease"))
+                    yield _sse(notice)
+            await asyncio.sleep(interval)
+    finally:
+        if held_token:
+            try:
+                release_if_unchanged(
+                    _store_root(),
+                    project_id,
+                    token=held_token,
+                    expires_at=held_until,
+                )
+            except (OSError, ValueError, LeaseLost):
+                pass
+        if local and _host.release_presence is not None:
+            _host.release_presence()
 
 
 @router.get("/api/project/{project_id}/layout/events")
