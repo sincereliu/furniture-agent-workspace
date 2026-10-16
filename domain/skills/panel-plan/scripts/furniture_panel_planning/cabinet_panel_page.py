@@ -168,11 +168,7 @@ function draw(){{
   requestAnimationFrame(draw);
 }}
 draw();
-function pulse(){{
-  fetch("/api/preview/presence", {{method:"POST", cache:"no-store", keepalive:true}}).catch(()=>{{}});
-}}
-pulse();
-setInterval(pulse, 1000);
+new EventSource("/api/preview/presence/stream");
 const shutdownButton = document.getElementById("shutdown-preview");
 if (shutdownButton) {{
   shutdownButton.addEventListener("click", async () => {{

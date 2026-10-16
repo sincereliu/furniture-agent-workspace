@@ -1498,11 +1498,9 @@ async function decideBasis(target,action){
   setStatus(action==="confirm"?"已记下：客户确认了这条":"已记下：客户划掉了这条");
 }
 let shownLease=null;
-let leaseShownAt=0;
 let paintedLease="";
 function applyLease(lease){
   shownLease=lease||null;
-  leaseShownAt=Date.now();
   paintedLease="";
   paintLease();
 }
@@ -1517,18 +1515,16 @@ function paintLease(){
     paintedLease="none";
     badge.hidden=true;badge.classList.remove("mine");button.hidden=true;return;
   }
-  const left=Math.max(0,Math.round((lease.expires_in||0)-(Date.now()-leaseShownAt)/1000));
   const who=lease.holder==="agent"?"助手正在处理":(mine?"编辑权在你手上":"另一窗口正在编辑");
-  const signature=`${who}|${left}|${mine}|${lease.holder}`;
+  const signature=`${who}|${mine}|${lease.holder}`;
   if(signature===paintedLease)return;
   paintedLease=signature;
-  badge.textContent=`${who} · ${left} 秒后自动释放`;
+  badge.textContent=who;
   badge.hidden=false;
   badge.classList.toggle("mine",mine);
   // 助手拿着时给一个出口；自己拿着不用抢，分享形态不给外人这个按钮。
   button.hidden=SHARE_FORM||lease.holder!=="agent";
 }
-if(LAYOUT_URL)setInterval(paintLease,1000);
 async function leasePost(path,body){
   const headers={"Content-Type":"application/json"};
   if(leaseToken)headers["X-Edit-Lease"]=leaseToken;
@@ -1567,6 +1563,7 @@ if(takeLeaseButton){
       sessionStorage.setItem(LEASE_TOKEN_KEY,leaseToken);
       sessionStorage.setItem(LEASE_ID_KEY,leaseId);
       applyLease(lease);
+      watchLayout();
       setStatus("已收回编辑权：助手下次写入会被挡下");
     }catch(error){
       setStatus("收回失败："+error,"error");
@@ -1575,19 +1572,6 @@ if(takeLeaseButton){
     }
   });
 }
-function heartbeatLease(){
-  if(!leaseToken||!LEASE_URL)return;
-  leasePost(LEASE_URL,{holder:"page",label:leaseLabel,token:leaseToken})
-    .then(response=>(response&&response.ok?response.json():null))
-    .then(lease=>{
-      if(!lease)return;
-      leaseId=lease.id;
-      sessionStorage.setItem(LEASE_ID_KEY,leaseId);
-      applyLease(lease);
-    })
-    .catch(()=>{});
-}
-if(LEASE_URL)setInterval(heartbeatLease,5000);
 // 关页面就还回去；带 keepalive 让请求在卸载后仍能发出。
 window.addEventListener("pagehide",()=>{
   if(layoutEvents)layoutEvents.close();
@@ -1623,9 +1607,15 @@ function flushLayoutNotice(){
     if(!ok&&layoutFetchEpoch===epoch)layoutFetchEpoch=-1;
   });
 }
+let layoutLeaseQuery="";
 function watchLayout(){
   if(!LAYOUT_URL)return;
-  const source=new EventSource(LAYOUT_URL+"/events");
+  // 公开的锁号挂在这条已经开着的连接上。打开时钉一次，断开就归还。
+  const query=leaseId?("?lease_id="+encodeURIComponent(leaseId)):"";
+  if(layoutEvents&&query===layoutLeaseQuery)return;
+  if(layoutEvents)layoutEvents.close();
+  layoutLeaseQuery=query;
+  const source=new EventSource(LAYOUT_URL+"/events"+query);
   source.onmessage=event=>{
     try{applyLayoutNotice(JSON.parse(event.data))}catch(error){}
   };
@@ -1646,12 +1636,19 @@ syncRoomUrl();
 if(LAYOUT_URL)watchLayout();
 // ---------------------------------------------------------------- 项目页的编辑权
 // 服务端按权限把这一页渲染成可编辑；能不能**真的写**由编辑租约说话（同一时刻只有一个写者）。
-// 页面只负责：申请、心跳、闲置让出、被抢走/被收回时跟着变。
+// 页面只负责：申请、闲置让出、被抢走/被收回时跟着变。锁跟着事件连接走，页面不再定时续。
 const IDLE_YIELD_SECONDS=300;
 let lastInteraction=Date.now();
 let idleYielded=false;
+let idleTimer=0;
+function armIdle(){
+  if(!PROJECT_EDIT_URL||READ_ONLY||SHARE_FORM||!leaseToken)return;
+  clearTimeout(idleTimer);
+  idleTimer=setTimeout(yieldIdleLease,IDLE_YIELD_SECONDS*1000);
+}
 function markInteraction(){
   lastInteraction=Date.now();
+  if(leaseToken)armIdle();
   if(idleYielded&&PROJECT_EDIT_URL&&!READ_ONLY&&!leaseToken)acquireLease();
 }
 ["pointerdown","keydown","wheel","pointermove"].forEach(name=>{
@@ -1673,14 +1670,18 @@ async function acquireLease(){
     sessionStorage.setItem(LEASE_TOKEN_KEY,leaseToken);
     sessionStorage.setItem(LEASE_ID_KEY,leaseId);
     applyLease(lease);
+    watchLayout();
+    armIdle();
     return lease;
   }catch(error){return null}
 }
-function idleGuard(){
-  if(!PROJECT_EDIT_URL||READ_ONLY||SHARE_FORM)return;
-  if(!leaseToken)return;
-  if(Date.now()-lastInteraction<IDLE_YIELD_SECONDS*1000)return;
-  // 闲置太久：把编辑权还回去，别让一个开着的标签页把项目占一整天。
+function yieldIdleLease(){
+  if(!PROJECT_EDIT_URL||READ_ONLY||SHARE_FORM||!leaseToken)return;
+  if(Date.now()-lastInteraction<IDLE_YIELD_SECONDS*1000){
+    armIdle();
+    return;
+  }
+  // 闲置太久：把编辑权还回去。这一下是人停手五分钟，不是定时打卡。
   fetch(LEASE_URL,{method:"DELETE",cache:"no-store",headers:{"X-Edit-Lease":leaseToken}})
     .catch(()=>{});
   leaseToken="";idleYielded=true;
@@ -1688,7 +1689,6 @@ function idleGuard(){
   applyLease(null);
   setStatus("闲置太久，已让出编辑权 · 点一下就能拿回来");
 }
-if(PROJECT_EDIT_URL)setInterval(idleGuard,30000);
 if(PROJECT_EDIT_URL&&!READ_ONLY){
   acquireLease().then(lease=>{
     if(lease)setStatus("可以直接拖动：还没有下游产物时，改动落在同一版上；改到哪一间，哪一间就要重看一眼");

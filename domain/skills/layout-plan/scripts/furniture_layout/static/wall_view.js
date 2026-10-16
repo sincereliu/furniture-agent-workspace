@@ -13,9 +13,9 @@
 // 室外是夜色深底。背景墙再亮一档，靠颜色和侧墙分开，不再靠透明度。
 export const WALL_SIDE_OPACITY = 1;
 export const WALL_BACK_OPACITY = 1;
-export const WALL_BACK_COLOR = 0xfff3df;      // 背景墙：暖石膏
+export const WALL_BACK_COLOR = 0xefe8dc;      // 背景墙：亮一档的石灰石
 export const WALL_ELEVATION_OPACITY = 1;
-export const WALL_ELEVATION_COLOR = 0xf6e6cc; // 立面视图墙面：同一档暖色
+export const WALL_ELEVATION_COLOR = 0xddd6ca; // 立面视图墙面：同一档石灰石
 export const ELEVATION_PITCH = 0.12;          // 与 room_page.html 的 ELEVATION_MAX_PITCH 一致
 
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];

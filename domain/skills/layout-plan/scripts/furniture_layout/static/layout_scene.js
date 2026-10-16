@@ -176,7 +176,8 @@ const INK = 0x2a2118;
 const BASE_SCALE = 1.22;
 
 const CEL_RAMP = (() => {
-  const data = new Uint8Array([152, 196, 226, 255]);
+  // 阴影抬高，石材和织物保持自己的明度，不压成一块深色。
+  const data = new Uint8Array([184, 214, 236, 255]);
   const texture = new THREE.DataTexture(data, 4, 1);
   texture.format = THREE.RedFormat;
   texture.magFilter = THREE.NearestFilter;
@@ -208,14 +209,14 @@ function paintTexture(width, height, draw) {
 
 function woodTexture() {
   return paintTexture(256, 256, (ctx) => {
-    ctx.fillStyle = "#f0d2a4";
+    ctx.fillStyle = "#c4b39e";
     ctx.fillRect(0, 0, 256, 256);
     for (let row = 0; row < 8; row += 1) {
-      ctx.fillStyle = row % 2 ? "#f6ddb6" : "#e4c08a";
+      ctx.fillStyle = row % 2 ? "#d5c6b2" : "#bba78f";
       ctx.fillRect(0, row * 32, 256, 30);
-      ctx.fillStyle = "rgba(92, 58, 28, 0.16)";
+      ctx.fillStyle = "rgba(62, 48, 38, 0.2)";
       ctx.fillRect(0, row * 32 + 30, 256, 2);
-      ctx.fillStyle = "rgba(255, 244, 220, 0.28)";
+      ctx.fillStyle = "rgba(255, 248, 236, 0.2)";
       ctx.fillRect(18 + (row % 3) * 40, row * 32 + 8, 70, 3);
     }
   });
@@ -223,9 +224,9 @@ function woodTexture() {
 
 function pavementTexture() {
   return paintTexture(256, 256, (ctx) => {
-    ctx.fillStyle = "#141a2c";
+    ctx.fillStyle = "#12110f";
     ctx.fillRect(0, 0, 256, 256);
-    ctx.strokeStyle = "rgba(120, 146, 186, 0.16)";
+    ctx.strokeStyle = "rgba(186, 168, 146, 0.14)";
     ctx.lineWidth = 2;
     for (let i = 0; i <= 4; i += 1) {
       ctx.beginPath();
@@ -237,12 +238,6 @@ function pavementTexture() {
       ctx.lineTo(i * 64, 256);
       ctx.stroke();
     }
-    ctx.fillStyle = "rgba(103, 232, 249, 0.18)";
-    ctx.fillRect(0, 148, 256, 9);
-    ctx.fillStyle = "rgba(244, 114, 182, 0.16)";
-    ctx.fillRect(24, 42, 190, 7);
-    ctx.fillStyle = "rgba(255, 214, 160, 0.08)";
-    ctx.fillRect(0, 204, 256, 16);
   });
 }
 
@@ -282,11 +277,11 @@ function furnitureColor(item, selected, blocked) {
   if (blocked) return 0xd64545;
   if (selected) return 0xf2c56b;
   const category = String(item.category || "");
-  if (category === "sofa" || category === "chair") return 0xd48984;
-  if (category === "bed") return 0xecd8c8;
-  if (category === "coffee_table" || category === "table" || category === "desk") return 0xc9956a;
-  if (item.furniture_category === "wall_cabinet") return 0xf0d5b0;
-  return 0xd7a36a;
+  if (category === "sofa" || category === "chair") return 0x8d8276;
+  if (category === "bed") return 0xd9d0c4;
+  if (category === "coffee_table" || category === "table" || category === "desk") return 0xd4cbbd;
+  if (item.furniture_category === "wall_cabinet") return 0xfaf7f2;
+  return 0xf4f0e8;
 }
 
 /** 按足迹摆一组外形块。放不进外形尺寸时返回 false，调用方改画盒子。 */
@@ -327,9 +322,9 @@ function addSofa(parent, pickables, item, selected, blocked) {
     ? { fabric, deck: fabric, cushion: fabric, wood: fabric }
     : {
         fabric,
-        deck: celMaterial(0xb56d68),
-        cushion: celMaterial(0xf0c2ba),
-        wood: celMaterial(0x5c4030),
+        deck: celMaterial(0x776e64),
+        cushion: celMaterial(0xd4c9bb),
+        wood: celMaterial(0x3a312b),
       };
   return addShapedItem(parent, pickables, item, parts, materials, selected);
 }
@@ -343,8 +338,8 @@ function addCoffeeTable(parent, pickables, item, selected, blocked) {
     ? { top, leg: top, shelf: top }
     : {
         top,
-        leg: celMaterial(0x6e4b2e),
-        shelf: celMaterial(0xd8b48a),
+        leg: celMaterial(0x3a322c),
+        shelf: celMaterial(0xc9bfb0),
       };
   return addShapedItem(parent, pickables, item, parts, materials, selected);
 }
@@ -372,18 +367,17 @@ function addSky() {
         void main() {
           vec3 n = normalize(vDir);
           float h = clamp(n.y * 0.5 + 0.5, 0.0, 1.0);
-          vec3 zenith = vec3(0.035, 0.05, 0.11);
-          vec3 mid = vec3(0.09, 0.11, 0.24);
-          vec3 horizon = vec3(0.36, 0.18, 0.40);
-          vec3 col = mix(horizon, mid, smoothstep(0.02, 0.38, h));
-          col = mix(col, zenith, smoothstep(0.32, 0.92, h));
+          vec3 zenith = vec3(0.025, 0.028, 0.036);
+          vec3 mid = vec3(0.07, 0.065, 0.06);
+          vec3 horizon = vec3(0.32, 0.22, 0.16);
+          vec3 col = mix(horizon, mid, smoothstep(0.02, 0.42, h));
+          col = mix(col, zenith, smoothstep(0.28, 0.9, h));
           float band = pow(1.0 - abs(n.y), 10.0);
-          col += vec3(0.15, 0.45, 0.62) * band * 0.22;
-          col += vec3(0.85, 0.25, 0.55) * band * 0.08;
+          col += vec3(0.55, 0.38, 0.22) * band * 0.16;
           vec3 moon = normalize(vec3(-0.45, 0.78, -0.28));
-          col += vec3(0.86, 0.91, 1.0) * smoothstep(0.9972, 0.9992, dot(n, moon));
+          col += vec3(0.92, 0.9, 0.84) * smoothstep(0.9972, 0.9992, dot(n, moon));
           float stars = step(0.997, hash(floor(n * 180.0)));
-          col += vec3(0.9, 0.93, 1.0) * stars * step(0.18, n.y);
+          col += vec3(0.92, 0.9, 0.86) * stars * step(0.18, n.y);
           gl_FragColor = vec4(col, 1.0);
         }
       `,
@@ -392,23 +386,6 @@ function addSky() {
   sky.frustumCulled = false;
   sky.renderOrder = -2;
   return sky;
-}
-
-function addBuilding(parent, east, south, spanEast, spanSouth, height, color, windowColor) {
-  const mesh = new THREE.Mesh(
-    new THREE.BoxGeometry(spanEast, height, spanSouth),
-    celMaterial(color),
-  );
-  mesh.position.set(...roomToThree(east, south, height / 2));
-  parent.add(mesh);
-  addInk(mesh, 0x0c1018);
-  const windows = new THREE.Mesh(
-    new THREE.PlaneGeometry(spanEast * 0.62, height * 0.42),
-    new THREE.MeshBasicMaterial({ color: windowColor, transparent: true, opacity: 0.9 }),
-  );
-  // 平面默认朝 +Z，也就是房间的南向。默认相机在南边，看见的是楼的南立面。
-  windows.position.set(...roomToThree(east, south + spanSouth / 2 + 2, height * 0.58));
-  parent.add(windows);
 }
 
 function addLamp(parent, east, south, glow) {
@@ -427,10 +404,10 @@ function addNeonRim(parent, width, depth, side) {
   const x0 = width / 2 - side / 2;
   const y0 = depth / 2 - side / 2;
   const specs = [
-    [width / 2, y0 + 16, side, 32, 0x67e8f9],
-    [width / 2, y0 + side - 16, side, 32, 0xf472b6],
-    [x0 + 16, depth / 2, 32, side, 0xf472b6],
-    [x0 + side - 16, depth / 2, 32, side, 0x67e8f9],
+    [width / 2, y0 + 16, side, 32, 0xa6845c],
+    [width / 2, y0 + side - 16, side, 32, 0xa6845c],
+    [x0 + 16, depth / 2, 32, side, 0xa6845c],
+    [x0 + side - 16, depth / 2, 32, side, 0xa6845c],
   ];
   for (const [cx, cy, east, south, color] of specs) {
     const mesh = new THREE.Mesh(
@@ -445,36 +422,10 @@ function addNeonRim(parent, width, depth, side) {
 function addTown(parent, width, depth, side) {
   const x0 = width / 2 - side / 2;
   const y0 = depth / 2 - side / 2;
-  const northGap = -y0;
   const southGap = y0 + side - depth;
-  const westGap = -x0;
   const eastGap = x0 + side - width;
-  // 围墙在室内边界外占一个墙厚。室外小景沿用原来离墙面的空隙，改从外墙面起算。
+  // 围墙在室内边界外占一个墙厚。灯和树篱从外墙面起算。
   const yard = WALL_THICKNESS_MM;
-  if (northGap > 240) {
-    const span = Math.min(northGap - 70, 720) - yard;
-    if (span > 120) {
-      const south = -(36 + yard) - span / 2;
-      const colors = [0x1a2236, 0x261c38, 0x172433, 0x2c2140];
-      const heights = [1100, 1560, 860, 1280];
-      const windows = [0xffd2a4, 0x8be7ff, 0xf9a8d4, 0xffe1b0];
-      let cursor = Math.max(40, width * 0.06);
-      for (let index = 0; index < 4 && cursor < width * 0.92; index += 1) {
-        const spanEast = Math.min(520 + (index % 2) * 220, width * 0.92 - cursor);
-        if (spanEast < 180) break;
-        addBuilding(parent, cursor + spanEast / 2, south, spanEast, span, heights[index], colors[index], windows[index]);
-        cursor += spanEast + 80;
-      }
-    }
-  }
-  if (westGap > 240) {
-    const span = Math.min(westGap - 70, 640) - yard;
-    if (span > 120) {
-      const east = -(36 + yard) - span / 2;
-      addBuilding(parent, east, depth * 0.72, span, Math.min(480, depth * 0.22), 1320, 0x1b243c, 0xf9a8d4);
-      addBuilding(parent, east, depth * 0.28, span, Math.min(420, depth * 0.18), 900, 0x241832, 0x8be7ff);
-    }
-  }
   if (southGap > 180) {
     const hedgeDepth = Math.min(120, southGap * 0.28);
     const hedge = new THREE.Mesh(
@@ -485,10 +436,10 @@ function addTown(parent, width, depth, side) {
     parent.add(hedge);
     addInk(hedge, 0x0e1c18);
     const lampOut = (gap) => Math.max(gap, yard + 48);
-    addLamp(parent, width * 0.18, depth + lampOut(southGap * 0.62), 0xffd7a8);
-    addLamp(parent, width * 0.78, depth + lampOut(southGap * 0.5), 0x9aefff);
+    addLamp(parent, width * 0.18, depth + lampOut(southGap * 0.62), 0xf0e2cc);
+    addLamp(parent, width * 0.78, depth + lampOut(southGap * 0.5), 0xf0e2cc);
   }
-  if (eastGap > 200) addLamp(parent, width + Math.max(eastGap * 0.55, yard + 48), depth * 0.3, 0xffb7d5);
+  if (eastGap > 200) addLamp(parent, width + Math.max(eastGap * 0.55, yard + 48), depth * 0.3, 0xf0e2cc);
 }
 
 /** 正方形厚底座。房间和室外小景都落在它上面，夜色停在底座边缘。 */
@@ -538,9 +489,9 @@ export function mountLayout(canvas) {
   nightFill.layers.set(0);
   const moon = new THREE.DirectionalLight(0xd5e2ff, 0.42);
   moon.layers.set(0);
-  const roomFill = new THREE.HemisphereLight(0xfff6e4, 0xe8a15a, 0.48);
+  const roomFill = new THREE.HemisphereLight(0xf8f4ee, 0xd8cfc2, 0.62);
   roomFill.layers.set(ROOM_LAYER);
-  const roomKey = new THREE.DirectionalLight(0xffe3b0, 0.42);
+  const roomKey = new THREE.DirectionalLight(0xfff4e6, 0.55);
   roomKey.layers.set(ROOM_LAYER);
   scene.add(nightFill, moon, roomFill, roomKey);
   const content = new THREE.Group();
@@ -950,16 +901,16 @@ export function mountLayout(canvas) {
     addInk(floorMesh, 0x6b4e32);
     const lamp = new THREE.Mesh(
       new THREE.SphereGeometry(Math.min(width, depth) * 0.025, 16, 12),
-      new THREE.MeshBasicMaterial({ color: 0xfff1d4 }),
+      new THREE.MeshBasicMaterial({ color: 0xfff8f0 }),
     );
     lamp.position.set(...roomToThree(width / 2, depth / 2, Math.max(height - 180, height * 0.72)));
     content.add(lamp);
     const pool = new THREE.Mesh(
       new THREE.CircleGeometry(Math.min(width, depth) * 0.22, 28),
       new THREE.MeshBasicMaterial({
-        color: 0xffd7a1,
+        color: 0xf3eadc,
         transparent: true,
-        opacity: 0.32,
+        opacity: 0.16,
         side: THREE.DoubleSide,
         depthWrite: false,
       }),
@@ -971,14 +922,14 @@ export function mountLayout(canvas) {
     const grid = [];
     for (let x = step; x < width; x += step) grid.push(...roomToThree(x, 0, 2), ...roomToThree(x, depth, 2));
     for (let y = step; y < depth; y += step) grid.push(...roomToThree(0, y, 2), ...roomToThree(width, y, 2));
-    if (grid.length) content.add(lineSegments(grid, 0xd7b48a, 0.28));
+    if (grid.length) content.add(lineSegments(grid, 0xc9bba8, 0.16));
     // outline 内的几何和标注定义都使用房间坐标。
     content.userData.outline = {
       width, depth, height, axes: roomAxes(room),
     };
     // 相机到目标的距离下限用房间对角线：保证相机始终在房间外（见 applyRoomLimits）。
     content.userData.roomDiagonal = Math.hypot(width, depth, height);
-    const wallMaterial = celMaterial(0xf4e0c8, {
+    const wallMaterial = celMaterial(0xdcd4c8, {
       transparent: true,
       opacity: 1,
       depthWrite: true,
@@ -992,7 +943,7 @@ export function mountLayout(canvas) {
       const inks = [];
       for (const box of solid.boxes) {
         const mesh = markRoom(addRoomBox(group, box, material));
-        inks.push(addInk(mesh, 0x6a5344));
+        inks.push(addInk(mesh, 0x7a7066));
       }
       group.userData.material = material;
       group.userData.inks = inks;
@@ -1011,7 +962,7 @@ export function mountLayout(canvas) {
         content,
         insetOpening(opening.wall, opening.box),
         new THREE.MeshBasicMaterial({
-          color: windowGlow ? 0xffe1b0 : 0xc4956a,
+          color: windowGlow ? 0xf4ead8 : 0x8f704c,
           transparent: true,
           opacity: windowGlow ? 0.94 : 0.88,
           side: THREE.DoubleSide,

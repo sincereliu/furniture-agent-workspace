@@ -204,9 +204,8 @@
       }
       document.getElementById("no-results").hidden = cards.length === 0 || shown !== 0;
     });
-    function pulsePreview() { fetch("/api/preview/presence", {method:"POST",cache:"no-store",keepalive:true}).catch(function(){}); }
-    pulsePreview();
-    setInterval(pulsePreview, 1000);
+    // 一条开着的连接表示这一页还在。关掉页面，连接断，预览进程到点自己停。
+    new EventSource("/api/preview/presence/stream");
   </script>
 </body>
 </html>
