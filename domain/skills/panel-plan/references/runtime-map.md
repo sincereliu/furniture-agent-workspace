@@ -23,6 +23,8 @@
 
 确认后的板件冻成 `store/<project-id>/panels/<sha256>.json`，Revision 记下 `confirmed_panel_sha256`。有 Project Store 时，制造、板件旁路分析、CAD 板件快照和交付哈希按该哈希读冻结文件，文件缺失则失败；尚未记录冻结哈希、或没有 Store 时仍读内存中的 `stage_outputs.panel_plan`。不重跑 `plan_panel_stage()`。
 
+**看结构（只读）**：预览里的一台柜子结构页读同一份冻结文件——`confirmed_panel_sha256` 指向的那份，没有确认过就不显示结构，只画布局里已保存的外形（怎么挂路由见 [布局预览维护](../../layout-plan/references/preview-ops.md)）。这条链只读：不写 `stage_outputs`、不改确认状态、不喂下游。
+
 ## 模块
 
 | 模块 | 职责 | 边界理由 |
@@ -37,7 +39,7 @@
 | `assembly_tree.py` | 把求解结果编成柜→子装配→板，并按装配收口接触 | calculation / schema |
 | `joint_topology.py` | 大面–端面接触几何；不解析连不连 | calculation |
 | `panel_review.py` | 确认审查清单：净空、板件一行一条、接触去重；不含连不连 | calculation / structured_protocol |
-| `cabinet_panel_page.py` | 一台柜子的板件页：只画布局里已保存的外形。不确认布局，不生成门和层板 | structured_protocol |
+| `cabinet_panel_page.py` | 一台柜子的板件页。给了已确认冻结板件的投影就画结构；没有只画布局里已保存的外形。`panel_structure_view()` 只把冻结结构投影成页面能画的尺寸、位置、装配和颜色分组，不确认布局，不生成门和层板 | structured_protocol |
 | `validation.py` | 检查点入口；柜体/装配在 `validation_cabinet.py`，板件角色在 `validation_panels.py` | validation |
 | `quantitative_audit.py` / `design_optimization.py` | 旁路分析 | 只写 `stage_analyses` |
 
