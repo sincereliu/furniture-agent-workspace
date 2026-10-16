@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import re
 import sys
@@ -38,7 +39,11 @@ from furniture_layout.cabinet_entry import (
     cabinet_for_panel_page,
 )
 from furniture_layout.room_page import render_project_page
-from furniture_panel_planning.cabinet_panel_page import render_cabinet_panel_page
+from furniture_panel_planning.cabinet_identity import cabinets_from_output
+from furniture_panel_planning.cabinet_panel_page import (
+    panel_structure_view,
+    render_cabinet_panel_page,
+)
 from furniture_layout.project_list import render_project_list
 from furniture_layout.open_preview import (
     preview_server_is_up,
@@ -63,6 +68,7 @@ from furniture_workflow.workflow_lease import (
     transfer,
 )
 from furniture_workflow.workflow_store import JsonProjectStore, project_preview_status
+from furniture_workflow.workflow_state import WorkflowStage
 
 API_VERSION = "0.8.0"
 # 最后一页关掉后，超过这个秒数没有页面报「还在」，预览进程就退出。
@@ -504,6 +510,72 @@ async def project_layout(project_id: str):
     return _preview_page_data(project_id)
 
 
+class FrozenPanelsMissing(LookupError):
+    """这个项目还没有已确认冻结的板件。"""
+
+
+def confirmed_panel_structure(
+    project,
+    cabinet_id: str,
+    *,
+    store: JsonProjectStore,
+) -> dict[str, Any] | None:
+    """这一台已确认冻结板件的结构投影；还没有冻结板件返回 `None`。
+
+    只读，而且只认确认过的内容——与制造 / CAD 读同一份事实（`confirmed_panel_sha256`
+    指向的那份冻结点）。**没有确认就不显示结构**：页面上宁可只有外形，也不拿运行中的
+    候选冒充已经认可的柜体。
+
+    冻结文件里没有这台柜（布局改过、板件还没重跑）时抛 `LookupError`，由页面明说这件事。
+    """
+    revision = project.latest
+    if WorkflowStage.PANELS_PLANNED.value not in revision.approved_stages:
+        return None
+    digest = revision.confirmed_panel_sha256
+    if not digest:
+        return None
+    path = store.panel_path(project.id, digest)
+    if not path.is_file():
+        raise FrozenPanelsMissing(
+            f"已确认板件文件缺失：panels/{digest}.json"
+        )
+    try:
+        frozen = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise FrozenPanelsMissing(f"已确认板件文件无法读取：{exc}") from exc
+    if not isinstance(frozen, dict):
+        raise FrozenPanelsMissing("已确认板件文件不是对象")
+    for cabinet in cabinets_from_output(frozen):
+        if str(cabinet.get("id")) == cabinet_id:
+            return panel_structure_view(cabinet)
+    raise LookupError(f"已确认板件里没有 {cabinet_id}")
+
+
+def structure_for_panel_page(
+    project,
+    cabinet_id: str,
+) -> tuple[dict[str, Any] | None, str]:
+    """给板件页的 `(结构, 说明)`。
+
+    结构为 `None` 时说明为什么只有外形——三种情况页面上说法必须不同，别让"没确认"
+    和"冻结文件缺了"看起来像同一件事。
+    """
+    revision = project.latest
+    if WorkflowStage.PANELS_PLANNED.value not in revision.approved_stages:
+        return None, ""
+    try:
+        structure = confirmed_panel_structure(
+            project,
+            cabinet_id,
+            store=JsonProjectStore(STORE_ROOT),
+        )
+    except FrozenPanelsMissing as exc:
+        return None, f"已确认板件读不出来，暂时只能看外形：{exc}。回布局页重跑板件后再看结构。"
+    except LookupError:
+        return None, "冻结板件里没有这台柜（布局可能改过）。回布局页重新生成板件后再看结构。"
+    return structure, ""
+
+
 @app.get(
     "/api/project/{project_id}/cabinets/{cabinet_id}/panels",
     response_class=HTMLResponse,
@@ -513,7 +585,7 @@ async def project_cabinet_panels(
     cabinet_id: str,
     mode: str | None = None,
 ) -> HTMLResponse:
-    """这一台的板件页。读最新布局里已保存的外形，不确认布局，不写板件。"""
+    """这一台的板件页。外形来自最新布局；结构来自已确认冻结板件（没有就只画外形）。"""
     project = _load_project(project_id)
     try:
         cabinet = cabinet_for_panel_page(project.latest.layout, cabinet_id)
@@ -521,11 +593,14 @@ async def project_cabinet_panels(
         raise HTTPException(status_code=404, detail="这一台不在布局里") from exc
     except CabinetNotExecutable as exc:
         raise HTTPException(status_code=422, detail="这件只占位置") from exc
+    structure, stage_note = structure_for_panel_page(project, cabinet_id)
     return HTMLResponse(
         content=render_cabinet_panel_page(
             project_id,
             cabinet,
             share=mode == "view",
+            structure=structure,
+            stage_note=stage_note,
         )
     )
 
