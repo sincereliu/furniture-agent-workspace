@@ -12,6 +12,8 @@ import {
   isOrthoView, nearAngle, rotationSign, verticalPlaneScale,
 } from "/layout-view/layout_camera.js";
 
+const pageConfigEl=document.getElementById("page-config");
+const PAGE_CONFIG=pageConfigEl?JSON.parse(pageConfigEl.textContent||"{}"):{};
 const SCENE_ID="__SCENE_ID__";
 const READ_ONLY=__READ_ONLY__;
 const SHARE_FORM=__SHARE_FORM__;
@@ -21,11 +23,24 @@ const PANEL_URL_BASE=__PANEL_URL_BASE__;
 const LAYOUT_URL=__LAYOUT_URL__;
 let rooms=__ROOMS_JSON__;
 let layoutVersion=__VERSION_JSON__;
-let layoutDirty=false;
-let layoutEpoch=0;
-let layoutFetchEpoch=-1;
-let layoutEvents=null;
-let roomIndex=0;
+
+// 收敛散落的顶层可变状态为四个职责清晰的 Store
+const syncStore={
+  dirty:false,
+  epoch:0,
+  fetchEpoch:-1,
+  events:null,
+  leaseQuery:"",
+  roomIndex:0,
+};
+const pullStore={now:1,from:1,end:1};
+const uiStore={
+  placing:false,
+  scale:1,
+  panelSignature:null,
+  detailItemId:undefined,
+  viewAnimation:0,
+};
 
 const scene=JSON.parse(document.getElementById("scene-data").textContent);
 scene.items=normalizeItems(scene.items);
@@ -33,7 +48,6 @@ scene.obstacles=scene.obstacles||[];
 scene.openings=scene.openings||[];
 const canvas=document.getElementById("scene"),status=document.getElementById("status");
 const view=mountLayout(canvas);
-let placing=false;
 let room=scene.room;
 let HOME_TARGET=[room.width_mm/2,room.depth_mm/2,room.height_mm*.3];
 const target=[...HOME_TARGET];
@@ -50,7 +64,7 @@ function bindRoom(){
   }
   const heading=document.getElementById("heading");
   if(heading){
-    heading.textContent=(room.name||"房间")+" · "+__HEADING_SUFFIX__;
+    heading.textContent=(room.name||"房间")+" · "+(PAGE_CONFIG.heading_suffix||__HEADING_SUFFIX__);
     document.title=heading.textContent;
   }
 }
@@ -66,9 +80,8 @@ const VIEWS={
   right:{yaw:0,pitch:0},
   left:{yaw:Math.PI,pitch:0},
 };
-let uiScale=1;
-function fitCanvas(){view.resize();uiScale=1}
-const px=css=>css*uiScale;
+function fitCanvas(){view.resize();uiStore.scale=1}
+const px=css=>css*uiStore.scale;
 function camera(){return view.basis()}
 function projector(){return point=>view.project(point[0],point[1],point[2]||0)}
 function unprojectToGround(sx,sy){
@@ -79,21 +92,20 @@ function screenPoint(event){
   const rect=canvas.getBoundingClientRect();
   return [event.clientX-rect.left,event.clientY-rect.top];
 }
-
-let pullNow=1,pullFrom=1,pullEnd=1;
-function setPullProgress(k){pullNow=pullFrom+(pullEnd-pullFrom)*k}
+function setPullProgress(k){pullStore.now=pullStore.from+(pullStore.end-pullStore.from)*k}
 
 function render(){
-  placing=true;
+  uiStore.placing=true;
   const fit=baseFit(canvas,diagonal);
-  state.distance=fit*pullNow;
-  view.setFovForZoom(state.zoom*pullNow);
+  state.distance=fit*pullStore.now;
+  view.setFovForZoom(state.zoom*pullStore.now);
   view.setView(state.yaw,state.pitch,state.distance,target);
-  placing=false;
+  uiStore.placing=false;
   window.__state={active:state.active,yaw:state.yaw,pitch:state.pitch,
     distance:state.distance,zoom:state.zoom,
     freeView:state.freeView?{...state.freeView}:null,
-    pullFrom,pullEnd,pullNow,animating:viewAnimation!==0};
+    pullFrom:pullStore.from,pullEnd:pullStore.end,pullNow:pullStore.now,
+    animating:uiStore.viewAnimation!==0};
   view.sync(scene,{selectedId:state.selectedId,dims:state.dims,readOnly:READ_ONLY,blockedId:state.blocked});
   syncPanel();
 }
@@ -139,12 +151,11 @@ function selectHint(item){
 
 /* ---------- 3. 右侧面板与数值微调 ---------- */
 const escapeHtml=value=>String(value).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
-let panelSignature=null;
 function syncPanel(){
   const signature=scene.items.map(item=>`${item.id}:${item.label}:${item.placement.mode}`).join("|")+"#"+state.selectedId;
   const list=document.getElementById("item-list");
-  if(list&&signature!==panelSignature){
-    panelSignature=signature;
+  if(list&&signature!==uiStore.panelSignature){
+    uiStore.panelSignature=signature;
     list.innerHTML=scene.items.map(item=>`<li><button type="button" class="item-row${item.id===state.selectedId?" active":""}" data-item="${escapeHtml(item.id)}">
       <span class="dot"></span><span class="name">${escapeHtml(item.label)}</span>
       <span class="mode">${item.placement.mode==="wall"?"靠墙":"自由"}</span></button></li>`).join("");
@@ -233,17 +244,16 @@ function openPanelPlan(item){
   location.assign(`${PANEL_URL_BASE}/${encodeURIComponent(item.id)}/panels${query?`?${query}`:""}`);
 }
 
-let detailItemId;
 function syncDetail(force=false){
   const detail=document.getElementById("detail");
   if(!detail)return;
   const item=scene.items.find(candidate=>candidate.id===state.selectedId);
   if(!item){
-    if(detailItemId!==null){detailItemId=null;detail.innerHTML='<p class="empty">未选中任何家具</p>'}
+    if(uiStore.detailItemId!==null){uiStore.detailItemId=null;detail.innerHTML='<p class="empty">未选中任何家具</p>'}
     return;
   }
-  if(detailItemId!==item.id){
-    detailItemId=item.id;
+  if(uiStore.detailItemId!==item.id){
+    uiStore.detailItemId=item.id;
     detail.innerHTML=detailMarkup(item);
   }
   applyDetailValues(detail,item,force);
@@ -511,20 +521,20 @@ function applyDocument(payload){
   showRoom(index,true);
 }
 async function refreshProjectDocument(){
-  const epoch=layoutEpoch;
+  const epoch=syncStore.epoch;
   try{
     const response=await fetch(LAYOUT_URL,{cache:"no-store",headers:{Accept:"application/json"}});
     if(!response.ok)return false;
     const payload=await response.json();
-    if(epoch!==layoutEpoch)return false;
+    if(epoch!==syncStore.epoch)return false;
     applyDocument(payload);
-    layoutDirty=false;
+    syncStore.dirty=false;
     return true;
   }catch(error){return false}
 }
 async function persist(item,kind,sizes){
   if(READ_ONLY)return false;
-  if(PROJECT_EDIT_URL&&!leaseToken){
+  if(PROJECT_EDIT_URL&&!leaseStore.token){
     setStatus("这一页现在只能看：编辑权不在你手上（点「收回编辑权」或等助手做完）","warn");
     return false;
   }
@@ -551,7 +561,7 @@ async function persist(item,kind,sizes){
   }
   const url=PROJECT_EDIT_URL||`/api/room-scene/${encodeURIComponent(SCENE_ID)}/edit`;
   const headers={"Content-Type":"application/json"};
-  if(leaseToken)headers["X-Edit-Lease"]=leaseToken;
+  if(leaseStore.token)headers["X-Edit-Lease"]=leaseStore.token;
   if(PROJECT_EDIT_URL)op.expected_version=layoutVersion;
   try{
     const response=await fetch(url,{method:"POST",headers,body:JSON.stringify(op)});
@@ -666,16 +676,15 @@ window.addEventListener("keyup",event=>{if(event.key==="Shift")view.setShiftPan(
 
 window.addEventListener("resize",()=>{
   fitCanvas();
-  if(!viewAnimation)state.distance=fitDistance(canvas,diagonal,view,state.active);
+  if(!uiStore.viewAnimation)state.distance=fitDistance(canvas,diagonal,view,state.active);
   render();
 });
 const nextFrame=typeof requestAnimationFrame==="function"
   ?requestAnimationFrame
   :callback=>setTimeout(()=>callback(Date.now()),16);
 const cancelFrame=typeof cancelAnimationFrame==="function"?cancelAnimationFrame:clearTimeout;
-let viewAnimation=0;
 function animateView(goal,duration){
-  cancelFrame(viewAnimation);viewAnimation=0;
+  cancelFrame(uiStore.viewAnimation);uiStore.viewAnimation=0;
   const reduce=typeof matchMedia==="function"&&matchMedia("(prefers-reduced-motion: reduce)").matches;
   const from={yaw:state.yaw,pitch:state.pitch,zoom:state.zoom,
     centre:[target[0],target[1],target[2]]};
@@ -686,16 +695,16 @@ function animateView(goal,duration){
     state.yaw=goal.yaw;state.pitch=goal.pitch;
     state.zoom=toZoom;
     for(let i=0;i<3;i++)target[i]=to[i];
-    pullFrom=pullEnd=isOrthoView(goal.active)?view.elevationPull():1;
-    pullNow=pullEnd;
-    state.distance=baseFit(canvas,diagonal)*pullNow;
+    pullStore.from=pullStore.end=isOrthoView(goal.active)?view.elevationPull():1;
+    pullStore.now=pullStore.end;
+    state.distance=baseFit(canvas,diagonal)*pullStore.now;
     render();
     if(done)done();
     return;
   }
-  pullFrom=pullNow;
-  pullEnd=isOrthoView(goal.active)?view.elevationPull():1;
-  pullNow=pullFrom;
+  pullStore.from=pullStore.now;
+  pullStore.end=isOrthoView(goal.active)?view.elevationPull():1;
+  pullStore.now=pullStore.from;
   let deltaYaw=goal.yaw-from.yaw;
   while(deltaYaw>Math.PI)deltaYaw-=Math.PI*2;
   while(deltaYaw<-Math.PI)deltaYaw+=Math.PI*2;
@@ -709,11 +718,11 @@ function animateView(goal,duration){
     state.zoom=from.zoom+(toZoom-from.zoom)*k;
     for(let i=0;i<3;i++)target[i]=from.centre[i]+(to[i]-from.centre[i])*k;
     render();
-    if(t<1){viewAnimation=nextFrame(step);return}
-    viewAnimation=0;
+    if(t<1){uiStore.viewAnimation=nextFrame(step);return}
+    uiStore.viewAnimation=0;
     if(done)done();
   };
-  viewAnimation=nextFrame(step);
+  uiStore.viewAnimation=nextFrame(step);
 }
 function syncViewControls(){
   const select=document.getElementById("view-select");
@@ -838,7 +847,7 @@ const state={...defaults,orbiting:false,panning:false,active:"default_view",sele
 
 canvas.addEventListener("wheel",event=>{
   event.preventDefault();
-  cancelFrame(viewAnimation);viewAnimation=0;
+  cancelFrame(uiStore.viewAnimation);uiStore.viewAnimation=0;
   const pose=view.readView();
   state.yaw=pose.yaw;state.pitch=pose.pitch;
   for(let i=0;i<3;i++)target[i]=pose.target[i];
@@ -856,12 +865,12 @@ if(dimsButton){
   syncDimsButton();
 }
 view.controls.addEventListener("start",()=>{
-  cancelFrame(viewAnimation);viewAnimation=0;
+  cancelFrame(uiStore.viewAnimation);uiStore.viewAnimation=0;
   state.orbiting=true;
   state._pose=view.readView();
   canvas.classList.add("orbiting");
 });
-view.controls.addEventListener("change",()=>{if(!placing)view.draw()});
+view.controls.addEventListener("change",()=>{if(!uiStore.placing)view.draw()});
 view.controls.addEventListener("end",()=>{
   const pose=view.readView();
   const before=state._pose;
@@ -899,7 +908,7 @@ const deepLinkItem=deepLink.get("item");
 if(deepLinkItem&&scene.items.some(candidate=>candidate.id===deepLinkItem))selectItem(deepLinkItem);
 function syncRoomUrl(){
   if(!rooms||rooms.length<2)return;
-  const entry=rooms[roomIndex];
+  const entry=rooms[syncStore.roomIndex];
   if(!entry||!entry.id||typeof history==="undefined")return;
   try{
     const url=new URL(location.href);
@@ -917,19 +926,19 @@ function syncRoomBand(){
     band.dataset.signature=signature;
     band.innerHTML=rooms.map((entry,index)=>{
       const pending=entry.approved===false?" · 待审":"";
-      const pressed=index===roomIndex?' aria-pressed="true"':' aria-pressed="false"';
+      const pressed=index===syncStore.roomIndex?' aria-pressed="true"':' aria-pressed="false"';
       const mark=entry.approved===false?' data-pending="true"':"";
       return `<button type="button" data-room-index="${index}"${pressed}${mark}>${escapeHtml(entry.name||entry.id)}${pending}</button>`;
     }).join("");
     return;
   }
   Array.from(band.querySelectorAll("button")).forEach(button=>{
-    button.setAttribute("aria-pressed",Number(button.dataset.roomIndex)===roomIndex?"true":"false");
+    button.setAttribute("aria-pressed",Number(button.dataset.roomIndex)===syncStore.roomIndex?"true":"false");
   });
 }
 function showRoom(index,keepCamera){
   if(!rooms||!rooms[index])return;
-  roomIndex=index;
+  syncStore.roomIndex=index;
   const next=rooms[index].scene;
   scene.room=next.room;
   scene.items=normalizeItems(next.items||[]);
@@ -937,8 +946,8 @@ function showRoom(index,keepCamera){
   scene.openings=next.openings||[];
   bindRoom();
   if(!keepCamera){
-    cancelFrame(viewAnimation);viewAnimation=0;
-    pullNow=pullFrom=pullEnd=1;state.zoom=1;state.freeView=null;
+    cancelFrame(uiStore.viewAnimation);uiStore.viewAnimation=0;
+    pullStore.now=pullStore.from=pullStore.end=1;state.zoom=1;state.freeView=null;
     target[0]=HOME_TARGET[0];target[1]=HOME_TARGET[1];target[2]=HOME_TARGET[2];
     state.yaw=DEFAULT_YAW;state.pitch=DEFAULT_PITCH;
     state.distance=fitDistance(canvas,diagonal,view,"default_view");
@@ -948,8 +957,8 @@ function showRoom(index,keepCamera){
   if(state.selectedId&&!scene.items.some(item=>item.id===state.selectedId)){
     state.selectedId=null;state.blocked=null;
   }
-  panelSignature=null;
-  detailItemId=undefined;
+  uiStore.panelSignature=null;
+  uiStore.detailItemId=undefined;
   syncRoomBand();
   syncRoomUrl();
   render();
@@ -963,12 +972,20 @@ const DECISIONS_URL=LAYOUT_URL?LAYOUT_URL.replace(/\/layout$/,"/decisions"):"";
 const LEASE_TOKEN_KEY="dsh-edit-lease:"+SCENE_ID;
 const LEASE_ID_KEY=LEASE_TOKEN_KEY+":id";
 const LEASE_LABEL_KEY=LEASE_TOKEN_KEY+":label";
-let leaseToken=PROJECT_EDIT_URL?(sessionStorage.getItem(LEASE_TOKEN_KEY)||""):"";
-let leaseId=PROJECT_EDIT_URL?(sessionStorage.getItem(LEASE_ID_KEY)||""):"";
 if(PROJECT_EDIT_URL&&!sessionStorage.getItem(LEASE_LABEL_KEY)){
   sessionStorage.setItem(LEASE_LABEL_KEY,"窗口 "+Math.random().toString(16).slice(2,6));
 }
-const leaseLabel=PROJECT_EDIT_URL?sessionStorage.getItem(LEASE_LABEL_KEY):"";
+const leaseStore={
+  token:PROJECT_EDIT_URL?(sessionStorage.getItem(LEASE_TOKEN_KEY)||""):"",
+  id:PROJECT_EDIT_URL?(sessionStorage.getItem(LEASE_ID_KEY)||""):"",
+  label:PROJECT_EDIT_URL?sessionStorage.getItem(LEASE_LABEL_KEY):"",
+  shown:null,
+  painted:"",
+  pendingDecisions:[],
+  lastInteraction:Date.now(),
+  idleYielded:false,
+  idleTimer:0,
+};
 const round1=value=>Math.round(value);
 function localTime(iso){
   const date=new Date(iso);
@@ -1032,7 +1049,6 @@ function applyWorking(payload){
   const panel=document.getElementById("working-panel");
   if(panel&&!panel.hidden)renderWorkingPanel();
 }
-let pendingDecisions=[];
 function basisCanDecide(){
   return Boolean(PROJECT_EDIT_URL)&&!READ_ONLY&&!SHARE_FORM;
 }
@@ -1041,7 +1057,7 @@ function renderBasisPanel(){
   const badge=document.getElementById("basis-badge");
   if(!panel||!badge)return;
   const canDecide=basisCanDecide();
-  panel.innerHTML=pendingDecisions.map(entry=>{
+  panel.innerHTML=leaseStore.pendingDecisions.map(entry=>{
     const quote=entry.utterance?`<p class="quote">「${escapeHtml(entry.utterance)}」</p>`:"";
     const who=entry.speaker==="relay"?"（别人转达的客户话）":(entry.speaker==="customer"?"":"（助手记的）");
     const actions=canDecide
@@ -1058,15 +1074,15 @@ function applyDecisions(payload){
   const badge=document.getElementById("basis-badge");
   const panel=document.getElementById("basis-panel");
   if(!badge)return;
-  pendingDecisions=(payload&&payload.decisions&&payload.decisions.pending)||[];
-  if(!pendingDecisions.length){
+  leaseStore.pendingDecisions=(payload&&payload.decisions&&payload.decisions.pending)||[];
+  if(!leaseStore.pendingDecisions.length){
     badge.hidden=true;badge.removeAttribute("title");badge.setAttribute("aria-expanded","false");
     if(panel)panel.hidden=true;
     return;
   }
   badge.hidden=false;
-  badge.textContent=`助手假设 ${pendingDecisions.length} 条 · 点开确认`;
-  badge.title=pendingDecisions.map(entry=>`${entry.utterance} → ${entry.interpretation}`).join("\n");
+  badge.textContent=`助手假设 ${leaseStore.pendingDecisions.length} 条 · 点开确认`;
+  badge.title=leaseStore.pendingDecisions.map(entry=>`${entry.utterance} → ${entry.interpretation}`).join("\n");
   renderBasisPanel();
 }
 function toggleBasisPanel(){
@@ -1099,28 +1115,26 @@ async function decideBasis(target,action){
   applyDecisions(document);
   setStatus(action==="confirm"?"已记下：客户确认了这条":"已记下：客户划掉了这条");
 }
-let shownLease=null;
-let paintedLease="";
 function applyLease(lease){
-  shownLease=lease||null;
-  paintedLease="";
+  leaseStore.shown=lease||null;
+  leaseStore.painted="";
   paintLease();
 }
 function paintLease(){
   const badge=document.getElementById("lease-badge");
   const button=document.getElementById("take-lease");
   if(!badge||!button)return;
-  const lease=shownLease;
-  const mine=Boolean(lease&&leaseToken&&lease.id===leaseId);
+  const lease=leaseStore.shown;
+  const mine=Boolean(lease&&leaseStore.token&&lease.id===leaseStore.id);
   if(!lease){
-    if(paintedLease==="none")return;
-    paintedLease="none";
+    if(leaseStore.painted==="none")return;
+    leaseStore.painted="none";
     badge.hidden=true;badge.classList.remove("mine");button.hidden=true;return;
   }
   const who=lease.holder==="agent"?"助手正在处理":(mine?"编辑权在你手上":"另一窗口正在编辑");
   const signature=`${who}|${mine}|${lease.holder}`;
-  if(signature===paintedLease)return;
-  paintedLease=signature;
+  if(signature===leaseStore.painted)return;
+  leaseStore.painted=signature;
   badge.textContent=who;
   badge.hidden=false;
   badge.classList.toggle("mine",mine);
@@ -1128,7 +1142,7 @@ function paintLease(){
 }
 async function leasePost(path,body){
   const headers={"Content-Type":"application/json"};
-  if(leaseToken)headers["X-Edit-Lease"]=leaseToken;
+  if(leaseStore.token)headers["X-Edit-Lease"]=leaseStore.token;
   return fetch(path,{method:"POST",cache:"no-store",headers,body:JSON.stringify(body)});
 }
 const takeLeaseButton=document.getElementById("take-lease");
@@ -1156,13 +1170,13 @@ if(takeLeaseButton){
     try{
       const response=await fetch(LEASE_URL+"/takeover",{
         method:"POST",cache:"no-store",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({holder:"page",label:leaseLabel}),
+        body:JSON.stringify({holder:"page",label:leaseStore.label}),
       });
       if(!response.ok)throw new Error(response.status);
       const lease=await response.json();
-      leaseToken=lease.token;leaseId=lease.id;
-      sessionStorage.setItem(LEASE_TOKEN_KEY,leaseToken);
-      sessionStorage.setItem(LEASE_ID_KEY,leaseId);
+      leaseStore.token=lease.token;leaseStore.id=lease.id;
+      sessionStorage.setItem(LEASE_TOKEN_KEY,leaseStore.token);
+      sessionStorage.setItem(LEASE_ID_KEY,leaseStore.id);
       applyLease(lease);
       watchLayout();
       setStatus("已收回编辑权：助手下次写入会被挡下");
@@ -1174,12 +1188,12 @@ if(takeLeaseButton){
   });
 }
 window.addEventListener("pagehide",()=>{
-  if(layoutEvents)layoutEvents.close();
-  if(!leaseToken||!LEASE_URL)return;
+  if(syncStore.events)syncStore.events.close();
+  if(!leaseStore.token||!LEASE_URL)return;
   try{
     fetch(LEASE_URL,{
       method:"DELETE",cache:"no-store",keepalive:true,
-      headers:{"X-Edit-Lease":leaseToken},
+      headers:{"X-Edit-Lease":leaseStore.token},
     });
   }catch(error){}
 });
@@ -1192,32 +1206,31 @@ function applyLayoutNotice(notice){
   if(notice.working)applyWorking(notice);
   if(notice.decisions)applyDecisions(notice);
   if(notice.version===undefined)return;
-  if(layoutVersionOf(notice)===layoutVersion){layoutDirty=false;return}
-  layoutEpoch+=1;
-  layoutDirty=true;
+  if(layoutVersionOf(notice)===layoutVersion){syncStore.dirty=false;return}
+  syncStore.epoch+=1;
+  syncStore.dirty=true;
   if(!sceneBusy())flushLayoutNotice();
 }
 function flushLayoutNotice(){
-  if(!layoutDirty||sceneBusy()||!LAYOUT_URL)return;
-  if(layoutFetchEpoch===layoutEpoch)return;
-  const epoch=layoutEpoch;
-  layoutFetchEpoch=epoch;
+  if(!syncStore.dirty||sceneBusy()||!LAYOUT_URL)return;
+  if(syncStore.fetchEpoch===syncStore.epoch)return;
+  const epoch=syncStore.epoch;
+  syncStore.fetchEpoch=epoch;
   refreshProjectDocument().then(ok=>{
-    if(!ok&&layoutFetchEpoch===epoch)layoutFetchEpoch=-1;
+    if(!ok&&syncStore.fetchEpoch===epoch)syncStore.fetchEpoch=-1;
   });
 }
-let layoutLeaseQuery="";
 function watchLayout(){
   if(!LAYOUT_URL)return;
-  const query=leaseId?("?lease_id="+encodeURIComponent(leaseId)):"";
-  if(layoutEvents&&query===layoutLeaseQuery)return;
-  if(layoutEvents)layoutEvents.close();
-  layoutLeaseQuery=query;
+  const query=leaseStore.id?("?lease_id="+encodeURIComponent(leaseStore.id)):"";
+  if(syncStore.events&&query===syncStore.leaseQuery)return;
+  if(syncStore.events)syncStore.events.close();
+  syncStore.leaseQuery=query;
   const source=new EventSource(LAYOUT_URL+"/events"+query);
   source.onmessage=event=>{
     try{applyLayoutNotice(JSON.parse(event.data))}catch(error){}
   };
-  layoutEvents=source;
+  syncStore.events=source;
 }
 const roomBand=document.getElementById("room-band");
 if(roomBand){
@@ -1225,7 +1238,7 @@ if(roomBand){
     const button=event.target&&event.target.closest?event.target.closest("button[data-room-index]"):null;
     if(!button)return;
     const index=Number(button.dataset.roomIndex);
-    if(!Number.isInteger(index)||!rooms||!rooms[index]||index===roomIndex)return;
+    if(!Number.isInteger(index)||!rooms||!rooms[index]||index===syncStore.roomIndex)return;
     showRoom(index,false);
   });
 }
@@ -1234,18 +1247,15 @@ syncRoomUrl();
 if(LAYOUT_URL)watchLayout();
 
 const IDLE_YIELD_SECONDS=300;
-let lastInteraction=Date.now();
-let idleYielded=false;
-let idleTimer=0;
 function armIdle(){
-  if(!PROJECT_EDIT_URL||READ_ONLY||SHARE_FORM||!leaseToken)return;
-  clearTimeout(idleTimer);
-  idleTimer=setTimeout(yieldIdleLease,IDLE_YIELD_SECONDS*1000);
+  if(!PROJECT_EDIT_URL||READ_ONLY||SHARE_FORM||!leaseStore.token)return;
+  clearTimeout(leaseStore.idleTimer);
+  leaseStore.idleTimer=setTimeout(yieldIdleLease,IDLE_YIELD_SECONDS*1000);
 }
 function markInteraction(){
-  lastInteraction=Date.now();
-  if(leaseToken)armIdle();
-  if(idleYielded&&PROJECT_EDIT_URL&&!READ_ONLY&&!leaseToken)acquireLease();
+  leaseStore.lastInteraction=Date.now();
+  if(leaseStore.token)armIdle();
+  if(leaseStore.idleYielded&&PROJECT_EDIT_URL&&!READ_ONLY&&!leaseStore.token)acquireLease();
 }
 ["pointerdown","keydown","wheel","pointermove"].forEach(name=>{
   window.addEventListener(name,markInteraction,{passive:true});
@@ -1253,18 +1263,18 @@ function markInteraction(){
 async function acquireLease(){
   if(!PROJECT_EDIT_URL||READ_ONLY||SHARE_FORM)return null;
   try{
-    const response=await leasePost(LEASE_URL,{holder:"page",label:leaseLabel,token:leaseToken||undefined});
+    const response=await leasePost(LEASE_URL,{holder:"page",label:leaseStore.label,token:leaseStore.token||undefined});
     if(response.status===423){
       const detail=await response.json().catch(()=>({}));
       applyLease(detail.detail&&detail.detail.holder?detail.detail:(detail.detail||null));
-      idleYielded=false;
+      leaseStore.idleYielded=false;
       return null;
     }
     if(!response.ok)return null;
     const lease=await response.json();
-    leaseToken=lease.token;leaseId=lease.id;idleYielded=false;
-    sessionStorage.setItem(LEASE_TOKEN_KEY,leaseToken);
-    sessionStorage.setItem(LEASE_ID_KEY,leaseId);
+    leaseStore.token=lease.token;leaseStore.id=lease.id;leaseStore.idleYielded=false;
+    sessionStorage.setItem(LEASE_TOKEN_KEY,leaseStore.token);
+    sessionStorage.setItem(LEASE_ID_KEY,leaseStore.id);
     applyLease(lease);
     watchLayout();
     armIdle();
@@ -1272,14 +1282,14 @@ async function acquireLease(){
   }catch(error){return null}
 }
 function yieldIdleLease(){
-  if(!PROJECT_EDIT_URL||READ_ONLY||SHARE_FORM||!leaseToken)return;
-  if(Date.now()-lastInteraction<IDLE_YIELD_SECONDS*1000){
+  if(!PROJECT_EDIT_URL||READ_ONLY||SHARE_FORM||!leaseStore.token)return;
+  if(Date.now()-leaseStore.lastInteraction<IDLE_YIELD_SECONDS*1000){
     armIdle();
     return;
   }
-  fetch(LEASE_URL,{method:"DELETE",cache:"no-store",headers:{"X-Edit-Lease":leaseToken}})
+  fetch(LEASE_URL,{method:"DELETE",cache:"no-store",headers:{"X-Edit-Lease":leaseStore.token}})
     .catch(()=>{});
-  leaseToken="";idleYielded=true;
+  leaseStore.token="";leaseStore.idleYielded=true;
   sessionStorage.removeItem(LEASE_TOKEN_KEY);
   applyLease(null);
   setStatus("闲置太久，已让出编辑权 · 点一下就能拿回来");
@@ -1294,7 +1304,7 @@ const shutdownButton=document.getElementById("shutdown-preview");
 if(shutdownButton){
   shutdownButton.addEventListener("click",async()=>{
     shutdownButton.disabled=true;
-    if(layoutEvents){layoutEvents.close();layoutEvents=null}
+    if(syncStore.events){syncStore.events.close();syncStore.events=null}
     try{
       await fetch("/api/preview/shutdown",{method:"POST",cache:"no-store"});
       setStatus("预览服务已退出，可以关闭这个标签页");

@@ -76,8 +76,19 @@ export function mountLayout(canvas) {
   const roomKey = new THREE.DirectionalLight(0xfff4e6, 0.55);
   roomKey.layers.set(ROOM_LAYER);
   scene.add(nightFill, moon, roomFill, roomKey);
+
+  // 分层缓存：房间舞台（围墙/地板/城市底座/坐标轴）、家具网格池（按 id 增量更新）、动态标注与手柄
   const content = new THREE.Group();
+  const stageGroup = new THREE.Group();
+  const itemsGroup = new THREE.Group();
+  const annotationsGroup = new THREE.Group();
+  content.add(stageGroup, itemsGroup, annotationsGroup);
   scene.add(content);
+
+  let stageKey = "";
+  let stageAxisLabels = [];
+  const itemCache = new Map();
+
   const controls = new OrbitControls(camera, canvas);
   controls.enableDamping = false;
   controls.enableZoom = false;
@@ -276,63 +287,104 @@ export function mountLayout(canvas) {
     return ELEVATION_PULL;
   }
 
-  function sync(data, options) {
-    const room = data.room;
-    const selectedId = options.selectedId;
-    const readOnly = options.readOnly;
-    const dimsMode = options.dims === false ? "off" : (options.dims || "selected");
-    disposeObject(content);
-    content.clear();
+  function ensureRoomStage(data) {
+    const nextStageKey = JSON.stringify([data.room, data.openings || [], data.obstacles || []]);
+    if (nextStageKey === stageKey) {
+      for (const spec of stageAxisLabels) overlay.addLabel(spec);
+      return;
+    }
+    stageKey = nextStageKey;
+    disposeObject(stageGroup);
+    stageGroup.clear();
+    stageAxisLabels = [];
     wallFade = [];
     wallFadeFrom = [];
     wallFadeTargets = [];
     wallFadeStarted = 0;
-    pickables = [];
-    overlay.clear();
 
+    const room = data.room;
     const width = room.width_mm;
     const depth = room.depth_mm;
     const height = room.height_mm;
     roomKey.position.set(...roomToThree(width * 0.15, depth * 1.35, height * 2.4));
     moon.position.set(...roomToThree(-width, -depth * 0.4, height * 4));
-    addDiorama(content, width, depth, addInk);
-    content.userData.outline = {
+    addDiorama(stageGroup, width, depth, addInk);
+    stageGroup.userData.outline = {
       width, depth, height, axes: roomAxes(room),
     };
     content.userData.roomDiagonal = Math.hypot(width, depth, height);
     wallShells = buildRoomStage(
-      content, width, depth, height,
+      stageGroup, width, depth, height,
       data.openings || [], data.obstacles || [],
       addInk,
     );
+    buildOutline(stageGroup);
+    buildAxes(stageGroup, (spec) => {
+      stageAxisLabels.push(spec);
+      overlay.addLabel(spec);
+    });
+  }
 
+  function sync(data, options) {
+    const selectedId = options.selectedId;
+    const readOnly = options.readOnly;
+    const dimsMode = options.dims === false ? "off" : (options.dims || "selected");
+    disposeObject(annotationsGroup);
+    annotationsGroup.clear();
+    pickables = [];
+    overlay.clear();
+
+    ensureRoomStage(data);
+
+    const activeIds = new Set();
     for (const item of data.items || []) {
+      activeIds.add(item.id);
       const selected = item.id === selectedId;
       const blocked = selected && options.blockedId === item.id;
       const itemZStart = item.z_start, itemZEnd = item.z_end;
-      const drewShape = (isFixedSofa(item) && addSofa(content, pickables, item, selected, blocked, addInk))
-        || (isFixedCoffeeTable(item) && addCoffeeTable(content, pickables, item, selected, blocked, addInk));
-      if (!drewShape) {
-        const mesh = markRoom(new THREE.Mesh(
-          prismGeometry(item.footprint, itemZStart, itemZEnd),
-          celMaterial(furnitureColor(item, selected, blocked)),
-        ));
-        addInk(mesh, selected ? 0x6a4520 : INK);
-        mesh.userData = { kind: "item", itemId: item.id };
-        addMesh(content, mesh, pickables);
+      const itemSig = JSON.stringify([
+        item.footprint, itemZStart, itemZEnd,
+        item.width, item.depth, item.height,
+        item.category, item.manufacture,
+        selected, blocked,
+      ]);
+      let cached = itemCache.get(item.id);
+      if (!cached || cached.signature !== itemSig) {
+        if (cached) {
+          itemsGroup.remove(cached.group);
+          disposeObject(cached.group);
+        }
+        const itemGroup = new THREE.Group();
+        const itemPickables = [];
+        const drewShape = (isFixedSofa(item) && addSofa(itemGroup, itemPickables, item, selected, blocked, addInk))
+          || (isFixedCoffeeTable(item) && addCoffeeTable(itemGroup, itemPickables, item, selected, blocked, addInk));
+        if (!drewShape) {
+          const mesh = markRoom(new THREE.Mesh(
+            prismGeometry(item.footprint, itemZStart, itemZEnd),
+            celMaterial(furnitureColor(item, selected, blocked)),
+          ));
+          addInk(mesh, selected ? 0x6a4520 : INK);
+          mesh.userData = { kind: "item", itemId: item.id };
+          addMesh(itemGroup, mesh, itemPickables);
+        }
+        if (item.footprint.length >= 4) {
+          const frontZ = (itemZStart + itemZEnd) / 2;
+          const a = item.footprint[3];
+          const b = item.footprint[2];
+          itemGroup.add(line([
+            roomToThree(a[0], a[1], frontZ),
+            roomToThree(b[0], b[1], frontZ),
+          ], 0x047857));
+        }
+        itemsGroup.add(itemGroup);
+        cached = { signature: itemSig, group: itemGroup, pickables: itemPickables };
+        itemCache.set(item.id, cached);
       }
-      if (item.footprint.length >= 4) {
-        const frontZ = (itemZStart + itemZEnd) / 2;
-        const a = item.footprint[3];
-        const b = item.footprint[2];
-        content.add(line([
-          roomToThree(a[0], a[1], frontZ),
-          roomToThree(b[0], b[1], frontZ),
-        ], 0x047857));
-      }
+      pickables.push(...cached.pickables);
+
       const dimMode = dimsMode === "off" ? "off" : (dimsMode === "all" ? "all" : (selected ? "selected" : "off"));
       if (dimMode !== "off" && (dimMode === "all" || selected)) {
-        addDimensions(content, dimensionAnnotations(data.room, item), overlay.addLabel);
+        addDimensions(annotationsGroup, dimensionAnnotations(data.room, item), overlay.addLabel);
       }
       if (!selected) continue;
       const center = footprintCenter(item.footprint);
@@ -342,8 +394,8 @@ export function mountLayout(canvas) {
           const dial = createRotateDialMeshes(item, (itemZStart + itemZEnd) / 2);
           dial.arrow.userData = { kind: "rotate", itemId: item.id };
           dial.grab.userData = { kind: "ring", itemId: item.id };
-          addMesh(content, dial.arrow, pickables);
-          addMesh(content, dial.grab, pickables);
+          addMesh(annotationsGroup, dial.arrow, pickables);
+          addMesh(annotationsGroup, dial.grab, pickables);
         }
         const heightHandle = new THREE.Mesh(
           new THREE.SphereGeometry(26, 16, 12),
@@ -351,12 +403,19 @@ export function mountLayout(canvas) {
         );
         heightHandle.position.set(...roomToThree(center[0], center[1], itemZEnd + 72));
         heightHandle.userData = { kind: "height", itemId: item.id };
-        addMesh(content, heightHandle, pickables);
+        addMesh(annotationsGroup, heightHandle, pickables);
       }
     }
+
+    for (const [id, cached] of itemCache.entries()) {
+      if (!activeIds.has(id)) {
+        itemsGroup.remove(cached.group);
+        disposeObject(cached.group);
+        itemCache.delete(id);
+      }
+    }
+
     refreshWalls();
-    buildOutline(content);
-    buildAxes(content, overlay.addLabel);
     applyRoomLimits();
     overlay.refresh();
     draw();
@@ -403,7 +462,10 @@ export function mountLayout(canvas) {
     return true;
   }
 
-  window.__diag = { scene, camera, controls, content, renderer, syncCached };
+  window.__diag = {
+    scene, camera, controls, content, stageGroup, itemsGroup, annotationsGroup,
+    itemCache, renderer, syncCached,
+  };
   return {
     controls, resize, setView, readView, basis, project, ground, pick, sync: syncCached, draw, setEnabled, setShiftPan,
     setFovForZoom, elevationPull,

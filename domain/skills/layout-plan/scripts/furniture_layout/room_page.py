@@ -148,26 +148,43 @@ def _render_canvas_html(
     body_class = " ".join(
         name for name in ("readonly" if read_only else "", "share" if share_form else "") if name
     )
-    return (
-        _EDITOR_HTML.replace("__SCENE_JSON__", _json_for_script(scene_payload))
-        .replace("__SCENE_ID__", escape(scene_id, quote=True))
-        .replace("__HEADING__", escape(heading, quote=True))
-        .replace("__HEADING_SUFFIX__", _json_for_script(heading_suffix))
-        .replace("__MODE_BADGE__", escape(mode_badge, quote=True))
-        .replace("__READ_ONLY__", "true" if read_only else "false")
-        .replace("__SHARE_FORM__", "true" if share_form else "false")
-        .replace("__LAYOUT_URL__", _json_for_script(layout_url))
-        .replace("__EDIT_URL__", _json_for_script(edit_url))
-        .replace("__UNDO_URL__", _json_for_script(undo_url))
-        .replace("__PANEL_URL_BASE__", _json_for_script(panel_url_base))
-        .replace("__ROOMS_JSON__", _json_for_script(rooms))
-        .replace("__VERSION_JSON__", _json_for_script(version))
-        .replace("__BODY_CLASS__", body_class)
-        .replace("__APP_LABEL__", escape(app_label, quote=True))
-        .replace("__TIPS__", tips)
-        .replace("__SHUTDOWN_BUTTON__", shutdown_button)
-        .replace("/layout-view/layout_scene.js", _layout_scene_src())
-    )
+    page_config = {
+        "scene_id": scene_id,
+        "read_only": read_only,
+        "share_form": share_form,
+        "layout_url": layout_url,
+        "edit_url": edit_url,
+        "undo_url": undo_url,
+        "panel_url_base": panel_url_base,
+        "heading_suffix": heading_suffix,
+        "version": version,
+        "rooms": rooms,
+    }
+    tokens = {
+        "__PAGE_CONFIG_JSON__": _json_for_script(page_config),
+        "__SCENE_JSON__": _json_for_script(scene_payload),
+        "__SCENE_ID__": escape(scene_id, quote=True),
+        "__HEADING__": escape(heading, quote=True),
+        "__HEADING_SUFFIX__": _json_for_script(heading_suffix),
+        "__MODE_BADGE__": escape(mode_badge, quote=True),
+        "__READ_ONLY__": "true" if read_only else "false",
+        "__SHARE_FORM__": "true" if share_form else "false",
+        "__LAYOUT_URL__": _json_for_script(layout_url),
+        "__EDIT_URL__": _json_for_script(edit_url),
+        "__UNDO_URL__": _json_for_script(undo_url),
+        "__PANEL_URL_BASE__": _json_for_script(panel_url_base),
+        "__ROOMS_JSON__": _json_for_script(rooms),
+        "__VERSION_JSON__": _json_for_script(version),
+        "__BODY_CLASS__": body_class,
+        "__APP_LABEL__": escape(app_label, quote=True),
+        "__TIPS__": tips,
+        "__SHUTDOWN_BUTTON__": shutdown_button,
+        "/layout-view/layout_scene.js": _layout_scene_src(),
+    }
+    rendered = _EDITOR_HTML
+    for token, value in tokens.items():
+        rendered = rendered.replace(token, value)
+    return rendered
 
 
 def render_draft_page(scene_id: str, scene: RoomScene) -> dict[str, object]:
