@@ -220,6 +220,7 @@ export const LayoutChatComponent = Component({
         toggleBtn.hidden = false;
         toggleBtn.setAttribute("aria-pressed", "true");
       }
+      window.dispatchEvent(new Event("resize"));
 
       const stagePill = document.getElementById("chat-stage-pill");
       const messagesEl = document.getElementById("chat-messages");

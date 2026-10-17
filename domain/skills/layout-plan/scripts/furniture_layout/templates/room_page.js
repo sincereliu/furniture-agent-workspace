@@ -689,11 +689,16 @@ window.addEventListener("keydown",event=>{
 });
 window.addEventListener("keyup",event=>{if(event.key==="Shift")view.setShiftPan(false)});
 
-window.addEventListener("resize",()=>{
+function handleViewportResize(){
   fitCanvas();
   if(!uiStore.viewAnimation)state.distance=fitDistance(canvas,diagonal,view,state.active);
   render();
-});
+}
+window.addEventListener("resize",handleViewportResize);
+if(typeof ResizeObserver==="function"){
+  const stageRo=new ResizeObserver(()=>handleViewportResize());
+  stageRo.observe(canvas.parentElement||canvas);
+}
 const nextFrame=typeof requestAnimationFrame==="function"
   ?requestAnimationFrame
   :callback=>setTimeout(()=>callback(Date.now()),16);
