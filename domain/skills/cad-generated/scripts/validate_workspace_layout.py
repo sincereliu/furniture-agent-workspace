@@ -34,6 +34,10 @@ STAGE_SKILL_NAMES = (
 ALLOWED_SCRIPT_ROOTS = tuple(
     Path("domain") / "skills" / skill_name / "scripts" for skill_name in STAGE_SKILL_NAMES
 ) + (Path("temp"),)
+#: 根目录点名的例外：只有一个给人双击的启动器，本身不承载逻辑
+#: （只 cd 到仓库根、转去跑布局阶段的 `scripts/open_last_project.py`）。
+#: 别往这里加第二个文件——要加就先问「它为什么不放在某个阶段的 scripts/ 里」。
+ALLOWED_ROOT_SCRIPTS = frozenset({Path("open_last_project.bat")})
 EXCLUDED_ROOTS = {".git", ".venv", "external", "vendor"}
 FORBIDDEN_TOP_LEVEL_CODE_TREES = {"packages", "scripts", "scratch", "tests", "tmp"}
 
@@ -56,6 +60,8 @@ def find_violations(workspace_root: Path) -> list[str]:
             if path.suffix.lower() not in SCRIPT_SUFFIXES:
                 continue
             relative = path.relative_to(workspace_root)
+            if relative in ALLOWED_ROOT_SCRIPTS:
+                continue
             if any(relative.is_relative_to(root) for root in ALLOWED_SCRIPT_ROOTS):
                 continue
             violations.append(f"script outside allowed locations: {relative.as_posix()}")

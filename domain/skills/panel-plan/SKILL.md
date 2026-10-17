@@ -68,3 +68,4 @@ description: 用于 panel_plan 阶段。当用户说“几扇门”“几层板�
 - 抽屉区尺寸链、适用条件和限制： [抽屉尺寸链](references/drawer-dimension-chain.md)
 - 柜型拓扑骨架： `references/cabinet-topologies/`（围合面、有无踢脚、整高抽屉区类型；门/层板/抽屉几何由求解器执行，不能只加 YAML 就支持新柜型）
 - 单位审计和优化等旁路证据： [板件旁路分析](references/panel-side-analyses.md)
+- 还没做的需求（门排、半高立板、对开归属）： [backlog](references/backlog.md)
