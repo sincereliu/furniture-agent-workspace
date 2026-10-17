@@ -142,6 +142,8 @@ def _render_canvas_html(
     edit_url: str = "",
     undo_url: str = "",
     panel_url_base: str = "",
+    chat_url: str = "",
+    llm_config_url: str = "",
 ) -> str:
     room_name = str(scene_payload["room"]["name"])
     heading = f"{room_name} · {heading_suffix}"
@@ -156,6 +158,8 @@ def _render_canvas_html(
         "edit_url": edit_url,
         "undo_url": undo_url,
         "panel_url_base": panel_url_base,
+        "chat_url": chat_url,
+        "llm_config_url": llm_config_url,
         "heading_suffix": heading_suffix,
         "version": version,
         "rooms": rooms,
@@ -303,6 +307,8 @@ def render_project_page(
         edit_url=f"/api/project/{project_id}/layout/edit",
         undo_url=f"/api/project/{project_id}/layout/undo",
         panel_url_base=f"/api/project/{project_id}/cabinets",
+        chat_url="" if (read_only or share_form) else f"/api/project/{project_id}/chat",
+        llm_config_url="" if (read_only or share_form) else "/api/llm/config",
         heading_suffix="布局预览",
         tips=_SHARE_TIPS if share_form else (
             _PREVIEW_TIPS if read_only else _PROJECT_EDITOR_TIPS

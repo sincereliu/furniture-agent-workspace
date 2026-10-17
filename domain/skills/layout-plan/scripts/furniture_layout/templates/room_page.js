@@ -11,6 +11,7 @@ import {
   ELEVATION_MAX_PITCH, baseFit, fitDistance, horizontalAxis,
   isOrthoView, nearAngle, rotationSign, verticalPlaneScale,
 } from "/layout-view/layout_camera.js";
+import { mountProjectChat } from "/layout-view/layout_chat.js";
 
 const pageConfigEl=document.getElementById("page-config");
 const PAGE_CONFIG=pageConfigEl?JSON.parse(pageConfigEl.textContent||"{}"):{};
@@ -1315,3 +1316,12 @@ if(shutdownButton){
     }
   });
 }
+if(PAGE_CONFIG.chat_url&&PAGE_CONFIG.llm_config_url&&!SHARE_FORM){
+  mountProjectChat({
+    chatUrl:PAGE_CONFIG.chat_url,
+    llmConfigUrl:PAGE_CONFIG.llm_config_url,
+    onProjectUpdated:()=>refreshProjectDocument(),
+    onStatusToast:(msg,kind)=>setStatus(msg,kind),
+  });
+}
+

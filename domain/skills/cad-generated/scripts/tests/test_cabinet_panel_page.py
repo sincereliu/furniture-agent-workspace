@@ -332,7 +332,7 @@ class CabinetStructurePageTests(unittest.TestCase):
             server.confirmed_panel_structure(project, "cabinet_missing", store=self.store)
 
     def test_unconfirmed_panels_show_only_the_envelope_and_say_so(self) -> None:
-        """板件阶段没确认过：结构页不出现，页面上说明还没确认。"""
+        """还没生成板件时：结构页不出现，页面上说明还没确认。"""
         project = self.orchestrator.create_project(
             "未确认板件",
             layout_proposal(),
@@ -345,6 +345,24 @@ class CabinetStructurePageTests(unittest.TestCase):
         self.assertNotIn('id="cabinet-structure"', page)
         self.assertIn("板件还没确认", page)
         self.assertIn("绿面是柜门这一面", page)
+
+    def test_candidate_panels_show_structure_draft_before_confirmation(self) -> None:
+        """板件已生成候选但尚未确认：显示 3D 结构草稿供审查，但不开放顺纹保存。"""
+        project = self.orchestrator.create_project(
+            "待确认板件草稿",
+            layout_proposal(),
+            stage_inputs=stage_inputs_from_spec(panel_parameters()),
+        )
+        self.orchestrator.confirm_layout(project)
+        self.orchestrator.run_next(project)
+        page = asyncio.run(
+            server.project_cabinet_panels(project.id, "cabinet_1", _local())
+        ).body.decode("utf-8")
+        self.assertIn("cabinet_1 · 柜体结构", page)
+        self.assertIn('id="cabinet-structure"', page)
+        self.assertIn("待确认板件草稿", page)
+        self.assertIn('version: ""', page)
+        self.assertIn("editor: null", page)
 
     def test_missing_frozen_file_says_the_panels_cannot_be_read(self) -> None:
         """已确认但冻结文件丢了：不装作"还没确认"，页面上直说读不出来。"""
