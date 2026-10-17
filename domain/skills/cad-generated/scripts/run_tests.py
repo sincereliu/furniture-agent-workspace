@@ -23,6 +23,7 @@ TESTS_ROOT = SCRIPT_ROOT / "tests"
 
 sys.path.insert(0, str(SCRIPT_ROOT))
 
+from backlog_reconcile import reconcile_workspace
 from runtime_paths import bootstrap_runtime_paths
 
 
@@ -80,6 +81,12 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    repo_root = SCRIPT_ROOT.parents[4]
+    for message in reconcile_workspace(repo_root):
+        print(message, flush=True)
+        if message.startswith("error:"):
+            return 1
+
     suite = _suite(args.pattern)
     # unittest discards each executed case from the suite, so snapshot first.
     all_ids = [_test_id(test) for test in _flatten(suite)]
@@ -120,7 +127,7 @@ def main() -> int:
     if unexpected_ids:
         print(
             "\nunexpected pass (a known gap closed - update the gap's record, "
-            "e.g. references/backlog.md, and drop its expectedFailure marker):"
+            "e.g. backlog/<stage>.md, set its landed version, and drop its expectedFailure marker):"
         )
         for test_id in unexpected_ids:
             print(f"  UNEXPECTED-PASS {test_id}")

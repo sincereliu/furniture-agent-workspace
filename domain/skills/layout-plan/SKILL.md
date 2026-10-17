@@ -43,6 +43,5 @@ description: 用于 layout_plan 阶段。当用户说「房间多大」「家具
 | 预览打不开、页面不刷新、重开已有项目 | [预览维护](references/preview-ops.md) |
 | 改布局代码，或决定跑哪个测试 | [运行时映射](references/runtime-map.md) |
 | 改可执行柜类 | [可执行柜类](references/intake/catalog.yaml) |
-| 查还没做的需求 | [backlog](references/backlog.md) |
 
 日常做布局只打开表里对上的那一行。

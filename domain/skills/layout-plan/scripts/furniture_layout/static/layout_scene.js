@@ -59,7 +59,7 @@ export function mountLayout(canvas) {
     antialias: true,
     logarithmicDepthBuffer: true,
   });
-  renderer.setClearColor(0x070b16, 1);
+  renderer.setClearColor(0xeef2f6, 1);
   const camera = new THREE.PerspectiveCamera(48, 1, 10, 500000);
   camera.up.set(0, 1, 0);
   const LENS_BASE = 48;
@@ -67,13 +67,13 @@ export function mountLayout(canvas) {
   const scene = new THREE.Scene();
   const sky = addSky();
   scene.add(sky);
-  const nightFill = new THREE.HemisphereLight(0x31456e, 0x121624, 0.85);
+  const nightFill = new THREE.HemisphereLight(0xffffff, 0xe2ddd5, 0.92);
   nightFill.layers.set(0);
-  const moon = new THREE.DirectionalLight(0xd5e2ff, 0.42);
+  const moon = new THREE.DirectionalLight(0xfffcf5, 0.48);
   moon.layers.set(0);
-  const roomFill = new THREE.HemisphereLight(0xf8f4ee, 0xd8cfc2, 0.62);
+  const roomFill = new THREE.HemisphereLight(0xffffff, 0xede8df, 0.85);
   roomFill.layers.set(ROOM_LAYER);
-  const roomKey = new THREE.DirectionalLight(0xfff4e6, 0.55);
+  const roomKey = new THREE.DirectionalLight(0xfffaf0, 0.52);
   roomKey.layers.set(ROOM_LAYER);
   scene.add(nightFill, moon, roomFill, roomKey);
 

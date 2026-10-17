@@ -10,12 +10,12 @@
  */
 
 // 留下的墙一律不透明。挡在人和房间之间的那面已经剔掉，室内从缺口看进去。
-// 室外是夜色深底。背景墙再亮一档，靠颜色和侧墙分开，不再靠透明度。
+// 背景墙用更亮的暖白乳胶漆色，与侧墙自然区分，不再靠透明度。
 export const WALL_SIDE_OPACITY = 1;
 export const WALL_BACK_OPACITY = 1;
-export const WALL_BACK_COLOR = 0xefe8dc;      // 背景墙：亮一档的石灰石
+export const WALL_BACK_COLOR = 0xf7f4ee;      // 背景墙：明亮暖白乳胶漆
 export const WALL_ELEVATION_OPACITY = 1;
-export const WALL_ELEVATION_COLOR = 0xddd6ca; // 立面视图墙面：同一档石灰石
+export const WALL_ELEVATION_COLOR = 0xf3efe7; // 立面视图墙面：柔和奶白
 export const ELEVATION_PITCH = 0.12;          // 与 room_page.html 的 ELEVATION_MAX_PITCH 一致
 
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];

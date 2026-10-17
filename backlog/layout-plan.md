@@ -1,3 +1,32 @@
+# layout-plan
+
+这份在 `backlog/` 里，由 git 跟踪，不是技能。要不要做，只看 Open 和 Done。下面是原来的记录。
+
+<!-- backlog-status:start -->
+file_version: 1
+
+## Open
+
+- drag-snap version 1 — drag threshold and snap tolerance
+- opening-edits version 1 — edit openings and lock them
+- preview-draft-switch version 1 — switch between preview and draft
+- room-merge version 1 — whether rooms can merge
+
+## Done
+
+- cabinet-id-check version 1 — reject illegal cabinet ids at layout entry
+- overhead-camera version 1 — leave the overhead camera as it is
+- wall-fill version 1 — fill along a wall
+- page-writes-project version 1 — page writes a project revision
+- page-identity version 1 — page identity and room navigation
+- share-view-mode version 1 — read-only share expression
+- content-digest version 1 — one content digest
+- readonly-preview-chrome version 1 — hide edit chrome on the read-only page
+- view-controls version 1 — view controls and coordinates
+- camera-mirror version 1 — camera mirror fix
+- origin-axes version 1 — origin axes and cursor readout
+<!-- backlog-status:end -->
+
 # 布局阶段未落地需求
 
 日常改房间摆放、摆放检查、编辑器或 Viewer 不必读本文。核对实现或规划演进时再打开。
@@ -14,13 +43,13 @@
 
 ### 拖动的阈值与吸附容差（2026-10-02 落地后待评审）
 
-**现状**：拖动换算已改成按**家具脚下那一点**的比例（`static/layout_drag.js::groundDragDelta`，见[运行时契约](../../cad-generated/references/runtime-contract.md)），自由件拖回墙边会由 `wallSnap()` 重新认成墙摆。
+**现状**：拖动换算已改成按**家具脚下那一点**的比例（`static/layout_drag.js::groundDragDelta`，见[运行时契约](../domain/skills/cad-generated/references/runtime-contract.md)），自由件拖回墙边会由 `wallSnap()` 重新认成墙摆。
 
 **待定**：① 向外脱离墙面的阈值仍是 26 屏幕像素——新换算下约等于 130mm 的手部位移，够不够"故意"；② 吸附容差 0.5mm（背面正好落在墙上才认），要不要放宽到几毫米；③ 吸回墙面时要不要给一句提示（现在只有"靠墙/自由"这一栏会变）；④ 转角处贴两面墙时只认背面那面墙，这条口径要不要写进用户可见的说明。
 
 ### 摆放级改动不该重跑柜体（跨阶段需求，登记在编排层）
 
-改摆放 / 改房间会开新 Revision 并从本阶段重来，但柜体内容其实一个字都没变（板件只读 `id / furniture_category / width / depth / height`）。柜体没变时下游全部重做、还要人重新确认，代价偏大。证据、缺口与候选方向登记在 [编排与生命周期未落地需求](../../cad-generated/references/backlog.md)，机制与判据见 [修订继承设计](../../cad-generated/references/revision-inheritance-design.md)。本阶段要注意的是依赖面与 `fill` 例外（见 [运行时映射](runtime-map.md)）。
+改摆放 / 改房间会开新 Revision 并从本阶段重来，但柜体内容其实一个字都没变（板件只读 `id / furniture_category / width / depth / height`）。柜体没变时下游全部重做、还要人重新确认，代价偏大。证据、缺口与候选方向登记在 [编排与生命周期未落地需求](cad-generated.md)，机制与判据见 [修订继承设计](../domain/skills/cad-generated/references/revision-inheritance-design.md)。本阶段要注意的是依赖面与 `fill` 例外（见 [运行时映射](../domain/skills/layout-plan/references/runtime-map.md)）。
 
 ### 门窗的增删改，以及"锁定"
 
@@ -52,10 +81,10 @@
 
 ## 已落地（留档）
 
-- 沿墙铺满：客户在一面墙上写 `fill: true`，这段空墙就是这一台的包络宽。不按门宽或内部分格拆成几台。口径在[空间布局规则](spatial-layout-rules.md)。
-- 页面写项目（P3）：`POST /api/project/{id}/layout/edit` —— 页面上改一件的摆放，落成一个新 Revision（未确认）。几何复用房间场景编辑那套 op 词表与重算/准入（新增 `project_edit.py`：`RoomScene` ↔ 场景源往返 + `plan_scene`），版本与生命周期归 `furniture_workflow/project_layout_edit.py` 门面；三道门（本机来源 / 灰度开关 / `expected_version`）任一不过都不落盘。铺满件只接受改离地高度（宽和沿墙位置由空段算出）。靠墙件不收沿墙偏移。设计见 [页面写项目设计](../../cad-generated/references/project-layout-edit-design.md)；预览页**尚未**接上这个 op（属单页内核收敛）。
+- 沿墙铺满：客户在一面墙上写 `fill: true`，这段空墙就是这一台的包络宽。不按门宽或内部分格拆成几台。口径在[空间布局规则](../domain/skills/layout-plan/references/spatial-layout-rules.md)。
+- 页面写项目（P3）：`POST /api/project/{id}/layout/edit` —— 页面上改一件的摆放，落成一个新 Revision（未确认）。几何复用房间场景编辑那套 op 词表与重算/准入（新增 `project_edit.py`：`RoomScene` ↔ 场景源往返 + `plan_scene`），版本与生命周期归 `furniture_workflow/project_layout_edit.py` 门面；三道门（本机来源 / 灰度开关 / `expected_version`）任一不过都不落盘。铺满件只接受改离地高度（宽和沿墙位置由空段算出）。靠墙件不收沿墙偏移。设计见 [页面写项目设计](../domain/skills/cad-generated/references/project-layout-edit-design.md)；预览页**尚未**接上这个 op（属单页内核收敛）。
 - 页面身份与房间导航：两页页眉各挂一块身份牌（预览「只读预览 · 由对话更新」 / 草稿「草稿 · 不影响项目」）；多间房的切换从下拉改成页眉药丸按钮（只有一间房时整条藏掉），当前房间写进地址栏 `?room=<id>`，切房间时 `history.replaceState` 跟着改，链接可分享；深链按房间 → 视角 → 选中件依次生效。
-- 只读分享形态：预览页带 `?mode=view`（`preview_url(id, mode="view")` / `open_project_preview(id, share=True)`）时牌子换「只读分享 · 链接可转发」、提示语换成"只看不改"、**不生成「退出」按钮**。它只是表达，不承担权限；写权限的门在服务端（见 [访问模式与外网分享](../../cad-generated/references/preview-access-design.md)）。
+- 只读分享形态：预览页带 `?mode=view`（`preview_url(id, mode="view")` / `open_project_preview(id, share=True)`）时牌子换「只读分享 · 链接可转发」、提示语换成"只看不改"、**不生成「退出」按钮**。它只是表达，不承担权限；写权限的门在服务端（见 [访问模式与外网分享](../domain/skills/cad-generated/references/preview-access-design.md)）。
 - 内容指纹收敛到一个实现：`workflow_digest.stable_digest`（key 排序 + 紧凑分隔符的规范化 JSON 上取 sha256），`workflow_constants` / `workflow_project` 都改用它，`open_preview` 的 `version` 从「修订号」改成内容版本 `layout_sha256:确认位`。
 - 只读预览页去掉"编辑痕迹"：右栏**不生成**输入框与 − / ＋ 按钮（只留纯文字读数，提示语换成"只读预览：位置由对话更新；要自己拖，用草稿页"）；画布上**不画橙色旋转手柄、旋转环与刻度、蓝色离地手柄**（保留"正面朝哪"的绿箭头与「前」）；图例里"旋转环与手柄（橙）""离地高度手柄（蓝）"两行在只读页隐藏。落点：`detailMarkup()` 与 `drawRotateHandle()` / `drawHeightHandle()` 里按 `READ_ONLY` 分支，绿箭头抽成 `drawFrontArrow()` 两页共用；图例行标 `data-edit-only` + 一条 `body.readonly` 的 CSS。可编辑页一个字没动。
 - 视图控件与坐标层：统一房间页使用"正视图下拉 + 复位"，预设键 `default_view`，补 `仰视`，双击吸附 / 再双击回到进它之前那一眼，转视角后标识变「自由视角」；默认视角正南偏东 15°、俯仰 0.35。

@@ -2,7 +2,7 @@
 
 这一页说清「页面上拖一件家具，项目里到底发生了什么」。契约细节见
 [运行时契约](runtime-contract.md)「页面写项目」段；待评审与已知缺口登记在
-[编排与生命周期未落地需求](backlog.md)；修订继承见 [修订继承设计](revision-inheritance-design.md)。
+`backlog/cad-generated.md`；修订继承见 [修订继承设计](revision-inheritance-design.md)。
 
 ## 分水岭：页面能写项目了
 

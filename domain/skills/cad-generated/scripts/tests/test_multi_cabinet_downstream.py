@@ -2,7 +2,7 @@
 
 以前下游只读 `cabinets[0]`（主柜），所以拆成三台只有一台能走到车间。
 本文件盯住**制造 + 特征树**这一刀；CAD 与交付清单的逐柜还没做
-（见 [编排未落地需求](../../references/backlog.md)），做完在同一个文件里补齐。
+（见backlog/cad-generated.md），做完在同一个文件里补齐。
 """
 
 from __future__ import annotations

@@ -61,7 +61,7 @@ description: 用于 manufacture_plan 阶段。当用户说"用什么五金""三�
 
 ## 参考导航
 
-运行时在 `scripts/furniture_manufacturing/`。代码契约见 [运行时映射](references/runtime-map.md)。未落地需求见 [backlog](references/backlog.md)，日常实现不必读。
+运行时在 `scripts/furniture_manufacturing/`。代码契约见 [运行时映射](references/runtime-map.md)。
 
 - 孔位、封边、槽和背板连接的口径： [制造规则](references/manufacturing-rules.md)
 - 哪对接触默认连、哪对默认不连： [连接与接触默认规则](references/connection-contact-defaults.md)

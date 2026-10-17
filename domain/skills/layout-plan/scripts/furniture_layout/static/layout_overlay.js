@@ -26,11 +26,12 @@ function makeLabelElement(layer, label) {
     "left:0",
     "top:0",
     "font:700 12px/1.25 Inter,Microsoft YaHei,system-ui,sans-serif",
-    "color:#f7f1e6",
-    "background:rgba(16,14,26,.78)",
-    "border:1px solid rgba(255,214,160,.35)",
-    "border-radius:4px",
-    "padding:1px 4px",
+    "color:#1e293b",
+    "background:rgba(255,255,255,.92)",
+    "border:1px solid rgba(148,163,184,.45)",
+    "box-shadow:0 2px 6px rgba(15,23,42,.08)",
+    "border-radius:5px",
+    "padding:2px 5px",
     "white-space:nowrap",
     "transform:translate(0,0)",
     "will-change:transform",
@@ -103,8 +104,11 @@ export function createLabelOverlay(canvas, camera) {
     ctx.translate(S * 0.46, S * 0.60);
     ctx.beginPath();
     ctx.arc(0, 0, 42, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(8, 10, 20, 0.55)";
+    ctx.fillStyle = "rgba(255, 255, 255, 0.82)";
     ctx.fill();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(148, 163, 184, 0.45)";
+    ctx.stroke();
     camera.updateMatrixWorld(true);
     const m = camera.matrixWorld;
     const col = (i) => new THREE.Vector3(m.elements[i * 4], m.elements[i * 4 + 1], m.elements[i * 4 + 2]).normalize();
@@ -129,7 +133,7 @@ export function createLabelOverlay(canvas, camera) {
       ctx.fill();
       ctx.fillText(axis.label, dx + anchor * 26 + 5, dy + anchor * 26);
     }
-    ctx.fillStyle = "#f6efe4";
+    ctx.fillStyle = "#334155";
     ctx.beginPath();
     ctx.arc(0, 0, 2.8, 0, Math.PI * 2);
     ctx.fill();

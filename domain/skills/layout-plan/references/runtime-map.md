@@ -38,7 +38,7 @@
 | 布局页订阅项目文件和编辑租约。变了才通知，版本变了才重读整份布局 | `layout_events.py` | structured_protocol / side_effect |
 | 从最新布局取出一台已保存外形，供板件页使用。不要求整份布局已确认 | `cabinet_entry.py` | validation |
 | 房间页三维视口组装、相机控制、射线拾取与句柄同步 | `static/layout_scene.js` | calculation |
-| 天空球、夜景微缩底座、卡通光照材质与缓存化木纹/路面贴图 | `static/layout_diorama.js` | calculation |
+| 日间工作室天空球、建筑微缩底座、卡通光照材质与缓存化地砖/台面贴图 | `static/layout_diorama.js` | calculation |
 | 文字标签 DOM 层、SVG 引线与左下角坐标轴角标 | `static/layout_overlay.js` | calculation |
 | 围墙/地板台子、家具棱柱、沙发/茶几网格、旋转环与尺寸标注线 | `static/layout_meshes.js` | calculation |
 | 前端碰撞、越界、门窗遮挡、四向净距与整数毫米二分拖拽求解（对应 `placement_check.py`） | `static/layout_solver.js` | calculation |
@@ -112,4 +112,4 @@ node domain/skills/layout-plan/scripts/furniture_layout/static/<检查脚本>
 
 这些测试会引用布局类型，测的是别的面：`test_agent_tools.py`（工具面）、`test_decision_log.py`（决策记录）、`test_edit_lease.py`（编辑租约）、`test_revision_inheritance.py`（修订继承）、`test_entrypoint_architecture.py`（入口装配）。改摆放几何时不把它们算进这一次。
 
-未落地与待议需求见 [backlog](backlog.md)。改坐标、摆放检查或房间页时不必读。
+未落地需求在 `backlog/layout-plan.md`，不在本技能里。改坐标、摆放检查或房间页时不必读。

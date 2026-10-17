@@ -1,3 +1,29 @@
+# cad-generated
+
+这份在 `backlog/` 里，由 git 跟踪，不是技能。要不要做，只看 Open 和 Done。下面是原来的记录。
+
+<!-- backlog-status:start -->
+file_version: 1
+
+## Open
+
+- content-addressed-reuse version 1 — reuse unchanged cabinet STEP files
+- decision-log-followups version 1 — remaining decision-log checks
+- room-confirm version 1 — how a room gets confirmed
+- edit-page-polish version 1 — undo button and other-window hint
+- share-token version 1 — token for off-machine read-only share
+- panel-replay version 1 — panel inputs cannot be rebuilt from memory
+
+## Done
+
+- downstream-per-cabinet version 1 — downstream runs per cabinet
+- per-cabinet-parameters version 1 — per-cabinet panel parameters
+- decision-log-core version 1 — decision log core
+- revision-inheritance version 1 — reuse confirmation when content matches
+- revise-keeps-inputs version 1 — revise keeps stage inputs
+- no-legacy-migration version 1 — do not migrate old project files
+<!-- backlog-status:end -->
+
 # 编排与生命周期未落地需求
 
 > **边界（2026-10-02 客户定）**：**代码更新只到 `panel_plan`**。布局与板件（以及服务这两段的编排：建项目、工作副本与编辑租约、房间确认、决策台账、`stage_input` 通道、`furniture_*` 工具）继续改；**制造 / 特征树 / CAD / 交付即将重写**，所以本文件里属于下游的条目（含 CAD 成本与按柜内容寻址复用）**暂停投入**。
@@ -19,14 +45,14 @@
 1. **下游逐柜**——**已完成（2026-10-02）**：制造 / 特征树 / CAD / 交付清单全部逐柜。产物形状 `{"cabinets": [{"id", "bom"|"tree"|"bridge"}]}`，与板件 `cabinets[]` 一一对应；阶段验收逐柜跑、问题点名是哪一台；柜级产物（BOM、STEP、钻孔、六面钻 XML）manifest 记录带 `cabinet_id`；交付验证新增 `MISSING_CABINET_ARTIFACT`（规划过的每台都要有 step / drilled_holes / six_side_drill_xml）。验收测试：`tests/test_multi_cabinet_downstream.py`（两台柜各自一整套产物 + 少一台会被拦住）。
    - **成本**：CAD 逐柜 = **N 台 × 约 5 秒**（桥一个源文件起一个进程）。6 台约 29 秒，已压到[方向 3](#摆放级--房间级改动不该重跑柜体方向-12-已落地-方向-3-待定) 的唤醒线——**下一件要拍的就是它**（一个进程连做几台 / 按柜内容寻址复用）。
    - **拆脚手架**：`Revision.feature_tree` 那个"主柜那棵"的镜像**已删**（字段、序列化键、三处赋值、`primary_feature_tree()`、`primary_bom()`、`_spec_from_revision()` 一起拆掉）；`require_primary_handoff()` 与 `primary_cabinet()` 也**已删**——"只看一台"现在叫 `cabinet_handoff(output, cabinet_id)`，**哪一台必须说清**，没有"默认第一台"这个入口了。
-2. **逐柜参数进主流程**——**已完成（2026-10-02）**：`stage_inputs.panels` 支持"一份共享提案 + `cabinets: {柜名: 逐字段覆盖}`"（身份与几何不许覆盖，陌生柜名直接拒；形状见[板件提案契约](../../panel-plan/references/panel-proposal-contract.md)）；制造选项同样支持 `manufacturing.cabinets[柜名]` 覆盖 `parameters` / `appearance`（一台双门一台单门时，共享的 `door_hinge_side` 表达不了——实测撞到）；`revise_stage_output(panel_plan)` 改成把**每台自己的 spec 写回它自己的覆盖**（旧做法是把第一台的抄给所有柜）；旁路分析也指名了：审计默认逐台 + 逐台明细，择优必须指名、候选自带柜名、落地只改那一台。`require_primary_handoff()` / `primary_cabinet()` 已删（产品代码无人调用）。
+2. **逐柜参数进主流程**——**已完成（2026-10-02）**：`stage_inputs.panels` 支持"一份共享提案 + `cabinets: {柜名: 逐字段覆盖}`"（身份与几何不许覆盖，陌生柜名直接拒；形状见[板件提案契约](../domain/skills/panel-plan/references/panel-proposal-contract.md)）；制造选项同样支持 `manufacturing.cabinets[柜名]` 覆盖 `parameters` / `appearance`（一台双门一台单门时，共享的 `door_hinge_side` 表达不了——实测撞到）；`revise_stage_output(panel_plan)` 改成把**每台自己的 spec 写回它自己的覆盖**（旧做法是把第一台的抄给所有柜）；旁路分析也指名了：审计默认逐台 + 逐台明细，择优必须指名、候选自带柜名、落地只改那一台。`require_primary_handoff()` / `primary_cabinet()` 已删（产品代码无人调用）。
    - **剩下的**：`plan_panel_cabinets()` 的逐柜请求在工具面还没有专门入口（现在靠 `stage_input.cabinets` 表达，够用）；多柜的"只重算变了的那一台"要等内容寻址（方向 3）。
 
 **建议顺序**：先 1 后 2（没有逐柜下游，逐柜参数做出来也走不到车间）。验收：一个三台柜的项目，三台都出现在制造/特征树/CAD/交付清单里，且改一台只重算一台。**当前进度：制造 ✓、特征树 ✓、CAD ✓、交付清单 ✓、逐柜参数 ✓**（"改一台只重算一台"仍待方向 3）。
 
 ### 决策台账的后续（第 1、2 步已落地，剩三项）
 
-数据模型、工具面两条入口、页面「确认 / 划掉」、`working_ops[].actor`、**动作与台账自动对账**都已落地（口径见 [决策台账设计](decision-log-design.md)）。剩下：
+数据模型、工具面两条入口、页面「确认 / 划掉」、`working_ops[].actor`、**动作与台账自动对账**都已落地（口径见 [决策台账设计](../domain/skills/cad-generated/references/decision-log-design.md)）。剩下：
 
 1. **`applies_to` 的存在性校验**：现在只校验形状；等"空间 / 格"这套词表落地后要能核对到真实对象。
 2. **"没有依据不许写"的闸门**：凡是有语义选择的字段（分几格、几扇门、通顶与否），要么能指到一条 decision，要么显式标成助手假设——需要先有约束词表（拆分器那一步）。
@@ -37,7 +63,7 @@
 
 **现状**：拖动会把**那一间的确认作废**（药丸上变「· 待审」），但**页面上没有确认入口**——"确认这一间"只能由助手调 `furniture_confirm_stage(project_id, room_id=…)`。客户实测的原话是"我挪动过柜体，如何确认？"。
 
-**要确认的不是"他按了按钮"**，而是"这一版内容有人看过、没人提异议"这个事实。留档五个候选（口径与取舍见 [2026-10-02 更新日志](../../../../changelog/20261002.1.md) 第五节）：
+**要确认的不是"他按了按钮"**，而是"这一版内容有人看过、没人提异议"这个事实。留档五个候选（口径与取舍见 [2026-10-02 更新日志](../changelog/20261002.1.md) 第五节）：
 
 | | 做法 | 代价 |
 | --- | --- | --- |
@@ -63,11 +89,11 @@
 
 **明确不做**：外人在页面上改（并发、冲突、审计属"页面写项目"那条线）。
 
-**设计方案**：[预览页的访问模式与外网分享](preview-access-design.md)。
+**设计方案**：[预览页的访问模式与外网分享](../domain/skills/cad-generated/references/preview-access-design.md)。
 
 ### 摆放级 / 房间级改动不该重跑柜体（方向 1+2 已落地；方向 3 待定）
 
-**现状（已改）**：方向 1「摘要重用」与方向 2「`revise()` 保留 `stage_inputs`」都已实现。现在改摆放或改房间后跑板件，若内容与更早某版**已确认**的板件逐字节相同，系统直接承认那次确认（不再要人点头），并记 `Revision.inherited` 回指到真正点头的那一版；`revise()` 不再丢 `stage_inputs`。判据、逐字节不变式、`fill` 例外与三条承认规则见 [修订继承设计](revision-inheritance-design.md)（落地顺序 1–5 已完成）。
+**现状（已改）**：方向 1「摘要重用」与方向 2「`revise()` 保留 `stage_inputs`」都已实现。现在改摆放或改房间后跑板件，若内容与更早某版**已确认**的板件逐字节相同，系统直接承认那次确认（不再要人点头），并记 `Revision.inherited` 回指到真正点头的那一版；`revise()` 不再丢 `stage_inputs`。判据、逐字节不变式、`fill` 例外与三条承认规则见 [修订继承设计](../domain/skills/cad-generated/references/revision-inheritance-design.md)（落地顺序 1–5 已完成）。
 
 **仍未做**：方向 3「产物按内容寻址复用」——`generated/<project-id>/revision-<n>/` 现在仍按修订号出目录，所以 CAD / STEP **还是会重跑**（哪怕几何一模一样）。要改就得动血缘：`delivery_validated` 的谱系校验、`manifest` 的 stale 标记，以及逐柜复用的混合来源。
 
@@ -79,7 +105,7 @@
 | 拆开 | 导入 build123d **2.4 s** + 建模 **0.25–0.7 s** + viewer 导出 **约 1.4 s** |
 | 模型脚本自己的缓存 | 产物已存在且内容未变时 **0.03 s** 返回（不起几何），**但进程照样起**——所以省不掉那 4.2 秒 |
 
-**已试过并否掉：一个进程连做几台**（省 N−1 次导入）。只跑模型脚本确实只要 0.25–0.7 秒/台，但 **viewer 拓扑导出必须待在刚建完模型的进程里**：长进程里导出同样三台要 **6.7 秒/台**，在模型自己的进程里约 1.4 秒 → 端到端两台柜 **20.1 s vs 9.3 s（更慢）**。要复活这条路，前提是让模型脚本自己产出 viewer 包（上游 cadgen 的事）。代码没留（试完就撤了，见 [TOOL.md](../TOOL.md)）。
+**已试过并否掉：一个进程连做几台**（省 N−1 次导入）。只跑模型脚本确实只要 0.25–0.7 秒/台，但 **viewer 拓扑导出必须待在刚建完模型的进程里**：长进程里导出同样三台要 **6.7 秒/台**，在模型自己的进程里约 1.4 秒 → 端到端两台柜 **20.1 s vs 9.3 s（更慢）**。要复活这条路，前提是让模型脚本自己产出 viewer 包（上游 cadgen 的事）。代码没留（试完就撤了，见 [TOOL.md](../domain/skills/cad-generated/TOOL.md)）。
 
 **所以下一步就是方向 3 本身**：按柜内容寻址复用——摘要命中就 0 秒沿用 STEP + viewer 包，不命中才跑。这也是"改一台只重算一台"那条验收缺口的唯一解（多柜逐柜已完成，见本文件第 1 条）。**这条不再是"等瓶颈出现"，瓶颈已经量出来了。**
 
@@ -125,7 +151,7 @@
   复现脚本：`temp/measure_cad.py`、`temp/measure_cad_shape.py`（临时目录，不入库）。**动 CAD 相关代码前先看一眼这几条。**
 
 **取舍**：现在"改任何上游都开新 Revision、下游全作废"是一条极清晰的血缘规则，审计时无歧义。方向 1+2 保留这条规则、只免掉"内容没变还要重新排队确认"；方向 3 会削弱它。做之前先决定愿意付多少复杂度换多少等待时间。
-**设计方案**：[修订继承设计](revision-inheritance-design.md) —— 判据（`envelope_set` 比对与差异分类）、承认语义（R1 承认 / R2 留痕 / R3 让人看得见）、必重算清单、`fill` 例外、逐柜复用、前置条件与测试要求。
+**设计方案**：[修订继承设计](../domain/skills/cad-generated/references/revision-inheritance-design.md) —— 判据（`envelope_set` 比对与差异分类）、承认语义（R1 承认 / R2 留痕 / R3 让人看得见）、必重算清单、`fill` 例外、逐柜复用、前置条件与测试要求。
 
 ## 已知缺口（实测踩到；已修的留档）
 

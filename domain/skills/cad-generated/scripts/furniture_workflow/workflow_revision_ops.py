@@ -71,8 +71,8 @@ class RevisionOpsMixin:
 
         新 Revision **带走父修订的 `stage_inputs`**：那些参数是柜体的构造意图
         （门数、层板、背板安装…），摆放/房间变了它们并没有变。清掉它们会让下一次
-        `run_next()` 直接报 "panel proposal is incomplete"（见 references/backlog.md
-        「已知缺口」第 1 条）——摆放级改动不该顺带丢掉柜体参数。
+        `run_next()` 直接报 "panel proposal is incomplete"（backlog/cad-generated.md
+        的 revise-keeps-inputs）——摆放级改动不该顺带丢掉柜体参数。
         内容对不上时下游仍会自己报错（层板间距填不满内部净空之类），那是准确得多的失败。
         """
         parent = project.revisions[-1] if project.revisions else None

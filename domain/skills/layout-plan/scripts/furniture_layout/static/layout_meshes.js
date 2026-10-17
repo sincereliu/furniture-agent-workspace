@@ -238,7 +238,7 @@ export function createRotateDialMeshes(item, z) {
 
 export function buildRoomStage(content, width, depth, height, openings, obstacles, addInk) {
   const boards = woodTexture();
-  boards.repeat.set(Math.max(width / 700, 1), Math.max(depth / 700, 1));
+  boards.repeat.set(Math.max(width / 1200, 1), Math.max(depth / 1200, 1));
   const floorMesh = markRoom(new THREE.Mesh(
     new THREE.PlaneGeometry(width, depth),
     celMaterial(0xffffff, { map: boards }),
@@ -246,36 +246,15 @@ export function buildRoomStage(content, width, depth, height, openings, obstacle
   floorMesh.rotation.x = -Math.PI / 2;
   floorMesh.position.set(...roomToThree(width / 2, depth / 2, 0));
   content.add(floorMesh);
-  addInk(floorMesh, 0x6b4e32);
-
-  const lamp = new THREE.Mesh(
-    new THREE.SphereGeometry(Math.min(width, depth) * 0.025, 16, 12),
-    new THREE.MeshBasicMaterial({ color: 0xfff8f0 }),
-  );
-  lamp.position.set(...roomToThree(width / 2, depth / 2, Math.max(height - 180, height * 0.72)));
-  content.add(lamp);
-
-  const pool = new THREE.Mesh(
-    new THREE.CircleGeometry(Math.min(width, depth) * 0.22, 28),
-    new THREE.MeshBasicMaterial({
-      color: 0xf3eadc,
-      transparent: true,
-      opacity: 0.16,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-    }),
-  );
-  pool.rotation.x = -Math.PI / 2;
-  pool.position.set(...roomToThree(width / 2, depth / 2, 6));
-  content.add(pool);
+  addInk(floorMesh, 0xb8b0a4);
 
   const step = [200, 250, 500, 1000, 2000, 5000].find((value) => Math.max(width, depth) / value <= 14) || 5000;
   const grid = [];
   for (let x = step; x < width; x += step) grid.push(...roomToThree(x, 0, 2), ...roomToThree(x, depth, 2));
   for (let y = step; y < depth; y += step) grid.push(...roomToThree(0, y, 2), ...roomToThree(width, y, 2));
-  if (grid.length) content.add(lineSegments(grid, 0xc9bba8, 0.16));
+  if (grid.length) content.add(lineSegments(grid, 0xb5aea2, 0.22));
 
-  const wallMaterial = celMaterial(0xdcd4c8, {
+  const wallMaterial = celMaterial(0xede8df, {
     transparent: true,
     opacity: 1,
     depthWrite: true,
@@ -287,7 +266,7 @@ export function buildRoomStage(content, width, depth, height, openings, obstacle
     const inks = [];
     for (const box of solid.boxes) {
       const mesh = markRoom(addRoomBox(group, box, material));
-      inks.push(addInk(mesh, 0x7a7066));
+      inks.push(addInk(mesh, 0xb8b0a4));
     }
     group.userData.material = material;
     group.userData.inks = inks;
@@ -306,9 +285,9 @@ export function buildRoomStage(content, width, depth, height, openings, obstacle
       content,
       insetOpening(opening.wall, opening.box),
       new THREE.MeshBasicMaterial({
-        color: windowGlow ? 0xf4ead8 : 0x8f704c,
+        color: windowGlow ? 0xc8e6f5 : 0xd7be9e,
         transparent: true,
-        opacity: windowGlow ? 0.94 : 0.88,
+        opacity: windowGlow ? 0.76 : 0.90,
         side: THREE.DoubleSide,
       }),
     );
@@ -330,7 +309,7 @@ export function buildOutline(content) {
   const { width } = content.userData.outline;
   content.add(lineSegments([
     ...roomToThree(0, 0, 0), ...roomToThree(width, 0, 0),
-  ], 0x6b4e32));
+  ], 0xb8b0a4));
 }
 
 export function buildAxes(content, onLabel) {

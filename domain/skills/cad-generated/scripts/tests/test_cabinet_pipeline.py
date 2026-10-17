@@ -64,11 +64,11 @@ class CabinetStageCompositionTests(unittest.TestCase):
 
     @unittest.expectedFailure
     def test_length_width_are_flat_dimensions_not_world_axes(self) -> None:
-        """已知缺口（「发现 A」）的自动提醒，条目在 manufacture-plan/backlog.md。
+        """已知缺口（「发现 A」）的自动提醒，条目是 backlog/manufacture-plan.md 的 flat-dimensions。
 
         length_mm/width_mm 目前固定取世界坐标 size_x/size_y，板厚方向落在 X 或 Y
         的板件会把板厚当成开料尺寸。缺口修好时本测试转为 unexpected success、
-        套件转红 —— 那是信号：去 backlog.md 把该条目移入「已落地」。
+        套件转红 —— 那是信号：把 backlog_landed.py 里 flat-dimensions 的版本改成 1。
         """
         panels = by_role(self.bom.panels)
 
