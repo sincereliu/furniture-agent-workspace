@@ -128,9 +128,9 @@ canvas.panning{cursor:grabbing}
 .panel-entry{margin:10px 0 0}
 .panel-entry button{appearance:none;border:0;background:var(--accent);color:#fff;border-radius:8px;padding:7px 12px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer}
 .panel-entry button:disabled{background:#cbd5e1;color:#64748b;cursor:not-allowed}
-/* 右侧 AI 助手对话栏与本机模型配置弹窗 */
+/* AI 助手对话栏与右侧属性栏（家具/选中/图例放在网页最右边） */
 body.has-chat .app{width:min(1680px,100%)}
-body.has-chat .workspace{grid-template-columns:minmax(0,1fr) 280px 360px}
+body.has-chat .workspace{grid-template-columns:minmax(0,1fr) 360px 280px}
 .chat-panel{display:flex;flex-direction:column;min-height:0;background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:0 4px 18px -8px rgba(15,23,42,.08);overflow:hidden}
 .chat-header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 13px;border-bottom:1px solid var(--line);background:#f8fafc}
 .chat-title-wrap{display:flex;flex-direction:column;gap:3px;min-width:0}
@@ -225,31 +225,6 @@ body.has-chat .workspace{grid-template-columns:minmax(0,1fr) 280px 360px}
       <div class="toast" id="status">点击一件家具开始</div>
       <div class="coord" id="coord" hidden></div>
     </section>
-    <aside class="sidebar">
-      <section class="card">
-        <h2>家具</h2>
-        <ul class="list" id="item-list"></ul>
-      </section>
-      <section class="card">
-        <h2>选中</h2>
-        <div id="detail"><p class="empty">未选中任何家具</p></div>
-      </section>
-      <section class="card">
-        <h2>图例</h2>
-        <ul class="legend">
-          <li><i class="chip furniture"></i>家具外形尺寸</li>
-          <li data-edit-only><i class="chip selected"></i>高度中间两段黄色圆弧箭头（拖了转向）</li>
-          <li data-edit-only><i class="chip height"></i>离地高度手柄（蓝）</li>
-          <li><i class="chip dim"></i>离东/南/西/北墙净距（紫）</li>
-          <li><i class="chip size"></i>本体尺寸 宽/深/高（深灰）</li>
-          <li><i class="chip front"></i>正面（绿边）</li>
-          <li><i class="chip obstacle"></i>障碍物</li>
-          <li><i class="chip opening"></i>门窗</li>
-          <li><i class="chip axes"></i>房间标尺（X 西→东 · Y 北→南 · Z 向上）</li>
-        </ul>
-        <p class="tips">__TIPS__</p>
-      </section>
-    </aside>
     <aside class="chat-panel" id="chat-panel" aria-label="AI 助手" hidden>
       <header class="chat-header">
         <div class="chat-title-wrap">
@@ -280,31 +255,52 @@ body.has-chat .workspace{grid-template-columns:minmax(0,1fr) 280px 360px}
         <button type="submit" id="chat-send-btn">发送</button>
       </form>
     </aside>
+    <aside class="sidebar">
+      <section class="card">
+        <h2>家具</h2>
+        <ul class="list" id="item-list"></ul>
+      </section>
+      <section class="card">
+        <h2>选中</h2>
+        <div id="detail"><p class="empty">未选中任何家具</p></div>
+      </section>
+      <section class="card">
+        <h2>图例</h2>
+        <ul class="legend">
+          <li><i class="chip furniture"></i>家具外形尺寸</li>
+          <li data-edit-only><i class="chip selected"></i>高度中间两段黄色圆弧箭头（拖了转向）</li>
+          <li data-edit-only><i class="chip height"></i>离地高度手柄（蓝）</li>
+          <li><i class="chip dim"></i>离东/南/西/北墙净距（紫）</li>
+          <li><i class="chip size"></i>本体尺寸 宽/深/高（深灰）</li>
+          <li><i class="chip front"></i>正面（绿边）</li>
+          <li><i class="chip obstacle"></i>障碍物</li>
+          <li><i class="chip opening"></i>门窗</li>
+          <li><i class="chip axes"></i>房间标尺（X 西→东 · Y 北→南 · Z 向上）</li>
+        </ul>
+        <p class="tips">__TIPS__</p>
+      </section>
+    </aside>
   </div>
   <div class="llm-modal-backdrop" id="llm-modal" role="dialog" aria-modal="true" aria-labelledby="llm-modal-title" hidden>
     <form class="llm-modal-card" id="llm-config-form">
       <h3 id="llm-modal-title">本地大模型连接设置</h3>
-      <p class="llm-modal-sub">支持直接使用<strong>本机已登录的 ChatGPT / Gemini 订阅账号（免 API Key）</strong>，或接入任意 OpenAI / Anthropic 兼容 API。</p>
+      <p class="llm-modal-sub">支持直接使用<strong>本机已登录的 ChatGPT / Gemini 订阅账号（免 API Key）</strong>，或接入通用 OpenAI 兼容本地/远端模型入口。</p>
       <div class="llm-presets">
         <button type="button" data-llm-preset="codex_cli">★ ChatGPT 订阅 (本机 Codex)</button>
         <button type="button" data-llm-preset="agy_cli">★ Gemini 订阅 (本机 AGY)</button>
-        <button type="button" data-llm-preset="deepseek">DeepSeek API</button>
-        <button type="button" data-llm-preset="openai">OpenAI API</button>
-        <button type="button" data-llm-preset="qwen">通义千问</button>
-        <button type="button" data-llm-preset="ollama">本地 Ollama</button>
+        <button type="button" data-llm-preset="local_openai">通用 OpenAI 本地模型入口</button>
       </div>
       <label class="llm-field">
         <span>连接方式</span>
         <select id="llm-provider">
           <option value="codex_cli">ChatGPT 订阅 · 本机 Codex OAuth 登录态（免 API Key）</option>
-          <option value="agy_cli">Gemini / Claude 订阅 · 本机 AGY 登录态（免 API Key）</option>
-          <option value="openai_compatible">OpenAI 兼容 API (/v1/chat/completions)</option>
-          <option value="anthropic">Anthropic 原生 API (/v1/messages)</option>
+          <option value="agy_cli">Gemini 订阅 · 本机 AGY 登录态（免 API Key）</option>
+          <option value="openai_compatible">通用 OpenAI 样式本地/兼容模型入口 (/v1/chat/completions)</option>
         </select>
       </label>
       <label class="llm-field" id="llm-base-url-field">
         <span>接口地址 (Base URL)</span>
-        <input type="url" id="llm-base-url" placeholder="https://api.deepseek.com/v1">
+        <input type="url" id="llm-base-url" placeholder="http://127.0.0.1:11434/v1">
       </label>
       <label class="llm-field">
         <span>模型名称 (Model)</span>

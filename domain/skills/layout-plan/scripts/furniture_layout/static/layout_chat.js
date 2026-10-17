@@ -1,7 +1,7 @@
 /**
  * 布局工作台右侧 AI 对话栏与本机大模型设置组件。
  *
- * 支持本机已登录 OAuth CLI（Codex / AGY，无需 API Key）以及标准 OpenAI / Anthropic API。
+ * 支持本机已登录 OAuth CLI（ChatGPT Codex / Gemini AGY，无需 API Key）以及通用 OpenAI 样式本地/兼容模型入口。
  * 按不同厂商与模型家族自动适配对应的思考深度（Thinking / Reasoning Effort）选项与参数叫法。
  * 仅做前端 UI 交互与结构化 HTTP 调用（`/api/llm/config`、`/api/project/{id}/chat`），
  * 不在前端解析自然语言或改写业务规则。
@@ -29,28 +29,10 @@ const PROVIDER_PRESETS = {
     model: "gemini-3.8-flash-high",
     effort: "high",
   },
-  deepseek: {
-    provider: "openai_compatible",
-    base_url: "https://api.deepseek.com/v1",
-    model: "deepseek-reasoner",
-    effort: "none",
-  },
-  openai: {
-    provider: "openai_compatible",
-    base_url: "https://api.openai.com/v1",
-    model: "o3",
-    effort: "high",
-  },
-  qwen: {
-    provider: "openai_compatible",
-    base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    model: "qwen-max",
-    effort: "none",
-  },
-  ollama: {
+  local_openai: {
     provider: "openai_compatible",
     base_url: "http://127.0.0.1:11434/v1",
-    model: "qwen2.5:14b",
+    model: "gpt-oss-120b",
     effort: "none",
   },
 };
@@ -58,8 +40,6 @@ const PROVIDER_PRESETS = {
 const AGY_TIERED_PREFIXES = [
   "gemini-4-argon-",
   "gemini-3.8-flash-",
-  "claude-opus-5-5-",
-  "claude-sonnet-5-5-",
 ];
 
 /**
@@ -85,23 +65,11 @@ export function getEffortProfile(provider, model) {
     };
   }
 
-  // 2. Google Antigravity / Gemini & Claude CLI (agy_cli)
+  // 2. Google Antigravity / Gemini CLI (agy_cli)
   if (p === "agy_cli") {
-    if (m.startsWith("gpt-oss-")) {
-      return {
-        paramLabel: "AGY CLI · 固定 Medium 档位",
-        hint: "gpt-oss-120b-medium 在 AGY 中仅提供 Medium 固定思考档位。",
-        defaultEffort: "medium",
-        options: [
-          { value: "medium", shortLabel: "Thinking: Medium", fullLabel: "Medium（GPT-OSS 固定档位）" },
-        ],
-      };
-    }
-    const isClaude = m.startsWith("claude-");
-    const familyLabel = isClaude ? "Claude 5.5 Thinking" : "Gemini Thinking Level";
     return {
-      paramLabel: `AGY · ${familyLabel} (--effort & 模型后缀联动)`,
-      hint: "切换档位时会自动同步 AGY 模型后缀（-low / -medium / -high）与 `--effort` 参数。",
+      paramLabel: "Gemini · Thinking Level (--effort & 模型后缀联动)",
+      hint: "切换档位时会自动同步 Gemini 模型后缀（-low / -medium / -high）与 `--effort` 参数。",
       defaultEffort: "high",
       options: [
         { value: "low", shortLabel: "Thinking: Low", fullLabel: "Low（对应 -low 模型后缀 · 极速）" },
@@ -113,49 +81,11 @@ export function getEffortProfile(provider, model) {
     };
   }
 
-  // 3. Anthropic 原生 API (Claude Extended Thinking: budget_tokens)
-  if (p === "anthropic") {
-    return {
-      paramLabel: "Anthropic Claude · Extended Thinking (budget_tokens)",
-      hint: "对应 Anthropic `/v1/messages` 的 `thinking: { type: \"enabled\", budget_tokens: ... }`。",
-      defaultEffort: "medium",
-      options: [
-        { value: "none", shortLabel: "Thinking: Off", fullLabel: "Off / 关闭 Extended Thinking（标准模式）" },
-        { value: "low", shortLabel: "Budget: 2k", fullLabel: "Low · 2,048 tokens（轻量思考预算）" },
-        { value: "medium", shortLabel: "Budget: 8k", fullLabel: "Medium · 8,192 tokens（标准思考预算）" },
-        { value: "high", shortLabel: "Budget: 16k", fullLabel: "High · 16,384 tokens（深度思考预算）" },
-        { value: "max", shortLabel: "Budget: 32k", fullLabel: "Max · 31,999 tokens（最大思考预算）" },
-      ],
-    };
-  }
-
-  // 4. OpenAI 兼容 API — 按模型家族区分
-  if (m.includes("deepseek-reasoner") || m.includes("deepseek-r1") || m.includes("qwq")) {
-    return {
-      paramLabel: "内置原生 CoT 思考链（模型自带）",
-      hint: `${model || "该推理模型"} 默认强制开启完整思维链（CoT），无需额外传 reasoning_effort 参数。`,
-      defaultEffort: "none",
-      options: [
-        { value: "none", shortLabel: "思考: 模型内置 CoT", fullLabel: "内置推理链（模型自动控制思考深度）" },
-      ],
-    };
-  }
-
-  if (m.includes("deepseek-chat") || (m.startsWith("qwen") && !m.includes("qwq"))) {
-    return {
-      paramLabel: "标准对话模式（无独立 effort 参数）",
-      hint: "如需深度推理，可将模型切换为 deepseek-reasoner 或 qwq-plus。",
-      defaultEffort: "none",
-      options: [
-        { value: "none", shortLabel: "思考: 标准模式", fullLabel: "none（标准对话模式，不传 reasoning_effort）" },
-      ],
-    };
-  }
-
+  // 3. 通用 OpenAI 兼容本地/远端接口
   if (m.includes("gemini")) {
     return {
-      paramLabel: "Gemini API (OpenAI 兼容) · reasoning_effort",
-      hint: "Gemini 2.5 / 3 系列在 OpenAI 兼容接口下支持 low / medium / high 思考预算映射。",
+      paramLabel: "Gemini (OpenAI 兼容) · reasoning_effort",
+      hint: "Gemini 系列在 OpenAI 兼容接口下支持 low / medium / high 思考预算映射。",
       defaultEffort: "high",
       options: [
         { value: "none", shortLabel: "Thinking: Off", fullLabel: "none（不传 reasoning_effort）" },
@@ -166,24 +96,23 @@ export function getEffortProfile(provider, model) {
     };
   }
 
-  // OpenAI o1 / o3 / o4-mini / gpt-5 / gpt-6 或通用 OpenAI 兼容接口
   return {
-    paramLabel: "OpenAI API · reasoning_effort",
-    hint: "OpenAI 推理系列（o1 / o3 / o4-mini / gpt-5+）支持 low / medium / high；非推理模型请选择 none。",
+    paramLabel: "通用 OpenAI 接口 · reasoning_effort",
+    hint: "支持 reasoning_effort 的模型可选 low / medium / high；普通或本地自托管模型请选择 none（不传该参数）。",
     defaultEffort: /^(o1|o3|o4|gpt-5|gpt-6)/.test(m) ? "high" : "none",
     options: [
-      { value: "none", shortLabel: "Effort: 默认/关闭", fullLabel: "none（不传 reasoning_effort · 适用于 gpt-4o 等普通模型）" },
+      { value: "none", shortLabel: "思考: 默认/不传", fullLabel: "none（不传 reasoning_effort · 适用于通用本地模型）" },
       { value: "minimal", shortLabel: "Effort: minimal", fullLabel: "minimal（极简推理）" },
       { value: "low", shortLabel: "Effort: low", fullLabel: "low（快速推理）" },
       { value: "medium", shortLabel: "Effort: medium", fullLabel: "medium（均衡推理）" },
       { value: "high", shortLabel: "Effort: high", fullLabel: "high（深度推理）" },
-      { value: "xhigh", shortLabel: "Effort: xhigh", fullLabel: "xhigh（极限推理 · 仅部分旗舰模型支持）" },
+      { value: "xhigh", shortLabel: "Effort: xhigh", fullLabel: "xhigh（极限推理）" },
     ],
   };
 }
 
 /**
- * 若当前是 AGY CLI 且模型名以 -low / -medium / -high 结尾，切换档位时同步更新模型名后缀。
+ * 若当前是 AGY CLI 且 Gemini 模型名以 -low / -medium / -high 结尾，切换档位时同步更新模型名后缀。
  */
 function syncAgyModelWithEffort(provider, model, effort) {
   const m = String(model || "").trim();
@@ -200,7 +129,7 @@ function syncAgyModelWithEffort(provider, model, effort) {
 }
 
 /**
- * 若用户在 AGY CLI 下直接手改了模型后缀（如改成 gemini-4-argon-low），反推对应的 effort。
+ * 若用户在 AGY CLI 下直接手改了 Gemini 模型后缀（如改成 gemini-4-argon-low），反推对应的 effort。
  */
 function inferEffortFromModelName(provider, model, currentEffort) {
   const m = String(model || "").trim().toLowerCase();
@@ -313,16 +242,13 @@ export function mountProjectChat({
     if (modelHint) {
       if (provider === "codex_cli") {
         modelHint.textContent =
-          "直接使用本机 Codex OAuth 登录态（免 API Key）。可选模型：gpt-6.1-sol、gpt-6-astra、gpt-6-sol、gpt-5.6-sol";
+          "直接使用本机 Codex OAuth 登录态（免 API Key）。可选 ChatGPT 模型：gpt-6.1-sol、gpt-6-astra、gpt-6-sol、gpt-5.6-sol";
       } else if (provider === "agy_cli") {
         modelHint.textContent =
-          "直接使用本机 AGY / Gemini OAuth 登录态（免 API Key）。可选家族：gemini-4-argon-high、gemini-3.8-flash-high、claude-sonnet-5-5-high、claude-opus-5-5-high";
-      } else if (provider === "anthropic") {
-        modelHint.textContent =
-          "填写 Anthropic 模型名，如 claude-sonnet-4-20250514 / claude-3-7-sonnet-latest";
+          "直接使用本机 AGY / Gemini OAuth 登录态（免 API Key）。可选 Gemini 模型：gemini-4-argon-high、gemini-3.8-flash-high";
       } else {
         modelHint.textContent =
-          "填写对应服务商的模型 ID，如 o3 / gpt-4o / deepseek-reasoner / deepseek-chat / qwen-max";
+          "填写本地或兼容 OpenAI 接口的模型 ID（本机 127.0.0.1 / localhost 地址免填 API Key）";
       }
     }
 
@@ -377,11 +303,11 @@ export function mountProjectChat({
         llm.provider === "codex_cli"
           ? "本机 ChatGPT 订阅"
           : llm.provider === "agy_cli"
-            ? "本机 Gemini/AGY 订阅"
+            ? "本机 Gemini 订阅"
             : llm.base_url;
       settingsBtn.title = `当前模型：${llm.model} · ${profile.paramLabel}: ${activeEffort} (${modeName})`;
     } else {
-      settingsBtn.title = "点击选择本机 ChatGPT/Gemini 订阅或配置 API";
+      settingsBtn.title = "点击选择本机 ChatGPT/Gemini 订阅或配置本地 OpenAI 模型入口";
     }
   }
 
@@ -481,7 +407,7 @@ export function mountProjectChat({
     const trimmed = String(text || "").trim();
     if (!trimmed || state.sending) return;
     if (!state.llm || !state.llm.configured) {
-      openSettingsModal("请先选择本机 ChatGPT/Gemini 订阅模式或配置 API");
+      openSettingsModal("请先选择本机 ChatGPT/Gemini 订阅模式或配置本地模型入口");
       return;
     }
 
@@ -559,7 +485,7 @@ export function mountProjectChat({
     const llm = state.llm || {};
     if (providerSelect) providerSelect.value = llm.provider || "codex_cli";
     if (baseUrlInput) {
-      const url = llm.base_url && !llm.base_url.startsWith("local://") ? llm.base_url : "https://api.openai.com/v1";
+      const url = llm.base_url && !llm.base_url.startsWith("local://") ? llm.base_url : "http://127.0.0.1:11434/v1";
       baseUrlInput.value = url;
     }
     if (modelInput) modelInput.value = llm.model || "gpt-6.1-sol";
@@ -567,7 +493,7 @@ export function mountProjectChat({
       apiKeyInput.value = "";
       apiKeyInput.placeholder = llm.has_api_key
         ? `已保存 (${llm.api_key_masked})，留空保持不变`
-        : "输入你的 API Key（如 sk-...）";
+        : "本机地址可留空；远端接口填 API Key";
     }
     if (apiKeyHint) {
       apiKeyHint.textContent = llm.has_api_key
@@ -636,7 +562,11 @@ export function mountProjectChat({
       const p = providerSelect.value;
       if (p === "codex_cli" && modelInput) modelInput.value = "gpt-6.1-sol";
       else if (p === "agy_cli" && modelInput) modelInput.value = "gemini-3.8-flash-high";
-      else if (p === "anthropic" && modelInput) modelInput.value = "claude-sonnet-4-20250514";
+      else if (p === "openai_compatible") {
+        if (baseUrlInput && (!baseUrlInput.value || baseUrlInput.value.startsWith("local://"))) {
+          baseUrlInput.value = "http://127.0.0.1:11434/v1";
+        }
+      }
       syncModalProviderFields();
     });
   }

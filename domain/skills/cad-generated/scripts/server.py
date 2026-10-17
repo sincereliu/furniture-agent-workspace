@@ -848,7 +848,7 @@ class LlmConfigSaveRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    provider: Literal["codex_cli", "agy_cli", "openai_compatible", "anthropic"] = "codex_cli"
+    provider: Literal["codex_cli", "agy_cli", "openai_compatible"] = "codex_cli"
     base_url: str = Field(default="")
     model: str = Field(..., min_length=1)
     reasoning_effort: Literal["none", "minimal", "low", "medium", "high", "xhigh", "max"] = "high"

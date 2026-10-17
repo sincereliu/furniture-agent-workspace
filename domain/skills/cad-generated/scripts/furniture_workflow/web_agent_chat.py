@@ -3,7 +3,7 @@
 职责边界（遵循 llm-runtime-boundary.md）：
 - 本模块只负责 `structured_protocol` 与 `side_effect`：
   1. 读写本机大模型连接配置（`store/_llm_config.json`，支持本机已登录 OAuth CLI：`codex_cli` / `agy_cli`，
-     以及标准 `openai_compatible` / `anthropic` API 接口）；
+     以及通用 `openai_compatible` API 接口）；
   2. 读写项目对话历史（`store/<project_id>/chat.json`）；
   3. 按项目当前阶段从磁盘读取对应 `SKILL.md` / `references/` 与项目结构化快照，组装上下文；
   4. 调用用户所选的大模型通道（本机 CLI 或 HTTP API），将模型返回的 `tool_calls` 原样交由
@@ -41,7 +41,6 @@ VALID_PROVIDERS = {
     "codex_cli",
     "agy_cli",
     "openai_compatible",
-    "anthropic",
 }
 VALID_REASONING_EFFORTS = {
     "none",
@@ -53,16 +52,10 @@ VALID_REASONING_EFFORTS = {
     "max",
 }
 _AGY_EFFORT_SUFFIXES = ("low", "medium", "high")
-_ANTHROPIC_THINKING_BUDGETS = {
-    "low": 2048,
-    "medium": 8192,
-    "high": 16384,
-    "max": 31999,
-}
 
 
 def _sync_agy_model_and_effort(model: str, effort: str) -> tuple[str, str]:
-    """AGY CLI 的模型 ID 自带档位后缀（如 gemini-4-argon-high），将模型后缀与 --effort 同步。"""
+    """AGY CLI 的 Gemini 模型 ID 自带档位后缀（如 gemini-4-argon-high），将模型后缀与 --effort 同步。"""
     cleaned_model = str(model or "").strip()
     cleaned_effort = str(effort or "high").strip().lower()
     if cleaned_effort not in {"low", "medium", "high", "xhigh", "max"}:
@@ -72,8 +65,7 @@ def _sync_agy_model_and_effort(model: str, effort: str) -> tuple[str, str]:
         token = f"-{suffix}"
         if cleaned_model.endswith(token):
             base_name = cleaned_model[: -len(token)]
-            # gpt-oss-120b-medium 等仅单档位的模型保持原名
-            if base_name.startswith(("gemini-", "claude-")):
+            if base_name.startswith("gemini-"):
                 target_suffix = (
                     cleaned_effort
                     if cleaned_effort in _AGY_EFFORT_SUFFIXES
@@ -236,18 +228,13 @@ def load_llm_config(store_root: str | Path) -> dict[str, str]:
             saved.get("base_url")
             or os.environ.get("FURNITURE_LLM_BASE_URL")
             or os.environ.get("OPENAI_BASE_URL")
-            or (
-                "https://api.anthropic.com/v1"
-                if provider == "anthropic"
-                else "https://api.openai.com/v1"
-            )
+            or "http://127.0.0.1:11434/v1"
         ).strip()
 
     api_key = str(
         saved.get("api_key")
         or os.environ.get("FURNITURE_LLM_API_KEY")
         or os.environ.get("OPENAI_API_KEY")
-        or os.environ.get("ANTHROPIC_API_KEY")
         or os.environ.get("GEMINI_API_KEY")
         or ""
     ).strip()
@@ -739,15 +726,6 @@ def _resolve_chat_completions_url(base_url: str) -> str:
     return f"{trimmed}/v1/chat/completions"
 
 
-def _resolve_anthropic_messages_url(base_url: str) -> str:
-    trimmed = base_url.rstrip("/")
-    if trimmed.endswith("/messages"):
-        return trimmed
-    if trimmed.endswith("/v1"):
-        return f"{trimmed}/messages"
-    return f"{trimmed}/v1/messages"
-
-
 def _http_post_json(
     url: str,
     headers: Mapping[str, str],
@@ -860,106 +838,6 @@ def _call_openai_compatible(
     return {"content": content, "tool_calls": normalized_calls}
 
 
-def _call_anthropic(
-    config: Mapping[str, str],
-    messages: list[dict[str, Any]],
-    tools: list[dict[str, Any]],
-) -> dict[str, Any]:
-    url = _resolve_anthropic_messages_url(config["base_url"])
-    headers = {
-        "x-api-key": config["api_key"],
-        "anthropic-version": "2023-06-01",
-    }
-    system_parts: list[str] = []
-    anth_messages: list[dict[str, Any]] = []
-    for msg in messages:
-        role = msg.get("role")
-        if role == "system":
-            system_parts.append(str(msg.get("content") or ""))
-        elif role == "user":
-            anth_messages.append({"role": "user", "content": str(msg.get("content") or "")})
-        elif role == "assistant":
-            blocks: list[dict[str, Any]] = []
-            if msg.get("content"):
-                blocks.append({"type": "text", "text": str(msg["content"])})
-            for tc in msg.get("tool_calls") or []:
-                fn = tc.get("function") or {}
-                try:
-                    parsed_input = json.loads(str(fn.get("arguments") or "{}"))
-                except json.JSONDecodeError:
-                    parsed_input = {}
-                blocks.append(
-                    {
-                        "type": "tool_use",
-                        "id": tc.get("id"),
-                        "name": fn.get("name"),
-                        "input": parsed_input,
-                    }
-                )
-            if blocks:
-                anth_messages.append({"role": "assistant", "content": blocks})
-        elif role == "tool":
-            anth_messages.append(
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": msg.get("tool_call_id"),
-                            "content": str(msg.get("content") or ""),
-                        }
-                    ],
-                }
-            )
-    anth_tools = [
-        {
-            "name": t["function"]["name"],
-            "description": t["function"].get("description", ""),
-            "input_schema": t["function"].get("parameters", {"type": "object"}),
-        }
-        for t in tools
-        if isinstance(t, dict) and isinstance(t.get("function"), dict)
-    ]
-    effort = str(config.get("reasoning_effort") or "none").strip().lower()
-    thinking_budget = _ANTHROPIC_THINKING_BUDGETS.get(effort)
-    payload: dict[str, Any] = {
-        "model": config["model"],
-        "max_tokens": (thinking_budget + 4096) if thinking_budget else 4096,
-        "system": "\n\n".join(system_parts),
-        "messages": anth_messages,
-        "tools": anth_tools,
-    }
-    if thinking_budget:
-        payload["thinking"] = {
-            "type": "enabled",
-            "budget_tokens": thinking_budget,
-        }
-    data = _http_post_json(url, headers, payload)
-    content_blocks = data.get("content")
-    if not isinstance(content_blocks, list):
-        raise WebChatError("LLM_MISSING_CONTENT", "Anthropic 响应缺少 content 列表", status_code=502)
-    texts: list[str] = []
-    tool_calls: list[dict[str, Any]] = []
-    for block in content_blocks:
-        if not isinstance(block, dict):
-            continue
-        btype = block.get("type")
-        if btype == "text":
-            texts.append(str(block.get("text") or ""))
-        elif btype == "tool_use":
-            tool_calls.append(
-                {
-                    "id": str(block.get("id") or f"call_{len(tool_calls) + 1}"),
-                    "type": "function",
-                    "function": {
-                        "name": str(block.get("name") or ""),
-                        "arguments": json.dumps(block.get("input") or {}, ensure_ascii=False),
-                    },
-                }
-            )
-    return {"content": "\n".join(texts).strip(), "tool_calls": tool_calls}
-
-
 def _default_llm_completion(
     config: Mapping[str, str],
     messages: list[dict[str, Any]],
@@ -970,8 +848,6 @@ def _default_llm_completion(
         return _call_codex_cli(config, messages, tools)
     if provider == "agy_cli":
         return _call_agy_cli(config, messages, tools)
-    if provider == "anthropic":
-        return _call_anthropic(config, messages, tools)
     return _call_openai_compatible(config, messages, tools)
 
 
