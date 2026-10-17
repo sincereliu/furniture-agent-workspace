@@ -17,6 +17,20 @@ class WorkspaceLayoutTests(unittest.TestCase):
     def test_live_workspace_uses_only_stage_skills_and_temp(self) -> None:
         self.assertEqual(find_violations(WORKSPACE_ROOT), [])
 
+    def test_root_launcher_is_the_only_script_allowed_at_the_root(self) -> None:
+        """根目录只放行那一个双击启动器；换一个名字或再加一个都要被拦住。"""
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            (root / "open_last_project.bat").write_text("@echo off\n", encoding="utf-8")
+            self.assertEqual(find_violations(root), [])
+
+            (root / "another_launcher.bat").write_text("@echo off\n", encoding="utf-8")
+            violations = find_violations(root)
+
+        self.assertEqual(
+            violations, ["script outside allowed locations: another_launcher.bat"]
+        )
+
     def test_accepts_stage_owned_script_and_rejects_unrelated_skill_script(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
