@@ -52,7 +52,8 @@
 | 房间轴、家具尺寸线和标签锚点；全部用房间坐标计算 | `static/layout_annotations.js` | calculation |
 | 屏幕标注矩形避让、画布边界与稳定偏移 | `static/layout_labels.js` | calculation |
 | 拖动换算（屏幕像素 → 房间毫米）与"贴回墙面" | `static/layout_drag.js` | calculation |
-| 布局页右侧 AI 对话栏与本机大模型连接配置弹窗 | `static/layout_chat.js` | structured_protocol / side_effect |
+| 布局页离线免构建 Angular Standalone 组件与响应式 Signals 运行时 | `static/layout_angular.js` | structured_protocol / side_effect |
+| 布局页右侧 AI 对话栏与本机大模型连接配置弹窗（Angular 组件） | `static/layout_chat.js` | structured_protocol / side_effect |
 | 记下移动、旋转或改尺寸，这一步先不算。全屋和单间共用这一套字段 | `scene_edit.py` | schema |
 | 把这次改动算进某一间，算出一版还没确认的摆放。版本号和落盘不在这里 | `project_edit.py` | calculation |
 | 三个入口：建全屋摆放（`plan_project_layout`）、建单间（`plan_room_scene`）、写房间外壳（`write_room_shell`） | `layout_entry.py` | structured_protocol |

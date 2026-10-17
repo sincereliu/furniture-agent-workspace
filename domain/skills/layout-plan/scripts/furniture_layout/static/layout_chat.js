@@ -1,11 +1,13 @@
 /**
- * 布局工作台右侧 AI 对话栏与本机大模型设置组件。
+ * 布局工作台右侧 AI 对话栏与本机大模型设置组件（基于 Angular Standalone Component & Reactive Signals）。
  *
  * 支持本机已登录 OAuth CLI（ChatGPT Codex / Gemini AGY，无需 API Key）以及通用 OpenAI 样式本地/兼容模型入口。
  * 按不同厂商与模型家族自动适配对应的思考深度（Thinking / Reasoning Effort）选项与参数叫法。
  * 仅做前端 UI 交互与结构化 HTTP 调用（`/api/llm/config`、`/api/project/{id}/chat`），
  * 不在前端解析自然语言或改写业务规则。
  */
+
+import { Component, Injectable, signal, computed, effect } from "/layout-view/layout_angular.js";
 
 const STAGE_LABELS = {
   layout_plan: "房间布局",
@@ -180,519 +182,546 @@ function formatStageBadge(project) {
   return isApproved ? `${label} · 已确认` : `${label} · 待确认`;
 }
 
-export function mountProjectChat({
-  chatUrl,
-  llmConfigUrl,
-  onProjectUpdated,
-  onStatusToast,
-}) {
-  const panel = document.getElementById("chat-panel");
-  const toggleBtn = document.getElementById("toggle-chat");
-  if (!panel || !chatUrl || !llmConfigUrl) return null;
-
-  document.body.classList.add("has-chat");
-  panel.hidden = false;
-  if (toggleBtn) {
-    toggleBtn.hidden = false;
-    toggleBtn.setAttribute("aria-pressed", "true");
-  }
-
-  const stagePill = document.getElementById("chat-stage-pill");
-  const messagesEl = document.getElementById("chat-messages");
-  const formEl = document.getElementById("chat-form");
-  const inputEl = document.getElementById("chat-input");
-  const sendBtn = document.getElementById("chat-send-btn");
-  const clearBtn = document.getElementById("chat-clear-btn");
-  const effortSelect = document.getElementById("chat-effort-select");
-  const settingsBtn = document.getElementById("chat-settings-btn");
-  const settingsDot = document.getElementById("chat-settings-dot");
-  const quickBar = document.getElementById("chat-quick-bar");
-
-  const modal = document.getElementById("llm-modal");
-  const modalForm = document.getElementById("llm-config-form");
-  const providerSelect = document.getElementById("llm-provider");
-  const baseUrlField = document.getElementById("llm-base-url-field");
-  const baseUrlInput = document.getElementById("llm-base-url");
-  const modelInput = document.getElementById("llm-model");
-  const modalEffortLabel = document.getElementById("llm-effort-label");
-  const modalEffortSelect = document.getElementById("llm-effort");
-  const modalEffortHint = document.getElementById("llm-effort-hint");
-  const modelHint = document.getElementById("llm-model-hint");
-  const apiKeyField = document.getElementById("llm-api-key-field");
-  const apiKeyInput = document.getElementById("llm-api-key");
-  const apiKeyHint = document.getElementById("llm-key-hint");
-  const modalCloseBtn = document.getElementById("llm-modal-close");
-  const modalStatus = document.getElementById("llm-modal-status");
-
-  let state = {
-    sending: false,
-    llm: null,
-    project: null,
-    messages: [],
-  };
-
-  function syncModalProviderFields(preferredEffort) {
-    if (!providerSelect) return;
-    const provider = providerSelect.value;
-    const model = modelInput ? modelInput.value.trim() : "";
-    const isCli = provider === "codex_cli" || provider === "agy_cli";
-    if (baseUrlField) baseUrlField.hidden = isCli;
-    if (baseUrlInput) baseUrlInput.required = !isCli;
-    if (apiKeyField) apiKeyField.hidden = isCli;
-    if (modelHint) {
-      if (provider === "codex_cli") {
-        modelHint.textContent =
-          "直接使用本机 Codex OAuth 登录态（免 API Key）。可选 ChatGPT 模型：gpt-6.1-sol、gpt-6-astra、gpt-6-sol、gpt-5.6-sol";
-      } else if (provider === "agy_cli") {
-        modelHint.textContent =
-          "直接使用本机 AGY / Gemini OAuth 登录态（免 API Key）。可选 Gemini 模型：gemini-4-argon-high、gemini-3.8-flash-high";
-      } else {
-        modelHint.textContent =
-          "填写本地或兼容 OpenAI 接口的模型 ID（本机 127.0.0.1 / localhost 地址免填 API Key）";
-      }
-    }
-
-    const profile = getEffortProfile(provider, model);
-    if (modalEffortLabel) {
-      modalEffortLabel.textContent = `思考模式 (${profile.paramLabel})`;
-    }
-    if (modalEffortHint) {
-      modalEffortHint.textContent = profile.hint;
-    }
-    const currentVal =
-      preferredEffort ||
-      (modalEffortSelect ? modalEffortSelect.value : "") ||
-      profile.defaultEffort;
-    const inferred = inferEffortFromModelName(provider, model, currentVal);
-    const chosenEffort = populateSelectOptions(
-      modalEffortSelect,
-      profile.options,
-      inferred || profile.defaultEffort,
-      true,
-    );
-    if (provider === "agy_cli" && modelInput) {
-      const synced = syncAgyModelWithEffort(provider, model, chosenEffort);
-      if (synced.model && synced.model !== modelInput.value) {
-        modelInput.value = synced.model;
-      }
+export const LayoutChatService = Injectable({ providedIn: "root" })(
+  class LayoutChatService {
+    constructor() {
+      this.sending = signal(false);
+      this.llm = signal(null);
+      this.project = signal(null);
+      this.messages = signal([]);
+      this.modalOpen = signal(false);
+      this.modalNotice = signal("");
+      this.stageBadgeText = computed(() => formatStageBadge(this.project()));
     }
   }
+);
 
-  function updateLlmIndicator(llm) {
-    state.llm = llm || null;
-    const provider = (llm && llm.provider) || "codex_cli";
-    const model = (llm && llm.model) || "gpt-6.1-sol";
-    const profile = getEffortProfile(provider, model);
-    const rawEffort = (llm && llm.reasoning_effort) || profile.defaultEffort;
-    const activeEffort = populateSelectOptions(
-      effortSelect,
-      profile.options,
-      rawEffort,
-      false,
-    );
-    if (effortSelect) {
-      effortSelect.title = `${profile.paramLabel} — ${profile.hint}`;
+export const LayoutChatComponent = Component({
+  selector: "#chat-panel",
+  standalone: true,
+})(
+  class LayoutChatComponent {
+    constructor({ chatUrl, llmConfigUrl, onProjectUpdated, onStatusToast }) {
+      this.chatUrl = chatUrl;
+      this.llmConfigUrl = llmConfigUrl;
+      this.onProjectUpdated = onProjectUpdated;
+      this.onStatusToast = onStatusToast;
+      this.service = new LayoutChatService();
     }
 
-    if (!settingsDot || !settingsBtn) return;
-    const configured = Boolean(llm && llm.configured);
-    settingsDot.classList.toggle("ok", configured);
-    settingsDot.classList.toggle("warn", !configured);
-    if (configured) {
-      const modeName =
-        llm.provider === "codex_cli"
-          ? "本机 ChatGPT 订阅"
-          : llm.provider === "agy_cli"
-            ? "本机 Gemini 订阅"
-            : llm.base_url;
-      settingsBtn.title = `当前模型：${llm.model} · ${profile.paramLabel}: ${activeEffort} (${modeName})`;
-    } else {
-      settingsBtn.title = "点击选择本机 ChatGPT/Gemini 订阅或配置本地 OpenAI 模型入口";
-    }
-  }
+    mount() {
+      const panel = document.getElementById("chat-panel");
+      const toggleBtn = document.getElementById("toggle-chat");
+      if (!panel || !this.chatUrl || !this.llmConfigUrl) return null;
 
-  function updateProjectSummary(project) {
-    if (!project) return;
-    state.project = project;
-    if (stagePill) {
-      stagePill.textContent = formatStageBadge(project);
-    }
-  }
-
-  function createToolTraceNode(traceList) {
-    const wrap = document.createElement("div");
-    wrap.className = "chat-tool-trace";
-    for (const item of traceList) {
-      const chip = document.createElement("span");
-      chip.className = "chat-tool-chip " + (item.ok ? "ok" : "err");
-      const mark = item.ok ? "✓" : "⚠";
-      const suffix = item.progressed ? " · 已更新项目" : "";
-      const errText =
-        !item.ok && item.error && item.error.message
-          ? ` (${item.error.message})`
-          : "";
-      chip.textContent = `${mark} ${item.tool}${suffix}${errText}`;
-      wrap.appendChild(chip);
-    }
-    return wrap;
-  }
-
-  function renderMessages() {
-    if (!messagesEl) return;
-    messagesEl.innerHTML = "";
-    if (!state.messages || state.messages.length === 0) {
-      const empty = document.createElement("div");
-      empty.className = "chat-empty";
-      const configured = Boolean(state.llm && state.llm.configured);
-      let modelTag = "";
-      if (configured && state.llm) {
-        const profile = getEffortProfile(state.llm.provider, state.llm.model);
-        const matchOpt =
-          profile.options.find((o) => o.value === state.llm.reasoning_effort) ||
-          profile.options[0];
-        const effortLabel = matchOpt ? matchOpt.shortLabel : state.llm.reasoning_effort;
-        modelTag = `<br><span style="color:#4f46e5;font-weight:600">当前已连接：${state.llm.model} (${effortLabel})</span>`;
-      }
-      empty.innerHTML = configured
-        ? `<strong>直接在这里和 AI 对话</strong>${modelTag}<br>你可以让 AI 修改房间家具尺寸、确认当前布局，或生成各台柜子的板件草稿，左侧 3D 视图会自动同步更新。`
-        : "<strong>欢迎使用网页端 AI 助手</strong><br>点击右上角「⚙️ 模型设置」，可直接选用本机已登录的 ChatGPT / Gemini 订阅账号（免 API Key）。";
-      messagesEl.appendChild(empty);
-      return;
-    }
-
-    for (const msg of state.messages) {
-      const item = document.createElement("div");
-      const role = msg.role === "user" ? "user" : "assistant";
-      item.className = `chat-msg ${role}`;
-
-      if (role === "assistant" && Array.isArray(msg.tool_trace) && msg.tool_trace.length > 0) {
-        item.appendChild(createToolTraceNode(msg.tool_trace));
+      document.body.classList.add("has-chat");
+      panel.hidden = false;
+      if (toggleBtn) {
+        toggleBtn.hidden = false;
+        toggleBtn.setAttribute("aria-pressed", "true");
       }
 
-      const bubble = document.createElement("div");
-      bubble.className = "chat-bubble";
-      bubble.textContent = msg.content || "";
-      item.appendChild(bubble);
-      messagesEl.appendChild(item);
-    }
+      const stagePill = document.getElementById("chat-stage-pill");
+      const messagesEl = document.getElementById("chat-messages");
+      const formEl = document.getElementById("chat-form");
+      const inputEl = document.getElementById("chat-input");
+      const sendBtn = document.getElementById("chat-send-btn");
+      const clearBtn = document.getElementById("chat-clear-btn");
+      const effortSelect = document.getElementById("chat-effort-select");
+      const settingsBtn = document.getElementById("chat-settings-btn");
+      const settingsDot = document.getElementById("chat-settings-dot");
+      const quickBar = document.getElementById("chat-quick-bar");
 
-    if (state.sending) {
-      const thinking = document.createElement("div");
-      thinking.className = "chat-msg assistant thinking";
-      const bubble = document.createElement("div");
-      bubble.className = "chat-bubble";
-      bubble.textContent = "AI 正在思考并执行工具…";
-      thinking.appendChild(bubble);
-      messagesEl.appendChild(thinking);
-    }
+      const modal = document.getElementById("llm-modal");
+      const modalForm = document.getElementById("llm-config-form");
+      const providerSelect = document.getElementById("llm-provider");
+      const baseUrlField = document.getElementById("llm-base-url-field");
+      const baseUrlInput = document.getElementById("llm-base-url");
+      const modelInput = document.getElementById("llm-model");
+      const modalEffortLabel = document.getElementById("llm-effort-label");
+      const modalEffortSelect = document.getElementById("llm-effort");
+      const modalEffortHint = document.getElementById("llm-effort-hint");
+      const modelHint = document.getElementById("llm-model-hint");
+      const apiKeyField = document.getElementById("llm-api-key-field");
+      const apiKeyInput = document.getElementById("llm-api-key");
+      const apiKeyHint = document.getElementById("llm-key-hint");
+      const modalCloseBtn = document.getElementById("llm-modal-close");
+      const modalStatus = document.getElementById("llm-modal-status");
 
-    messagesEl.scrollTop = messagesEl.scrollHeight;
-  }
+      const svc = this.service;
+      const { chatUrl, llmConfigUrl, onProjectUpdated, onStatusToast } = this;
 
-  async function loadInitialChat() {
-    try {
-      const resp = await fetch(chatUrl, { cache: "no-store" });
-      if (!resp.ok) return;
-      const data = await resp.json();
-      state.messages = Array.isArray(data.messages) ? data.messages : [];
-      updateLlmIndicator(data.llm);
-      updateProjectSummary(data.project);
-      renderMessages();
-    } catch (err) {
-      // 忽略初始加载网络异常
-    }
-  }
-
-  async function sendMessage(text) {
-    const trimmed = String(text || "").trim();
-    if (!trimmed || state.sending) return;
-    if (!state.llm || !state.llm.configured) {
-      openSettingsModal("请先选择本机 ChatGPT/Gemini 订阅模式或配置本地模型入口");
-      return;
-    }
-
-    state.sending = true;
-    const optimisticUser = {
-      id: "temp_user",
-      role: "user",
-      content: trimmed,
-    };
-    state.messages = [...state.messages, optimisticUser];
-    if (inputEl) inputEl.value = "";
-    if (sendBtn) sendBtn.disabled = true;
-    renderMessages();
-
-    try {
-      const resp = await fetch(chatUrl, {
-        method: "POST",
-        cache: "no-store",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: trimmed }),
-      });
-      const payload = await resp.json().catch(() => ({}));
-      if (!resp.ok) {
-        const detail = payload && payload.detail;
-        const errMsg =
-          typeof detail === "object" && detail !== null
-            ? detail.message || JSON.stringify(detail)
-            : String(detail || `请求失败 (${resp.status})`);
-        state.messages = [
-          ...state.messages,
-          {
-            id: "temp_err",
-            role: "assistant",
-            content: `⚠️ ${errMsg}`,
-          },
-        ];
-        if (detail && detail.code && detail.code.startsWith("LLM_NOT_CONFIGURED")) {
-          openSettingsModal(errMsg);
-        }
-        return;
-      }
-
-      if (Array.isArray(payload.messages)) {
-        state.messages = payload.messages;
-      }
-      if (payload.project) {
-        updateProjectSummary(payload.project);
-      }
-      if (payload.progressed || (Array.isArray(payload.tool_trace) && payload.tool_trace.length > 0)) {
-        if (typeof onProjectUpdated === "function") {
-          onProjectUpdated();
-        }
-        if (typeof onStatusToast === "function" && payload.progressed) {
-          onStatusToast("AI 已更新项目状态，3D 视图已同步");
-        }
-      }
-    } catch (err) {
-      state.messages = [
-        ...state.messages,
-        {
-          id: "temp_err",
-          role: "assistant",
-          content: `⚠️ 请求异常：${err}`,
-        },
-      ];
-    } finally {
-      state.sending = false;
-      if (sendBtn) sendBtn.disabled = false;
-      renderMessages();
-    }
-  }
-
-  function openSettingsModal(noticeText = "") {
-    if (!modal) return;
-    const llm = state.llm || {};
-    if (providerSelect) providerSelect.value = llm.provider || "codex_cli";
-    if (baseUrlInput) {
-      const url = llm.base_url && !llm.base_url.startsWith("local://") ? llm.base_url : "http://127.0.0.1:11434/v1";
-      baseUrlInput.value = url;
-    }
-    if (modelInput) modelInput.value = llm.model || "gpt-6.1-sol";
-    if (apiKeyInput) {
-      apiKeyInput.value = "";
-      apiKeyInput.placeholder = llm.has_api_key
-        ? `已保存 (${llm.api_key_masked})，留空保持不变`
-        : "本机地址可留空；远端接口填 API Key";
-    }
-    if (apiKeyHint) {
-      apiKeyHint.textContent = llm.has_api_key
-        ? `当前已保存密钥：${llm.api_key_masked}（仅存本机 store/_llm_config.json）`
-        : "密钥仅保存在本机 store/_llm_config.json，绝不上传 Git。";
-    }
-    syncModalProviderFields(llm.reasoning_effort || "high");
-    if (modalStatus) {
-      modalStatus.textContent = noticeText || "";
-    }
-    modal.hidden = false;
-  }
-
-  function closeSettingsModal() {
-    if (modal) modal.hidden = true;
-  }
-
-  if (toggleBtn) {
-    toggleBtn.addEventListener("click", () => {
-      const hidden = !panel.hidden;
-      panel.hidden = hidden;
-      document.body.classList.toggle("has-chat", !hidden);
-      toggleBtn.setAttribute("aria-pressed", hidden ? "false" : "true");
-      window.dispatchEvent(new Event("resize"));
-    });
-  }
-
-  if (effortSelect) {
-    effortSelect.addEventListener("change", async () => {
-      const newEffort = effortSelect.value || "high";
-      const llm = state.llm || {};
-      const provider = llm.provider || "codex_cli";
-      const isCli = provider === "codex_cli" || provider === "agy_cli";
-      const synced = syncAgyModelWithEffort(
-        provider,
-        llm.model || "gpt-6.1-sol",
-        newEffort,
-      );
-      try {
-        const resp = await fetch(llmConfigUrl, {
-          method: "POST",
-          cache: "no-store",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            provider,
-            base_url: isCli ? "" : (llm.base_url || ""),
-            model: synced.model,
-            reasoning_effort: synced.effort,
-            api_key: null,
-          }),
-        });
-        if (resp.ok) {
-          const data = await resp.json();
-          updateLlmIndicator(data);
-          renderMessages();
-          if (typeof onStatusToast === "function") {
-            onStatusToast(`已切换思考模式：${data.model} (${data.reasoning_effort})`);
-          }
-        }
-      } catch (err) {}
-    });
-  }
-
-  if (providerSelect) {
-    providerSelect.addEventListener("change", () => {
-      const p = providerSelect.value;
-      if (p === "codex_cli" && modelInput) modelInput.value = "gpt-6.1-sol";
-      else if (p === "agy_cli" && modelInput) modelInput.value = "gemini-3.8-flash-high";
-      else if (p === "openai_compatible") {
-        if (baseUrlInput && (!baseUrlInput.value || baseUrlInput.value.startsWith("local://"))) {
-          baseUrlInput.value = "http://127.0.0.1:11434/v1";
-        }
-      }
-      syncModalProviderFields();
-    });
-  }
-
-  if (modelInput) {
-    modelInput.addEventListener("input", () => {
-      syncModalProviderFields();
-    });
-  }
-
-  if (modalEffortSelect) {
-    modalEffortSelect.addEventListener("change", () => {
-      const p = providerSelect ? providerSelect.value : "codex_cli";
-      const m = modelInput ? modelInput.value.trim() : "";
-      const e = modalEffortSelect.value;
-      if (p === "agy_cli" && modelInput) {
-        const synced = syncAgyModelWithEffort(p, m, e);
-        if (synced.model) modelInput.value = synced.model;
-      }
-    });
-  }
-
-  if (settingsBtn) {
-    settingsBtn.addEventListener("click", () => openSettingsModal());
-  }
-  if (modalCloseBtn) {
-    modalCloseBtn.addEventListener("click", closeSettingsModal);
-  }
-  if (modal) {
-    modal.addEventListener("click", (e) => {
-      if (e.target === modal) closeSettingsModal();
-    });
-    modal.querySelectorAll("button[data-llm-preset]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const key = btn.getAttribute("data-llm-preset");
-        const preset = PROVIDER_PRESETS[key];
-        if (!preset) return;
-        if (providerSelect) providerSelect.value = preset.provider;
-        if (baseUrlInput && preset.base_url) baseUrlInput.value = preset.base_url;
-        if (modelInput) modelInput.value = preset.model;
-        syncModalProviderFields(preset.effort);
-      });
-    });
-  }
-
-  if (modalForm) {
-    modalForm.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      if (modalStatus) modalStatus.textContent = "正在保存…";
-      try {
-        const provider = providerSelect ? providerSelect.value : "codex_cli";
+      function syncModalProviderFields(preferredEffort) {
+        if (!providerSelect) return;
+        const provider = providerSelect.value;
+        const model = modelInput ? modelInput.value.trim() : "";
         const isCli = provider === "codex_cli" || provider === "agy_cli";
-        const rawModel = modelInput ? modelInput.value.trim() : "";
-        const rawEffort = modalEffortSelect ? modalEffortSelect.value : "high";
-        const synced = syncAgyModelWithEffort(provider, rawModel, rawEffort);
-        const body = {
-          provider,
-          base_url: isCli ? "" : (baseUrlInput ? baseUrlInput.value.trim() : ""),
-          model: synced.model,
-          reasoning_effort: synced.effort,
-          api_key: !isCli && apiKeyInput && apiKeyInput.value.trim() ? apiKeyInput.value.trim() : null,
-        };
-        const resp = await fetch(llmConfigUrl, {
-          method: "POST",
-          cache: "no-store",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        const data = await resp.json().catch(() => ({}));
-        if (!resp.ok) {
-          if (modalStatus) {
-            modalStatus.textContent = `保存失败：${data.detail || resp.status}`;
+        if (baseUrlField) baseUrlField.hidden = isCli;
+        if (baseUrlInput) baseUrlInput.required = !isCli;
+        if (apiKeyField) apiKeyField.hidden = isCli;
+        if (modelHint) {
+          if (provider === "codex_cli") {
+            modelHint.textContent =
+              "直接使用本机 Codex OAuth 登录态（免 API Key）。可选 ChatGPT 模型：gpt-6.1-sol、gpt-6-astra、gpt-6-sol、gpt-5.6-sol";
+          } else if (provider === "agy_cli") {
+            modelHint.textContent =
+              "直接使用本机 AGY / Gemini OAuth 登录态（免 API Key）。可选 Gemini 模型：gemini-4-argon-high、gemini-3.8-flash-high";
+          } else {
+            modelHint.textContent =
+              "填写本地或兼容 OpenAI 接口的模型 ID（本机 127.0.0.1 / localhost 地址免填 API Key）";
           }
+        }
+
+        const profile = getEffortProfile(provider, model);
+        if (modalEffortLabel) {
+          modalEffortLabel.textContent = `思考模式 (${profile.paramLabel})`;
+        }
+        if (modalEffortHint) {
+          modalEffortHint.textContent = profile.hint;
+        }
+        const currentVal =
+          preferredEffort ||
+          (modalEffortSelect ? modalEffortSelect.value : "") ||
+          profile.defaultEffort;
+        const inferred = inferEffortFromModelName(provider, model, currentVal);
+        const chosenEffort = populateSelectOptions(
+          modalEffortSelect,
+          profile.options,
+          inferred || profile.defaultEffort,
+          true,
+        );
+        if (provider === "agy_cli" && modelInput) {
+          const synced = syncAgyModelWithEffort(provider, model, chosenEffort);
+          if (synced.model && synced.model !== modelInput.value) {
+            modelInput.value = synced.model;
+          }
+        }
+      }
+
+      function createToolTraceNode(traceList) {
+        const wrap = document.createElement("div");
+        wrap.className = "chat-tool-trace";
+        for (const item of traceList) {
+          const chip = document.createElement("span");
+          chip.className = "chat-tool-chip " + (item.ok ? "ok" : "err");
+          const mark = item.ok ? "✓" : "⚠";
+          const suffix = item.progressed ? " · 已更新项目" : "";
+          const errText =
+            !item.ok && item.error && item.error.message
+              ? ` (${item.error.message})`
+              : "";
+          chip.textContent = `${mark} ${item.tool}${suffix}${errText}`;
+          wrap.appendChild(chip);
+        }
+        return wrap;
+      }
+
+      // Angular Reactive Effect: 阶段标签同步
+      effect(() => {
+        const text = svc.stageBadgeText();
+        if (stagePill && svc.project()) {
+          stagePill.textContent = text;
+        }
+      });
+
+      // Angular Reactive Effect: 模型连接状态与思考深度选择器同步
+      effect(() => {
+        const llm = svc.llm();
+        const provider = (llm && llm.provider) || "codex_cli";
+        const model = (llm && llm.model) || "gpt-6.1-sol";
+        const profile = getEffortProfile(provider, model);
+        const rawEffort = (llm && llm.reasoning_effort) || profile.defaultEffort;
+        const activeEffort = populateSelectOptions(
+          effortSelect,
+          profile.options,
+          rawEffort,
+          false,
+        );
+        if (effortSelect) {
+          effortSelect.title = `${profile.paramLabel} — ${profile.hint}`;
+        }
+
+        if (!settingsDot || !settingsBtn) return;
+        const configured = Boolean(llm && llm.configured);
+        settingsDot.classList.toggle("ok", configured);
+        settingsDot.classList.toggle("warn", !configured);
+        if (configured) {
+          const modeName =
+            llm.provider === "codex_cli"
+              ? "本机 ChatGPT 订阅"
+              : llm.provider === "agy_cli"
+                ? "本机 Gemini 订阅"
+                : llm.base_url;
+          settingsBtn.title = `当前模型：${llm.model} · ${profile.paramLabel}: ${activeEffort} (${modeName})`;
+        } else {
+          settingsBtn.title = "点击选择本机 ChatGPT/Gemini 订阅或配置本地 OpenAI 模型入口";
+        }
+      });
+
+      // Angular Reactive Effect: 消息列表与发送按钮状态同步
+      effect(() => {
+        const msgs = svc.messages();
+        const isSending = svc.sending();
+        const llm = svc.llm();
+        if (sendBtn) sendBtn.disabled = isSending;
+        if (!messagesEl) return;
+        messagesEl.innerHTML = "";
+        if (!msgs || msgs.length === 0) {
+          const empty = document.createElement("div");
+          empty.className = "chat-empty";
+          const configured = Boolean(llm && llm.configured);
+          let modelTag = "";
+          if (configured && llm) {
+            const profile = getEffortProfile(llm.provider, llm.model);
+            const matchOpt =
+              profile.options.find((o) => o.value === llm.reasoning_effort) ||
+              profile.options[0];
+            const effortLabel = matchOpt ? matchOpt.shortLabel : llm.reasoning_effort;
+            modelTag = `<br><span style="color:#4f46e5;font-weight:600">当前已连接：${llm.model} (${effortLabel})</span>`;
+          }
+          empty.innerHTML = configured
+            ? `<strong>直接在这里和 AI 对话</strong>${modelTag}<br>你可以让 AI 修改房间家具尺寸、确认当前布局，或生成各台柜子的板件草稿，中间 3D 视图会自动同步更新。`
+            : "<strong>欢迎使用网页端 AI 助手</strong><br>点击右上角「⚙️ 模型设置」，可直接选用本机已登录的 ChatGPT / Gemini 订阅账号（免 API Key）。";
+          messagesEl.appendChild(empty);
           return;
         }
-        updateLlmIndicator(data);
-        renderMessages();
-        closeSettingsModal();
-        if (typeof onStatusToast === "function") {
-          onStatusToast(`已切换模型：${data.model} (思考模式: ${data.reasoning_effort})`);
+
+        for (const msg of msgs) {
+          const item = document.createElement("div");
+          const role = msg.role === "user" ? "user" : "assistant";
+          item.className = `chat-msg ${role}`;
+
+          if (role === "assistant" && Array.isArray(msg.tool_trace) && msg.tool_trace.length > 0) {
+            item.appendChild(createToolTraceNode(msg.tool_trace));
+          }
+
+          const bubble = document.createElement("div");
+          bubble.className = "chat-bubble";
+          bubble.textContent = msg.content || "";
+          item.appendChild(bubble);
+          messagesEl.appendChild(item);
         }
-      } catch (err) {
-        if (modalStatus) modalStatus.textContent = `保存出错：${err}`;
+
+        if (isSending) {
+          const thinking = document.createElement("div");
+          thinking.className = "chat-msg assistant thinking";
+          const bubble = document.createElement("div");
+          bubble.className = "chat-bubble";
+          bubble.textContent = "AI 正在思考并执行工具…";
+          thinking.appendChild(bubble);
+          messagesEl.appendChild(thinking);
+        }
+
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      });
+
+      async function loadInitialChat() {
+        try {
+          const resp = await fetch(chatUrl, { cache: "no-store" });
+          if (!resp.ok) return;
+          const data = await resp.json();
+          svc.llm.set(data.llm || null);
+          if (data.project) svc.project.set(data.project);
+          svc.messages.set(Array.isArray(data.messages) ? data.messages : []);
+        } catch (err) {
+          // 忽略初始加载网络异常
+        }
       }
-    });
-  }
 
-  if (clearBtn) {
-    clearBtn.addEventListener("click", async () => {
-      if (state.sending) return;
-      try {
-        await fetch(chatUrl, { method: "DELETE", cache: "no-store" });
-        state.messages = [];
-        renderMessages();
-      } catch (err) {}
-    });
-  }
+      async function sendMessage(text) {
+        const trimmed = String(text || "").trim();
+        if (!trimmed || svc.sending()) return;
+        const llm = svc.llm();
+        if (!llm || !llm.configured) {
+          openSettingsModal("请先选择本机 ChatGPT/Gemini 订阅模式或配置本地模型入口");
+          return;
+        }
 
-  if (quickBar) {
-    quickBar.addEventListener("click", (e) => {
-      const btn = e.target && e.target.closest ? e.target.closest("button[data-prompt]") : null;
-      if (!btn || state.sending) return;
-      const prompt = btn.getAttribute("data-prompt");
-      if (prompt) sendMessage(prompt);
-    });
-  }
+        svc.sending.set(true);
+        const optimisticUser = {
+          id: "temp_user",
+          role: "user",
+          content: trimmed,
+        };
+        svc.messages.update((prev) => [...prev, optimisticUser]);
+        if (inputEl) inputEl.value = "";
 
-  if (formEl) {
-    formEl.addEventListener("submit", (e) => {
-      e.preventDefault();
-      if (inputEl) sendMessage(inputEl.value);
-    });
-  }
+        try {
+          const resp = await fetch(chatUrl, {
+            method: "POST",
+            cache: "no-store",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message: trimmed }),
+          });
+          const payload = await resp.json().catch(() => ({}));
+          if (!resp.ok) {
+            const detail = payload && payload.detail;
+            const errMsg =
+              typeof detail === "object" && detail !== null
+                ? detail.message || JSON.stringify(detail)
+                : String(detail || `请求失败 (${resp.status})`);
+            svc.messages.update((prev) => [
+              ...prev,
+              {
+                id: "temp_err",
+                role: "assistant",
+                content: `⚠️ ${errMsg}`,
+              },
+            ]);
+            if (detail && detail.code && detail.code.startsWith("LLM_NOT_CONFIGURED")) {
+              openSettingsModal(errMsg);
+            }
+            return;
+          }
 
-  if (inputEl) {
-    inputEl.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        sendMessage(inputEl.value);
+          if (Array.isArray(payload.messages)) {
+            svc.messages.set(payload.messages);
+          }
+          if (payload.project) {
+            svc.project.set(payload.project);
+          }
+          if (payload.progressed || (Array.isArray(payload.tool_trace) && payload.tool_trace.length > 0)) {
+            if (typeof onProjectUpdated === "function") {
+              onProjectUpdated();
+            }
+            if (typeof onStatusToast === "function" && payload.progressed) {
+              onStatusToast("AI 已更新项目状态，3D 视图已同步");
+            }
+          }
+        } catch (err) {
+          svc.messages.update((prev) => [
+            ...prev,
+            {
+              id: "temp_err",
+              role: "assistant",
+              content: `⚠️ 请求异常：${err}`,
+            },
+          ]);
+        } finally {
+          svc.sending.set(false);
+        }
       }
-    });
-  }
 
-  loadInitialChat();
-  return {
-    reload: loadInitialChat,
-    sendMessage,
-  };
+      function openSettingsModal(noticeText = "") {
+        if (!modal) return;
+        const llm = svc.llm() || {};
+        if (providerSelect) providerSelect.value = llm.provider || "codex_cli";
+        if (baseUrlInput) {
+          const url = llm.base_url && !llm.base_url.startsWith("local://") ? llm.base_url : "http://127.0.0.1:11434/v1";
+          baseUrlInput.value = url;
+        }
+        if (modelInput) modelInput.value = llm.model || "gpt-6.1-sol";
+        if (apiKeyInput) {
+          apiKeyInput.value = "";
+          apiKeyInput.placeholder = llm.has_api_key
+            ? `已保存 (${llm.api_key_masked})，留空保持不变`
+            : "本机地址可留空；远端接口填 API Key";
+        }
+        if (apiKeyHint) {
+          apiKeyHint.textContent = llm.has_api_key
+            ? `当前已保存密钥：${llm.api_key_masked}（仅存本机 store/_llm_config.json）`
+            : "密钥仅保存在本机 store/_llm_config.json，绝不上传 Git。";
+        }
+        syncModalProviderFields(llm.reasoning_effort || "high");
+        if (modalStatus) {
+          modalStatus.textContent = noticeText || "";
+        }
+        svc.modalOpen.set(true);
+        modal.hidden = false;
+      }
+
+      function closeSettingsModal() {
+        svc.modalOpen.set(false);
+        if (modal) modal.hidden = true;
+      }
+
+      if (toggleBtn) {
+        toggleBtn.addEventListener("click", () => {
+          const hidden = !panel.hidden;
+          panel.hidden = hidden;
+          document.body.classList.toggle("has-chat", !hidden);
+          toggleBtn.setAttribute("aria-pressed", hidden ? "false" : "true");
+          window.dispatchEvent(new Event("resize"));
+        });
+      }
+
+      if (effortSelect) {
+        effortSelect.addEventListener("change", async () => {
+          const newEffort = effortSelect.value || "high";
+          const llm = svc.llm() || {};
+          const provider = llm.provider || "codex_cli";
+          const isCli = provider === "codex_cli" || provider === "agy_cli";
+          const synced = syncAgyModelWithEffort(
+            provider,
+            llm.model || "gpt-6.1-sol",
+            newEffort,
+          );
+          try {
+            const resp = await fetch(llmConfigUrl, {
+              method: "POST",
+              cache: "no-store",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                provider,
+                base_url: isCli ? "" : (llm.base_url || ""),
+                model: synced.model,
+                reasoning_effort: synced.effort,
+                api_key: null,
+              }),
+            });
+            if (resp.ok) {
+              const data = await resp.json();
+              svc.llm.set(data);
+              if (typeof onStatusToast === "function") {
+                onStatusToast(`已切换思考模式：${data.model} (${data.reasoning_effort})`);
+              }
+            }
+          } catch (err) {}
+        });
+      }
+
+      if (providerSelect) {
+        providerSelect.addEventListener("change", () => {
+          const p = providerSelect.value;
+          if (p === "codex_cli" && modelInput) modelInput.value = "gpt-6.1-sol";
+          else if (p === "agy_cli" && modelInput) modelInput.value = "gemini-3.8-flash-high";
+          else if (p === "openai_compatible") {
+            if (baseUrlInput && (!baseUrlInput.value || baseUrlInput.value.startsWith("local://"))) {
+              baseUrlInput.value = "http://127.0.0.1:11434/v1";
+            }
+          }
+          syncModalProviderFields();
+        });
+      }
+
+      if (modelInput) {
+        modelInput.addEventListener("input", () => {
+          syncModalProviderFields();
+        });
+      }
+
+      if (modalEffortSelect) {
+        modalEffortSelect.addEventListener("change", () => {
+          const p = providerSelect ? providerSelect.value : "codex_cli";
+          const m = modelInput ? modelInput.value.trim() : "";
+          const e = modalEffortSelect.value;
+          if (p === "agy_cli" && modelInput) {
+            const synced = syncAgyModelWithEffort(p, m, e);
+            if (synced.model) modelInput.value = synced.model;
+          }
+        });
+      }
+
+      if (settingsBtn) {
+        settingsBtn.addEventListener("click", () => openSettingsModal());
+      }
+      if (modalCloseBtn) {
+        modalCloseBtn.addEventListener("click", closeSettingsModal);
+      }
+      if (modal) {
+        modal.addEventListener("click", (e) => {
+          if (e.target === modal) closeSettingsModal();
+        });
+        modal.querySelectorAll("button[data-llm-preset]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const key = btn.getAttribute("data-llm-preset");
+            const preset = PROVIDER_PRESETS[key];
+            if (!preset) return;
+            if (providerSelect) providerSelect.value = preset.provider;
+            if (baseUrlInput && preset.base_url) baseUrlInput.value = preset.base_url;
+            if (modelInput) modelInput.value = preset.model;
+            syncModalProviderFields(preset.effort);
+          });
+        });
+      }
+
+      if (modalForm) {
+        modalForm.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          if (modalStatus) modalStatus.textContent = "正在保存…";
+          try {
+            const provider = providerSelect ? providerSelect.value : "codex_cli";
+            const isCli = provider === "codex_cli" || provider === "agy_cli";
+            const rawModel = modelInput ? modelInput.value.trim() : "";
+            const rawEffort = modalEffortSelect ? modalEffortSelect.value : "high";
+            const synced = syncAgyModelWithEffort(provider, rawModel, rawEffort);
+            const body = {
+              provider,
+              base_url: isCli ? "" : (baseUrlInput ? baseUrlInput.value.trim() : ""),
+              model: synced.model,
+              reasoning_effort: synced.effort,
+              api_key: !isCli && apiKeyInput && apiKeyInput.value.trim() ? apiKeyInput.value.trim() : null,
+            };
+            const resp = await fetch(llmConfigUrl, {
+              method: "POST",
+              cache: "no-store",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body),
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) {
+              if (modalStatus) {
+                modalStatus.textContent = `保存失败：${data.detail || resp.status}`;
+              }
+              return;
+            }
+            svc.llm.set(data);
+            closeSettingsModal();
+            if (typeof onStatusToast === "function") {
+              onStatusToast(`已切换模型：${data.model} (思考模式: ${data.reasoning_effort})`);
+            }
+          } catch (err) {
+            if (modalStatus) modalStatus.textContent = `保存出错：${err}`;
+          }
+        });
+      }
+
+      if (clearBtn) {
+        clearBtn.addEventListener("click", async () => {
+          if (svc.sending()) return;
+          try {
+            await fetch(chatUrl, { method: "DELETE", cache: "no-store" });
+            svc.messages.set([]);
+          } catch (err) {}
+        });
+      }
+
+      if (quickBar) {
+        quickBar.addEventListener("click", (e) => {
+          const btn = e.target && e.target.closest ? e.target.closest("button[data-prompt]") : null;
+          if (!btn || svc.sending()) return;
+          const prompt = btn.getAttribute("data-prompt");
+          if (prompt) sendMessage(prompt);
+        });
+      }
+
+      if (formEl) {
+        formEl.addEventListener("submit", (e) => {
+          e.preventDefault();
+          if (inputEl) sendMessage(inputEl.value);
+        });
+      }
+
+      if (inputEl) {
+        inputEl.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage(inputEl.value);
+          }
+        });
+      }
+
+      loadInitialChat();
+      return {
+        reload: loadInitialChat,
+        sendMessage,
+        service: svc,
+      };
+    }
+  }
+);
+
+export function mountProjectChat(options) {
+  const comp = new LayoutChatComponent(options);
+  return comp.mount();
 }
