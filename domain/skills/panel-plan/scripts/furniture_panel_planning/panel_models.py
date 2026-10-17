@@ -30,6 +30,9 @@ class PanelPlacement:
     door_overlay: str | None = None      # "full" / "half" / "inset", only for door panels
     inner_face: str = ""                 # panel face pointing toward cabinet interior
     outer_face: str = ""                 # panel face pointing toward cabinet exterior
+    #: 除 `inner_face` 之外，还拿哪张大面去接别人的端面。常规板是空的；
+    #: 中立板两张大面都朝柜内（左右各一个腔），所以多声明一张，见 `joint_topology`。
+    bearing_faces: list[str] = field(default_factory=list)
     #: 顺纹方向（柜体轴 x/y/z，或 none=不限）。由板件类型给默认值，见 `grain_rules`。
     #: 它是板件属性：进了冻结文件，制造/开料可以据此排版。空值按类型取默认。
     grain_axis: str = ""

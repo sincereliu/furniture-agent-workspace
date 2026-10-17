@@ -15,8 +15,19 @@
 - 用角色及其与外形尺寸/区域的关系表达板件；位置用最小角点、包络、面或板件关系。
 - 层板和隔板不得与选定的背板结构冲突；层板列表语义、计算层和固定/活动层板物化见
   [层板规则](shelf-planning-rules.md)。
-- 门板落在前开口净空包络内。当前求解器只物化单门或双门；更多门见
-  [提案契约](panel-proposal-contract.md) 的停问清单。
+- 中立板（`panel_type = divider`，柜内角色 `divider_1`）站在内部净空里：底面在底板上表面、
+  顶面在顶板下表面，前后不出内空，位置由评估器按「缝定锚」给
+  （`construction_geometry.divider_panel_boxes`）。它**两张朝柜内的大面都接端面**——
+  `inner_face` 之外多声明一张 `bearing_faces`，漏一张就少一侧的连接。顺纹沿高。
+  有中立板时层板**按腔分段**出件（每腔一块，id 带腔序号 `shelf_c1_z*`），
+  没有中立板时层板 id 与几何和以前逐字节相同。当前边界：一台最多一块、通高、
+  只有一排整高门、`n_doors ≤ 2`、不与整高抽屉区共存。
+- 门板落在前开口净空包络内。**一整排门按扇序出件，扇数不再限制成 1/2**；每扇的宽度与起点
+  只从评估器取（`construction_geometry.door_interior_report`），板件阶段不自己推导等分槽。
+  角色名：一扇 `single_door`、两扇 `left_door`/`right_door`（老名字，冻结文件钉着）、
+  三扇以上 `door_1…door_n`。门高仍是"柜高 − 踢脚 − 2×边距"，一排整高门。
+  **多扇的铰链侧还没落**：制造阶段 `_derive_door_hinge_sides` 仍写死"最多 2 扇"，见
+  [backlog](backlog.md) 的门排条。
 - 当前 `drawer_count>0` 的规范语义仅为整高抽屉区；必须同时提交
   空 `shelves` 与 `n_doors=0`。混合分区的停问见
   [提案契约](panel-proposal-contract.md)。不得由代码按数量优先级静默丢弃任何区域。

@@ -21,6 +21,8 @@ from .cabinet_frame import CabinetFrame, _negate as negate_axis
 from .cabinet_identity import DEFAULT_CABINET_ID, bind_panels_to_cabinet
 from .construction_geometry import (
     back_rail_boxes,
+    divider_panel_boxes,
+    door_panel_boxes,
     drawer_panel_boxes,
     shelf_panel_boxes,
     toe_kick_support_boxes,
@@ -109,6 +111,11 @@ def solve_panel_placements(
     base_def = topology.get("base", {})
     if base_def.get("type") == "toe_kick" and structure.toe_kick_height > 0:
         placements.extend(_toe_kick_panels(spec, structure, base_def, frame))
+
+    # ── 中立板 ────────────────────────────────────────────────────
+    # 区间与缝由评估器算（唯一公式）；这里只摆件、声明大面。
+    if spec.dividers:
+        placements.extend(_divider_panels(spec, structure, frame))
 
     # ── Internal shelves / drawers ────────────────────────────────
     internals = topology.get("internals", {})
@@ -275,40 +282,34 @@ def _back_panel_variants(
     return result
 
 
+_DOOR_LABELS = {"single_door": "门板", "left_door": "左门板", "right_door": "右门板"}
+
+
 def _door_panels(
     spec: FurnitureSpec,
     structure: CabinetStructure,
     frame: CabinetFrame,
 ) -> list[PanelPlacement]:
-    """Generate door panels on the front face of the cabinet."""
-    count = structure.n_doors
-    if count not in {1, 2}:
-        return []
+    """Generate door panels on the front face of the cabinet.
 
-    margin = spec.front_face_margin
-    dw = (structure.width - margin * 2 * count) / count
-    dh = structure.height - structure.toe_kick_height - margin * 2
-    dy = structure.carcass_y_end + spec.front_gap
+    每扇门的宽度与起点由评估器给（`door_panel_boxes`），这里只摆件、声明前脸。
+    扇数不再限制成 1/2：一整排按从左到右的顺序出件，一扇 `single_door`、
+    两扇 `left_door`/`right_door`、三扇以上 `door_1…door_n`。
+    """
     inner = frame.back
     outer = frame.front
-
     panels: list[PanelPlacement] = []
-    for index in range(count):
-        if count == 1:
-            pid, pname = "single_door", "门板"
-            x = structure.width / 2 - dw / 2
-        else:
-            pid = "left_door" if index == 0 else "right_door"
-            pname = "左门板" if index == 0 else "右门板"
-            x = margin if index == 0 else structure.width - margin - dw
+    for index, box in enumerate(door_panel_boxes(spec, structure), start=1):
         panels.append(PanelPlacement(
-            id=pid, name=pname, panel_type="door",
-            size_x=dw, size_y=spec.door_thickness, size_z=dh,
-            pos_x=x, pos_y=dy, pos_z=structure.toe_kick_height + margin,
+            id=box.panel_id,
+            name=_DOOR_LABELS.get(box.panel_id, f"门板{index}"),
+            panel_type="door",
+            size_x=box.size_x, size_y=box.size_y, size_z=box.size_z,
+            pos_x=box.pos_x, pos_y=box.pos_y, pos_z=box.pos_z,
             material_role="door",
             depends_on=["left_side_panel", "right_side_panel"],
             inner_face=inner, outer_face=outer,
-            note=f"门板，{dw:.0f}×{dh:.0f}×{spec.door_thickness:.0f}mm",
+            note=f"门板，{box.size_x:.0f}×{box.size_z:.0f}×{spec.door_thickness:.0f}mm",
         ))
     return panels
 
@@ -356,6 +357,33 @@ def _toe_kick_panels(
     return panels
 
 
+def _divider_panels(
+    spec: FurnitureSpec,
+    structure: CabinetStructure,
+    frame: CabinetFrame,
+) -> list[PanelPlacement]:
+    """中立板：站在内部净空里，两张朝柜内的大面都接端面。
+
+    几何（缝、区间、板厚）由 `divider_panel_boxes` 调评估器算，这里不另算一套。
+    """
+    panels: list[PanelPlacement] = []
+    for index, box in enumerate(divider_panel_boxes(spec, structure), start=1):
+        panels.append(PanelPlacement(
+            id=box.panel_id,
+            name=f"中立板{index}",
+            panel_type="divider",
+            size_x=box.size_x, size_y=box.size_y, size_z=box.size_z,
+            pos_x=box.pos_x, pos_y=box.pos_y, pos_z=box.pos_z,
+            material_role="carcass",
+            depends_on=["top_panel", "bottom_panel"],
+            inner_face=frame.right, outer_face=frame.left,
+            # 左右各朝一个腔：两张都是大面，少一张就少一侧的连接。
+            bearing_faces=[frame.left],
+            note=f"中立板，厚{box.size_x:.0f}mm，锚在缝上",
+        ))
+    return panels
+
+
 def _shelves_from_spec(
     spec: FurnitureSpec,
     structure: CabinetStructure,
@@ -366,20 +394,26 @@ def _shelves_from_spec(
     outer = frame.top
     panels: list[PanelPlacement] = []
     for box in shelf_panel_boxes(spec, structure):
+        # 分段层板同标高有好几块，名字必须带腔号，否则审查清单里分不出是哪些。
+        where = (
+            f"腔{box.cavity_index}·{box.center_z:.0f}mm"
+            if box.cavity_count > 1
+            else f"{box.center_z:.0f}mm"
+        )
         if box.shelf_type == "fixed":
             panel_type = "fixed_shelf"
-            name = f"层板({box.center_z:.0f}mm)"
+            name = f"层板({where})"
             note = "固定层板"
         else:
             panel_type = "movable_shelf"
-            name = f"活动层板({box.center_z:.0f}mm)"
+            name = f"活动层板({where})"
             note = "活动层板"
         panels.append(PanelPlacement(
             id=box.panel_id, name=name, panel_type=panel_type,
             size_x=box.size_x, size_y=box.size_y, size_z=box.size_z,
             pos_x=box.pos_x, pos_y=box.pos_y, pos_z=box.pos_z,
             material_role="carcass",
-            depends_on=["left_side_panel", "right_side_panel"],
+            depends_on=list(box.supports) or ["left_side_panel", "right_side_panel"],
             inner_face=inner, outer_face=outer,
             note=note,
         ))

@@ -235,6 +235,9 @@ def _panel_payload(panel: PanelPlacement, assembly_id: str) -> dict[str, Any]:
     panel.assembly_id = assembly_id
     payload = asdict(panel)
     payload.pop("joints", None)
+    # 没有额外承载大面的板件不落这个键：老工程产出逐字节不变。
+    if not payload.get("bearing_faces"):
+        payload.pop("bearing_faces", None)
     return payload
 
 

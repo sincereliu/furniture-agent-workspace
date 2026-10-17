@@ -24,6 +24,8 @@ from .cabinet_identity import (
 )
 from .construction_geometry import (
     back_rail_boxes,
+    divider_panel_boxes,
+    door_panel_boxes,
     drawer_panel_boxes,
     shelf_panel_boxes,
     toe_kick_support_boxes,
@@ -56,7 +58,7 @@ def validate_panels(
         report.add_error("DUPLICATE_PANEL_ID", "panel ids must be unique")
     panel_by_id = {item.id: item for item in panels}
     panel_by_role = index_by_role(panels)
-    report.issues.extend(_validate_doors(spec, panels).issues)
+    report.issues.extend(_validate_doors(spec, structure, panels).issues)
     report.issues.extend(_validate_panel_basics(spec, panels, ids).issues)
     carcass_roles = {
         "left_side_panel",
@@ -73,6 +75,7 @@ def validate_panels(
     report.issues.extend(_validate_toe_kick_panels(spec, structure, panels).issues)
     report.issues.extend(_validate_back_rails(spec, structure, panels).issues)
     report.issues.extend(_validate_depth_aligned_panels(spec, structure, panels).issues)
+    report.issues.extend(_validate_divider_panels(spec, structure, panels).issues)
     report.issues.extend(_validate_shelf_panels(spec, structure, panels).issues)
     drawer_report = _validate_drawer_panels(spec, structure, panels)
     report.issues.extend(drawer_report.issues)
@@ -114,6 +117,7 @@ def _mismatch_boxes(
 
 def _validate_doors(
     spec: FurnitureSpec,
+    structure: CabinetStructure,
     panels: list[PanelPlacement],
 ) -> ValidationReport:
     report = ValidationReport(stage="panel_plan")
@@ -128,6 +132,12 @@ def _validate_doors(
             "n_doors",
         )
         return report
+    _mismatch_boxes(
+        report,
+        "DOOR_GEOMETRY_MISMATCH",
+        {item.role: item for item in doors},
+        door_panel_boxes(spec, structure),
+    )
     return report
 
 
@@ -394,6 +404,33 @@ def _validate_depth_aligned_panels(
                 f"{item.id} must end at the finished depth",
                 item.id,
             )
+    return report
+
+
+def _validate_divider_panels(
+    spec: FurnitureSpec,
+    structure: CabinetStructure,
+    panels: list[PanelPlacement],
+) -> ValidationReport:
+    report = ValidationReport(stage="panel_plan")
+    dividers = [item for item in panels if item.panel_type == "divider"]
+    try:
+        expected = divider_panel_boxes(spec, structure)
+    except ValueError as exc:
+        report.add_error("INVALID_DIVIDER_LAYOUT", str(exc), "dividers")
+        return report
+    if len(dividers) != len(expected):
+        report.add_error(
+            "DIVIDER_PANEL_COUNT_MISMATCH",
+            "generated divider count must match the admitted dividers list",
+            "dividers",
+        )
+    _mismatch_boxes(
+        report,
+        "DIVIDER_PANEL_GEOMETRY_MISMATCH",
+        {item.role: item for item in dividers},
+        expected,
+    )
     return report
 
 

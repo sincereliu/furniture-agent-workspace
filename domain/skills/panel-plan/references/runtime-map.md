@@ -15,6 +15,7 @@
 - `interior.cavity`：内空宽高深和角点；`interior.zones`：前开口分区。
 - `assemblies`：`carcass`、可选 `base`、`fronts`、`drawers[]`。板件和接触只写在所属子装配内。
 - 板件：`parent_id`（柜体）、`assembly_id`（子装配）、`role`（如 `left_side_panel`）；全局 `id` 为 `{cabinet_id}__{role}`。
+- 中立板：`role = divider_1`、`panel_type = divider`；除 `inner_face` 外多带一张 `bearing_faces`（左右两个腔各一张大面）。这个键只在非空时落盘，常规板不带——老工程产出逐字节不变。
 - 当前踢脚工法是侧板落地：`base.construction=integrated`，踢脚板仍挂在 `carcass`。
 - 当前抽屉前板即盒体前脸，写在该抽屉的 `box.panels`，不进 `fronts`。
 - `cabinet_id` 是身份不是构造参数，准入 `FurnitureSpec` 前弹出。交互主流程保留各布局单元的 `id`，同一项目可有多个柜体；需要逐柜不同参数时使用 `plan_panel_cabinets()` 的逐柜请求。
@@ -40,7 +41,7 @@
 | `structure_planning.py` | 精确净空与柜体区域 | calculation |
 | `panel_rules.py` | 省略时的踢脚支撑数与层板均分、支撑净距、背拉条数量与净距 | calculation |
 | `interior_structure.py` | 正面缝、中立板区间、腔净空和分段长度；不物化柜体板件 | calculation |
-| `construction_geometry.py` | 层板/抽屉/踢脚/背拉条盒子 | calculation |
+| `construction_geometry.py` | 层板/抽屉/踢脚/背拉条/中立板/门的盒子与腔边界；中立板的缝与区间、门的宽度与起点都只经 `divider_interior_report` / `door_interior_report` 向评估器取，不另算一套 | calculation |
 | `topology_solver.py` | 读柜型 YAML，物化板件位置与语义面 | calculation |
 | `assembly_tree.py` | 把求解结果编成柜→子装配→板，并按装配收口接触 | calculation / schema |
 | `joint_topology.py` | 大面–端面接触几何；不解析连不连 | calculation |

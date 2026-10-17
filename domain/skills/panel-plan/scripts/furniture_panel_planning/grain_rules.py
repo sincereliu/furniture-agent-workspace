@@ -22,7 +22,7 @@ GRAIN_AXES: tuple[str, ...] = ("x", "y", "z", GRAIN_NONE)
 
 #: 板件类型 → 顺纹方向（默认）。常规柜子的口径：
 #:
-#: - 左右侧板、门板、抽面、背板 → **沿高 Z**（柜体立起来的那根方向）；
+#: - 左右侧板、中立板、门板、抽面、背板 → **沿高 Z**（柜体立起来的那根方向）；
 #: - 层板、顶板、底板、踢脚板 → **沿宽 X**（横着的那根方向）；
 #: - 背拉条 → **不限**。
 #:
@@ -30,6 +30,7 @@ GRAIN_AXES: tuple[str, ...] = ("x", "y", "z", GRAIN_NONE)
 #: 沿高是里面错得最少的那个答案。
 GRAIN_BY_TYPE: dict[str, str] = {
     "side": GRAIN_HEIGHT,
+    "divider": GRAIN_HEIGHT,
     "door": GRAIN_HEIGHT,
     "drawer_front": GRAIN_HEIGHT,
     "drawer_side": GRAIN_HEIGHT,

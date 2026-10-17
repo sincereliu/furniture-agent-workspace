@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
 from typing import Any, Mapping, Sequence
 
 from .assembly_tree import build_cabinet_tree
 from .cabinet_envelope import CabinetEnvelope
 from .cabinet_identity import DEFAULT_CABINET_ID, admit_cabinet_id
 from .panel_planning import plan_panels
-from .panel_spec import FurnitureSpec
+from .panel_spec import FurnitureSpec, spec_payload
 from .structure_planning import CabinetStructure
 
 
@@ -123,7 +122,7 @@ def plan_panel_cabinets(
         cabinets.append(
             {
                 "id": cabinet_id,
-                "spec": asdict(spec),
+                "spec": spec_payload(spec),
                 "interior": interior,
                 "back_mount_resolution": {
                     "requested": requested_back_mount,

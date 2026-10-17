@@ -81,6 +81,9 @@ def _review_cabinet(cabinet: Mapping[str, Any]) -> dict[str, Any]:
         "n_doors": spec["n_doors"],
         "drawer_count": spec["drawer_count"],
         "shelf_count": len(shelves),
+        "divider_count": sum(
+            1 for item in panels if item.get("panel_type") == "divider"
+        ),
         "toe_kick_height_mm": spec["toe_kick_height"],
         "panels": [_review_panel(item) for item in panels],
         "contacts": contacts,
@@ -143,6 +146,11 @@ def _cabinet_markdown(cabinet: Mapping[str, Any]) -> str:
             f"门 {cabinet['n_doors']} · 抽屉 {cabinet['drawer_count']} · "
             f"层板 {cabinet['shelf_count']} · 踢脚 "
             f"{_format_mm(cabinet['toe_kick_height_mm'])} mm"
+            + (
+                f" · 中立板 {cabinet['divider_count']}"
+                if cabinet.get("divider_count")
+                else ""
+            )
         ),
         "",
         f"### 板件（{len(cabinet['panels'])}）",

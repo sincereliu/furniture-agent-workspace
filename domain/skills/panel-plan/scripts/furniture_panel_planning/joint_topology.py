@@ -101,71 +101,84 @@ def _axis_range(panel: PanelPlacement, axis: str) -> tuple[float, float]:
     return (panel.pos_z, panel.pos_z + panel.size_z)
 
 
+def _bearing_faces(panel: PanelPlacement) -> list[str]:
+    """这块板拿哪几张大面去接别人的端面。
+
+    常规板只有 `inner_face` 一张。中立板左右各朝一个腔，两张都是大面
+    （`bearing_faces`），漏一张就会少一侧的连接。
+    """
+    faces: list[str] = [panel.inner_face] if panel.inner_face else []
+    for face in getattr(panel, "bearing_faces", ()) or ():
+        if face and face not in faces:
+            faces.append(face)
+    return faces
+
+
 def compute_joints(placements: Sequence[PanelPlacement]) -> list[PanelJoint]:
     """从板件列表推导所有大面–端面邻接。
 
-    对每块有 inner_face 的板（大面候选），
+    对每块有 inner_face（或 `bearing_faces`）的板（大面候选），
     找出所有端面顶在该面上的板（端面候选）。
     """
     joints: list[PanelJoint] = []
-    candidates = [p for p in placements if p.inner_face]
+    candidates = [p for p in placements if _bearing_faces(p)]
 
     def _is_drawer(panel: PanelPlacement) -> bool:
         return "drawer" in panel.panel_type
 
     for bearing in candidates:
-        face_dir = bearing.inner_face
-        face_axis = _axis_char(face_dir)
-        face_pos = _face_position(bearing, face_dir)
+        for face_dir in _bearing_faces(bearing):
+            face_axis = _axis_char(face_dir)
+            face_pos = _face_position(bearing, face_dir)
 
-        # 待检查的轴线（大面法向之外的另外两轴）
-        other_axes = [a for a in ("x", "y", "z") if a != face_axis]
+            # 待检查的轴线（大面法向之外的另外两轴）
+            other_axes = [a for a in ("x", "y", "z") if a != face_axis]
 
-        for end_panel in placements:
-            if end_panel.id == bearing.id:
-                continue
-            # 抽屉是滑动子装配：抽屉↔柜体的接触（如抽屉侧板贴柜体侧板、
-            # 抽屉前板底边搁柜体底板）不是连接，排除跨装配 joint。
-            if _is_drawer(bearing) != _is_drawer(end_panel):
-                continue
-            # 端面件必须在这个大面上有端面才可能接触
-            end_min, end_max = _axis_range(end_panel, face_axis)
+            for end_panel in placements:
+                if end_panel.id == bearing.id:
+                    continue
+                # 抽屉是滑动子装配：抽屉↔柜体的接触（如抽屉侧板贴柜体侧板、
+                # 抽屉前板底边搁柜体底板）不是连接，排除跨装配 joint。
+                if _is_drawer(bearing) != _is_drawer(end_panel):
+                    continue
+                # 端面件必须在这个大面上有端面才可能接触
+                end_min, end_max = _axis_range(end_panel, face_axis)
 
-            if not (
-                abs(end_min - face_pos) <= _SNAP_TOLERANCE
-                or abs(end_max - face_pos) <= _SNAP_TOLERANCE
-            ):
-                continue
+                if not (
+                    abs(end_min - face_pos) <= _SNAP_TOLERANCE
+                    or abs(end_max - face_pos) <= _SNAP_TOLERANCE
+                ):
+                    continue
 
-            # 另外两个轴必须重叠
-            overlap_all = True
-            for axis in other_axes:
-                b_min, b_max = _axis_range(bearing, axis)
-                e_min, e_max = _axis_range(end_panel, axis)
-                if not _overlap(b_min, b_max, e_min, e_max):
-                    overlap_all = False
-                    break
+                # 另外两个轴必须重叠
+                overlap_all = True
+                for axis in other_axes:
+                    b_min, b_max = _axis_range(bearing, axis)
+                    e_min, e_max = _axis_range(end_panel, axis)
+                    if not _overlap(b_min, b_max, e_min, e_max):
+                        overlap_all = False
+                        break
 
-            if not overlap_all:
-                continue
+                if not overlap_all:
+                    continue
 
-            # 确定端面方向
-            if abs(end_min - face_pos) <= _SNAP_TOLERANCE:
-                edge_sign = -1
-            else:
-                edge_sign = +1
+                # 确定端面方向
+                if abs(end_min - face_pos) <= _SNAP_TOLERANCE:
+                    edge_sign = -1
+                else:
+                    edge_sign = +1
 
-            joints.append(
-                PanelJoint(
-                    bearing_id=bearing.id,
-                    end_id=end_panel.id,
-                    face=face_dir,
-                    edge_axis=face_axis,
-                    edge_sign=edge_sign,
-                    end_z=end_panel.pos_z + end_panel.size_z / 2.0,
-                    end_size_z=end_panel.size_z,
+                joints.append(
+                    PanelJoint(
+                        bearing_id=bearing.id,
+                        end_id=end_panel.id,
+                        face=face_dir,
+                        edge_axis=face_axis,
+                        edge_sign=edge_sign,
+                        end_z=end_panel.pos_z + end_panel.size_z / 2.0,
+                        end_size_z=end_panel.size_z,
+                    )
                 )
-            )
 
     return joints
 

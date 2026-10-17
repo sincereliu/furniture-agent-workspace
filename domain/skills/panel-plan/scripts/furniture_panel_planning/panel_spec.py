@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, field
 from math import isfinite
 from typing import Any, Mapping
 
@@ -13,6 +13,10 @@ from .panel_rules import default_toe_kick_support_count, even_shelf_gap
 VALID_BACK_MOUNTS = frozenset({"groove", "insert", "cover"})
 
 VALID_SHELF_TYPES = frozenset({"fixed", "movable"})
+
+#: 中立板相对那条缝怎么摆：缝定锚，板厚对称或贴在缝的一侧。
+#: 毫米由评估器算（`interior_structure.evaluate_interior`），提案只说对准哪条缝。
+VALID_DIVIDER_ALIGNS = frozenset({"center", "left_face", "right_face"})
 
 # Shop sheet-stock catalog. See references/sheet-stock-catalog.md.
 CARCASS_STOCK_MM = frozenset({18.0, 22.0})
@@ -58,6 +62,49 @@ def _coerce_shelves(raw: Any) -> list[ShelfSpec]:
         result.append(ShelfSpec(shelf_type=shelf_type, gap_below_mm=gap_below))
     return result
 
+@dataclass(frozen=True)
+class DividerSpec:
+    """一块中立板：只说对准哪条缝。
+
+    板厚不是提案字段——中立板是柜体板，厚度取已准入的 `board_thickness`；
+    位置与区间由评估器按缝和板厚算，见 references/interior-structure-contract.md。
+    """
+
+    seam_index: int                # 缝序号，从左起、0 开始；缝 i 在门 i 与门 i+1 之间
+    seam_align: str = "center"     # "center" | "left_face" | "right_face"
+
+
+def _coerce_dividers(raw: Any) -> list[DividerSpec]:
+    """把 dividers 输入规范化为 DividerSpec 列表；不写就是没有中立板。"""
+    if raw is None:
+        return []
+    if not isinstance(raw, (list, tuple)):
+        raise ValueError("dividers must be a list")
+    result: list[DividerSpec] = []
+    for item in raw:
+        if isinstance(item, DividerSpec):
+            result.append(item)
+            continue
+        if not isinstance(item, Mapping):
+            raise ValueError("each divider entry must be an object")
+        unknown = sorted(set(item) - {"seam_index", "seam_align"})
+        if unknown:
+            raise ValueError("divider does not support: " + ", ".join(unknown))
+        seam_index = item.get("seam_index")
+        if isinstance(seam_index, bool) or not isinstance(seam_index, int):
+            raise ValueError("divider seam_index must be an integer")
+        if seam_index < 0:
+            raise ValueError("divider seam_index cannot be negative")
+        align = item.get("seam_align", "center")
+        if align not in VALID_DIVIDER_ALIGNS:
+            raise ValueError(
+                "divider seam_align must be one of: "
+                + ", ".join(sorted(VALID_DIVIDER_ALIGNS))
+            )
+        result.append(DividerSpec(seam_index=seam_index, seam_align=str(align)))
+    return result
+
+
 # Construction fields that remain required after proposal admission.
 # Sheet stock, an omitted toe-kick support count, and a fully omitted
 # shelf-gap set are expanded first. Serialized specs stay complete and
@@ -81,11 +128,20 @@ PANEL_STOCK_FIELDS = frozenset(
         "drawer_back_thickness",
     }
 )
-PANEL_PARAMETER_FIELDS = PANEL_REQUIRED_PARAMETER_FIELDS | PANEL_STOCK_FIELDS
+#: 可省略的构造字段：不写 = 没有中立板。省略不是「按柜型猜」，见
+#: references/interior-structure-contract.md。
+PANEL_OPTIONAL_PARAMETER_FIELDS = frozenset({"dividers"})
+
+PANEL_PARAMETER_FIELDS = (
+    PANEL_REQUIRED_PARAMETER_FIELDS | PANEL_STOCK_FIELDS
+    | PANEL_OPTIONAL_PARAMETER_FIELDS
+)
 PANEL_SPEC_FIELDS = PANEL_PARAMETER_FIELDS
 _SERIALIZED_FIELDS = PANEL_PARAMETER_FIELDS | {
     "furniture_category", "width", "depth", "height",
 }
+#: 不写也合法的字段：序列化输出为空时不落盘（老工程产出逐字节不变）。
+_OPTIONAL_SERIALIZED_FIELDS = PANEL_OPTIONAL_PARAMETER_FIELDS
 
 
 @dataclass
@@ -120,6 +176,9 @@ class FurnitureSpec:
     drawer_back_thickness: float
     drawer_back_clearance: float
 
+    #: 中立板：可选。不写就是没有；写了则由评估器给毫米（见 construction_geometry）。
+    dividers: list[DividerSpec] = field(default_factory=list)
+
     def __post_init__(self) -> None:
         if self.furniture_category not in CABINET_CATEGORIES:
             raise ValueError(
@@ -145,6 +204,7 @@ class FurnitureSpec:
             _require_count(getattr(self, name), name)
         self.back_mount = resolve_back_mount(self.back_mount)
         self.shelves = _coerce_shelves(self.shelves)
+        self.dividers = _coerce_dividers(self.dividers)
         _validate_objective_invariants(self)
         _validate_sheet_stock(self)
 
@@ -191,7 +251,7 @@ class FurnitureSpec:
         """Read a serialized complete spec without filling missing values."""
         values = dict(data)
         unknown = sorted(set(values) - _SERIALIZED_FIELDS)
-        missing = sorted(_SERIALIZED_FIELDS - set(values))
+        missing = sorted(_SERIALIZED_FIELDS - _OPTIONAL_SERIALIZED_FIELDS - set(values))
         if unknown:
             raise ValueError(
                 "serialized panel spec does not support: " + ", ".join(unknown)
@@ -200,9 +260,24 @@ class FurnitureSpec:
             raise ValueError(
                 "serialized panel spec is incomplete; missing: " + ", ".join(missing)
             )
+        # 老冻结文件里没有 dividers 键也要读得回来。
+        values.setdefault("dividers", [])
         if "shelves" in values:
             values["shelves"] = _coerce_shelves(values["shelves"])
         return cls(**values)
+
+
+def spec_payload(spec: FurnitureSpec) -> dict[str, Any]:
+    """板件阶段写进柜体 `spec` 的序列化形状。
+
+    为空的**可选**字段不落盘（现在只有 `dividers`）：没有中立板的老工程产出
+    与加这个字段之前逐字节相同。冻结文件里带了值就照写。
+    """
+    payload = asdict(spec)
+    for name in _OPTIONAL_SERIALIZED_FIELDS:
+        if not payload.get(name):
+            payload.pop(name, None)
+    return payload
 
 
 def resolve_back_mount(requested: str) -> str:
@@ -452,7 +527,11 @@ def _validate_objective_invariants(spec: FurnitureSpec) -> None:
         raise ValueError("toe-kick supports require a positive toe_kick_height")
     if spec.drawer_count and (spec.shelves or spec.n_doors):
         raise ValueError("full-height drawers require no shelves and n_doors=0")
-    if spec.n_doors > 2:
-        raise ValueError("current panel topology supports at most 2 doors")
+    if spec.dividers and spec.drawer_count:
+        # 中立板站在内部净空里，整高抽屉区把这段净空占满了。
+        raise ValueError("a full-height drawer zone cannot take a divider")
+    if spec.dividers and spec.n_doors < 2:
+        # 缝定锚：一扇门没有内缝，中立板无处可对。
+        raise ValueError("a divider needs an inner seam, so at least 2 doors")
     if sum(1 for s in spec.shelves if s.gap_below_mm is None) > 1:
         raise ValueError("at most one shelf gap may be null")

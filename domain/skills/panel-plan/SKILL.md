@@ -7,7 +7,7 @@ description: 用于 panel_plan 阶段。当用户说“几扇门”“几层板�
 
 阶段：`panel_plan`
 
-**这一阶段只回答一件事：已确认的柜体外形尺寸里面，门、层板、抽屉、背板、踢脚和料厚怎么落成板。** 交出去的是一版还没确认的板件。房间怎么摆、材料五金、柜体模型都不在这里做。
+**这一阶段只回答一件事：已确认的柜体外形尺寸里面，门、层板、中立板、抽屉、背板、踢脚和料厚怎么落成板。** 交出去的是一版还没确认的板件。房间怎么摆、材料五金、柜体模型都不在这里做。
 
 ## 人要交什么
 
@@ -28,9 +28,9 @@ description: 用于 panel_plan 阶段。当用户说“几扇门”“几层板�
 按编号往下做。第 6 步是客户要另一版时的回头路。第 7 步是确认。
 
 1. **确认布局已经冻结。** 没有已确认的 `layout_plan` 就停止生成板件，并说明缺的是布局确认。不要把新的宽、深、高写进板件参数。客户要改外形时，用已有房间数据修订布局，等布局重新确认后再生成板件。
-2. **把客户的话收成整份板件方案。** 按 [提案契约](references/panel-proposal-contract.md)「展示与停止」：客户已经给出的构造值照写；没说的必填构造值用候选起点，标成假设。料厚、层板净高和踢脚支撑数没给就留空，不自己算，也不放进假设清单。中立板、成对门和分段按 [柜内结构契约](references/interior-structure-contract.md) 调用 `furniture_evaluate_interior`，只提交选择；门宽、缝、区间、净空和段长用回报里的 `interior_review`，这些毫米不写入 `stage_inputs`。停问清单命中时先问清楚，不写入。客户还没接受假设时只问一句；客户已经接受这套构造时直接进入下一步。
+2. **把客户的话收成整份板件方案。** 按 [提案契约](references/panel-proposal-contract.md)「展示与停止」：客户已经给出的构造值照写；没说的必填构造值用候选起点，标成假设。料厚、层板净高和踢脚支撑数没给就留空，不自己算，也不放进假设清单。中立板、成对门和分段按 [柜内结构契约](references/interior-structure-contract.md) 调用 `furniture_evaluate_interior`，只提交选择；门宽、缝、区间、净空和段长用回报里的 `interior_review`，这些毫米不写入 `stage_inputs`。要中立板时只提交 `dividers`（对准哪条缝、怎么锚），**毫米由评估器给，不自己写位置、厚度或板厚**。停问清单命中时先问清楚，不写入。客户还没接受假设时只问一句；客户已经接受这套构造时直接进入下一步。
 3. **写入参数并调用 `furniture_run_next`。** 编排层从已确认布局读取柜体包络；`FurnitureSpec.from_envelope()` 校验提案字段完整、类型及客观结构冲突，按工艺卡展开省略的料档，并展开省略的层板均分净高和踢脚支撑数，首次物化完整规范。
-4. **代码生成柜体。** 依据 [背板结构规则](references/back-construction-rules.md)、[板件定义规则](references/panel-definition-rules.md)、[抽屉尺寸链](references/drawer-dimension-chain.md) 和 `references/cabinet-topologies/` 生成柜体实例及其 `spec` / `interior` / `back_mount_resolution` / `assemblies`。背板模式需要背拉条时，同一阶段把背拉条物化并纳入校验。运行时统一校验柜体身份、子装配归属、结构规格、精确净空、板件标识、尺寸、位置、依赖和背板几何。
+4. **代码生成柜体。** 依据 [背板结构规则](references/back-construction-rules.md)、[板件定义规则](references/panel-definition-rules.md)、[抽屉尺寸链](references/drawer-dimension-chain.md) 和 `references/cabinet-topologies/` 生成柜体实例及其 `spec` / `interior` / `back_mount_resolution` / `assemblies`。中立板按评估器给的缝与区间物化（通高、站在内部净空里、两张朝柜内的大面都接端面）；有中立板时层板按腔分段出件。背板模式需要背拉条时，同一阶段把背拉条物化并纳入校验。运行时统一校验柜体身份、子装配归属、结构规格、精确净空、板件标识、尺寸、位置、依赖和背板几何。
 5. **展示审查清单。** 准入成功后展示工具快照 `current_view`：柜体、背板安装、内部净空、板件一行一条、接触去重。不展开完整 `cabinets` 树。已省略的料厚、层板净高和踢脚支撑数不再单独询问。清单由运行时从检查点派生，见 [运行时映射](references/runtime-map.md)。每次规划是一次 attempt。
 6. **客户要另一版。** 调用 `retry_stage("panel_plan")`，可带新的 `stage_inputs.panels`。保持已冻结布局；失败只记录该次 attempt。客户选定某次通过的尝试后，用 `select_stage_attempt()` 选用，再确认。
 7. **客户认这版板件，再确认。** 客户已经接受时，`confirm_stage(panel_plan)` 把当前候选冻成 `store/<project-id>/panels/<sha256>.json`。制造只读这份冻结文件，重试制造不会重跑板件。客户还没接受时不确认，也不进入制造。直接改已经生成的板件结果用 `revise_stage_output()`。

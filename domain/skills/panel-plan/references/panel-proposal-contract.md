@@ -22,6 +22,7 @@
 - 前脸边距与踢脚：`front_face_margin`、`front_gap`、`toe_kick_height`、`toe_kick_reveal_front`、`toe_kick_reveal_back`、`toe_kick_support_count`
 - 门与抽屉数量：`n_doors`、`drawer_count`
 - 层板：`shelves`、`top_gap_mm`
+- 中立板（可选）：`dividers`；每项是 {seam_index, seam_align?}，不写就是没有中立板。
 - 抽屉尺寸链输入：`drawer_side_clearance`、`drawer_layer_gap`、`drawer_back_clearance`
 - 可选料档：`board_thickness`、`back_thickness`、`door_thickness`、`drawer_bottom_thickness`、`drawer_back_thickness`；省略则按 [料档与工艺卡](sheet-stock-catalog.md) 展开。
 - 柜体身份（可选）：`cabinet_id`；这不是构造字段，运行时在准入前弹出，缺省 cabinet_1，不得包含 __。
@@ -30,12 +31,13 @@
 
 - `shelves` 每项是 `{shelf_type: fixed|movable, gap_below_mm: 数值|null}`；列表顺序、均分、计算层和净高口径见 [层板规则](shelf-planning-rules.md)。整组净高省略时准入均分。恰好一项为 `null` 时只闭合那一层，不对其余层均分。不保留 `shelf_count`。
 - 当前 `drawer_count>0` 的规范语义只表示整高抽屉区；必须同时提交空 `shelves` 与 `n_doors=0`。
+- `dividers` 每项是 {seam_index, seam_align?}：`seam_align` 不写按 `center`。**不写 id、不写 thickness_mm**——中立板是柜体板，厚度取已准入的 `board_thickness`；`seam_index` 越界或同一缝出现两块，准入/评估直接拒。**不写 `dividers` 等于没有中立板**，不是"按柜型猜一块"。两条客观冲突同样直接拒：与整高抽屉区共存；`n_doors < 2`（一扇门没有内缝可对）。
 
 ## 展示与停止
 
 - 先给出一整份方案：用户已给的值 + 一份假设清单（只含候选起点里客户还没表态的构造选择）。用户没提板厚时，料档只写一行「柜体板 18 / 9 厘背板 9 / 门同柜体板」，不进假设清单。用户没给层板净高和踢脚支撑数时，这两项也不进假设清单，等准入结果里的具体数再给客户看。还有未接受的假设时，只问这一句：按这套出板，还是要改门/层板/抽屉/背板安装/踢脚。
 - 客户已经给出完整构造，或已经说按这套做时，把完整对象写入 `stage_inputs` 再 `run_next()` / `retry_stage()`，不要把同一句话再问一遍。只改其中几项时，改完再调用。代码准入后展示确认审查清单（`current_view.markdown` 或其中的柜体/板件/接触表）。客户接受这一版后再确认阶段；还没接受时不确认。
-- 只有超出当前拓扑表达能力时才停在消歧，不要写入 `stage_inputs`。完整停问清单：混合门/层板/抽屉分区；`n_doors` 大于 2。门缝和中立板按 [柜内结构契约](interior-structure-contract.md) 评估，评估回报不写入 `stage_inputs`。
+- 只有超出当前拓扑表达能力时才停在消歧，不要写入 `stage_inputs`。完整停问清单：混合门/层板/抽屉分区（**腔级内容还表达不了**）。多扇门**不再**是停问项：一排放几扇都能出件，门宽由代码按等宽槽算。门缝按 [柜内结构契约](interior-structure-contract.md) 评估，评估回报不写入 `stage_inputs`。**中立板已经能落成板件**：要就说准哪条缝（`dividers`），毫米由代码给，不必也不该问客户"板多宽、离左墙多少"。
 
 ## 逐柜参数（一组柜不用长一样）
 

@@ -213,8 +213,9 @@ class FurnitureOrchestratorAdmissionTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "no owning stage"):
                     stage_inputs_from_spec({field: 1800})
 
-    def test_three_door_request_fails_at_panel_admission(self) -> None:
-        result = confirm_through(self.orchestrator, 
+    def test_three_door_request_is_admitted_at_panel_admission(self) -> None:
+        """三扇门现在能出件（原来被 `n_doors > 2` 挡住）。"""
+        result = confirm_through(self.orchestrator,
             "三门柜体",
             cabinet_data(n_doors=3, shelf_count=0),
             through_stage=WorkflowStage.PANELS_PLANNED,
@@ -222,15 +223,21 @@ class FurnitureOrchestratorAdmissionTests(unittest.TestCase):
 
         self.assertEqual(
             result.revision.workflow.current,
-            WorkflowStage.LAYOUT_PLAN,
+            WorkflowStage.PANELS_PLANNED,
         )
-        self.assertFalse(
+        self.assertTrue(
             result.revision.latest_attempt(WorkflowStage.PANELS_PLANNED).passed
         )
-        self.assertIn(
-            "at most 2 doors",
-            result.revision.validations[-1].issues[0].message,
-        )
+        output = result.revision.stage_outputs[WorkflowStage.PANELS_PLANNED.value]
+        cabinet = output["cabinets"][0]
+        doors = [
+            panel
+            for assembly in cabinet["assemblies"].values()
+            if isinstance(assembly, dict)
+            for panel in assembly.get("panels", [])
+            if panel["panel_type"] == "door"
+        ]
+        self.assertEqual([panel["role"] for panel in doors], ["door_1", "door_2", "door_3"])
 
     def test_wall_cabinet_hanging_is_origin_z(self) -> None:
         free = cabinet_layout(

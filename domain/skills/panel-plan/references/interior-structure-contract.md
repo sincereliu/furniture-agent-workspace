@@ -1,6 +1,8 @@
 # 柜内结构
 
-回答“中立板、腔、分段和正面排版提交什么，谁来算毫米”。交互工具是 `furniture_evaluate_interior`（实现函数 `evaluate_interior`）。它不写项目、不推进阶段。这一步不把结果写进柜体板件，制造、特征树、CAD、交付仍读原来的板件形状。
+回答“中立板、腔、分段和正面排版提交什么，谁来算毫米”。交互工具是 `furniture_evaluate_interior`（实现函数 `evaluate_interior`）。它不写项目、不推进阶段。
+
+**现在到哪一步**：中立板已经物化——`dividers` 是板件提案的可选字段，缝与区间仍全部出自这个评估器（`construction_geometry.divider_interior_report` 是板件阶段与它之间唯一的接口）。**腔内容（每腔自己的层板/抽屉/挂衣）和分段还没做**；评估回报本身仍不写入 `stage_inputs`，制造、特征树、CAD、交付读的是已物化的板件。
 
 名称见 [术语规范表](terminology-glossary.md)。
 
@@ -11,7 +13,7 @@
 中立板和分段互不绑定。同一块中立板可以让顶板、踢脚各自保持整段，或按这块中立板断开，四种组合都能表达。断口不写 `align_divider` 时，那块板保持整段。运输拼板用 `at_mm`，与有没有中立板无关。
 
 - 正面：`width_mm`、`n_doors`、`margin_mm`（用已准入的 `front_face_margin`）、`pairs`（从左起、0 开始的相邻两扇）。对开只记录哪两扇对着开，不改变门宽和门缝。
-- 中立板：`seam_index`、`seam_align`（不写则 `center`）、`thickness_mm`。缝定锚。侧面锚就是那个侧面。
+- 中立板：`seam_index`、`seam_align`（不写则 `center`）、`thickness_mm`。缝定锚。侧面锚就是那个侧面。**板件阶段提交的不是这一层**：提案只写 `seam_index` 与 `seam_align`，`id` 和 `thickness_mm` 由板件代码填（厚度取已准入的 `board_thickness`），见 [提案契约](panel-proposal-contract.md)。
 - 分段：板的 `start_mm` / `end_mm`。断口要么 `align_divider`，要么 `at_mm`（可带 `width_mm`，不带则为 0）。
 - 腔的用途净空：`cavity_needs`，每条带 `grade`。
 - 门宽推荐区间：`min_door_width_mm` / `max_door_width_mm` + `door_width_grade`。可只给一头；**一头都不给就是不判**（不报 `unjudged`）。口径见 [门宽与边界件](door-width-and-boundary-pieces.md)。
@@ -44,4 +46,4 @@
 
 ## 下一步
 
-把评估结果写进板件（谁拥有哪些数、物化清单与分期）见 [柜内结构物化设计](interior-materialization-design.md)。
+把评估结果写进板件（谁拥有哪些数、物化清单与分期）见 [柜内结构物化设计](interior-materialization-design.md)。中立板属批次 1，已落地；**分段（`breaks`）和腔级内容还没做**。
