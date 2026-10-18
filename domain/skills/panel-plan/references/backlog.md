@@ -71,15 +71,15 @@
 
 **约束**：① **竖向分层不逼门分层** —— 整高门盖住顶格是最常见的做法，只有客户要一道横向门缝时才需要这一条；② 独立的顶柜（叠在衣柜上的另一台吊柜）在布局里就是另一件家具，不需要它；③ 每排、每条固定竖直边最多 2 扇平开门（一扇挂左壁、一扇挂右壁）；上下排可用的竖直边可以不同（通高侧板 vs 半高立板）。
 
-**影响面**：`topology_solver._door_panels`、`validation_panels._validate_doors`、`panel_review`、制造阶段 `_derive_door_hinge_sides`（现在写死"最多 2 扇"）。
+**影响面**：`topology_solver._door_panels`、`validation_panels._validate_doors`、`panel_review`。铰链侧已经不是障碍：它由板件阶段给，多扇也能落到每块门板（见 [门板铰链侧](door-hinge-side.md)）。
 
-> **多扇已经先落地，制造还停在 2 扇**（有意为之，见 SKILL 的"本阶段不做什么"）。`panel_plan` 现在能出 3 扇以上（`door_1…door_n`），但 `manufacture_plan` 的 `_derive_door_hinge_sides` 仍会抛 `supports at most 2 doors`。所以**多门柜目前只能停在板件确认**：不要 `run_next` 进制造。它是硬失败，不会产出错的制造结果。
+> **多扇与铰链侧都已落地**：`panel_plan` 能出 3 扇以上（`door_1…door_n`），门板带 `door_hinge_side`；`manufacture_plan` 读门板上的值，只在老冻结文件上回退到按门序派生（≤2 扇）。所以多门柜可以一路走到制造。
 
 **验收**：一体 2400 高衣柜、上排 400 高两扇门 + 下排两扇 2000 高门 → 四块门件、各自位置与缝；两排的边距/缝可以不同。
 
 ### 对开分组归谁（`pairs` 是否退场）
 
-**现状**：`pairs` 只是 `furniture_evaluate_interior` 的入参，作用两处 —— 零头落哪条缝（`_leftover_seam`）和审查清单显示（`format_interior_review_markdown`）。制造阶段**不读** `pairs`，它按门角色推铰链（`_derive_door_hinge_sides`："单门须显式给 `door_hinge_side`，双门左=left 右=right，最多 2 扇"）。板件阶段提案里**没有** `pairs` 这个字段。
+**现状**：`pairs` 只是 `furniture_evaluate_interior` 的入参，作用两处 —— 零头落哪条缝（`_leftover_seam`）和审查清单显示（`format_interior_review_markdown`）。制造阶段**不读** `pairs`；铰链侧现在由板件阶段按腔给（`construction_geometry.door_hinge_sides`），也不读 `pairs`。板件阶段提案里**没有** `pairs` 这个字段。
 
 **已厘清的物理边界**：平开门每排每条竖直边最多挂 2 扇 —— 一个腔里 1 扇＝单开、2 扇＝对开（被几何逼死）、**≥3 扇本拓扑表达不了**（要联动 / 推拉 / 加中立板）。所以"立板切腔 → 腔定分组"是自洽的，`pairs` 可以退场、由腔推导。
 

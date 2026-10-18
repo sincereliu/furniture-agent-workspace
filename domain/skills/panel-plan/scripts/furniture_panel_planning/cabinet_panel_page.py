@@ -13,11 +13,14 @@ from typing import Any, Mapping, Sequence
 from urllib.parse import urlencode
 
 from .assembly_tree import flatten_panels_for_handoff
+from .construction_geometry import door_hinge_locks
 from .grain_rules import (
     default_grain_axis,
     grain_axis_index,
     grain_axis_of,
 )
+from .panel_spec import FurnitureSpec
+from .structure_planning import CabinetStructure
 
 #: 板件角色 → 页面上的**材质**。整台柜子只有两种材料：柜体一种木纹，门板白色纯色。
 #: 角色仍然逐块带在数据里、列在清单里，只是不再各画一个颜色。
@@ -148,7 +151,10 @@ def panel_structure_view(cabinet: Mapping[str, Any]) -> dict[str, Any]:
         raise ValueError(f"{cabinet_id} requires assemblies")
 
     kinds = _assembly_kinds(assemblies)
-    panels = [_panel_view(item, kinds) for item in flatten_panels_for_handoff(cabinet)]
+    locked = _door_hinge_locks(cabinet, spec)
+    panels = [
+        _panel_view(item, kinds, locked) for item in flatten_panels_for_handoff(cabinet)
+    ]
     shelves = spec.get("shelves") or []
     return {
         "cabinet_id": cabinet_id,
@@ -182,7 +188,11 @@ def panel_structure_view(cabinet: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _panel_view(panel: Mapping[str, Any], kinds: Mapping[str, str]) -> dict[str, Any]:
+def _panel_view(
+    panel: Mapping[str, Any],
+    kinds: Mapping[str, str],
+    hinge_locked: frozenset[str] = frozenset(),
+) -> dict[str, Any]:
     if not isinstance(panel, Mapping):
         raise ValueError("each panel must be an object")
     panel_id = str(panel.get("id") or "").strip()
@@ -223,7 +233,35 @@ def _panel_view(panel: Mapping[str, Any], kinds: Mapping[str, str]) -> dict[str,
         "outer_face": str(panel.get("outer_face") or ""),
         "depends_on": [str(item) for item in panel.get("depends_on") or []],
         "contact_count": len(panel.get("joints") or []),
+        #: 门板往哪条竖边开。空 = 还没定（单开腔没给），页面上这扇门不转，并给「左开/右开」两个选择。
+        "hinge_side": str(panel.get("door_hinge_side") or ""),
+        #: 对开腔里的门：铰链侧被几何定死，页面上不给改，只显示结果。
+        "hinge_locked": panel_id in hinge_locked,
     }
+
+
+def _door_hinge_locks(
+    cabinet: Mapping[str, Any],
+    spec: Mapping[str, Any],
+) -> frozenset[str]:
+    """对开腔里的门 id——它们的铰链侧由几何决定，页面上不给单独改。
+
+    腔怎么切**不在页面里算**：直接用板件阶段的 `construction_geometry.door_hinge_locks()`，
+    免得"被中立板切开的内空"在页面和板件各有一份、哪天漂了都不知道。
+    这里算出来只是为了把按钮关掉，免得让人点了才被拒；真正的裁决在保存时
+    （`project_layout_edit._resolve_door_hinges`）。
+    """
+    cabinet_id = str(cabinet.get("id") or "")
+    try:
+        admitted = FurnitureSpec.from_dict(dict(spec))
+        structure = CabinetStructure.from_spec(admitted)
+        locks = door_hinge_locks(admitted, structure)
+    except (TypeError, ValueError):
+        # 冻结文件读不动时宁可都让人改，也别因为算不出来把按钮全锁死。
+        return frozenset()
+    return frozenset(
+        f"{cabinet_id}__{role}" for role, locked in locks.items() if locked
+    )
 
 
 def _assembly_kinds(assemblies: Mapping[str, Any]) -> dict[str, str]:
@@ -376,6 +414,7 @@ p.warn{color:#92400e;background:#fffbeb;border-left:3px solid #f59e0b;border-rad
 /* 详情里可点的「顺纹方向」：点一下换纹理。 */
 .grainrow{cursor:pointer;border-bottom:1px dashed #94a3b8}
 .grainrow:hover{color:#1d4ed8;border-bottom-color:#1d4ed8}
+.hingerow{display:inline-flex;gap:6px;margin-right:8px}
 @media (max-width:1000px){.workspace{grid-template-columns:minmax(0,1fr)}}
 """
 
@@ -449,9 +488,10 @@ def _render_structure_page(
           <button type="button" class="chip" id="toggle-back" aria-pressed="true">背板</button>
           <button type="button" class="chip" id="toggle-wire" aria-pressed="false">透视门板</button>
           <span class="slider">拆开 <input type="range" id="explode" min="0" max="100" value="0" step="1"></span>
+          <span class="slider">开门 <input type="range" id="open" min="0" max="100" value="0" step="1"></span>
         </div>
       </div>
-      <div class="overlay hint"><b>点板件</b>只选中（不改任何东西）· <b>拖动</b>转动 · <b>滚轮</b>缩放。要改纹理，选中后在右侧详情的<b>顺纹方向</b>上点一下：竖纹 ⇄ 横纹。</div>
+      <div class="overlay hint"><b>点板件</b>只选中（不改任何东西）· <b>拖动</b>转动 · <b>滚轮</b>缩放 · <b>开门</b>滑块绕铰链边转门（没定铰链侧的门不动）。要改纹理，选中后在右侧详情的<b>顺纹方向</b>上点一下：竖纹 ⇄ 横纹。</div>
       <div class="overlay legend"><ul>{legend}</ul></div>
       <div id="hover"></div>
     </section>
@@ -506,9 +546,11 @@ const page = mountCabinetStructure({{
     back: document.getElementById("toggle-back"),
     wire: document.getElementById("toggle-wire"),
     explode: document.getElementById("explode"),
+    open: document.getElementById("open"),
   }},
-  grainSave: {{
-    url: "/api/project/{escape(project_id, quote=True)}/cabinets/{escape(str(structure["cabinet_id"]), quote=True)}/grain",
+  // 这一页上"攒着没存"的板件属性都走它：顺纹方向 + 门板铰链侧，一次提交只加一个 Revision。
+  panelSave: {{
+    url: "/api/project/{escape(project_id, quote=True)}/cabinets/{escape(str(structure["cabinet_id"]), quote=True)}/panels",
     version: {json.dumps(expected_version)},
     editor: document.getElementById("grain-editor"),
     pending: document.getElementById("grain-pending"),

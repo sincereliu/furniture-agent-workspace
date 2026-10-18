@@ -24,6 +24,11 @@
   已核对**只多了这个字段**：把 `grain_axis` 递归摘掉之后，四份摘要与改之前的基线
   逐字相同（尺寸、位置、接触、装配一个都没动）。加它是因为顺纹方向是板件的属性，
   要能按订单改、并随板件一起冻结；默认值由板件类型在 `grain_rules.GRAIN_BY_TYPE` 给。
+- 2026-10-19：门板多了 `door_hinge_side`（铰链侧），于是四份摘要全变（四例都带对开门）。
+  已核对**只多了这个字段**：把 `door_hinge_side` 递归摘掉之后，四份摘要与改之前的基线
+  逐字相同（核对脚本见提交说明）。加它是因为"门往哪边开"是**设计决定**，该由板件阶段
+  给并随板件冻结，而不是制造阶段按门序猜；对开腔由几何定（左 left、右 right），
+  单开腔由提案给，定不下来的留空。
 """
 
 from __future__ import annotations
@@ -51,12 +56,12 @@ from panel_fixtures import panel_parameters
 from workflow_test_support import confirm_through
 
 #: 冻结的板件产出摘要。改动它之前先读文件头部的"重新生成"一节。
-#: 2026-10-16 因新增 `grain_axis` 字段重新生成（见头部"改动记录"）。
+#: 2026-10-19 因新增 `door_hinge_side` 字段重新生成（见头部"改动记录"）。
 _BASELINE = {
-    "single_double_door": "8a00bdbaf38e7e92eef1024bc00331e55ae3048765670e275e283ba1b3dc321c",
-    "wardrobe_with_shelves": "b8ea2f82c35583a2397d7bba66aab54b988dd5d87aabc6dfc43c0ab92a74a688",
-    "wall_cabinet": "588de00c090b44219543367f616f689c207cdefd7ccaa5eafc52a003485347a6",
-    "two_cabinets": "9182789556d708b85f4db88bc4dd5bc116365f3425195f804b99e4a355113c79",
+    "single_double_door": "203b5f2e915bfead267a4e34230cd56e03d4edfe2fe2631a6412d0e42fd4027e",
+    "wardrobe_with_shelves": "96023a27fcd14552b4f8fe19737df41a04b6129d9c2277edc5947209cdd31ad0",
+    "wall_cabinet": "d8b02429651151ee0ba640b75a3f886aecc0e2e3f75a8852094f8b18b4487a00",
+    "two_cabinets": "14522c06892a360f33b7dcb2356dcb7c647d521dcbb488a3bde8893bbddf77be",
 }
 
 

@@ -309,6 +309,8 @@ def _door_panels(
             material_role="door",
             depends_on=["left_side_panel", "right_side_panel"],
             inner_face=inner, outer_face=outer,
+            # 铰链侧是板件属性：对开由几何定，单开来自提案；定不下来的留空。
+            door_hinge_side=box.door_hinge_side,
             note=f"门板，{box.size_x:.0f}×{box.size_z:.0f}×{spec.door_thickness:.0f}mm",
         ))
     return panels

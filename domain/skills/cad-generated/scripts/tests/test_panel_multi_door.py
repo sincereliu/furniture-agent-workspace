@@ -116,7 +116,17 @@ class MultiDoorTests(unittest.TestCase):
 
 class MultiDoorValidationTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.spec = _door_only(width=2450.0, n_doors=5)
+        # 五扇门要有物理含义：三块立板切成 1 对开 + 3 单开，单开的铰链侧逐扇给。
+        self.spec = _door_only(
+            width=2500.0,
+            n_doors=5,
+            dividers=[
+                {"seam_index": 1},
+                {"seam_index": 2},
+                {"seam_index": 3},
+            ],
+            door_hinges=["left", "right", "right", "left", "right"],
+        )
         self.structure = CabinetStructure.from_spec(self.spec)
         self.panels = plan_panels(self.spec, self.structure)
 

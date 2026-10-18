@@ -34,10 +34,13 @@ from panel_fixtures import by_role, cabinet_envelope, furniture_spec, panel_para
 
 
 def _spec_with_divider(seam_align: str | None = None, **overrides) -> FurnitureSpec:
+    """两扇门 + 一条缝上的中立板 → 两个单开腔，所以铰链侧要逐扇给。"""
     divider = {"seam_index": 0}
     if seam_align is not None:
         divider["seam_align"] = seam_align
-    return furniture_spec(dividers=[divider], **overrides)
+    values = {"door_hinges": ["left", "right"]}
+    values.update(overrides)
+    return furniture_spec(dividers=[divider], **values)
 
 
 class DividerGeometryTests(unittest.TestCase):

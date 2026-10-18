@@ -26,8 +26,9 @@
   只从评估器取（`construction_geometry.door_interior_report`），板件阶段不自己推导等分槽。
   角色名：一扇 `single_door`、两扇 `left_door`/`right_door`（老名字，冻结文件钉着）、
   三扇以上 `door_1…door_n`。门高仍是"柜高 − 踢脚 − 2×边距"，一排整高门。
-  **多扇的铰链侧还没落**：制造阶段 `_derive_door_hinge_sides` 仍写死"最多 2 扇"，见
-  [backlog](backlog.md) 的门排条。
+  **铰链侧也是板件属性**（`door_hinge_side`）：对开腔由几何定（左 left、右 right），
+  单开腔由提案的 `door_hinges` 给；**不给只报警告、不拦确认**——留空的那些在板件页上
+  选左开/右开，或下一版补 `door_hinges`。制造才是硬闸门。规则见 [门板铰链侧](door-hinge-side.md)。
 - 当前 `drawer_count>0` 的规范语义仅为整高抽屉区；必须同时提交
   空 `shelves` 与 `n_doors=0`。混合分区的停问见
   [提案契约](panel-proposal-contract.md)。不得由代码按数量优先级静默丢弃任何区域。

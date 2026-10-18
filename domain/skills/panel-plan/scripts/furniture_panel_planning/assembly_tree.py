@@ -238,6 +238,9 @@ def _panel_payload(panel: PanelPlacement, assembly_id: str) -> dict[str, Any]:
     # 没有额外承载大面的板件不落这个键：老工程产出逐字节不变。
     if not payload.get("bearing_faces"):
         payload.pop("bearing_faces", None)
+    # 门板以外、以及铰链侧还没定的门，也不落这个键。
+    if not payload.get("door_hinge_side"):
+        payload.pop("door_hinge_side", None)
     return payload
 
 

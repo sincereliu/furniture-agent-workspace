@@ -42,6 +42,9 @@ _PANEL_DEFAULTS = {
     "joints": (),
     "role": "",
     "parent_id": "",
+    #: 门板的铰链侧。**板件阶段给**：对开由几何定，单开由提案给。
+    #: 这里只搬，不推导——推导是旧冻结文件的兼容路径（见 `manufacturing_bom`）。
+    "door_hinge_side": None,
 }
 _CONTACT_FIELDS = (
     "bearing_id",
@@ -132,6 +135,9 @@ class ConfirmedPanel:
     joints: tuple[Contact, ...]
     role: str
     parent_id: str
+    #: 门板的铰链侧，由**板件阶段**给（对开由几何定、单开由提案给）。
+    #: 老冻结文件没有这个值，制造按门序回退推导，见 `manufacturing_bom`。
+    door_hinge_side: str | None = None
 
 
 def admit_construction(spec: Any) -> ConfirmedConstruction:
@@ -205,6 +211,14 @@ def _admit_panel(source: Any) -> ConfirmedPanel:
     overlay = values["door_overlay"]
     if overlay is not None and not isinstance(overlay, str):
         raise ValueError(f"{panel_id} door_overlay must be a string or null")
+    hinge_side = values["door_hinge_side"]
+    # 板件阶段用空串表示"没有"（非门板、以及定不下来的单开门），这里收成 None。
+    if isinstance(hinge_side, str):
+        hinge_side = hinge_side.strip() or None
+    if hinge_side is not None and hinge_side not in {"left", "right"}:
+        raise ValueError(
+            f"{panel_id} door_hinge_side must be 'left', 'right' or null"
+        )
     return ConfirmedPanel(
         id=panel_id.strip(),
         name=name,
@@ -225,6 +239,7 @@ def _admit_panel(source: Any) -> ConfirmedPanel:
         joints=tuple(contact_from_panel(item) for item in raw_joints),
         role=str(values["role"]),
         parent_id=str(values["parent_id"]),
+        door_hinge_side=hinge_side,
     )
 
 

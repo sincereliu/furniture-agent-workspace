@@ -18,6 +18,10 @@ VALID_SHELF_TYPES = frozenset({"fixed", "movable"})
 #: 毫米由评估器算（`interior_structure.evaluate_interior`），提案只说对准哪条缝。
 VALID_DIVIDER_ALIGNS = frozenset({"center", "left_face", "right_face"})
 
+#: 一扇门挂在哪条竖直边上。对开腔由几何决定（左 left、右 right）；
+#: 单开腔由提案给，没给就留空（板件阶段只报警告，客户在板件页上选）。
+VALID_DOOR_HINGES = frozenset({"left", "right"})
+
 # Shop sheet-stock catalog. See references/sheet-stock-catalog.md.
 CARCASS_STOCK_MM = frozenset({18.0, 22.0})
 BACK_STOCK_MM = 9.0
@@ -105,6 +109,27 @@ def _coerce_dividers(raw: Any) -> list[DividerSpec]:
     return result
 
 
+def _coerce_door_hinges(raw: Any) -> list[str]:
+    """把 door_hinges 规范化为「每扇门一个 left/right」；不写就是没定。
+
+    写法是 `["left", "right", …]`，从左到右、长度必须等于 `n_doors`。
+    对开腔那两位必须左 left、右 right（几何逼死），单开腔由提案决定；
+    一致性在几何层核对（`construction_geometry.door_hinge_sides`）。
+    """
+    if raw is None:
+        return []
+    if not isinstance(raw, (list, tuple)):
+        raise ValueError("door_hinges must be a list")
+    result: list[str] = []
+    for item in raw:
+        if not isinstance(item, str) or item not in VALID_DOOR_HINGES:
+            raise ValueError(
+                "door hinge must be one of: " + ", ".join(sorted(VALID_DOOR_HINGES))
+            )
+        result.append(item)
+    return result
+
+
 # Construction fields that remain required after proposal admission.
 # Sheet stock, an omitted toe-kick support count, and a fully omitted
 # shelf-gap set are expanded first. Serialized specs stay complete and
@@ -128,9 +153,9 @@ PANEL_STOCK_FIELDS = frozenset(
         "drawer_back_thickness",
     }
 )
-#: 可省略的构造字段：不写 = 没有中立板。省略不是「按柜型猜」，见
-#: references/interior-structure-contract.md。
-PANEL_OPTIONAL_PARAMETER_FIELDS = frozenset({"dividers"})
+#: 可省略的构造字段：不写 = 没有中立板 / 每扇门的铰链侧没定。省略不是「按柜型猜」，
+#: 见 references/interior-structure-contract.md 与 references/door-hinge-side.md。
+PANEL_OPTIONAL_PARAMETER_FIELDS = frozenset({"dividers", "door_hinges"})
 
 PANEL_PARAMETER_FIELDS = (
     PANEL_REQUIRED_PARAMETER_FIELDS | PANEL_STOCK_FIELDS
@@ -179,6 +204,10 @@ class FurnitureSpec:
     #: 中立板：可选。不写就是没有；写了则由评估器给毫米（见 construction_geometry）。
     dividers: list[DividerSpec] = field(default_factory=list)
 
+    #: 每扇门的铰链侧：可选，从左到右、长度等于 `n_doors`。不写就由几何推
+    #: （对开腔自动 left/right，单开腔留空）。见 references/door-hinge-side.md。
+    door_hinges: list[str] = field(default_factory=list)
+
     def __post_init__(self) -> None:
         if self.furniture_category not in CABINET_CATEGORIES:
             raise ValueError(
@@ -205,6 +234,7 @@ class FurnitureSpec:
         self.back_mount = resolve_back_mount(self.back_mount)
         self.shelves = _coerce_shelves(self.shelves)
         self.dividers = _coerce_dividers(self.dividers)
+        self.door_hinges = _coerce_door_hinges(self.door_hinges)
         _validate_objective_invariants(self)
         _validate_sheet_stock(self)
 
@@ -260,8 +290,9 @@ class FurnitureSpec:
             raise ValueError(
                 "serialized panel spec is incomplete; missing: " + ", ".join(missing)
             )
-        # 老冻结文件里没有 dividers 键也要读得回来。
+        # 老冻结文件里没有 dividers / door_hinges 键也要读得回来。
         values.setdefault("dividers", [])
+        values.setdefault("door_hinges", [])
         if "shelves" in values:
             values["shelves"] = _coerce_shelves(values["shelves"])
         return cls(**values)
@@ -270,8 +301,8 @@ class FurnitureSpec:
 def spec_payload(spec: FurnitureSpec) -> dict[str, Any]:
     """板件阶段写进柜体 `spec` 的序列化形状。
 
-    为空的**可选**字段不落盘（现在只有 `dividers`）：没有中立板的老工程产出
-    与加这个字段之前逐字节相同。冻结文件里带了值就照写。
+    为空的**可选**字段不落盘（现在有 `dividers`、`door_hinges`）：没有中立板、
+    没有逐扇铰链侧的老工程产出，与加这两个字段之前逐字节相同。冻结文件里带了值就照写。
     """
     payload = asdict(spec)
     for name in _OPTIONAL_SERIALIZED_FIELDS:
@@ -535,3 +566,5 @@ def _validate_objective_invariants(spec: FurnitureSpec) -> None:
         raise ValueError("a divider needs an inner seam, so at least 2 doors")
     if sum(1 for s in spec.shelves if s.gap_below_mm is None) > 1:
         raise ValueError("at most one shelf gap may be null")
+    if spec.door_hinges and len(spec.door_hinges) != spec.n_doors:
+        raise ValueError("door_hinges must have exactly one entry per door")

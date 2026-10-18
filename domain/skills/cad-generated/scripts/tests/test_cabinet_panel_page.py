@@ -43,7 +43,7 @@ from furniture_workflow.input_adapter import stage_inputs_from_spec
 from furniture_workflow.project_layout_edit import (
     LAYOUT_EDIT_ENV,
     VersionConflict,
-    save_cabinet_grain,
+    save_cabinet_panel_edits,
 )
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from furniture_workflow.workflow_store import JsonProjectStore
@@ -232,6 +232,11 @@ class CabinetStructurePageTests(unittest.TestCase):
         self.assertEqual(side["material"], "wood")
         self.assertEqual(panels["cabinet_1__left_door"]["material"], "white")
         self.assertEqual(payload["n_doors"], 2)
+        # 双门由几何定铰链侧：左 left、右 right，页面据此绕竖边开门。
+        self.assertEqual(panels["cabinet_1__left_door"]["hinge_side"], "left")
+        self.assertEqual(panels["cabinet_1__right_door"]["hinge_side"], "right")
+        self.assertEqual(panels["cabinet_1__left_side_panel"]["hinge_side"], "")
+        self.assertIn('id="open"', page)
         # 全柜只有两种材料，图例就是这两条；每块板都有材料。
         self.assertEqual(
             {item["material"] for item in payload["materials"]},
@@ -294,7 +299,7 @@ class CabinetStructurePageTests(unittest.TestCase):
             'id="grain-save">保存并冻结',
             'id="grain-status"',
             "待保存的改动",
-            "grainSave: {",
+            "panelSave: {",
             "window.page = page",
         ):
             self.assertIn(marker, page)
@@ -305,7 +310,7 @@ class CabinetStructurePageTests(unittest.TestCase):
     def test_grain_editor_only_for_local_editors(self) -> None:
         """「保存顺纹」写的是工程：只读分享那一页不给版本号，也就不用谈保存。
 
-        版本号是服务端渲染进去的（`grainSave.version`）——页面拿不到它就带不回
+        版本号是服务端渲染进去的（`panelSave.version`）——页面拿不到它就带不回
         `expected_version`，服务端也就会拒。所以"不给入口"和"不给版本"是同一件事。
         """
         shared = asyncio.run(
@@ -360,10 +365,16 @@ class CabinetStructurePageTests(unittest.TestCase):
 
 
 class StructureViewerDirectionTests(unittest.TestCase):
-    """结构页的视角方向：正面必须在门那一面。
+    """结构页的视角方向：正面必须在门那一面，左右必须和数据的 X 对得上。
 
-    换算关系是 `世界 = (柜X, 柜Z, -柜Y)`，所以柜体 +Y（门那一面）在世界里是 **-Z**。
-    这两句话写反的时候，人看到的现象是「门板没画出来」——实际是镜头站到了背板后面。
+    换算关系是 `世界 = (柜宽 − 柜X, 柜Z, -柜Y)`：
+
+    - 柜体 +Y（门那一面）在世界里是 **-Z**，所以正面站 -Z、背面站 +Z。写反的时候，
+      人看到的现象是「门板没画出来」——实际是镜头站到了背板后面。
+    - x 那次**镜像**是必须的：站在门前看，右手系里柜体 +X 必然落在人的**左手边**，
+      而数据把低 X 叫 `left_side_panel`。不镜像的话整台柜子在页面上左右反——
+      左侧板画在右边，`hinge_side="left"` 的门开到右边（实测踩过）。
+      镜像之后**低 X ＝ 屏幕左侧**，于是「左侧」= 从 +X 看、「右侧」= 从 -X 看。
     """
 
     MODULE = (
@@ -392,13 +403,26 @@ class StructureViewerDirectionTests(unittest.TestCase):
         # 世界 Z 越大越靠背板那一侧：正面必须取 -Z，背面必须取 +Z。
         self.assertLess(views["front"][2], 0, "正面要站在世界 -Z（门那一侧）")
         self.assertGreater(views["back"][2], 0, "背面要站在世界 +Z")
-        # 站在门前看，柜体 +X 在人右手边：左侧从 -X 看、右侧从 +X 看。
-        self.assertLess(views["left"][0], 0, "左侧要从 -X 看")
-        self.assertGreater(views["right"][0], 0, "右侧要从 +X 看")
+        # 世界 x 是镜像过的（低 X 在 +X 一侧）：左侧从 +X 看、右侧从 -X 看。
+        self.assertGreater(views["left"][0], 0, "左侧要从 +X 看（世界 x 镜像过）")
+        self.assertLess(views["right"][0], 0, "右侧要从 -X 看")
         # 顶视要站在上方。
         self.assertGreater(views["top"][1], 0, "顶视要站在上方")
         # 等轴要能看见门那一面。
         self.assertLess(views["iso"][2], 0, "等轴也要在门那一侧")
+
+    def test_panel_x_is_mirrored_so_low_x_lands_on_the_screen_left(self) -> None:
+        """低 X 是数据里的「左」，必须落在屏幕左侧——否则门会开反。"""
+        source = self.MODULE.read_text(encoding="utf-8")
+        self.assertIn("width - (px + sx / 2)", source)
+        self.assertIn("new THREE.Vector3(width - x, z, -y)", source)
+
+    def test_panels_do_not_flicker(self) -> None:
+        """板件接缝面是共面的：双面渲染 + 描边线贴面 + 近平面太近，都会转起来闪。"""
+        source = self.MODULE.read_text(encoding="utf-8")
+        self.assertNotIn("THREE.DoubleSide", source)
+        self.assertIn("polygonOffset", source)
+        self.assertIn("camera.near = Math.max(1, distance / 1000)", source)
 
     def test_camera_distance_is_computed_from_the_frame_not_a_constant(self) -> None:
         source = self.MODULE.read_text(encoding="utf-8")
@@ -550,7 +574,7 @@ class StructureViewerFieldTests(unittest.TestCase):
         self.assertIn("grainrow", detail)
         self.assertIn("button.addEventListener(\"click\", () => toggleGrainDirection(panel.id));", detail)
         # 只读分享那一页（没有编辑入口）不给点。
-        self.assertIn("if (grainSave.editor && direction) {", detail)
+        self.assertIn("if (panelSave.editor && direction) {", detail)
 
     def test_save_block_is_not_grain_specific(self) -> None:
         """「保存并冻结」是这一页通用的落盘动作，不是顺纹专用，也没有放弃按钮。
@@ -730,7 +754,7 @@ class PanelStructureViewTests(unittest.TestCase):
 class CabinetGrainSaveTests(unittest.TestCase):
     """顺纹方向是**板件的属性**：按订单改它，然后随板件一起重新冻结。
 
-    这里走的是真正的写路径（`save_cabinet_grain` → revise → 重新确认 → 落盘），
+    这里走的是真正的写路径（`save_cabinet_panel_edits` → revise → 重新确认 → 落盘），
     不是页面上的临时调整。所以要点有两个：改了真的进冻结文件；改动会按规矩作废下游。
     """
 
@@ -766,10 +790,10 @@ class CabinetGrainSaveTests(unittest.TestCase):
         self.orchestrator.confirm_stage(self.project, "panel_plan")
 
     def save(self, axes: dict[str, str], **kwargs):
-        return save_cabinet_grain(
+        return save_cabinet_panel_edits(
             self.project,
             "cabinet_1",
-            axes,
+            axes=axes,
             expected_version=kwargs.pop("expected_version", panel_version(self.project.latest)),
             workspace_root=WORKSPACE_ROOT,
             store_root=self.root,
@@ -864,10 +888,10 @@ class CabinetGrainSaveTests(unittest.TestCase):
         unchanged()
 
     def save_cabinet(self, cabinet_id: str, axes: dict[str, str]):
-        return save_cabinet_grain(
+        return save_cabinet_panel_edits(
             self.project,
             cabinet_id,
-            axes,
+            axes=axes,
             expected_version=panel_version(self.project.latest),
             workspace_root=WORKSPACE_ROOT,
             store_root=self.root,
@@ -893,6 +917,122 @@ class CabinetGrainSaveTests(unittest.TestCase):
             self.save({"cabinet_1__top_panel": "x"}, expected_version=panel_before)
         # 拿当前版本号：正常通过。
         self.save({"cabinet_1__top_panel": "x"})
+
+
+class CabinetHingeSaveTests(unittest.TestCase):
+    """门板铰链侧也能从页面上改：`save_cabinet_panel_edits(hinges=…)` → 重新冻结。
+
+    这台柜用一块**中立板**切成两个单开腔——正是"铰链侧定不下来、要人给"的形状。
+    所以它冻出来的时候门板不带铰链侧（板件阶段只报警告），再由这条写路径补上。
+    """
+
+    def setUp(self) -> None:
+        self.root = WORKSPACE_ROOT / "temp" / "test-cabinet-hinge-save"
+        if self.root.exists():
+            shutil.rmtree(self.root)
+        self.store = JsonProjectStore(self.root)
+        self.orchestrator = FurnitureOrchestrator(
+            workspace_root=WORKSPACE_ROOT,
+            project_store=self.store,
+        )
+        self._switch = mock.patch.dict(os.environ, {LAYOUT_EDIT_ENV: "1"})
+        self._switch.start()
+        self.addCleanup(self._switch.stop)
+        self._store_root = mock.patch.object(server, "STORE_ROOT", self.root)
+        self._store_root.start()
+        self.addCleanup(self._store_root.stop)
+        self.addCleanup(
+            lambda: shutil.rmtree(self.root, ignore_errors=True)
+            if self.root.exists()
+            else None
+        )
+        self.project = self.orchestrator.create_project(
+            "铰链侧",
+            layout_proposal(),
+            stage_inputs=stage_inputs_from_spec(
+                panel_parameters(dividers=[{"seam_index": 0}])
+            ),
+        )
+        self.orchestrator.confirm_layout(self.project)
+        self.orchestrator.run_next(self.project)
+        self.orchestrator.confirm_stage(self.project, "panel_plan")
+
+    def frozen_cabinet(self) -> dict:
+        digest = self.project.latest.confirmed_panel_sha256
+        frozen = json.loads(
+            self.store.panel_path(self.project.id, digest).read_text(encoding="utf-8")
+        )
+        return frozen["cabinets"][0]
+
+    def hinges(self) -> dict[str, str | None]:
+        return {
+            panel["role"]: panel.get("door_hinge_side")
+            for panel in flatten_panels_for_handoff(self.frozen_cabinet())
+            if panel["panel_type"] == "door"
+        }
+
+    def save(self, hinges: dict[str, str], **kwargs):
+        return save_cabinet_panel_edits(
+            self.project,
+            "cabinet_1",
+            hinges=hinges,
+            expected_version=kwargs.pop(
+                "expected_version", panel_version(self.project.latest)
+            ),
+            workspace_root=WORKSPACE_ROOT,
+            store_root=self.root,
+            **kwargs,
+        )
+
+    def test_two_single_door_cavities_start_undecided(self):
+        # 中立板把双门柜切成两个单开腔：谁都没法从几何推出来。
+        self.assertEqual(self.hinges(), {"left_door": None, "right_door": None})
+
+    def test_choosing_both_hinges_refreezes_the_panels(self):
+        old_digest = self.project.latest.confirmed_panel_sha256
+        old_revision = self.project.latest.number
+
+        result = self.save(
+            {"cabinet_1__left_door": "left", "cabinet_1__right_door": "right"}
+        )
+
+        self.assertGreater(self.project.latest.number, old_revision)
+        self.assertNotEqual(self.project.latest.confirmed_panel_sha256, old_digest)
+        self.assertEqual(
+            result["door_hinges"],
+            {"cabinet_1__left_door": "left", "cabinet_1__right_door": "right"},
+        )
+        self.assertEqual(
+            self.hinges(), {"left_door": "left", "right_door": "right"}
+        )
+        # 冻结文件里的 spec 也要跟上：门板上的值和 spec 的 door_hinges 不能各说各话。
+        cabinet = self.frozen_cabinet()
+        self.assertEqual(cabinet["spec"]["door_hinges"], ["left", "right"])
+        self.assertEqual(
+            [p.get("door_hinge_side") for p in flatten_panels_for_handoff(cabinet)
+             if p["panel_type"] == "door"],
+            ["left", "right"],
+        )
+
+    def test_leaving_one_undecided_is_refused(self):
+        digest = self.project.latest.confirmed_panel_sha256
+        with self.assertRaises(ValueError) as caught:
+            self.save({"cabinet_1__left_door": "left"})
+        self.assertIn("still have no hinge side", str(caught.exception))
+        self.assertEqual(self.project.latest.confirmed_panel_sha256, digest)
+
+    def test_the_endpoint_refuses_a_body_with_nothing_to_change(self):
+        """空提交要在**进门处**就拒，别白跑一趟 revise。"""
+        from fastapi import HTTPException
+
+        request = server.CabinetPanelEditRequest(expected_version="v"), _local()
+        with self.assertRaises(HTTPException) as caught:
+            asyncio.run(
+                server.save_cabinet_panel_edits_endpoint(
+                    "p", "c", *request
+                )
+            )
+        self.assertEqual(caught.exception.status_code, 422)
 
 
 def _local():

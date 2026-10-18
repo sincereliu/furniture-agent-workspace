@@ -101,7 +101,7 @@ class FurnitureOrchestratorFreezeTests(unittest.TestCase):
             second = orchestrator.retry_stage(
                 project,
                 WorkflowStage.PANELS_PLANNED,
-                stage_input={"parameters": panel_parameters(n_doors=1)},
+                stage_input={"parameters": panel_parameters(n_doors=1, door_hinges=["left"])},
             )
             self.assertEqual(second.revision.id, first.revision.id)
             self.assertEqual(second.revision.layout_sha256, layout_sha)

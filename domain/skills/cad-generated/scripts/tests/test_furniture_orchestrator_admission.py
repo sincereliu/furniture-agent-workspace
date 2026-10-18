@@ -214,10 +214,18 @@ class FurnitureOrchestratorAdmissionTests(unittest.TestCase):
                     stage_inputs_from_spec({field: 1800})
 
     def test_three_door_request_is_admitted_at_panel_admission(self) -> None:
-        """三扇门现在能出件（原来被 `n_doors > 2` 挡住）。"""
+        """三扇门现在能出件（原来被 `n_doors > 2` 挡住）。
+
+        但三扇门得有物理含义：一块立板切在缝 0 → 「单开 + 对开」，单开那扇的铰链侧要指定。
+        """
         result = confirm_through(self.orchestrator,
             "三门柜体",
-            cabinet_data(n_doors=3, shelf_count=0),
+            cabinet_data(
+                n_doors=3,
+                shelf_count=0,
+                dividers=[{"seam_index": 0}],
+                door_hinges=["left", "left", "right"],
+            ),
             through_stage=WorkflowStage.PANELS_PLANNED,
         )
 
@@ -238,6 +246,31 @@ class FurnitureOrchestratorAdmissionTests(unittest.TestCase):
             if panel["panel_type"] == "door"
         ]
         self.assertEqual([panel["role"] for panel in doors], ["door_1", "door_2", "door_3"])
+        self.assertEqual(
+            [panel["door_hinge_side"] for panel in doors], ["left", "left", "right"]
+        )
+
+    def test_three_doors_in_one_opening_are_flagged_not_blocked(self) -> None:
+        """一个腔三扇平开门没有铰链侧可给——板件阶段**警告但不硬停**。
+
+        硬停的话板件页就没有这台柜，客户连"点一下左开/右开"的机会都没有；
+        真正的闸门在制造（没有铰链侧的门排不了铰链孔）。
+        """
+        result = confirm_through(self.orchestrator,
+            "三门无立板",
+            cabinet_data(n_doors=3, shelf_count=0),
+            through_stage=WorkflowStage.PANELS_PLANNED,
+        )
+        self.assertTrue(
+            result.revision.latest_attempt(WorkflowStage.PANELS_PLANNED).passed
+        )
+        warnings = [
+            issue
+            for issue in result.revision.validations[-1].issues
+            if issue.code == "DOOR_HINGE_SIDE_UNKNOWN"
+        ]
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("door_3", warnings[0].message)
 
     def test_wall_cabinet_hanging_is_origin_z(self) -> None:
         free = cabinet_layout(

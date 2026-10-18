@@ -24,7 +24,7 @@
 - 具体连接件：`TrinityConnector`（三合一）、`HingeConnector`（铰链）、`TwoInOneConnector`（二合一）、`ShelfPinConnector`（层板托）、`BackMountConnector`（背板）、`DrawerSlideConnector`（滑轨）。
 - 新增五金：实现对应 `Connector` 并注册进 `ALL_CONNECTORS`。
 - 孔位用 `HoleSpec` 描述；`is_face_hole=True` 表示板面钻孔（导出 TypeNo=1 垂直孔），`False` 表示板边钻孔（TypeNo=2 水平孔）。
-- 铰链侧 `door_hinge_side` 由制造层派生：单门从 `requested_options` 输入（`left`/`right`），双门按门板 X 位置派生。`HingeConnector` 只接受 `left` / `right`，缺了就报错。
+- 铰链侧 `door_hinge_side` **由板件阶段给**，随门板进冻结文件；制造只读（`_resolve_door_hinge_sides`）。只有老冻结文件里的门板没带这个值时才回退到按门序派生（`_legacy_door_hinge_sides`：单门读 `requested_options`，双门左 left、右 right，最多两扇）。`HingeConnector` 只接受 `left` / `right`，缺了就报错。
 
 ## 五金命名约定
 
@@ -77,7 +77,7 @@
 | 想改什么 | 去哪改 |
 |---|---|
 | 门宽 / 门高 | `domain/skills/panel-plan/scripts/furniture_panel_planning/topology_solver.py`（`_door_panels` 的 `dw`/`dh` 公式） |
-| 铰链侧（左/右） | `domain/skills/manufacture-plan/scripts/furniture_manufacturing/manufacturing_bom.py`（`_derive_door_hinge_sides`；单门来自 `stage_inputs.manufacturing` 的 `door_hinge_side`） |
+| 铰链侧（左/右） | 板件阶段：`panel-plan` 的 `door_hinges` → 门板 `door_hinge_side`（规则见 `panel-plan/references/door-hinge-side.md`）。制造只在老冻结文件上回退：`manufacturing_bom._legacy_door_hinge_sides`（单门读 `stage_inputs.manufacturing` 的 `door_hinge_side`） |
 | 铰链数量（按门高分档） | `domain/skills/manufacture-plan/scripts/furniture_manufacturing/hardware_rules.yaml`（`hinge_drilling.count_by_door_height`） |
 | 杯孔直径 / 深度 | 同上（`hinge_drilling.cup_by_variant_group`） |
 | 杯孔到门边距离 | 同上（`hinge_drilling.position.edge_offset_mm`） |

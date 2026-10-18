@@ -876,7 +876,8 @@ class OpenProjectPreviewTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertEqual(source.count("_LOCAL_HOSTS"), 2)  # 定义一次 + 判据里读一次
         # 数一遍"每个写端点都走同一道门"：端点加一个，这里就加一。
-        # （顺纹保存 `cabinets/{id}/grain` 是后加的，加它时这里从 12 改成 13。）
+        # （板件属性保存那一条把原来的顺纹保存端点顶掉了——顺纹 + 铰链侧现在一次提交，
+        #   所以端点总数没变，仍是 13。）
         self.assertEqual(
             source.count("if not may_edit(request):")
             + room_http.count("if not may_edit(request):"),

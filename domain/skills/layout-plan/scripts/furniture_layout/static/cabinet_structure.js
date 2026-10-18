@@ -105,21 +105,26 @@ function textureFromCanvas(canvas) {
 }
 
 function materialFor(kind, texture) {
-  if (kind === "white") {
-    return new THREE.MeshStandardMaterial({
-      color: WHITE_FACE,
-      roughness: 0.34,
-      metalness: 0.0,
-      side: THREE.DoubleSide,
-    });
-  }
-  return new THREE.MeshStandardMaterial({
-    color: WOOD_BASE,
-    map: texture,
+  // **不要 DoubleSide**：板件之间的接缝面本来就是共面的（层板端面贴着中立板、
+  // 底板贴着侧板……），双面渲染会让这对共面三角形同时参与深度测试，转一下就闪。
+  // 盒子是闭合体，只看外面用默认的 FrontSide 就够。
+  // `polygonOffset` 往后退一点，让描边线（贴着板面画的那圈）稳稳压在上面，
+  // 否则线与面同深度，也会闪。
+  const base = {
     roughness: 0.72,
     metalness: 0.0,
-    side: THREE.DoubleSide,
-  });
+    polygonOffset: true,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1,
+  };
+  if (kind === "white") {
+    return new THREE.MeshStandardMaterial({
+      ...base,
+      color: WHITE_FACE,
+      roughness: 0.34,
+    });
+  }
+  return new THREE.MeshStandardMaterial({ ...base, color: WOOD_BASE, map: texture });
 }
 
 // 环顾一圈的方向（three.js 坐标，已经含 Z 朝上 → Y 朝上的那次旋转）。
@@ -161,16 +166,21 @@ export function grainLabel(axis) {
 
 // 环顾一圈的方向（three.js 坐标，已经含 Z 朝上 → Y 朝上的那次旋转）。
 //
-// 换算关系是 `世界 = (柜X, 柜Z, -柜Y)`，所以**柜体 +Y（门那一面）在世界里是 -Z**：
-// 「正面（门）」必须站在 -Z 看，站到 +Z 看到的是背板。这两个弄反的话，人会以为
-// 门板没画出来（实测踩过）。左右同理：站在门前看，柜体 +X 在人右手边，所以
-// 「左侧」= 从 -X 看、「右侧」= 从 +X 看。
+// 换算关系是 `世界 = (柜宽 − 柜X, 柜Z, -柜Y)`，其中 x 那次**镜像**是必须的：
+// 柜体坐标是「X 宽向右、Y 朝门、Z 朝上」，而站在门前看（门朝你），右手系里
+// 柜体 +X 必然落在人的**左手边**——数据却把低 X 叫 `left_side_panel`。不镜像的话
+// 整台柜子在页面上是反的：左侧板画在右边，`hinge_side="left"` 的门开到右边。
+// 所以这里按「低 X = 屏幕左」渲染；柜宽中点是不动点，取景中心不受影响。
+//
+// **柜体 +Y（门那一面）在世界里是 -Z**：「正面（门）」必须站在 -Z 看，站到 +Z
+// 看到的是背板。这两个弄反的话，人会以为门板没画出来（实测踩过）。
+// 镜像之后，「左侧」= 从 +X 看、「右侧」= 从 -X 看。
 const VIEWS = {
-  iso: [0.78, 0.62, -0.86],
+  iso: [-0.78, 0.62, -0.86],
   front: [0, 0.22, -1.25],
   back: [0, 0.22, 1.25],
-  left: [-1.25, 0.22, -0.08],
-  right: [1.25, 0.22, -0.08],
+  left: [1.25, 0.22, -0.08],
+  right: [-1.25, 0.22, -0.08],
   top: [0, 1.35, -0.28],
 };
 
@@ -186,7 +196,7 @@ export function mountCabinetStructure(options) {
     filters = [],
     viewButtons = [],
     toggles = {},
-    grainSave = {},
+    panelSave = {},
   } = options;
 
   const panelList = Array.isArray(payload.panels) ? payload.panels : [];
@@ -199,14 +209,15 @@ export function mountCabinetStructure(options) {
   // 整台柜子进镜头要多少距离：把八个角投到「右 / 上 / 沿视线」三个轴上再解。
   // 用外接球（半径 × 常数）会算得过远——球把柜子外面的空处也算进去了。
   //
-  // **取景一律用世界坐标**（`world = (柜X, 柜Z, -柜Y)`），和 VIEWS 同一套；
-  // 柜体坐标和世界坐标差着那次 Z→Y 的旋转，混着用会瞄错方向（实测踩过）。
+  // **取景一律用世界坐标**（`world = (柜宽−柜X, 柜Z, -柜Y)`，含那次镜像），和 VIEWS
+  // 同一套；柜体坐标和世界坐标差着一次镜像加一次 Z→Y 的旋转，混着用会瞄错方向（实测踩过）。
+  // 柜宽中点是镜像的不动点，所以取景中心还是 (宽/2, 高/2, -深/2)。
   const centerWorld = new THREE.Vector3(width / 2, height / 2, -depth / 2);
   const CORNERS = [];
   for (const x of [0, width]) {
     for (const y of [0, depth]) {
       for (const z of [0, height]) {
-        CORNERS.push(new THREE.Vector3(x, z, -y));
+        CORNERS.push(new THREE.Vector3(width - x, z, -y));
       }
     }
   }
@@ -300,6 +311,9 @@ export function mountCabinetStructure(options) {
   const FRONT_TYPES = new Set(["door", "drawer_front"]);
   const BACK_TYPES = new Set(["back", "back_rail"]);
 
+  // 开门最多转到 85°：转到 90° 时门板和侧板共面，看着像一块贴片，也和「拆开」分不清。
+  const MAX_OPEN = Math.PI * 0.5 * 0.95;
+
   const isFrontPanel = (panel) => FRONT_TYPES.has(panel.panel_type);
 
   // 材料只有两种，所以「白色」直接用投影给的材料名。
@@ -329,7 +343,8 @@ export function mountCabinetStructure(options) {
     }
     const mesh = new THREE.Mesh(boxGeometry, material);
     mesh.scale.set(sx, sy, sz);
-    const home = new THREE.Vector3(px + sx / 2, py + sy / 2, pz + sz / 2);
+    // 世界 x 是镜像过的（柜宽 − 柜X）：低 X 落在屏幕左侧，见文件顶部 VIEWS 的说明。
+    const home = new THREE.Vector3(width - (px + sx / 2), py + sy / 2, pz + sz / 2);
     mesh.position.copy(home);
     const edges = new THREE.LineSegments(
       edgeGeometry,
@@ -369,6 +384,8 @@ export function mountCabinetStructure(options) {
     back: true,
     wire: false,
     explode: 0,
+    // 开门角度（0–1），只作用在有铰链侧的门上。
+    open: 0,
     hovered: null,
     // 鼠标压在哪一块板的哪一个面上（'px'/'nx'/'py'/'ny'/'pz'/'nz'）。只看方向，不看位置。
     hoverFace: null,
@@ -398,6 +415,30 @@ export function mountCabinetStructure(options) {
         : record.home.clone();
       record.mesh.position.copy(position);
       record.edges.position.copy(position);
+
+      // 开门：绕门的一条竖边转。**柜体数据的左右和屏幕相反**（世界 x 镜像过），
+      // 所以「左开＝铰链在柜体低 X 那条边＝屏幕上看到的左边」。绕 z 轴转，
+      // 门心相对铰链边的偏移是半个门宽；往柜外（+Y，也就是朝人）转。
+      // 铰链侧由**板件阶段**给（`hinge_side`）；没给的门不动——它还没定
+      // 往哪边开，按门序猜一个就是替人做决定。
+      const hinge = hingeSideOf(panel);
+      let angle = 0;
+      if ((hinge === "left" || hinge === "right") && state.open > 0) {
+        angle = (hinge === "left" ? -1 : 1) * state.open * MAX_OPEN;
+      }
+      if (angle !== 0) {
+        // 铰链边在门心哪一侧：左开在世界 x 的**大**的一侧（镜像后）。
+        const arm = (hinge === "left" ? 1 : -1) * (shape[0] / 2);
+        // 铰链轴跟着「拆开」一起位移，否则门会绕着空气转。
+        const pivotX = record.home.x + arm + (position.x - record.home.x);
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+        position.set(pivotX - arm * cos, position.y - arm * sin, position.z);
+        record.mesh.position.copy(position);
+        record.edges.position.copy(position);
+      }
+      record.mesh.rotation.z = angle;
+      record.edges.rotation.z = angle;
 
       const suppressed = isSuppressed(panel);
       record.mesh.visible = state.visible && !suppressed;
@@ -477,6 +518,9 @@ export function mountCabinetStructure(options) {
       centerWorld.y + direction[1] * distance,
       centerWorld.z + direction[2] * distance
     );
+    // 近平面跟着取景距离走。固定 `near = 1` 而 `far` 是几万，深度精度全耗在近处，
+    // 远处相邻两张面就会打架——转起来是"闪烁/起条纹"。按距离给 near，精度能好几倍。
+    camera.near = Math.max(1, distance / 1000);
     camera.far = distance * 6;
     camera.updateProjectionMatrix();
     controls.target.copy(centerWorld);
@@ -508,6 +552,12 @@ export function mountCabinetStructure(options) {
   function setExplode(percent) {
     state.explode = percent / 100;
     if (toggles.explode) toggles.explode.value = String(percent);
+    paint();
+  }
+
+  function setOpen(percent) {
+    state.open = percent / 100;
+    if (toggles.open) toggles.open.value = String(percent);
     paint();
   }
 
@@ -578,7 +628,7 @@ export function mountCabinetStructure(options) {
       list.append(dt, dd);
     }
     // 顺纹方向：这是**板件的属性**，点一下就在竖纹 / 横纹之间切换（不是查看器上的显示开关）。
-    // 只读分享的那一页不给改：`grainSave.editor` 缺了就当普通一行文字。
+    // 只读分享的那一页不给改：`panelSave.editor` 缺了就当普通一行文字。
     const grainDt = document.createElement("dt");
     grainDt.textContent = "顺纹方向";
     const grainDd = document.createElement("dd");
@@ -586,7 +636,7 @@ export function mountCabinetStructure(options) {
     const label = direction
       ? `${GRAIN_DIRECTION_LABEL[direction]}${grainIsPending(panel.id) ? "（待保存）" : ""}`
       : grainLabel(panel.grain.axis);
-    if (grainSave.editor && direction) {
+    if (panelSave.editor && direction) {
       // **点这一行才改纹理**（文字和画面同时变）。点板件只是选中——改数据不能和点选同一个动作。
       const button = document.createElement("span");
       button.className = "grainrow";
@@ -600,8 +650,67 @@ export function mountCabinetStructure(options) {
       grainDd.textContent = label;
     }
     list.append(grainDt, grainDd);
+    if (panel.panel_type === "door") {
+      // 铰链侧：**左开＝铰链在左边，右开＝铰链在右边**，不解释拉手。
+      // 对开腔的两扇由几何定死（左扇挂左、右扇挂右），这里只显示结果、不给改；
+      // 单开腔没定的时候就给两个按钮让人选——这就是"提示客户选"的那一步。
+      const hingeDt = document.createElement("dt");
+      hingeDt.textContent = "铰链侧";
+      const hingeDd = document.createElement("dd");
+      const current = hingeSideOf(panel);
+      const label = current === "left" ? "左开" : current === "right" ? "右开" : "还没定";
+      if (panel.hinge_locked || !panelSave.editor) {
+        hingeDd.textContent = label;
+        if (panel.hinge_locked) {
+          hingeDd.title = "对开腔由几何决定：左扇挂左、右扇挂右，不能单独改";
+        }
+      } else {
+        const group = document.createElement("span");
+        group.className = "hingerow";
+        for (const [side, text] of [["left", "左开"], ["right", "右开"]]) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.textContent = text;
+          button.className = "chip";
+          button.setAttribute("aria-pressed", String(current === side));
+          button.addEventListener("click", () => setHingeSide(panel.id, side));
+          group.append(button);
+        }
+        hingeDd.append(group);
+        const hint = document.createElement("span");
+        hint.className = "hint-inline";
+        hint.textContent = current
+          ? hingeIsPending(panel.id) ? "（待保存）" : ""
+          : "还没定——选一个，再点「保存并冻结」";
+        if (hint.textContent) hingeDd.append(hint);
+      }
+      list.append(hingeDt, hingeDd);
+    }
     detail.append(title, list);
-    renderGrainEditor();
+    renderPendingEdits();
+  }
+
+  // 铰链侧：先攒着，和顺纹一起点「保存并冻结」才提交。
+  const hingeEdits = new Map();
+
+  function hingeIsPending(panelId) {
+    return hingeEdits.has(panelId);
+  }
+
+  // 当前生效的铰链侧：攒过的看攒的值，否则看板件自己的。空 = 还没定。
+  function hingeSideOf(panel) {
+    return hingeEdits.has(panel.id) ? hingeEdits.get(panel.id) : (panel.hinge_side || "");
+  }
+
+  // 选左开 / 右开。选回板件原本的值就等于撤销这条改动。
+  function setHingeSide(panelId, side) {
+    const panel = panelById(panelId);
+    if (!panel) return;
+    if (side === (panel.hinge_side || "")) hingeEdits.delete(panelId);
+    else hingeEdits.set(panelId, side);
+    if (state.selected === panelId) renderDetail(panel);
+    else renderPendingEdits();
+    paint();
   }
 
   // 顺纹编辑：先攒着，点一次「保存并冻结」才提交一次修订。
@@ -707,7 +816,7 @@ export function mountCabinetStructure(options) {
     }
     applyGrainAxis(panel);
     if (state.selected === panelId) renderDetail(panel);
-    else renderGrainEditor();
+    else renderPendingEdits();
     paint();
   }
 
@@ -734,10 +843,11 @@ export function mountCabinetStructure(options) {
   // 这块区域**不属于顺纹**：以后别的板件属性也从这里改、一起存，所以它只显示"还没保存的
   // 改动"和一颗「保存并冻结」，不叫「保存顺纹」。没有"放弃改动"——再点一次就切回去了，
   // 想撤销直接切回原样即可。
-  function renderGrainEditor() {
-    const { editor, pending, save, status } = grainSave;
+  function renderPendingEdits() {
+    const { editor, pending, save, status } = panelSave;
     if (!editor) return;
-    editor.hidden = grainEdits.size === 0;
+    const total = grainEdits.size + hingeEdits.size;
+    editor.hidden = total === 0;
     if (pending) {
       pending.replaceChildren();
       for (const [panelId, edit] of grainEdits) {
@@ -754,16 +864,24 @@ export function mountCabinetStructure(options) {
         );
         pending.append(item);
       }
+      for (const [panelId, side] of hingeEdits) {
+        const panel = panelById(panelId);
+        const item = document.createElement("li");
+        const name = document.createElement("b");
+        name.textContent = panel ? panel.name : panelId;
+        item.append(name, document.createTextNode(side === "left" ? "左开" : "右开"));
+        pending.append(item);
+      }
     }
-    if (save) save.disabled = grainEdits.size === 0;
+    if (save) save.disabled = total === 0;
     if (status) status.textContent = "";
   }
 
-  // 保存这一页上所有还没落盘的改动，然后重新冻结。目前只有顺纹方向一种，
-  // 但接口本身就是"把攒下的改动一次提交"，别的属性接进来不用改这里。
+  // 保存这一页上所有还没落盘的改动，然后重新冻结。现在有两种：顺纹方向、门板铰链侧。
+  // 接口本身就是"把攒下的改动一次提交"，再加别的属性也不用改这里。
   async function saveChanges() {
-    const { url, version, save, status } = grainSave;
-    if (!url || !version || grainEdits.size === 0) return;
+    const { url, version, save, status } = panelSave;
+    if (!url || !version || grainEdits.size + hingeEdits.size === 0) return;
     if (save) save.disabled = true;
     if (status) status.textContent = "正在保存…";
     try {
@@ -774,6 +892,7 @@ export function mountCabinetStructure(options) {
         body: JSON.stringify({
           expected_version: version,
           axes: Object.fromEntries([...grainEdits].map(([id, edit]) => [id, edit.axis])),
+          hinges: Object.fromEntries([...hingeEdits]),
         }),
       });
       if (!response.ok) {
@@ -789,7 +908,7 @@ export function mountCabinetStructure(options) {
     }
   }
 
-  if (grainSave.save) grainSave.save.addEventListener("click", saveChanges);
+  if (panelSave.save) panelSave.save.addEventListener("click", saveChanges);
 
   function select(panelId) {
     state.selected = panelId;
@@ -925,6 +1044,9 @@ export function mountCabinetStructure(options) {
   if (toggles.explode) {
     toggles.explode.addEventListener("input", () => setExplode(toggles.explode.value));
   }
+  if (toggles.open) {
+    toggles.open.addEventListener("input", () => setOpen(toggles.open.value));
+  }
   for (const filter of filters) {
     filter.addEventListener("change", () => {
       const active = new Set(
@@ -941,7 +1063,7 @@ export function mountCabinetStructure(options) {
   });
 
 
-  // 地址栏可以指点初始状态：`?view=front&doors=0&wire=1&explode=60`。
+  // 地址栏可以指点初始状态：`?view=front&doors=0&wire=1&explode=60&open=80`。
   // 只影响打开时看哪一面，不改数据——分享一个视角、或者截图核对都靠它。
   const query = new URLSearchParams(window.location.search);
   const requestedView = query.get("view");
@@ -955,6 +1077,10 @@ export function mountCabinetStructure(options) {
     state.filter = (panel) => groups.has(panel.material) || groups.has(panel.assembly);
   }
   if (Number.isFinite(requestedExplode)) setExplode(Math.min(100, Math.max(0, requestedExplode)));
+  const requestedOpen = Number(query.get("open"));
+  if (Number.isFinite(requestedOpen) && query.get("open") !== null) {
+    setOpen(Math.min(100, Math.max(0, requestedOpen)));
+  }
 
   renderSummary();
   renderRows();

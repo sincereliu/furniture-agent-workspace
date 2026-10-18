@@ -241,7 +241,7 @@ class AgentToolSurfaceTests(unittest.TestCase):
             {
                 "project_id": project_id,
                 "stage": "panel_plan",
-                "stage_input": panel_parameters(n_doors=1),
+                "stage_input": panel_parameters(n_doors=1, door_hinges=["left"]),
             },
         )
         self.assertTrue(second["ok"], second)
@@ -530,7 +530,7 @@ class AgentToolSurfaceTests(unittest.TestCase):
         self.assertIsNone(summary["project"]["current_view"])
 
     def test_run_next_wraps_flat_manufacturing_stage_input(self) -> None:
-        project_id = self._confirmed_panels(n_doors=1)
+        project_id = self._confirmed_panels(n_doors=1, door_hinges=["left"])
         generated = self.session.call(
             TOOL_RUN_NEXT,
             {
@@ -552,7 +552,7 @@ class AgentToolSurfaceTests(unittest.TestCase):
         self.assertNotIn("appearance", view["cabinets"][0]["bom"]["requested_options"])
 
     def test_nested_manufacturing_stage_input_still_works(self) -> None:
-        project_id = self._confirmed_panels(n_doors=1)
+        project_id = self._confirmed_panels(n_doors=1, door_hinges=["left"])
         generated = self.session.call(
             TOOL_RUN_NEXT,
             {
@@ -634,7 +634,7 @@ class OrchestratorRunNextStageInputTests(unittest.TestCase):
         orchestrator.confirm_stage(project)
         result = orchestrator.run_next(
             project,
-            stage_input=panel_parameters(n_doors=1),
+            stage_input=panel_parameters(n_doors=1, door_hinges=["left"]),
         )
         spec = result.revision.stage_outputs["panel_plan"]["cabinets"][0]["spec"]
         self.assertEqual(spec["n_doors"], 1)
@@ -646,7 +646,7 @@ class OrchestratorRunNextStageInputTests(unittest.TestCase):
             cabinet_layout(furniture_category="floor_cabinet", width=800, depth=600, height=1000, confirmed=True),
         )
         orchestrator.confirm_stage(project)
-        orchestrator.run_next(project, stage_input=panel_parameters(n_doors=1))
+        orchestrator.run_next(project, stage_input=panel_parameters(n_doors=1, door_hinges=["left"]))
         orchestrator.confirm_stage(project)
         result = orchestrator.run_next(
             project,

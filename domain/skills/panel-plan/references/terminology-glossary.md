@@ -89,7 +89,8 @@
 - `door_margin`：用 `front_face_margin`。
 - `door_count`：柜门数量用 `n_doors`。房间门洞是 layout 的 `openings[]`（`kind=door`），不是本阶段字段。
 - `origin_x_mm`、`origin_y_mm`、`origin_z_mm`、`rotation_z_deg`、`room_id`：布局摆放字段。CAD 单元上出现时本阶段忽略，不得写入板件提案。
-- `movable_shelf_connector`、`door_hinge_side`：制造阶段输入，不是板件 spec 字段。
+- `movable_shelf_connector`：制造阶段输入，不是板件 spec 字段。
+- `door_hinge_side`（单个字符串）：**旧写法**。现在逐扇给，提案用 `door_hinges`，落到门板上的属性叫 `door_hinge_side`；板件阶段只接受 `door_hinges`。见 [门板铰链侧](door-hinge-side.md)。
 - `back_mount=auto`、`gap_below_mm="auto"`：不再接受；背板必须写 `groove`/`insert`/`cover`，计算层只写 `null`。
 - `toe_kick_support_count=null`：不再接受。省略字段由外形宽展开；要指定数量就写非负整数。
 - `connection`：接触上的连不连。本阶段接触不接受该字段。

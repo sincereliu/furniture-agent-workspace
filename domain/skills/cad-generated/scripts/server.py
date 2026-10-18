@@ -59,7 +59,7 @@ from furniture_workflow.project_layout_edit import (
     VersionConflict,
     edit_project_decisions,
     edit_project_layout,
-    save_cabinet_grain,
+    save_cabinet_panel_edits,
     undo_layout_edit,
 )
 from furniture_workflow.workflow_lease import (
@@ -250,18 +250,21 @@ class ProjectDecisionRequest(BaseModel):
     target: str = Field(..., min_length=1, description="要表态的那条 decision id")
 
 
-class CabinetGrainSaveRequest(BaseModel):
-    """页面上改若干块板的**顺纹方向**，然后重新冻结板件。
+class CabinetPanelEditRequest(BaseModel):
+    """页面上改若干块板的**板件属性**（顺纹方向 / 门板铰链侧），然后重新冻结板件。
 
-    `axes` 是「板件 id → 顺纹轴」：`x` 沿宽 / `y` 沿深 / `z` 沿高 / `none` 不限。
-    只递板件 id 和轴，其它一律由服务端按冻结结构自己去查——页面递不进自由文本，
+    - `axes`：板件 id → 顺纹轴（`x` / `y` / `z` / `none`）。
+    - `hinges`：**门板** id → `left` / `right`。对开腔那两扇由几何决定，单独改会被拒。
+
+    只递板件 id 和值，其它一律由服务端按冻结结构自己去查——页面递不进自由文本，
     也改不了尺寸位置。一次请求只改这一台柜。
     """
 
     model_config = ConfigDict(extra="forbid")
 
     expected_version: str = Field(..., min_length=1, description="页面最近看到的 version")
-    axes: dict[str, str] = Field(..., min_length=1, description="板件 id → 顺纹轴")
+    axes: dict[str, str] | None = Field(default=None, description="板件 id → 顺纹轴")
+    hinges: dict[str, str] | None = Field(default=None, description="门板 id → left/right")
 
 
 @app.get("/health")
@@ -692,48 +695,52 @@ async def edit_project_layout_endpoint(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-@app.post("/api/project/{project_id}/cabinets/{cabinet_id}/grain")
-async def save_cabinet_grain_endpoint(
+def _panel_edit_error(exc: Exception) -> HTTPException:
+    """板件写路径的异常 → HTTP 响应。"""
+    if isinstance(exc, LeaseHeld):
+        return HTTPException(status_code=423, detail=_lease_held_detail(exc))
+    if isinstance(exc, LayoutEditDisabled):
+        return HTTPException(status_code=403, detail=str(exc))
+    if isinstance(exc, VersionConflict):
+        return HTTPException(
+            status_code=409,
+            detail={"message": str(exc), "current_version": exc.current_version},
+        )
+    return HTTPException(status_code=422, detail=str(exc))
+
+
+@app.post("/api/project/{project_id}/cabinets/{cabinet_id}/panels")
+async def save_cabinet_panel_edits_endpoint(
     project_id: str,
     cabinet_id: str,
-    req: CabinetGrainSaveRequest,
+    req: CabinetPanelEditRequest,
     request: Request,
 ):
-    """改一台柜子里若干块板的顺纹方向：落一个新 Revision 并**重新冻结**板件。
+    """改一台柜子里若干块板的**板件属性**（顺纹方向 / 门板铰链侧）并重新冻结板件。
 
-    与布局编辑同一套门：本机来源 → 灰度开关 → 编辑租约 → 版本对得上。任何一步不过都不落盘。
+    与布局编辑同一套门（本机来源 → 灰度开关 → 编辑租约 → 版本对得上），任何一步
+    不过都不落盘。顺纹和铰链侧可以在**一次提交**里一起改，只追加一个 Revision。
 
-    注意它会**作废下游**（制造 / BOM / CAD / 交付）：顺纹方向是板件的属性，改了它，
-    依赖板件的那几份产物就不再对应当前板件。这是有意的——页面上的「保存并冻结」
-    必须把这件事说清楚。
+    它会**作废下游**（制造 / BOM / CAD / 交付）：这些都依赖板件，改了就得重算。
     """
     if not may_edit(request):
-        raise HTTPException(status_code=403, detail="changing panel grain is local only")
+        raise HTTPException(status_code=403, detail="changing panels is local only")
+    if not req.axes and not req.hinges:
+        raise HTTPException(status_code=422, detail="nothing to change")
     project = _load_project(project_id)
     try:
-        return save_cabinet_grain(
+        return save_cabinet_panel_edits(
             project,
             cabinet_id,
-            req.axes,
+            axes=req.axes,
+            hinges=req.hinges,
             expected_version=req.expected_version,
             workspace_root=WORKSPACE_ROOT,
             store_root=STORE_ROOT,
             lease_token=request.headers.get(_LEASE_HEADER) or None,
         )
-    except LeaseHeld as exc:
-        raise HTTPException(status_code=423, detail=_lease_held_detail(exc)) from exc
-    except LayoutEditDisabled as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
-    except VersionConflict as exc:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "message": str(exc),
-                "current_version": exc.current_version,
-            },
-        ) from exc
-    except (TypeError, ValueError) as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (LeaseHeld, LayoutEditDisabled, VersionConflict, TypeError, ValueError) as exc:
+        raise _panel_edit_error(exc) from exc
 
 
 @app.post("/api/project/{project_id}/decisions")

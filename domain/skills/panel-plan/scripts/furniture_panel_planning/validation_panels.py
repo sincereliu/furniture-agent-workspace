@@ -132,12 +132,34 @@ def _validate_doors(
             "n_doors",
         )
         return report
+    expected = door_panel_boxes(spec, structure)
     _mismatch_boxes(
         report,
         "DOOR_GEOMETRY_MISMATCH",
         {item.role: item for item in doors},
-        door_panel_boxes(spec, structure),
+        expected,
     )
+    by_role = {item.role: item for item in doors}
+    for box in expected:
+        panel = by_role.get(box.panel_id)
+        if panel is not None and panel.door_hinge_side != box.door_hinge_side:
+            report.add_error(
+                "DOOR_HINGE_SIDE_MISMATCH",
+                f"{box.panel_id} hinge side does not match the admitted layout",
+                box.panel_id,
+            )
+    # 对开腔的铰链侧是几何逼出来的，一定有值；还能留空的只剩单开腔（和本拓扑
+    # 表达不了的多扇腔）。这些要客户定：**阶段只报警告，不硬停** —— 停在这里的话
+    # 板件页就没有这台柜，客户连"点一下左开/右开"的机会都没有。真正的闸门在制造：
+    # 没有铰链侧的门排不了铰链孔，那里会拦。
+    unknown = [item.role for item in doors if not item.door_hinge_side]
+    if unknown:
+        report.add_warning(
+            "DOOR_HINGE_SIDE_UNKNOWN",
+            "这些门还没定铰链侧，要在板件页上选左开/右开，或者在提案里给 door_hinges："
+            + ", ".join(unknown),
+            "door_hinges",
+        )
     return report
 
 

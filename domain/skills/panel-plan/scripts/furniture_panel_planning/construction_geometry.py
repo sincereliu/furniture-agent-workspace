@@ -33,6 +33,8 @@ class PanelBox:
     cavity_count: int = 1
     #: 这块板两侧的支撑（侧板或中立板）。只有分段层板用得上；不参与几何核对。
     supports: tuple[str, ...] = ()
+    #: 门板的铰链侧（"left" / "right"）；不是门的板件、以及几何也定不下来的门留空。
+    door_hinge_side: str = ""
 
     @property
     def geometry(self) -> tuple[float, float, float, float, float, float]:
@@ -91,6 +93,100 @@ def door_interior_report(spec: FurnitureSpec) -> dict[str, Any]:
     return evaluate_interior(_interior_payload(spec))
 
 
+def door_hinge_groups(
+    spec: FurnitureSpec,
+    structure: CabinetStructure,
+) -> list[list[int]]:
+    """门按「腔」分组：每组的门下标（从左到右）。**唯一一份分腔口径**。
+
+    页面要判断"这扇门能不能自己改"、板件要推导对开腔的铰链侧，都从这里出——
+    别再各写一遍"被中立板切开的内空"，那是两份会漂的几何。
+    """
+    report = door_interior_report(spec)
+    if not report:
+        return []
+    doors = report["doors"]
+    starts = [float(value) for value in doors["door_starts_mm"]]
+    widths = [float(value) for value in doors["door_widths_mm"]]
+    cavities = interior_cavity_bounds(spec, structure)
+    groups: dict[int, list[int]] = {}
+    for index, (start, width) in enumerate(zip(starts, widths)):
+        center = start + width / 2.0
+        owner = next(
+            (
+                position
+                for position, (left, right) in enumerate(cavities)
+                if left <= center <= right
+            ),
+            None,
+        )
+        if owner is None:
+            # 门心不落在任何腔里说明几何已经乱了，不猜一个腔顶上。
+            raise ValueError(f"door {index + 1} is not inside any cavity")
+        groups.setdefault(owner, []).append(index)
+    return [groups[key] for key in sorted(groups)]
+
+
+def door_hinge_sides(
+    spec: FurnitureSpec,
+    structure: CabinetStructure,
+) -> list[str]:
+    """每扇门挂哪条竖边，从左到右（`""` = 还没定）。
+
+    能不能定，只看这一扇门跟谁同一个腔：
+
+    - **对开腔（一个腔两扇）**：几何逼死——左扇挂左、右扇挂右，否则两扇会撞。
+      提案写反了直接拒，不让"客户指定"去覆盖一条几何事实。
+    - **单开腔（一个腔一扇）**：往走道开还是往墙开是设计决定，几何里没有答案；
+      提案给了就用，没给就留空——留空意味着这扇门暂时不能开门、也不能排铰链孔。
+      板件阶段对留空只报警告，客户在板件页上点左开/右开补。
+    - **一个腔三扇以上**：本拓扑表达不了，一律留空。
+    """
+    groups = door_hinge_groups(spec, structure)
+    if not groups:
+        return []
+    if spec.door_hinges:
+        given = list(spec.door_hinges)
+        for indices in groups:
+            if len(indices) == 2:
+                left, right = indices
+                if (given[left], given[right]) != ("left", "right"):
+                    raise ValueError(
+                        "a two-door cavity must be hinged left then right"
+                    )
+        return given
+
+    count = sum(len(indices) for indices in groups)
+    resolved = [""] * count
+    for indices in groups:
+        if len(indices) == 2:
+            resolved[indices[0]] = "left"
+            resolved[indices[1]] = "right"
+    return resolved
+
+
+def door_hinge_locks(
+    spec: FurnitureSpec,
+    structure: CabinetStructure,
+) -> dict[str, bool]:
+    """门角色 → 铰链侧是否被几何锁死（和别的门共用一个腔）。
+
+    板件页据此把「左开/右开」按钮关掉：对开腔那两扇选了也只会被拒。
+    键用**门角色名**（`door_1` / `left_door` / `single_door`），和板件 id 的后半段一致。
+    """
+    groups = door_hinge_groups(spec, structure)
+    count = sum(len(indices) for indices in groups)
+    locked = [False] * count
+    for indices in groups:
+        if len(indices) >= 2:
+            for index in indices:
+                locked[index] = True
+    return {
+        _door_panel_id(index, count): locked[index - 1]
+        for index in range(1, count + 1)
+    }
+
+
 def door_panel_boxes(
     spec: FurnitureSpec,
     structure: CabinetStructure,
@@ -102,6 +198,7 @@ def door_panel_boxes(
     doors = report["doors"]
     widths = [float(value) for value in doors["door_widths_mm"]]
     starts = [float(value) for value in doors["door_starts_mm"]]
+    hinges = door_hinge_sides(spec, structure)
     height = (
         structure.height
         - structure.toe_kick_height
@@ -118,6 +215,7 @@ def door_panel_boxes(
             pos_x=start,
             pos_y=pos_y,
             pos_z=pos_z,
+            door_hinge_side=hinges[index - 1] if index <= len(hinges) else "",
         )
         for index, (start, width) in enumerate(zip(starts, widths), start=1)
     ]
