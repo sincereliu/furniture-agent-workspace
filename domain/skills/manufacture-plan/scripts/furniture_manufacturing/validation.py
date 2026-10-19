@@ -21,7 +21,7 @@ from .manufacturing_bom import (
     collect_features,
     emit_drilled_holes,
 )
-from .panel_ids import index_by_role, panel_role
+from .panel_ids import panel_role
 
 
 def validate_manufacturing(
@@ -140,6 +140,11 @@ def validate_manufacturing(
         "top_back_groove",
         "bottom_back_groove",
     }
+    # 中立板通到柜背，两侧各开一条槽，所以预期的槽会随立板数增长。
+    for divider in (item for item in bom.panels if item.panel_type == "divider"):
+        role = panel_role(divider.label)
+        expected_back_groove_ids.add(f"{role}_left_back_groove")
+        expected_back_groove_ids.add(f"{role}_right_back_groove")
     back_grooves = [
         groove for groove in grooves if "back_groove" in groove.feature_id
     ]
@@ -153,7 +158,8 @@ def validate_manufacturing(
     ):
         report.add_error(
             "INCOMPLETE_BACK_GROOVES",
-            "grooved back strategy requires four target-specific groove cuts",
+            "grooved back strategy requires one groove per mating face "
+            "(four carcass panels plus both faces of every divider)",
             "operations",
         )
     if back_mount == "groove":
@@ -199,11 +205,12 @@ def validate_manufacturing(
             "every manufacturing panel must retain the resolved back_mount",
             "panels",
         )
-    back_panel = index_by_role(bom.panels).get("back_panel")
+    # 背板可能按中立板断成几块（back_panel_1…n），所以按类型逐块核对封边。
+    back_panels = [item for item in bom.panels if item.panel_type == "back"]
     expected_back_edges = set() if back_mount == "groove" else {"四边"}
-    if (
-        back_panel is None
-        or edge_banding_by_panel.get(back_panel.label, set()) != expected_back_edges
+    if not back_panels or any(
+        edge_banding_by_panel.get(panel.label, set()) != expected_back_edges
+        for panel in back_panels
     ):
         report.add_error(
             "BACK_EDGE_BANDING_MISMATCH",

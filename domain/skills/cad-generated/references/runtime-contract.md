@@ -87,6 +87,7 @@ store/<project-id>/
     }]
   }],
   "board_thickness": 18, "back_thickness": 9, "door_thickness": 18,
+  "sheet_width_mm": 1220, "sheet_length_mm": 2440,
   "toe_kick_height": 50, "back_offset": 18,
   "front_face_margin": 1.5, "front_gap": 2,
   "groove_depth": 6, "groove_clearance": 1,
@@ -98,7 +99,7 @@ store/<project-id>/
 }
 ```
 
-`rooms[]` 必须非空，房间的 `width_mm/depth_mm/height_mm` 和家具的 `width/depth/height` 必须在布局确认前明确提供（沿墙 `fill` 件的宽度由空段计算）；不再用类别预设替代客户确认的外形尺寸。板件必填字段必须完整提交；料档字段（`board_thickness` / `back_thickness` / `door_thickness` / `drawer_bottom_thickness` / `drawer_back_thickness`）可省略，由车间工艺卡展开（柜体板 18、9 厘背板 9、门与抽屉盒同柜体板）。`toe_kick_support_count` 可省略，由外形宽展开。层板净高整组省略时按内部净高均分。写出的支撑数和净高保持原值。代码不按柜型静默补其他默认方案。完整值经确定性准入后才写入 `panel_plan.cabinets[].spec`。
+`rooms[]` 必须非空，房间的 `width_mm/depth_mm/height_mm` 和家具的 `width/depth/height` 必须在布局确认前明确提供（沿墙 `fill` 件的宽度由空段计算）；不再用类别预设替代客户确认的外形尺寸。板件必填字段必须完整提交；料档字段（`board_thickness` / `back_thickness` / `door_thickness` / `drawer_bottom_thickness` / `drawer_back_thickness`）可省略，由车间工艺卡展开（柜体板 18、9 厘背板 9、门与抽屉盒同柜体板）；板幅 `sheet_width_mm` / `sheet_length_mm` 也可省略（展开成 1220×2440，另一档是 1220×2745，两个一起给或一起省略），它是判"板件进不进得去料"的依据，超尺报 `PANEL_EXCEEDS_SHEET` 拦确认。`toe_kick_support_count` 可省略，由外形宽展开。层板净高整组省略时按内部净高均分。写出的支撑数和净高保持原值。代码不按柜型静默补其他默认方案。完整值经确定性准入后才写入 `panel_plan.cabinets[].spec`。
 
 项目布局只接受明确的 `rooms[]`，由 `ProjectLayout.from_source` 规划。上述 JSON 展示布局和后续阶段的数据归属：创建项目只提交 `name` 和 `rooms`；板件与制造参数分别经 `furniture_run_next` 的 `stage_input` 提交。`stage_inputs_from_spec` 可将同一份结构化数据的板件规范字段路由到 `stage_inputs.panels`，将制造选项（含 `door_hinge_side`、`movable_shelf_connector`、`edge_banding`）和外观路由到 `stage_inputs.manufacturing`。吊柜离地写在 `rooms[].items[].placement.origin_z_mm`；贴顶位置由 LLM 根据明确的房间净高与柜高提出，再由运行时检查。可选 `constraints` 必须有阶段映射；未分类约束在协议路由时拒绝。示例里的 `door_hinge_side` 是制造选项。
 

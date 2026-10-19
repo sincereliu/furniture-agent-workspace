@@ -20,7 +20,9 @@ import yaml
 from .cabinet_frame import CabinetFrame, _negate as negate_axis
 from .cabinet_identity import DEFAULT_CABINET_ID, bind_panels_to_cabinet
 from .construction_geometry import (
+    back_panel_boxes,
     back_rail_boxes,
+    cavity_flanks,
     divider_panel_boxes,
     door_panel_boxes,
     drawer_panel_boxes,
@@ -219,65 +221,67 @@ def _back_panel_variants(
     face_dir: str,
     frame: CabinetFrame,
 ) -> list[PanelPlacement]:
-    """Generate back panel and optional back rails for the selected mount mode."""
+    """背板（每腔一块）与可选的背拉条。
+
+    背板: 外表面=柜体背面, 内表面指向柜内=柜体前面。
+    毫米来自 `construction_geometry.back_panel_boxes`——每腔一块、夹在两侧板/立板
+    之间；这里只摆件，不再自己算宽度。
+    """
     board = spec.board_thickness
-    back_mount = structure.back_mount
-    back_y = structure.back_plane_y
-    # 背板: 外表面=柜体背面, 内表面指向柜内=柜体前面
     outer = face_dir          # frame.back
     inner = negate_axis(outer)  # frame.front
 
+    pieces = back_panel_boxes(spec, structure)
+    count = len(pieces)
     result: list[PanelPlacement] = []
-
-    if back_mount == "groove":
-        groove_d = spec.groove_depth
-        bw = structure.internal_width + 2 * groove_d
-        bh = structure.internal_height + 2 * groove_d
+    for index, box in enumerate(pieces, start=1):
+        if count == 1:
+            name = "背板"
+            if structure.back_mount == "groove":
+                note = f"四边入槽{spec.groove_depth:.0f}mm的成品背板"
+            elif structure.back_mount == "insert":
+                note = "内嵌背板，位于内部净空后侧"
+            else:
+                note = "外盖背板，覆盖整个背面"
+        else:
+            name = f"背板{index}"
+            if structure.back_mount == "insert":
+                note = f"内嵌背板第{index}/{count}块，四边三合一锁在侧板/中立板上"
+            else:
+                note = f"背板第{index}/{count}块，两侧入侧板/中立板的槽"
+        flank_left, flank_right = cavity_flanks(
+            spec, structure, index, count,
+        )
         result.append(PanelPlacement(
-            id="back_panel", name="背板", panel_type="back",
-            size_x=bw, size_y=spec.back_thickness, size_z=bh,
-            pos_x=structure.internal_x_start - groove_d,
-            pos_y=back_y,
-            pos_z=structure.internal_z_start - groove_d,
+            id=box.panel_id, name=name, panel_type="back",
+            size_x=box.size_x, size_y=box.size_y, size_z=box.size_z,
+            pos_x=box.pos_x, pos_y=box.pos_y, pos_z=box.pos_z,
             material_role="back",
-            depends_on=["left_side_panel", "right_side_panel", "top_panel", "bottom_panel"],
+            depends_on=[flank_left, flank_right, "top_panel", "bottom_panel"],
             inner_face=inner, outer_face=outer,
-            note=f"四边入槽{groove_d:.0f}mm的成品背板",
+            note=note,
         ))
+
+    if structure.back_mount == "groove":
         for box in back_rail_boxes(spec, structure):
             index = box.panel_id.rsplit("_", 1)[-1]
+            if box.cavity_count == 1:
+                name = f"背拉条{index}"
+            else:
+                name = f"背拉条(腔{box.cavity_index}·{index})"
+            flank_left, flank_right = cavity_flanks(
+                spec, structure, box.cavity_index, box.cavity_count,
+            )
             result.append(PanelPlacement(
-                id=box.panel_id, name=f"背拉条{index}",
+                id=box.panel_id, name=name,
                 panel_type="back_rail",
                 size_x=box.size_x, size_y=box.size_y, size_z=box.size_z,
                 pos_x=box.pos_x, pos_y=box.pos_y, pos_z=box.pos_z,
                 material_role="carcass",
-                depends_on=["left_side_panel", "right_side_panel"],
+                depends_on=[flank_left, flank_right],
                 inner_face="+y", outer_face="-y",
                 note=f"背板拉条，{box.size_z:.0f}×{board:.0f}mm",
             ))
-
-    elif back_mount == "insert":
-        result.append(PanelPlacement(
-            id="back_panel", name="背板", panel_type="back",
-            size_x=structure.internal_width, size_y=spec.back_thickness, size_z=structure.internal_height,
-            pos_x=structure.internal_x_start, pos_y=back_y, pos_z=structure.internal_z_start,
-            material_role="back",
-            depends_on=["left_side_panel", "right_side_panel", "top_panel", "bottom_panel"],
-            inner_face=inner, outer_face=outer,
-            note="内嵌背板，位于内部净空后侧",
-        ))
-
-    else:  # cover
-        result.append(PanelPlacement(
-            id="back_panel", name="背板", panel_type="back",
-            size_x=structure.width, size_y=spec.back_thickness, size_z=structure.height,
-            pos_x=0.0, pos_y=0.0, pos_z=0.0,
-            material_role="back",
-            depends_on=["left_side_panel", "right_side_panel", "top_panel", "bottom_panel"],
-            inner_face=inner, outer_face=outer,
-            note="外盖背板，覆盖整个背面",
-        ))
 
     return result
 

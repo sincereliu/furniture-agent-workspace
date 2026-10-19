@@ -41,6 +41,7 @@ def panel_parameters(furniture_category: str = "floor_cabinet", **overrides: Any
     wall = furniture_category == "wall_cabinet"
     values = {
         "board_thickness": 18.0, "back_thickness": 9.0, "door_thickness": 18.0,
+        "sheet_width_mm": 1220.0, "sheet_length_mm": 2440.0,
         "toe_kick_height": 0.0 if wall else 50.0, "back_offset": 18.0,
         "front_face_margin": 1.5, "front_gap": 2.0,
         "groove_depth": 6.0, "groove_clearance": 1.0,

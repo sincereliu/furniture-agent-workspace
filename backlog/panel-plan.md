@@ -3,11 +3,10 @@
 这份在 `backlog/` 里，由 git 跟踪，不是技能。做柜子时按正式技能来。上面的 Open / Done 由程序按已落地版本改写，不要手改状态。
 
 <!-- backlog-status:start -->
-file_version: 1
+file_version: 2
 
 ## Open
 
-- full-height-divider version 1 — one full-height divider
 - half-height-divider version 1 — divider stops under the top bay
 - door-rows version 1 — upper and lower door rows
 - pair-grouping version 1 — whether pairs stays
@@ -15,7 +14,9 @@ file_version: 1
 
 ## Done
 
-- (none)
+- full-height-divider version 1 — one full-height divider
+- back-panel-breaks version 1 — back panel cut once per cavity, between the flanking panels
+- sheet-capacity-check version 1 — a panel must fit the shop sheet stock
 <!-- backlog-status:end -->
 
 来源是 rabbit0716 在 2026-10-17 写的那份计划。当时它被放进了 `domain/skills/panel-plan/references/backlog.md`。计划改留在这里。
@@ -23,6 +24,18 @@ file_version: 1
 ## full-height-divider
 
 提案 `dividers: [{seam_index, seam_align?}]` → 运行时调 `evaluate_interior` 取缝与区间 → 物化一块通高立板，层板按腔分段；没有中立板的老工程产出不变。边界：只有一排整高门、立板通高、`n_doors ≤ 2`、`drawer_count = 0`、一台最多一块。字段面、验收数字与分步步骤见实施手册（工作区 `temp/`，不入库）。落地后把新增的口径写进契约文档，并把 `backlog_landed.py` 里这条的版本改成上面的 version。
+
+**已落地（比原边界宽）**：缝数 = 门数 − 1，所以一台最多 `n_doors − 1` 块；`n_doors > 2` 的停问已撤（原来写死 1/2 扇）。层板按腔分段成 `shelf_c{腔}_z{中心}`，背板跟着按腔打断（见 `back-panel-breaks`）。口径写在 `panel-proposal-contract.md` 与 `panel-definition-rules.md`。
+
+## back-panel-breaks
+
+现成问题：背板原来是一整块，宽度取 `internal_width`，2500 宽的柜子出 2476×2486 的背板——任何一档板材都切不出来，而且校验只是把同一条公式又算了一遍，永远报不出来。
+
+已落地：中立板**通到柜背**（`groove`/`insert` 从 `Y=0` 起，`cover` 从背板厚起），`groove` / `insert` 的背板**每腔一块**夹在侧板与中立板之间：`groove` 两侧各自进槽（立板两侧各开一条），`insert` 齐腔净宽、四边三合一（立板的两个大面就是配合面）。背拉条同样每腔一套。id 是 `back_panel_1…n`（没有中立板时仍是 `back_panel`，老工程逐字节不变）。`cover` **不打断**——它和立板不接触，切开只多出无谓拼缝，宽柜盖不住时改挂法。校验改成查"成套"：块数 = 腔数、逐块对腔、相邻两块之间必须正好让出一块立板（不能从立板背后通过）。口径见 `back-construction-rules.md`。
+
+## sheet-capacity-check
+
+板件两个平面尺寸必须进得去车间那档板。板幅是提案可省略的料档字段（`sheet_width_mm` / `sheet_length_mm`，两档 `1220×2440` / `1220×2745`，工艺卡默认前者），随板件冻结；校验按 `min(平面两边) ≤ 宽` 且 `max(平面两边) ≤ 长` 判 `PANEL_EXCEEDS_SHEET`（error，拦确认）。旋转与顺纹都不影响结论。口径见 `sheet-stock-catalog.md`。
 
 ## half-height-divider
 

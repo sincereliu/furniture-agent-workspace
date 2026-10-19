@@ -258,8 +258,13 @@ def divider_panel_boxes(
     spec: FurnitureSpec,
     structure: CabinetStructure,
 ) -> list[PanelBox]:
-    """中立板盒子：站在内部净空里，从底板上表面到顶板下表面。"""
-    depth = structure.internal_y_end - structure.internal_y_start
+    """中立板盒子：站在内部净空里，从底板上表面到顶板下表面，**深度通到柜背**。
+
+    通到柜背是为了让每腔的背板与背拉条都夹在板与板之间：背板两侧要入槽，
+    槽得开在侧板/中立板的大面上；立板不到背面就没有那张面。
+    内部净深（柜内可用深度）不变，仍从背板内表面算起。
+    """
+    depth = structure.internal_y_end - structure.carcass_y_start
     height = structure.internal_z_end - structure.internal_z_start
     return [
         PanelBox(
@@ -268,7 +273,7 @@ def divider_panel_boxes(
             size_y=depth,
             size_z=height,
             pos_x=start,
-            pos_y=structure.internal_y_start,
+            pos_y=structure.carcass_y_start,
             pos_z=structure.internal_z_start,
         )
         for role, start, end in divider_intervals(spec)
@@ -281,6 +286,66 @@ def interior_cavity_bounds(
 ) -> list[tuple[float, float]]:
     """各腔的 X 区间（从左到右）：没有中立板时就是一整个内空。"""
     return _cavity_bounds(structure, divider_panel_boxes(spec, structure))
+
+
+def back_groove_allowance(
+    spec: FurnitureSpec,
+    structure: CabinetStructure,
+) -> float:
+    """背板四周多出来的槽深：只有 `groove` 入槽有，其它挂法是 0。
+
+    背板和背板槽、板件校验都要用这一条，别在两处各写一遍同样的三元判断。
+    """
+    return spec.groove_depth if structure.back_mount == "groove" else 0.0
+
+
+def back_panel_boxes(
+    spec: FurnitureSpec,
+    structure: CabinetStructure,
+) -> list[PanelBox]:
+    """背板盒子：**每腔一块**，夹在侧板与中立板之间。
+
+    中立板通到柜背（见 `divider_panel_boxes`），所以背板不能从立板背后通过；
+    每腔那块背板的两条竖边分别落进侧板或立板的背板槽（`groove`），或者齐腔边
+    （`insert`）。`cover` 盖在柜背外面、和立板不接触，整块不切。
+
+    没有中立板时只有一块，id 仍是 `back_panel`——老工程产出逐字节不变。
+    """
+    if structure.back_mount == "cover":
+        return [
+            PanelBox(
+                panel_id="back_panel",
+                size_x=structure.width,
+                size_y=spec.back_thickness,
+                size_z=structure.height,
+                pos_x=0.0,
+                pos_y=0.0,
+                pos_z=0.0,
+            )
+        ]
+    grooves = back_groove_allowance(spec, structure)
+    cavities = interior_cavity_bounds(spec, structure)
+    panel_ids = (
+        ["back_panel"]
+        if len(cavities) == 1
+        else [f"back_panel_{index}" for index in range(1, len(cavities) + 1)]
+    )
+    return [
+        PanelBox(
+            panel_id=panel_id,
+            size_x=right - left + 2 * grooves,
+            size_y=spec.back_thickness,
+            size_z=structure.internal_z_end - structure.internal_z_start + 2 * grooves,
+            pos_x=left - grooves,
+            pos_y=structure.back_plane_y,
+            pos_z=structure.internal_z_start - grooves,
+            cavity_index=index,
+            cavity_count=len(cavities),
+        )
+        for index, (panel_id, (left, right)) in enumerate(
+            zip(panel_ids, cavities), start=1
+        )
+    ]
 
 
 def _cavity_bounds(
@@ -494,7 +559,11 @@ def back_rail_boxes(
     spec: FurnitureSpec,
     structure: CabinetStructure,
 ) -> list[PanelBox]:
-    """Return grooved-back rail envelopes, or an empty list."""
+    """背拉条：**每腔一套**，夹在侧板与中立板之间。
+
+    立板通到柜背，拉条不能横穿过去，所以按腔出件；每腔一套的根数与间距规则
+    和原来一致（`resolve_back_rail_count` / `back_rail_clear_spacing`）。
+    """
     rail_h = spec.back_rail_height
     count = resolve_back_rail_count(
         structure.back_mount,
@@ -505,15 +574,46 @@ def back_rail_boxes(
         return []
     board = spec.board_thickness
     step = back_rail_clear_spacing(structure.internal_height, count, rail_h)
-    return [
-        PanelBox(
-            panel_id=f"back_rail_{index + 1}",
-            size_x=structure.internal_width,
-            size_y=board,
-            size_z=rail_h,
-            pos_x=structure.internal_x_start,
-            pos_y=structure.carcass_y_start,
-            pos_z=structure.internal_z_start + step + index * (rail_h + step),
-        )
-        for index in range(count)
-    ]
+    cavities = interior_cavity_bounds(spec, structure)
+    boxes: list[PanelBox] = []
+    for cavity_index, (left, right) in enumerate(cavities, start=1):
+        for index in range(count):
+            panel_id = (
+                f"back_rail_{index + 1}"
+                if len(cavities) == 1
+                else f"back_rail_c{cavity_index}_{index + 1}"
+            )
+            boxes.append(
+                PanelBox(
+                    panel_id=panel_id,
+                    size_x=right - left,
+                    size_y=board,
+                    size_z=rail_h,
+                    pos_x=left,
+                    pos_y=structure.carcass_y_start,
+                    pos_z=structure.internal_z_start + step + index * (rail_h + step),
+                    cavity_index=cavity_index,
+                    cavity_count=len(cavities),
+                )
+            )
+    return boxes
+
+
+def cavity_flanks(
+    spec: FurnitureSpec,
+    structure: CabinetStructure,
+    cavity_index: int,
+    cavity_count: int,
+) -> tuple[str, str]:
+    """某腔左右两侧各是哪块板（角色名）：侧板或中立板。
+
+    背板和背拉条都夹在这两块之间，所以它们的槽/连接都对着这两个面。
+    `cavity_index` 从 1 起、从左到右。
+    """
+    left = "left_side_panel" if cavity_index <= 1 else f"divider_{cavity_index - 1}"
+    right = (
+        "right_side_panel"
+        if cavity_index >= cavity_count
+        else f"divider_{cavity_index}"
+    )
+    return left, right

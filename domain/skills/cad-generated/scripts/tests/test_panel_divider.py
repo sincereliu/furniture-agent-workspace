@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import sys
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 
@@ -20,7 +21,9 @@ from runtime_paths import bootstrap_runtime_paths
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 from furniture_panel_planning.assembly_tree import flatten_panels_for_handoff
+from furniture_panel_planning.cabinet_identity import panel_role
 from furniture_panel_planning.construction_geometry import (
+    back_panel_boxes,
     divider_panel_boxes,
     interior_cavity_bounds,
     shelf_panel_boxes,
@@ -53,8 +56,9 @@ class DividerGeometryTests(unittest.TestCase):
         self.assertEqual(len(boxes), 1)
         box = boxes[0]
         self.assertEqual(box.panel_id, "divider_1")
-        # 18 厚、内空深 553、内空高 914，站在底板上表面 (z=68)、内空前沿 (y=27)。
-        self.assertEqual(box.geometry, (18.0, 553.0, 914.0, 391.0, 27.0, 68.0))
+        # 18 厚、深 580（通到柜背，不是只到内空前沿）、高 914，
+        # 站在底板上表面 (z=68)、柜背 (y=0)。
+        self.assertEqual(box.geometry, (18.0, 580.0, 914.0, 391.0, 0.0, 68.0))
 
     def test_cavity_bounds_split_at_the_seam(self):
         spec = _spec_with_divider()
@@ -216,6 +220,115 @@ class DividerSerializationTests(unittest.TestCase):
         # 常规板不落这个键，老工程的产出逐字节不变。
         side = next(item for item in panels if item["role"] == "left_side_panel")
         self.assertNotIn("bearing_faces", side)
+
+
+class BackPanelSplitTests(unittest.TestCase):
+    """背板跟着立板分腔：每腔一块，夹在侧板与中立板之间。
+
+    立板通到柜背，背板不能从立板背后通过；每腔那块的两条竖边分别落进侧板或
+    立板的背板槽里。
+    """
+
+    def test_groove_back_is_cut_once_per_cavity(self):
+        spec = _spec_with_divider()
+        structure = CabinetStructure.from_spec(spec)
+        boxes = back_panel_boxes(spec, structure)
+        self.assertEqual([box.panel_id for box in boxes],
+                         ["back_panel_1", "back_panel_2"])
+        # 两侧各入槽 6：左块 12→397、右块 403→788，中间留出立板的 18 减两个槽深。
+        self.assertEqual([box.geometry for box in boxes], [
+            (385.0, 9.0, 926.0, 12.0, 18.0, 62.0),
+            (385.0, 9.0, 926.0, 403.0, 18.0, 62.0),
+        ])
+
+    def test_insert_back_has_no_groove_allowance(self):
+        spec = _spec_with_divider(back_mount="insert")
+        structure = CabinetStructure.from_spec(spec)
+        boxes = back_panel_boxes(spec, structure)
+        self.assertEqual([box.geometry for box in boxes], [
+            (373.0, 18.0, 914.0, 18.0, 18.0, 68.0),
+            (373.0, 18.0, 914.0, 409.0, 18.0, 68.0),
+        ])
+
+    def test_cover_back_stays_one_piece(self):
+        spec = _spec_with_divider(back_mount="cover")
+        structure = CabinetStructure.from_spec(spec)
+        boxes = back_panel_boxes(spec, structure)
+        self.assertEqual([box.panel_id for box in boxes], ["back_panel"])
+        self.assertEqual(boxes[0].geometry, (800.0, 9.0, 1000.0, 0.0, 0.0, 0.0))
+
+    def test_no_divider_keeps_the_old_single_piece(self):
+        spec = furniture_spec()
+        structure = CabinetStructure.from_spec(spec)
+        boxes = back_panel_boxes(spec, structure)
+        self.assertEqual([box.panel_id for box in boxes], ["back_panel"])
+        self.assertEqual(boxes[0].size_x, structure.internal_width + 12.0)
+
+    def test_panel_stage_emits_one_named_piece_per_cavity(self):
+        spec = _spec_with_divider()
+        panels = by_role(plan_panels(spec, CabinetStructure.from_spec(spec)))
+        self.assertEqual(
+            [panels[key].name for key in ("back_panel_1", "back_panel_2")],
+            ["背板1", "背板2"],
+        )
+        # 每块都夹在侧板与中立板之间（或侧板/立板与顶底板）之间。
+        self.assertEqual(
+            [panel_role(item) for item in panels["back_panel_1"].depends_on],
+            ["left_side_panel", "divider_1", "top_panel", "bottom_panel"],
+        )
+        self.assertEqual(
+            [panel_role(item) for item in panels["back_panel_2"].depends_on],
+            ["divider_1", "right_side_panel", "top_panel", "bottom_panel"],
+        )
+
+    def test_back_rails_are_cut_per_cavity(self):
+        spec = _spec_with_divider()
+        panels = by_role(plan_panels(spec, CabinetStructure.from_spec(spec)))
+        rails = sorted(
+            (item for item in panels.values() if item.panel_type == "back_rail"),
+            key=lambda item: item.pos_x,
+        )
+        # 内空高 914 → 每腔一根拉条；拉条钉在腔里，不穿过立板，宽度就是腔宽。
+        self.assertEqual([item.role for item in rails],
+                         ["back_rail_c1_1", "back_rail_c2_1"])
+        self.assertEqual([item.size_x for item in rails], [373.0, 373.0])
+        self.assertEqual([item.name for item in rails],
+                         ["背拉条(腔1·1)", "背拉条(腔2·1)"])
+        self.assertEqual(
+            [item.pos_x for item in rails], [18.0, 409.0],
+        )
+
+    def test_validation_reports_a_missing_piece(self):
+        spec = _spec_with_divider()
+        structure = CabinetStructure.from_spec(spec)
+        panels = plan_panels(spec, structure)
+        without = [
+            item for item in panels if panel_role(item.id) != "back_panel_2"
+        ]
+        report = validate_panels(spec, structure, without)
+        self.assertIn("BACK_PANEL_COUNT_MISMATCH",
+                      {issue.code for issue in report.issues})
+
+    def test_validation_reports_a_back_spanning_behind_the_divider(self):
+        spec = _spec_with_divider()
+        structure = CabinetStructure.from_spec(spec)
+        panels = plan_panels(spec, structure)
+        # 把右边那块推回去 20mm：它就骑到立板背后去了。
+        moved = [
+            replace(item, pos_x=item.pos_x - 20.0)
+            if panel_role(item.id) == "back_panel_2"
+            else item
+            for item in panels
+        ]
+        report = validate_panels(spec, structure, moved)
+        self.assertIn("BACK_PANEL_SPAN_MISMATCH",
+                      {issue.code for issue in report.issues})
+
+    def test_a_complete_split_plan_has_no_back_issues(self):
+        spec = _spec_with_divider()
+        structure = CabinetStructure.from_spec(spec)
+        report = validate_panels(spec, structure, plan_panels(spec, structure))
+        self.assertEqual(report.issues, [])
 
 
 class DividerOutputValidationTests(unittest.TestCase):

@@ -29,6 +29,12 @@
   逐字相同（核对脚本见提交说明）。加它是因为"门往哪边开"是**设计决定**，该由板件阶段
   给并随板件冻结，而不是制造阶段按门序猜；对开腔由几何定（左 left、右 right），
   单开腔由提案给，定不下来的留空。
+- 2026-10-20：spec 多了板幅 `sheet_width_mm` / `sheet_length_mm`（1220×2440 或
+  1220×2745，工艺卡默认前者），于是四份摘要全变。已核对**只多了这两个字段**：
+  把这两个键递归摘掉之后，四份摘要与改之前的基线逐字相同
+  （`temp/verify_baseline_delta.py`）。加它是因为"板件两个平面尺寸进不进得去料"
+  是判 error 的前提，不能由校验临时猜一档。这一步没有动任何板件尺寸、位置与接触：
+  四个用例都没有中立板，背板仍是一整块 `back_panel`。
 """
 
 from __future__ import annotations
@@ -56,12 +62,12 @@ from panel_fixtures import panel_parameters
 from workflow_test_support import confirm_through
 
 #: 冻结的板件产出摘要。改动它之前先读文件头部的"重新生成"一节。
-#: 2026-10-19 因新增 `door_hinge_side` 字段重新生成（见头部"改动记录"）。
+#: 2026-10-20 因新增板幅 `sheet_width_mm` / `sheet_length_mm` 重新生成（见头部"改动记录"）。
 _BASELINE = {
-    "single_double_door": "203b5f2e915bfead267a4e34230cd56e03d4edfe2fe2631a6412d0e42fd4027e",
-    "wardrobe_with_shelves": "96023a27fcd14552b4f8fe19737df41a04b6129d9c2277edc5947209cdd31ad0",
-    "wall_cabinet": "d8b02429651151ee0ba640b75a3f886aecc0e2e3f75a8852094f8b18b4487a00",
-    "two_cabinets": "14522c06892a360f33b7dcb2356dcb7c647d521dcbb488a3bde8893bbddf77be",
+    "single_double_door": "bab007ef56d9b6ad2d51d9f4cc5666fb35c30c581c61cc8bdac0683e55903b9f",
+    "wardrobe_with_shelves": "ceb228128880bdda65cadd424386b51ea66f514c993884c1a6d30b06778b29e2",
+    "wall_cabinet": "15a9008422c571b78b8526d96f4f666dc8d0bc05a0d6ad31a1f7aecee780e724",
+    "two_cabinets": "68075a34b9f01e9c807d9be13a95111e9dc00b266582806acd6e524463c20a2e",
 }
 
 

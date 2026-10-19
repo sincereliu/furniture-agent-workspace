@@ -27,6 +27,7 @@
 | 柜体板厚 | `board_thickness` | mm | 柜体板厚，目录 `18/22`，工艺卡默认 `18`。侧板、顶底、层板、踢脚、背拉条和抽屉盒都用这一档。不是每块板的独立厚度。 |
 | 9 厘背板厚 | `back_thickness` | mm | `groove` 入槽 / `cover` 外盖为常量 `9`；`insert` 内嵌等于柜体板厚。提案可省略。 |
 | 门板厚 | `door_thickness` | mm | 柜体板目录 `18/22`。省略则等于 `board_thickness`。 |
+| 板幅 | `sheet_width_mm` / `sheet_length_mm` | mm | 车间进料那档板的宽与长，两档：`1220×2440`（工艺卡默认）或 `1220×2745`。两个一起给或一起省略。判"这块板做不做得出来"用它，不是每块板各自的开料尺寸。 |
 | 柜体实例 | `cabinet_id` / `cabinets[].id` | 标识符 | 柜体父对象身份；缺省 `cabinet_1`。不得包含 `__`。 |
 | 子装配 | `assemblies` | 对象 | 柜内 `carcass`、可选 `base`、`fronts`、`drawers[]`。检查点事实源。 |
 | 底座工法 | `assemblies.base.construction` | 枚举 | 当前只允许 `integrated`（侧板落地，踢脚板挂在 `carcass`）。 |

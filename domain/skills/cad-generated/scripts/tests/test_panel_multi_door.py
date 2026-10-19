@@ -120,6 +120,8 @@ class MultiDoorValidationTests(unittest.TestCase):
         self.spec = _door_only(
             width=2500.0,
             n_doors=5,
+            # 2500 宽柜的顶底板 2464 长，只能落在 1220×2745 那档板上。
+            sheet_length_mm=2745.0,
             dividers=[
                 {"seam_index": 1},
                 {"seam_index": 2},

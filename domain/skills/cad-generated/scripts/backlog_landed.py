@@ -10,11 +10,13 @@ from __future__ import annotations
 
 LANDED_VERSIONS: dict[str, dict[str, int]] = {
     "panel-plan.md": {
-        "full-height-divider": 0,
+        "full-height-divider": 1,
         "half-height-divider": 0,
         "door-rows": 0,
         "pair-grouping": 0,
         "multi-door-cases": 0,
+        "back-panel-breaks": 1,
+        "sheet-capacity-check": 1,
     },
     "layout-plan.md": {
         "drag-snap": 0,

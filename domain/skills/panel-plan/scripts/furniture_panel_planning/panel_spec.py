@@ -27,6 +27,11 @@ CARCASS_STOCK_MM = frozenset({18.0, 22.0})
 BACK_STOCK_MM = 9.0
 PROCESS_CARD_CARCASS_MM = 18.0
 
+#: 车间进料板幅 `(宽, 长)`。板件的两个平面尺寸进不去就是做不出来，
+#: 校验按这一档判（见 validation_panels 的 `_validate_sheet_capacity`）。
+SHEET_STOCK_MM = frozenset({(1220.0, 2440.0), (1220.0, 2745.0)})
+PROCESS_CARD_SHEET_MM = (1220.0, 2440.0)
+
 
 @dataclass(frozen=True)
 class ShelfSpec:
@@ -151,6 +156,8 @@ PANEL_STOCK_FIELDS = frozenset(
         "door_thickness",
         "drawer_bottom_thickness",
         "drawer_back_thickness",
+        "sheet_width_mm",
+        "sheet_length_mm",
     }
 )
 #: 可省略的构造字段：不写 = 没有中立板 / 每扇门的铰链侧没定。省略不是「按柜型猜」，
@@ -167,6 +174,8 @@ _SERIALIZED_FIELDS = PANEL_PARAMETER_FIELDS | {
 }
 #: 不写也合法的字段：序列化输出为空时不落盘（老工程产出逐字节不变）。
 _OPTIONAL_SERIALIZED_FIELDS = PANEL_OPTIONAL_PARAMETER_FIELDS
+#: 后加的料档字段：老冻结文件里没有，读时按工艺卡默认补（写时一定带上）。
+_READ_DEFAULTED_FIELDS = frozenset({"sheet_width_mm", "sheet_length_mm"})
 
 
 @dataclass
@@ -201,6 +210,12 @@ class FurnitureSpec:
     drawer_back_thickness: float
     drawer_back_clearance: float
 
+    #: 车间板幅 `(宽, 长)` 两档之一：1220×2440 或 1220×2745。提案可省略
+    #: （工艺卡默认 1220×2440），省略后由 `expand_sheet_stock` 展开。
+    #: 它决定"这块板做不做得出来"，所以随板件冻结，不再由校验临时猜。
+    sheet_width_mm: float
+    sheet_length_mm: float
+
     #: 中立板：可选。不写就是没有；写了则由评估器给毫米（见 construction_geometry）。
     dividers: list[DividerSpec] = field(default_factory=list)
 
@@ -221,6 +236,7 @@ class FurnitureSpec:
             "toe_kick_reveal_front", "toe_kick_reveal_back", "back_rail_height",
             "drawer_side_clearance", "drawer_layer_gap", "drawer_bottom_thickness",
             "drawer_back_thickness", "drawer_back_clearance",
+            "sheet_width_mm", "sheet_length_mm",
         ):
             value = getattr(self, name)
             if (
@@ -281,7 +297,10 @@ class FurnitureSpec:
         """Read a serialized complete spec without filling missing values."""
         values = dict(data)
         unknown = sorted(set(values) - _SERIALIZED_FIELDS)
-        missing = sorted(_SERIALIZED_FIELDS - _OPTIONAL_SERIALIZED_FIELDS - set(values))
+        missing = sorted(
+            _SERIALIZED_FIELDS - _OPTIONAL_SERIALIZED_FIELDS
+            - _READ_DEFAULTED_FIELDS - set(values)
+        )
         if unknown:
             raise ValueError(
                 "serialized panel spec does not support: " + ", ".join(unknown)
@@ -293,6 +312,10 @@ class FurnitureSpec:
         # 老冻结文件里没有 dividers / door_hinges 键也要读得回来。
         values.setdefault("dividers", [])
         values.setdefault("door_hinges", [])
+        # 板幅是后加的字段：老冻结文件没写，按工艺卡默认读回来（和提案省略同一口径）。
+        # 不改写文件，新产出一律带上这两个毫米。
+        values.setdefault("sheet_width_mm", PROCESS_CARD_SHEET_MM[0])
+        values.setdefault("sheet_length_mm", PROCESS_CARD_SHEET_MM[1])
         if "shelves" in values:
             values["shelves"] = _coerce_shelves(values["shelves"])
         return cls(**values)
@@ -325,8 +348,9 @@ def expand_sheet_stock(options: Mapping[str, Any]) -> dict[str, Any]:
 
     Structured protocol: carcass 18; rolled back 9 for groove/cover;
     insert back and drawer box inherit carcass; door inherits carcass
-    unless an admitted catalog value is supplied. Serialized specs must
-    already be complete and do not go through this expansion.
+    unless an admitted catalog value is supplied; sheet format defaults
+    to 1220×2440. Serialized specs must already be complete and do not go
+    through this expansion.
     """
     values = dict(options)
     board = _admit_optional_stock(
@@ -349,6 +373,12 @@ def expand_sheet_stock(options: Mapping[str, Any]) -> dict[str, Any]:
         board,
         CARCASS_STOCK_MM,
     )
+    sheet_width, sheet_length = _admit_sheet_format(
+        values.pop("sheet_width_mm", None),
+        values.pop("sheet_length_mm", None),
+    )
+    values["sheet_width_mm"] = sheet_width
+    values["sheet_length_mm"] = sheet_length
     for name in ("drawer_bottom_thickness", "drawer_back_thickness"):
         values[name] = _admit_optional_stock(
             values.pop(name, None),
@@ -465,6 +495,34 @@ def _admit_optional_stock(
     return value
 
 
+def _admit_sheet_format(
+    raw_width: Any,
+    raw_length: Any,
+) -> tuple[float, float]:
+    """板幅要么两个都给，要么都不给（工艺卡默认 1220×2440）。
+
+    只给一个就是没说清是哪一档——不猜「宽都是 1220，那就按长补」。
+    """
+    if raw_width is None and raw_length is None:
+        return PROCESS_CARD_SHEET_MM
+    if raw_width is None or raw_length is None:
+        raise ValueError(
+            "sheet_width_mm and sheet_length_mm must be given together, or both omitted"
+        )
+    pair = (
+        _finite_mm(raw_width, "sheet_width_mm"),
+        _finite_mm(raw_length, "sheet_length_mm"),
+    )
+    if pair not in SHEET_STOCK_MM:
+        raise ValueError(_sheet_choice_error())
+    return pair
+
+
+def _sheet_choice_error() -> str:
+    shown = ", ".join(f"{width:g}×{length:g}" for width, length in sorted(SHEET_STOCK_MM))
+    return f"sheet size must be one of: {shown}"
+
+
 def _finite_mm(value: Any, name: str) -> float:
     if (
         isinstance(value, bool)
@@ -493,6 +551,8 @@ def _validate_sheet_stock(spec: FurnitureSpec) -> None:
         raise ValueError(_stock_choice_error("back_thickness", back_allowed))
     if spec.door_thickness not in CARCASS_STOCK_MM:
         raise ValueError(_stock_choice_error("door_thickness", CARCASS_STOCK_MM))
+    if (spec.sheet_width_mm, spec.sheet_length_mm) not in SHEET_STOCK_MM:
+        raise ValueError(_sheet_choice_error())
     for name in ("drawer_bottom_thickness", "drawer_back_thickness"):
         if getattr(spec, name) != spec.board_thickness:
             raise ValueError(f"{name} must equal board_thickness")

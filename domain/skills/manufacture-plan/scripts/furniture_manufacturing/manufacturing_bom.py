@@ -525,7 +525,9 @@ def _back_groove_operations(
     by_parent: dict[str, list[ConfirmedPanel]] = {}
     for panel in placements:
         by_parent.setdefault(panel.parent_id or "", []).append(panel)
-    required = {"left_side_panel", "right_side_panel", "top_panel", "bottom_panel", "back_panel"}
+    # 背板每腔一块、角色名是 back_panel_1…n，所以按类型找，不按名字找；
+    # 槽在 z 向是通长的，取第一块——各块的 z 跨度与起点相同，切断只切宽度。
+    required = {"left_side_panel", "right_side_panel", "top_panel", "bottom_panel"}
     board = spec.board_thickness
     depth = spec.groove_depth
     groove_width = spec.back_thickness + spec.groove_clearance
@@ -533,9 +535,14 @@ def _back_groove_operations(
     common = {"operation_type": "cut_box", "size_y": groove_width, "pos_y": groove_y}
     for cabinet_id, cabinet_panels in by_parent.items():
         by_role = index_by_role(cabinet_panels, parent_id=cabinet_id or None)
-        if not required.issubset(by_role):
+        backs = [panel for panel in cabinet_panels if panel.panel_type == "back"]
+        if not required.issubset(by_role) or not backs:
             continue
-        back = by_role["back_panel"]
+        back = backs[0]
+        divider_panels = sorted(
+            (panel for panel in cabinet_panels if panel.panel_type == "divider"),
+            key=lambda panel: panel.pos_x,
+        )
         prefix = f"{cabinet_id}__" if cabinet_id else ""
 
         def _target(role: str) -> str:
@@ -585,6 +592,42 @@ def _back_groove_operations(
                 ),
             ]
         )
+        # 中立板通到柜背，两侧各开一条背板槽：每腔的背板就是落在这两条槽里。
+        for divider in divider_panels:
+            # 槽只开在**背板的那段高度里**（立板自己的高度 ∩ 背板高度）：现在两者
+            # 相差一个槽深，取交集不改变结果；以后立板落地或坐在踢脚板上时，
+            # 槽不会跟着跑到背板以外去。
+            groove_pos_z = max(divider.pos_z, back.pos_z)
+            groove_size_z = min(
+                divider.pos_z + divider.size_z, back.pos_z + back.size_z
+            ) - groove_pos_z
+            if groove_size_z <= 1e-6:
+                continue
+            role = divider.role
+            operations.extend(
+                [
+                    MachiningOperation(
+                        id=f"{prefix}{role}_left_back_groove",
+                        target_panel=divider.id,
+                        size_x=depth,
+                        size_z=groove_size_z,
+                        pos_x=divider.pos_x,
+                        pos_z=groove_pos_z,
+                        note=f"{divider.name}左侧背板槽",
+                        **common,
+                    ),
+                    MachiningOperation(
+                        id=f"{prefix}{role}_right_back_groove",
+                        target_panel=divider.id,
+                        size_x=depth,
+                        size_z=groove_size_z,
+                        pos_x=divider.pos_x + divider.size_x - depth,
+                        pos_z=groove_pos_z,
+                        note=f"{divider.name}右侧背板槽",
+                        **common,
+                    ),
+                ]
+            )
     return operations
 
 

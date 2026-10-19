@@ -7,6 +7,7 @@
 | 数据 | 在哪 |
 | --- | --- |
 | 料档：柜体板 / 背板 / 门板 / 抽屉底 / 抽屉后板的厚度 | [料档与工艺卡](sheet-stock-catalog.md) |
+| 板幅：1220×2440 与 1220×2745 两档（`sheet_width_mm` / `sheet_length_mm`） | [料档与工艺卡](sheet-stock-catalog.md) |
 | 踢脚高与支撑数 | [踢脚规则](toe-kick-rules.md) |
 | 层板口径（净高累加、固定/活动） | [层板规则](shelf-planning-rules.md) |
 | 抽屉尺寸链（侧/底/后、间隙） | [抽屉尺寸链](drawer-dimension-chain.md) |
@@ -20,7 +21,7 @@
 | 2 | **各用途的最小净高** | **字段还没有**（建议加 `min_clear_height_mm`） | **挂长衣/被褥/叠放的高度需求现在无处表达** |
 | 3 | **最小段宽**（门 / 分段板的最小可用宽） | `min_segment_mm` + `min_segment_grade` | 分段后太窄的段判不出来，会进车间 |
 | 4 | **门宽区间**（下限 / 上限） | ✅ **已给：350 ~ 450 mm（含首尾），`typical` 档**，字段 `min_door_width_mm` / `max_door_width_mm` + `door_width_grade` | 已落地；口径与出路见 [门宽与边界件](door-width-and-boundary-pieces.md) |
-| 5 | **板长上限**（如 2440） | **字段还没有** | 超长需要拼板/分段的判断做不了 |
+| 5 | **板长上限**（如 2440） | ✅ **已给：1220×2440 与 1220×2745 两档**，字段 `sheet_width_mm` / `sheet_length_mm`，工艺卡默认前者 | 已落地；超尺由 `PANEL_EXCEEDS_SHEET` 拦确认，口径见 [料档与工艺卡](sheet-stock-catalog.md) |
 | 6 | **可达高度带**（踩着凳子够得到的高度） | **字段还没有** | 推荐/审图都用不了它 |
 
 ## 请按这张表填（一行一个用途）

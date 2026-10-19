@@ -23,6 +23,8 @@ from .cabinet_identity import (
     qualify_panel_id,
 )
 from .construction_geometry import (
+    back_groove_allowance,
+    back_panel_boxes,
     back_rail_boxes,
     divider_panel_boxes,
     door_panel_boxes,
@@ -79,6 +81,7 @@ def validate_panels(
     report.issues.extend(_validate_shelf_panels(spec, structure, panels).issues)
     drawer_report = _validate_drawer_panels(spec, structure, panels)
     report.issues.extend(drawer_report.issues)
+    report.issues.extend(_validate_sheet_capacity(spec, panels).issues)
     return report
 
 
@@ -244,61 +247,69 @@ def _validate_back_panel(
     panel_by_role: Mapping[str, PanelPlacement],
     carcass_roles: set[str],
 ) -> ValidationReport:
+    """背板必须成套：每腔一块、夹在两侧板/立板之间、各块不能连成一片。
+
+    别再用生成端那条公式重算一遍——那样只能拦住"摆放被改坏"，拦不住
+    "这一块根本做不出来"（形状对不对由 `_validate_sheet_capacity` 管）。
+    """
     report = ValidationReport(stage="panel_plan")
-    back = panel_by_role.get("back_panel")
-    if back is None:
+    pieces = sorted(
+        (item for item in panel_by_role.values() if item.panel_type == "back"),
+        key=lambda item: item.pos_x,
+    )
+    if not pieces:
         report.add_error(
             "MISSING_BACK_PANEL",
             "supported cabinet panel plan requires a back panel",
             "back_panel",
         )
         return report
-    if structure.back_mount == "groove":
-        expected_back = (
-            structure.internal_x_start - spec.groove_depth,
-            structure.back_plane_y,
-            structure.internal_z_start - spec.groove_depth,
-            structure.internal_width + 2 * spec.groove_depth,
-            spec.back_thickness,
-            structure.internal_height + 2 * spec.groove_depth,
-        )
-    elif structure.back_mount == "insert":
-        expected_back = (
-            structure.internal_x_start,
-            structure.back_plane_y,
-            structure.internal_z_start,
-            structure.internal_width,
-            spec.back_thickness,
-            structure.internal_height,
-        )
-    else:
-        expected_back = (
-            0.0,
-            0.0,
-            0.0,
-            structure.width,
-            spec.back_thickness,
-            structure.height,
-        )
-    actual_back = (
-        back.pos_x,
-        back.pos_y,
-        back.pos_z,
-        back.size_x,
-        back.size_y,
-        back.size_z,
-    )
-    if any(
-        abs(actual - expected) > 1e-6
-        for actual, expected in zip(actual_back, expected_back)
-    ):
+
+    expected = back_panel_boxes(spec, structure)
+    if len(pieces) != len(expected):
         report.add_error(
-            "BACK_MOUNT_GEOMETRY_MISMATCH",
-            "back panel geometry does not match the confirmed mount mode",
+            "BACK_PANEL_COUNT_MISMATCH",
+            f"back panel must be cut once per cavity: expected {len(expected)} "
+            f"piece(s), found {len(pieces)}",
             "back_panel",
         )
+        return report
+
+    for panel, box in zip(pieces, expected):
+        if abs(panel.pos_x - box.pos_x) > 1e-6 or abs(panel.size_x - box.size_x) > 1e-6:
+            report.add_error(
+                "BACK_PANEL_GEOMETRY_MISMATCH",
+                f"{panel.id} must span its cavity ({box.pos_x:g}→"
+                f"{box.pos_x + box.size_x:g})",
+                panel.id,
+            )
+        if (
+            abs(panel.pos_y - box.pos_y) > 1e-6
+            or abs(panel.size_y - box.size_y) > 1e-6
+            or abs(panel.pos_z - box.pos_z) > 1e-6
+            or abs(panel.size_z - box.size_z) > 1e-6
+        ):
+            report.add_error(
+                "BACK_MOUNT_GEOMETRY_MISMATCH",
+                "back panel geometry does not match the confirmed mount mode",
+                panel.id,
+            )
+    # 背板不能从立板背后通过：相邻两块之间的空档必须正好是一块立板减去两侧槽深。
+    grooves = back_groove_allowance(spec, structure)
+    dividers = divider_panel_boxes(spec, structure)
+    for left, right, divider in zip(pieces, pieces[1:], dividers):
+        gap = right.pos_x - (left.pos_x + left.size_x)
+        expected_gap = divider.size_x - 2 * grooves
+        if abs(gap - expected_gap) > 1e-6:
+            report.add_error(
+                "BACK_PANEL_SPAN_MISMATCH",
+                f"back panels must stop at the divider: {left.id} and {right.id} "
+                f"should leave a {expected_gap:g}mm gap, found {gap:g}",
+                "back_panel",
+            )
+            break
     if structure.back_mount == "cover":
-        back_front_y = back.pos_y + back.size_y
+        back_front_y = pieces[0].pos_y + pieces[0].size_y
         if any(
             panel_by_role[role].pos_y < back_front_y - 1e-6
             for role in carcass_roles
@@ -309,6 +320,39 @@ def _validate_back_panel(
                 "cover back must end before the cabinet carcass starts",
                 "back_panel",
             )
+    return report
+
+
+def _validate_sheet_capacity(
+    spec: FurnitureSpec,
+    panels: list[PanelPlacement],
+) -> ValidationReport:
+    """每块板的两个平面尺寸必须进得去车间板幅。
+
+    板厚永远是三边里最小的（层板/背板/门板都一样，`_validate_panel_basics`
+    也按这条认板厚），所以平面就是较大的那两边。旋转不改变能不能放下：
+    板幅宽 × 长定死，`min ≤ 宽` 且 `max ≤ 长` 才切得出来。
+    """
+    report = ValidationReport(stage="panel_plan")
+    width = spec.sheet_width_mm
+    length = spec.sheet_length_mm
+    for item in panels:
+        short_side, long_side = sorted((item.size_x, item.size_y, item.size_z))[1:]
+        if short_side <= width + 1e-6 and long_side <= length + 1e-6:
+            continue
+        if item.panel_type == "back":
+            if spec.back_mount == "cover":
+                hint = "外盖背板不按腔打断，宽柜得改用 groove/insert"
+            else:
+                hint = "加中立板把背面切开，或改柜宽"
+        else:
+            hint = "改用更长的板，或改柜宽/柜高"
+        report.add_error(
+            "PANEL_EXCEEDS_SHEET",
+            f"{item.id} is {short_side:g}×{long_side:g}, does not fit the "
+            f"{width:g}×{length:g} sheet stock; {hint}",
+            item.id,
+        )
     return report
 
 
@@ -366,11 +410,8 @@ def _validate_back_rails(
     rail_panels = [
         item for item in panels if item.panel_type == "back_rail"
     ]
-    expected_rail_count = resolve_back_rail_count(
-        structure.back_mount,
-        structure.internal_height,
-        spec.back_rail_height,
-    )
+    expected_boxes = back_rail_boxes(spec, structure)
+    expected_rail_count = len(expected_boxes)
     if spec.back_rail_height < 0:
         report.add_error(
             "INVALID_BACK_RAIL_HEIGHT",
@@ -383,9 +424,15 @@ def _validate_back_rails(
             "generated back-rail count does not match the panel rule",
             "back_rail",
         )
-    if expected_rail_count > 0 and back_rail_clear_spacing(
+    # 每腔根数只在这里复算一次（出件在 `back_rail_boxes`，两边同一套规则函数）。
+    per_cavity = resolve_back_rail_count(
+        structure.back_mount,
         structure.internal_height,
-        expected_rail_count,
+        spec.back_rail_height,
+    )
+    if per_cavity > 0 and back_rail_clear_spacing(
+        structure.internal_height,
+        per_cavity,
         spec.back_rail_height,
     ) <= 0:
         report.add_error(
@@ -397,7 +444,7 @@ def _validate_back_rails(
         report,
         "BACK_RAIL_GEOMETRY_MISMATCH",
         {item.role: item for item in rail_panels},
-        back_rail_boxes(spec, structure),
+        expected_boxes,
     )
     return report
 

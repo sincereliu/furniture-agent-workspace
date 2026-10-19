@@ -28,6 +28,79 @@ from furniture_workflow.workflow_state import WorkflowStage
 from workflow_test_support import confirm_through, primary_manufactured_bom
 
 
+class SplitBackManufacturingTests(unittest.TestCase):
+    """背板按中立板打断后，制造侧不能因为角色名变了就静默丢工序。"""
+
+    def _spec(self, back_mount: str) -> FurnitureSpec:
+        return furniture_spec(
+            furniture_category="floor_cabinet",
+            width=800,
+            depth=600,
+            height=1000,
+            back_mount=back_mount,
+            shelf_count=1,
+            n_doors=2,
+            dividers=[{"seam_index": 0}],
+            door_hinges=["left", "right"],
+        )
+
+    def test_the_back_is_split_and_the_grooves_are_still_cut(self) -> None:
+        orchestrator = FurnitureOrchestrator(workspace_root=WORKSPACE_ROOT)
+        result = confirm_through(
+            orchestrator,
+            "split-groove-back",
+            cabinet_data(
+                "floor_cabinet", width=800, depth=600, height=1000,
+                back_mount="groove", shelf_count=1, n_doors=2,
+                dividers=[{"seam_index": 0}],
+                door_hinges=["left", "right"],
+            ),
+            through_stage=WorkflowStage.MANUFACTURING_PLANNED,
+        )
+        bom = primary_manufactured_bom(result.revision)
+        backs = [panel for panel in bom["panels"] if panel["panel_type"] == "back"]
+        # 角色名变成 back_panel_1/2，开槽仍按背板的 z 跨度切：四条柜体槽，
+        # 外加通到柜背的中立板两侧各一条。
+        self.assertEqual([panel["role"] for panel in backs],
+                         ["back_panel_1", "back_panel_2"])
+        self.assertEqual(
+            {operation["id"] for operation in bom["operations"]},
+            {
+                "cabinet_1__left_side_back_groove",
+                "cabinet_1__right_side_back_groove",
+                "cabinet_1__top_back_groove",
+                "cabinet_1__bottom_back_groove",
+                "cabinet_1__divider_1_left_back_groove",
+                "cabinet_1__divider_1_right_back_groove",
+            },
+        )
+
+    def test_insert_split_back_connects_each_piece_where_it_has_a_face(self) -> None:
+        spec = self._spec("insert")
+        placements = plan_panels(spec, CabinetStructure.from_spec(spec))
+        bom = plan_manufacturing(spec, placements)
+        backs = [panel for panel in bom.panels if panel.panel_type == "back"]
+        self.assertEqual(len(backs), 2)
+
+        holes = [
+            hole
+            for panel in emit_drilled_holes(bom)["panels"]
+            for hole in panel["holes"]
+        ]
+        back_holes = [
+            hole for hole in holes if "back_panel" in (hole.get("connection_id") or "")
+        ]
+        # 每块四边都接：左/右是侧板或中立板，上下是顶底板。
+        self.assertEqual(
+            sum(1 for hole in back_holes if hole["hole_type"] == "three_in_one_cam"),
+            20,
+        )
+        # 立板通到柜背，它的大面就是内侧那条边的配合面。
+        self.assertTrue(
+            [hole for hole in back_holes if "divider" in hole["connection_id"]]
+        )
+
+
 class BackMountModeTests(unittest.TestCase):
     def _spec(self, back_mount: str) -> FurnitureSpec:
         return furniture_spec(

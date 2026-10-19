@@ -187,14 +187,22 @@ class BackMountConnector(Connector):
         连接点在背板局部坐标定义（背板为装配锚点，局部为唯一真源），
         配合板按"同一世界点 − 板件原点"折算到各自局部坐标，
         世界坐标统一由各板的 to_global 派生。
+
+        背板每腔一块、夹在侧板与中立板之间，所以每块都按**几何相邻**找它左右
+        两张配合板（侧板或中立板），不按腔序推：立板通到柜背，它的大面就是
+        可打的配合面。
         """
         by_role = index_by_role(panels)
-        back = by_role.get("back_panel")
-        if back is None:
+        backs = sorted(
+            (panel for panel in panels if panel.panel_type == "back"),
+            key=lambda panel: panel.pos_x,
+        )
+        if not backs:
             return []
+        flanks = [
+            panel for panel in panels if panel.panel_type in {"side", "divider"}
+        ]
         targets = {
-            "left": by_role.get("left_side_panel"),
-            "right": by_role.get("right_side_panel"),
             "top": by_role.get("top_panel"),
             "bottom": by_role.get("bottom_panel"),
         }
@@ -212,128 +220,176 @@ class BackMountConnector(Connector):
         rod_depth = float(rod_spec.get("hole", {}).get("depth_mm", 33))
         nut_diameter = float(nut_spec.get("hole", {}).get("diameter_mm", 10))
         nut_depth = float(nut_spec.get("hole", {}).get("depth_mm", 11))
-        y_center_local = back.size_y / 2
-        y_face_local = back.size_y
         result: List[HoleSpec] = []
 
-        def add_connection(
-            row_index: int,
-            target: PanelRecord | None,
-            cam_x_local: float,
-            cam_z_local: float,
-            rod_x_local: float,
-            rod_z_local: float,
-            rod_direction: str,
-            target_direction: str,
-            edge_name: str,
-        ) -> None:
-            if target is None:
-                return
-            conn_id = make_connection_id(target.label, back.label, row_index)
-            result.append(
-                self._hole(
-                    back,
-                    "three_in_one_cam",
-                    cam_x_local,
-                    y_face_local,
-                    cam_z_local,
-                    cam_diameter,
-                    cam_depth,
-                    "-y",
-                    f"内嵌背板{edge_name}偏心轮孔",
-                    is_face_hole=True,
-                    connection_id=conn_id,
-                )
-            )
-            result.append(
-                self._hole(
-                    back,
-                    "three_in_one_rod",
-                    rod_x_local,
-                    y_center_local,
-                    rod_z_local,
-                    rod_diameter,
-                    rod_depth,
-                    rod_direction,
-                    f"内嵌背板{edge_name}连接杆通道",
-                    is_face_hole=False,
-                    connection_id=conn_id,
-                )
-            )
-            # 配合板预埋螺母孔必须与背板连接杆落在同一世界点：
-            # 以背板局部点为中间量折算到目标板局部坐标，再 to_global。
-            point = (
-                back.pos_x + rod_x_local,
-                back.pos_y + y_center_local,
-                back.pos_z + rod_z_local,
-            )
-            result.append(
-                self._hole(
-                    target,
-                    "three_in_one_nut",
-                    point[0] - target.pos_x,
-                    point[1] - target.pos_y,
-                    point[2] - target.pos_z,
-                    nut_diameter,
-                    nut_depth,
-                    target_direction,
-                    f"{target.name}与内嵌背板的预埋螺母孔",
-                    is_face_hole=True,
-                    connection_id=conn_id,
-                )
-            )
+        def piece_holes(
+            back: PanelRecord,
+            edges: dict[str, PanelRecord | None],
+        ) -> List[HoleSpec]:
+            """一块背板的四边孔；配合板由调用方按几何相邻找好再传进来。"""
+            holes: List[HoleSpec] = []
+            y_center_local = back.size_y / 2
+            y_face_local = back.size_y
 
-        for row_index, z_local in enumerate(
-            self._spaced_positions(back.size_z, first, max_spacing)
-        ):
-            add_connection(
-                row_index,
-                targets["left"],
-                cam_offset,
-                z_local,
-                0.0,
-                z_local,
-                "+x",
-                "-x",
-                "左边",
-            )
-            add_connection(
-                row_index,
-                targets["right"],
-                back.size_x - cam_offset,
-                z_local,
-                back.size_x,
-                z_local,
-                "-x",
-                "+x",
-                "右边",
-            )
-        for row_index, x_local in enumerate(
-            self._spaced_positions(back.size_x, first, max_spacing)
-        ):
-            add_connection(
-                row_index,
-                targets["bottom"],
-                x_local,
-                cam_offset,
-                x_local,
-                0.0,
-                "+z",
-                "-z",
-                "下边",
-            )
-            add_connection(
-                row_index,
-                targets["top"],
-                x_local,
-                back.size_z - cam_offset,
-                x_local,
-                back.size_z,
-                "-z",
-                "+z",
-                "上边",
-            )
+            def add_connection(
+                row_index: int,
+                target: PanelRecord | None,
+                cam_x_local: float,
+                cam_z_local: float,
+                rod_x_local: float,
+                rod_z_local: float,
+                rod_direction: str,
+                target_direction: str,
+                edge_name: str,
+            ) -> None:
+                if target is None:
+                    return
+                conn_id = make_connection_id(target.label, back.label, row_index)
+                holes.append(
+                    self._hole(
+                        back,
+                        "three_in_one_cam",
+                        cam_x_local,
+                        y_face_local,
+                        cam_z_local,
+                        cam_diameter,
+                        cam_depth,
+                        "-y",
+                        f"内嵌背板{edge_name}偏心轮孔",
+                        is_face_hole=True,
+                        connection_id=conn_id,
+                    )
+                )
+                holes.append(
+                    self._hole(
+                        back,
+                        "three_in_one_rod",
+                        rod_x_local,
+                        y_center_local,
+                        rod_z_local,
+                        rod_diameter,
+                        rod_depth,
+                        rod_direction,
+                        f"内嵌背板{edge_name}连接杆通道",
+                        is_face_hole=False,
+                        connection_id=conn_id,
+                    )
+                )
+                # 配合板预埋螺母孔必须与背板连接杆落在同一世界点：
+                # 以背板局部点为中间量折算到目标板局部坐标，再 to_global。
+                point = (
+                    back.pos_x + rod_x_local,
+                    back.pos_y + y_center_local,
+                    back.pos_z + rod_z_local,
+                )
+                holes.append(
+                    self._hole(
+                        target,
+                        "three_in_one_nut",
+                        point[0] - target.pos_x,
+                        point[1] - target.pos_y,
+                        point[2] - target.pos_z,
+                        nut_diameter,
+                        nut_depth,
+                        target_direction,
+                        f"{target.name}与内嵌背板的预埋螺母孔",
+                        is_face_hole=True,
+                        connection_id=conn_id,
+                    )
+                )
+
+            for row_index, z_local in enumerate(
+                self._spaced_positions(back.size_z, first, max_spacing)
+            ):
+                add_connection(
+                    row_index,
+                    edges["left"],
+                    cam_offset,
+                    z_local,
+                    0.0,
+                    z_local,
+                    "+x",
+                    "-x",
+                    "左边",
+                )
+                add_connection(
+                    row_index,
+                    edges["right"],
+                    back.size_x - cam_offset,
+                    z_local,
+                    back.size_x,
+                    z_local,
+                    "-x",
+                    "+x",
+                    "右边",
+                )
+            for row_index, x_local in enumerate(
+                self._spaced_positions(back.size_x, first, max_spacing)
+            ):
+                add_connection(
+                    row_index,
+                    edges["bottom"],
+                    x_local,
+                    cam_offset,
+                    x_local,
+                    0.0,
+                    "+z",
+                    "-z",
+                    "下边",
+                )
+                add_connection(
+                    row_index,
+                    edges["top"],
+                    x_local,
+                    back.size_z - cam_offset,
+                    x_local,
+                    back.size_z,
+                    "-z",
+                    "+z",
+                    "上边",
+                )
+            return holes
+
+        for position, back in enumerate(backs):
+            edges = {
+                "left": self._flank(flanks, back.pos_x, ending=True),
+                "right": self._flank(
+                    flanks, back.pos_x + back.size_x, ending=False
+                ),
+                "top": targets["top"],
+                "bottom": targets["bottom"],
+            }
+            if position > 0 and edges["left"] is None:
+                # 内侧块左边一定是立板；找不到说明冻结的几何对不上，不静默少打孔。
+                raise ValueError(
+                    f"{back.label} has no panel on its left edge; "
+                    "the frozen back panel layout does not match the carcass"
+                )
+            if position < len(backs) - 1 and edges["right"] is None:
+                raise ValueError(
+                    f"{back.label} has no panel on its right edge; "
+                    "the frozen back panel layout does not match the carcass"
+                )
+            result.extend(piece_holes(back, edges))
         return result
+
+    @staticmethod
+    def _flank(
+        panels: List[PanelRecord],
+        edge_x: float,
+        *,
+        ending: bool,
+        tolerance: float = 0.5,
+    ) -> PanelRecord | None:
+        """背板某条竖边的配合板：端面正好落在那条边上的侧板或中立板。
+
+        `ending=True` 找左邻（它的右端面贴着这条边），否则找右邻（它的左端面）。
+        """
+        for panel in panels:
+            face = panel.pos_x + panel.size_x if ending else panel.pos_x
+            if abs(face - edge_x) <= tolerance:
+                return panel
+        return None
 
     @staticmethod
     def _mode(panels: List[PanelRecord]) -> str:

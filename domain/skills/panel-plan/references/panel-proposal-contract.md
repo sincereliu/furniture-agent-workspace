@@ -25,7 +25,7 @@
 - 中立板（可选）：`dividers`；每项是 {seam_index, seam_align?}，不写就是没有中立板。
 - 门铰链侧（可选）：`door_hinges`；从左到右每扇门一项，取值 left 或 right，长度必须等于门数。
 - 抽屉尺寸链输入：`drawer_side_clearance`、`drawer_layer_gap`、`drawer_back_clearance`
-- 可选料档：`board_thickness`、`back_thickness`、`door_thickness`、`drawer_bottom_thickness`、`drawer_back_thickness`；省略则按 [料档与工艺卡](sheet-stock-catalog.md) 展开。
+- 可选料档：`board_thickness`、`back_thickness`、`door_thickness`、`drawer_bottom_thickness`、`drawer_back_thickness`、`sheet_width_mm`、`sheet_length_mm`；省略则按 [料档与工艺卡](sheet-stock-catalog.md) 展开。
 - 柜体身份（可选）：`cabinet_id`；这不是构造字段，运行时在准入前弹出，缺省 cabinet_1，不得包含 __。
 
 ## 字段口径
@@ -65,7 +65,7 @@
 
 用户没说时，LLM 用下面这组值填满必填字段并标成假设。料档、层板净高和踢脚支撑数按各自的省略口径留下不写，不把展开后的毫米或根数写成假设。
 
-- 料档按工艺卡，不写入假设清单：柜体板 18、9 厘背板 9、门与抽屉盒同柜体板。覆盖时只允许目录值，见 [料档与工艺卡](sheet-stock-catalog.md)。
+- 料档按工艺卡，不写入假设清单：柜体板 18、9 厘背板 9、门与抽屉盒同柜体板、板幅 1220×2440。覆盖时只允许目录值，见 [料档与工艺卡](sheet-stock-catalog.md)。客户说要长板（1220×2745）时两个数一起写，只写一个是没说清。
 - `back_mount=groove`、背板后移 18、前脸边距 1.5、前脸深度缝 2、槽深 6、槽余量 1、背拉条高 70。
 - 抽屉每侧净空 13、层缝 1.5、后净空 0。
 - 落地柜：踢脚 50、前后退让 1/30、2 门、`drawer_count=0`、4 层固定层板。层板只写 `shelf_type`，不写 `gap_below_mm` 和 `top_gap_mm`。不写 `toe_kick_support_count`。准入按该柜外形尺寸写入均分净高和支撑数。
