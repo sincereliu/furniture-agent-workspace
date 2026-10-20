@@ -7,12 +7,8 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Mapping
 
-from furniture_delivery_validation.validation import (
-    ValidationReport,
-    validate_delivery,
-)
-from furniture_feature_tree.feature_tree_builder import panels_to_feature_tree
-from furniture_manufacturing.manufacturing_bom import plan_manufacturing
+from furniture_contracts.validation import ValidationReport
+from furniture_delivery_validation.validation import validate_delivery
 from furniture_panel_planning.panel_pipeline import plan_panel_stage
 
 from .input_adapter import (
@@ -28,40 +24,8 @@ from .workflow_inheritance import (
     stage_digest,
 )
 from .workflow_project import Project, Revision, StageAttempt
+from .workflow_stage_planning import feature_trees_from, plan_every_cabinet
 from .workflow_state import STAGE_SEQUENCE, WorkflowStage, parse_stage, stage_index
-
-
-def _cabinet_option_overrides(
-    raw: Any, planned_ids: list[str]
-) -> dict[str, dict[str, Any]]:
-    """校验制造阶段的逐柜选项：柜名必须认识、只认 `parameters` / `appearance`。
-
-    不认识的柜名直接拒（不静默忽略）——否则"给 2 号柜设的铰链方向"会悄悄丢掉，
-    再跑到制造阶段才炸（实测撞到过：单门没给铰链方向）。
-    """
-    if raw is None:
-        return {}
-    if not isinstance(raw, Mapping):
-        raise ValueError("manufacturing stage cabinets must be an object")
-    known = set(planned_ids)
-    overrides: dict[str, dict[str, Any]] = {}
-    for cabinet_id, override in raw.items():
-        name = str(cabinet_id)
-        if name not in known:
-            raise ValueError(f"manufacturing stage has an unknown cabinet id: {name}")
-        if not isinstance(override, Mapping):
-            raise ValueError(f"manufacturing options for {name} must be an object")
-        unknown = sorted(set(override) - {"parameters", "appearance"})
-        if unknown:
-            raise ValueError(
-                f"manufacturing options for {name} do not support: "
-                + ", ".join(unknown)
-            )
-        for part in ("parameters", "appearance"):
-            if part in override and not isinstance(override[part], Mapping):
-                raise ValueError(f"manufacturing {part} for {name} must be an object")
-        overrides[name] = dict(override)
-    return overrides
 
 
 class StageRunnerMixin:
@@ -89,7 +53,7 @@ class StageRunnerMixin:
                 )
             next_stage = STAGE_SEQUENCE[current_index + 1]
             self._apply_retry_input(revision, next_stage, stage_input)
-        result = self.run_until(
+        return self.run_until(
             project,
             STAGE_SEQUENCE[current_index + 1],
             output_root=output_root,
@@ -97,11 +61,6 @@ class StageRunnerMixin:
             generate_cad=generate_cad,
             force=force,
         )
-        self._persist(project)
-        return result
-
-    # retry_stage / select_stage_attempt live in RevisionOpsMixin, which wins the
-    # MRO over this mixin; do not re-add copies here.
 
     def run_until(
         self,
@@ -113,40 +72,33 @@ class StageRunnerMixin:
         generate_cad: bool = False,
         force: bool = False,
     ) -> OrchestrationResult:
-        """Run toward a target, pausing at the first unconfirmed stage."""
+        """Execute at most one stage toward a target; keep every checkpoint."""
         target = parse_stage(target_stage)
         revision = project.latest
         attempted_stage: WorkflowStage | None = None
         try:
-            while (
-                revision.workflow.current != WorkflowStage.FAILED
-                and stage_index(revision.workflow.current) < stage_index(target)
+            current = revision.workflow.current
+            if (
+                current != WorkflowStage.FAILED
+                and stage_index(current) < stage_index(target)
+                and revision.is_stage_approved(current)
             ):
-                current = revision.workflow.current
-                if not revision.is_stage_approved(current):
-                    break
                 next_stage = STAGE_SEQUENCE[stage_index(current) + 1]
-                if (
+                has_attempt = (
                     next_stage in RETRYABLE_STAGES
                     and revision.attempts_for(next_stage)
-                ):
-                    break
-                attempted_stage = next_stage
-                self._execute_stage(
-                    project,
-                    revision,
-                    next_stage,
-                    output_root=output_root,
-                    artifact_name=artifact_name,
-                    generate_cad=generate_cad,
-                    force=force,
                 )
-                if revision.workflow.current == WorkflowStage.FAILED:
-                    break
-                latest_attempt = revision.latest_attempt(next_stage)
-                if latest_attempt is not None and not latest_attempt.passed:
-                    break
-                break
+                if not has_attempt:
+                    attempted_stage = next_stage
+                    self._execute_stage(
+                        project,
+                        revision,
+                        next_stage,
+                        output_root=output_root,
+                        artifact_name=artifact_name,
+                        generate_cad=generate_cad,
+                        force=force,
+                    )
 
             self._persist(project)
             return self._result(project)
@@ -211,7 +163,7 @@ class StageRunnerMixin:
             # 而不是记成"这次计划失败了"。
             handoffs = self._cabinet_handoffs(revision, project_id=project.id)
             try:
-                output = self._plan_every_cabinet(handoffs, stage_input)
+                output = plan_every_cabinet(handoffs, stage_input)
             except (TypeError, ValueError) as exc:
                 self._fail_retryable_stage(revision, stage, stage_input, str(exc))
                 return
@@ -229,7 +181,7 @@ class StageRunnerMixin:
         if stage == WorkflowStage.FEATURE_TREE_PLANNED:
             boms = self._cabinet_boms(revision)
             try:
-                feature_trees = self._feature_trees_from(boms)
+                feature_trees = feature_trees_from(boms)
             except (TypeError, ValueError) as exc:
                 self._fail_retryable_stage(revision, stage, {}, str(exc))
                 return
@@ -334,61 +286,6 @@ class StageRunnerMixin:
             return
 
         raise ValueError(f"stage is not executable: {stage.value}")
-
-    def _plan_every_cabinet(
-        self,
-        handoffs: list[tuple[str, Any, list[Any]]],
-        stage_input: Mapping[str, Any],
-    ) -> dict[str, Any]:
-        """**逐柜**做制造计划：布局里有几台，就出几份 BOM。
-
-        以前只对主柜算一次，所以拆成三台只有一台能走到车间。柜的**身份与顺序**
-        都来自板件阶段（布局决定的），这里不挑、不排、不漏。
-
-        **逐柜选项**：`stage_input["cabinets"][柜名]` 可以覆盖 `parameters` / `appearance`——
-        铰链方向、活动层板连接方式这些本来就是**按柜**定的（一台单门、一台双门时，
-        共享一份 `door_hinge_side` 根本表达不了：实测撞到过）。
-        """
-        shared_options = dict(stage_input.get("parameters", {}))
-        shared_appearance = dict(stage_input.get("appearance", {}))
-        overrides = _cabinet_option_overrides(
-            stage_input.get("cabinets"), [cabinet_id for cabinet_id, _, _ in handoffs]
-        )
-        cabinets = []
-        for cabinet_id, spec, placements in handoffs:
-            override = overrides.get(cabinet_id, {})
-            bom = plan_manufacturing(
-                spec,
-                placements,
-                requested_options={
-                    **shared_options,
-                    **dict(override.get("parameters", {})),
-                },
-                appearance={
-                    **shared_appearance,
-                    **dict(override.get("appearance", {})),
-                },
-            )
-            cabinets.append({"id": cabinet_id, "bom": asdict(bom)})
-        return {"cabinets": cabinets}
-
-    def _feature_trees_from(self, boms: list[tuple[str, Any]]) -> dict[str, Any]:
-        """**逐柜**出特征树，与制造产物一一对应、顺序一致。"""
-        cabinets = []
-        for cabinet_id, bom in boms:
-            tree = panels_to_feature_tree(
-                bom.panels,
-                bom.operations,
-                furniture_category=bom.furniture_category,
-                parameters={
-                    "width": bom.width,
-                    "depth": bom.depth,
-                    "height": bom.height,
-                    "board_thickness": bom.board_thickness,
-                },
-            )
-            cabinets.append({"id": cabinet_id, "tree": tree})
-        return {"cabinets": cabinets}
 
     def _complete_retryable_stage(
         self,

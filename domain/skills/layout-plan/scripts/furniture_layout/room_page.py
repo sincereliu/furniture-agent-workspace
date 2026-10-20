@@ -27,12 +27,24 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from html import escape
 from pathlib import Path
 import json
 from typing import Any
 
 from .scene import RoomScene
+
+
+@dataclass(frozen=True)
+class PageExtension:
+    """Trusted host fragments for an optional page feature; empty by default."""
+
+    styles: str = ""
+    toolbar: str = ""
+    panel: str = ""
+    dialogs: str = ""
+    script: str = ""
 
 
 EDITOR_WIDTH_PX = 960
@@ -142,6 +154,7 @@ def _render_canvas_html(
     edit_url: str = "",
     undo_url: str = "",
     panel_url_base: str = "",
+    page_extension: PageExtension | None = None,
 ) -> str:
     room_name = str(scene_payload["room"]["name"])
     heading = f"{room_name} · {heading_suffix}"
@@ -160,6 +173,7 @@ def _render_canvas_html(
         "version": version,
         "rooms": rooms,
     }
+    extension = page_extension or PageExtension()
     tokens = {
         "__PAGE_CONFIG_JSON__": _json_for_script(page_config),
         "__SCENE_JSON__": _json_for_script(scene_payload),
@@ -180,6 +194,11 @@ def _render_canvas_html(
         "__TIPS__": tips,
         "__SHUTDOWN_BUTTON__": shutdown_button,
         "/layout-view/layout_scene.js": _layout_scene_src(),
+        "__PAGE_EXTENSION_STYLES__": extension.styles,
+        "__PAGE_EXTENSION_TOOLBAR__": extension.toolbar,
+        "__PAGE_EXTENSION_PANEL__": extension.panel,
+        "__PAGE_EXTENSION_DIALOGS__": extension.dialogs,
+        "__PAGE_EXTENSION_SCRIPT__": extension.script,
     }
     rendered = _EDITOR_HTML
     for token, value in tokens.items():
@@ -277,6 +296,7 @@ def render_project_page(
     *,
     mode: str | None = None,
     read_only: bool = True,
+    page_extension: PageExtension | None = None,
 ) -> str:
     """项目里打开的房间页。页面按 `document` 里的版本换包络。
 
@@ -303,6 +323,7 @@ def render_project_page(
         edit_url=f"/api/project/{project_id}/layout/edit",
         undo_url=f"/api/project/{project_id}/layout/undo",
         panel_url_base=f"/api/project/{project_id}/cabinets",
+        page_extension=None if read_only else page_extension,
         heading_suffix="布局预览",
         tips=_SHARE_TIPS if share_form else (
             _PREVIEW_TIPS if read_only else _PROJECT_EDITOR_TIPS

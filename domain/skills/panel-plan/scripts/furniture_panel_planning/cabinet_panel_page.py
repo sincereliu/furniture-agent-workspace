@@ -448,6 +448,7 @@ def _render_structure_page(
         f'{escape(str(item["label"]))}</label>'
         for item in structure["assemblies"]
     )
+    grain_editor = 'document.getElementById("grain-editor")' if expected_version else "null"
     return f"""<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -552,7 +553,7 @@ const page = mountCabinetStructure({{
   panelSave: {{
     url: "/api/project/{escape(project_id, quote=True)}/cabinets/{escape(str(structure["cabinet_id"]), quote=True)}/panels",
     version: {json.dumps(expected_version)},
-    editor: document.getElementById("grain-editor"),
+    editor: {grain_editor},
     pending: document.getElementById("grain-pending"),
     save: document.getElementById("grain-save"),
     status: document.getElementById("grain-status"),
@@ -585,7 +586,7 @@ def _render_envelope_page(
     back_href: str,
     shutdown: str,
 ) -> str:
-    """还没有已确认板件：只画布局里已经保存的外形。"""
+    """还没有板件结构：只画布局里已经保存的外形。"""
     label = str(cabinet.get("label") or cabinet["id"])
     width = _mm(float(cabinet["width"]))
     depth = _mm(float(cabinet["depth"]))
@@ -600,7 +601,7 @@ def _render_envelope_page(
     note = (
         stage_note
         or "这台柜子的板件还没确认：页上只有布局里已经保存的外形。"
-        "板件阶段确认后，这里会换成能转、能拆开看的结构。"
+        "生成板件后，这里会换成能转、能拆开看的结构。"
     )
     badge = "只读分享 · 链接可转发" if share else "这一台的外形 · 尺寸在布局里改"
     title = escape(f"{label} · 板件")
@@ -718,13 +719,13 @@ def render_cabinet_panel_page(
 ) -> str:
     """这一台的板件页。
 
-    `structure` 是已确认冻结板件的投影（`panel_structure_view()` 的结果）。给了就画结构，
-    没给只画外形——**页面不自己去读冻结文件，也不替板件阶段生成**。`stage_note` 说明
-    为什么没有结构（未确认 / 冻结文件缺了 / 冻结文件里没有这台柜）。
+    `structure` 是板件结构的投影（`panel_structure_view()` 的结果，来自已确认冻结板件或
+    当前待确认候选板件）。给了就画结构，没给只画外形——**页面不自己去读冻结文件，也不替
+    板件阶段生成**。`stage_note` 在无结构时说明原因，在有结构（如待确认草稿）时作为徽章提示。
 
-    `expected_version` 是这份**板件**画面的版本号（`open_preview.panel_version()`），
+    `expected_version` 是这份**已确认板件**画面的版本号（`open_preview.panel_version()`），
     交给页面在「保存并冻结」时带回去：服务端据此拒绝拿过期画面覆盖新内容。
-    只读分享（`share`）不给它，那一页也不显示保存入口。
+    只读分享（`share`）或待确认草稿不给它，那一页也不开放顺纹保存入口。
     """
     back_query = {"room": cabinet["room_id"], "item": cabinet["id"]}
     if share:
@@ -746,7 +747,10 @@ def render_cabinet_panel_page(
     badge = (
         "只读分享 · 链接可转发"
         if share
-        else "已确认冻结板件 · 点板件看尺寸，点「顺纹方向」可改；透视看内部"
+        else (
+            stage_note
+            or "已确认冻结板件 · 点板件看尺寸，点「顺纹方向」可改；透视看内部"
+        )
     )
     return _render_structure_page(
         project_id=project_id,

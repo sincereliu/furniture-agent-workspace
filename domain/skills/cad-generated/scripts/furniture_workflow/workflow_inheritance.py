@@ -20,7 +20,7 @@ from typing import Any, Iterable, Mapping
 from furniture_layout.project_layout import LayoutUnit, ProjectLayout
 
 from .input_adapter import panel_envelopes_from_layout
-from .workflow_digest import stable_digest
+from furniture_contracts.digest import stable_digest
 from .workflow_project import Project, Revision
 from .workflow_state import WorkflowStage
 

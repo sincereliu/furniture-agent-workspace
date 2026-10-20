@@ -73,7 +73,7 @@ body.share .mode-badge{color:#b45309;background:#fffbeb;border-color:#fcd34d}
 body.readonly .legend [data-edit-only]{display:none}
 /* 改空间只给可编辑的那一页留入口：只读页（预览/分享）看不到输入框。 */
 body.readonly .space-edit{display:none}
-.workspace{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:14px;min-height:0}
+.workspace{display:grid;grid-template-columns:280px minmax(0,1fr);gap:14px;min-height:0}
 .stage{position:relative;height:100%;min-height:340px;border-radius:16px;overflow:hidden;background:var(--canvas);border:1px solid var(--line-strong);box-shadow:0 12px 32px -16px rgba(15,23,42,.12),inset 0 1px 0 rgba(255,255,255,.7)}
 canvas{display:block;width:100%;height:100%;touch-action:none;cursor:default}
 canvas.orbiting{cursor:grabbing}
@@ -128,12 +128,14 @@ canvas.panning{cursor:grabbing}
 .panel-entry{margin:10px 0 0}
 .panel-entry button{appearance:none;border:0;background:var(--accent);color:#fff;border-radius:8px;padding:7px 12px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer}
 .panel-entry button:disabled{background:#cbd5e1;color:#64748b;cursor:not-allowed}
+/* 左侧属性栏（家具/选中/图例放在最左边）+ 中间 3D 画布 + 右侧 AI 助手对话栏 */
 @media (max-width:980px){.workspace{grid-template-columns:minmax(0,1fr)}.stage{min-height:420px}.app{height:auto}}
 </style>
+__PAGE_EXTENSION_STYLES__
 </head>
 <body class="__BODY_CLASS__">
-<main class="app" aria-label="__APP_LABEL__">
-  <header class="topbar">
+<main class="app" id="layout-angular-root" ng-version="18.2.0-standalone" aria-label="__APP_LABEL__">
+  <header class="topbar" data-ng-component="LayoutHeaderComponent">
     <div class="titles">
       <h1 id="heading">__HEADING__</h1>
       <p id="room-meta"></p>
@@ -160,17 +162,13 @@ canvas.panning{cursor:grabbing}
       </label>
       <button type="button" data-view="default_view" aria-pressed="true">复位</button>
       <button type="button" id="toggle-dims" aria-pressed="true">标注</button>
+__PAGE_EXTENSION_TOOLBAR__
       <button type="button" id="take-lease" hidden>收回编辑权</button>
       __SHUTDOWN_BUTTON__
     </nav>
   </header>
   <div class="workspace">
-    <section class="stage">
-      <canvas id="scene" width="960" height="600" aria-label="房间与家具外形尺寸；点选家具后可拖动移动、拖高度中间的圆环箭头改朝向、拖蓝点改离地高度"></canvas>
-      <div class="toast" id="status">点击一件家具开始</div>
-      <div class="coord" id="coord" hidden></div>
-    </section>
-    <aside class="sidebar">
+    <aside class="sidebar" data-ng-component="LayoutSidebarComponent">
       <section class="card">
         <h2>家具</h2>
         <ul class="list" id="item-list"></ul>
@@ -195,12 +193,19 @@ canvas.panning{cursor:grabbing}
         <p class="tips">__TIPS__</p>
       </section>
     </aside>
+    <section class="stage" data-ng-component="LayoutViewportComponent">
+      <canvas id="scene" width="960" height="600" aria-label="房间与家具外形尺寸；点选家具后可拖动移动、拖高度中间的圆环箭头改朝向、拖蓝点改离地高度"></canvas>
+      <div class="toast" id="status">点击一件家具开始</div>
+      <div class="coord" id="coord" hidden></div>
+    </section>
+__PAGE_EXTENSION_PANEL__
   </div>
+__PAGE_EXTENSION_DIALOGS__
 </main>
 <script id="page-config" type="application/json">__PAGE_CONFIG_JSON__</script>
 <script id="scene-data" type="application/json">__SCENE_JSON__</script>
 <script type="importmap">
-{"imports":{"three":"/vendor/three/0.186.0/three.module.js"}}
+{"imports":{"three":"/vendor/three/0.186.0/three.module.js","@angular/core":"/layout-view/layout_angular.js","@angular/platform-browser":"/layout-view/layout_angular.js"}}
 </script>
 <script type="module">
 __ROOM_SCRIPT__

@@ -7,11 +7,11 @@ from dataclasses import dataclass, field
 from typing import Any
 from uuid import uuid4
 
-from furniture_delivery_validation.validation import ValidationReport
+from furniture_contracts.validation import ValidationReport
 from furniture_layout.project_layout import ProjectLayout
 
 from .workflow_artifacts import ArtifactManifest
-from .workflow_digest import stable_digest
+from furniture_contracts.digest import stable_digest
 from .workflow_state import WorkflowStage, WorkflowState, parse_stage, utc_now
 
 

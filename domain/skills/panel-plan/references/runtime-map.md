@@ -24,7 +24,7 @@
 
 确认后的板件冻成 `store/<project-id>/panels/<sha256>.json`，Revision 记下 `confirmed_panel_sha256`。有 Project Store 时，制造、板件旁路分析、CAD 板件快照和交付哈希按该哈希读冻结文件，文件缺失则失败；尚未记录冻结哈希、或没有 Store 时仍读内存中的 `stage_outputs.panel_plan`。不重跑 `plan_panel_stage()`。
 
-**看结构（只读）**：预览里的一台柜子结构页读同一份冻结文件——`confirmed_panel_sha256` 指向的那份，没有确认过就不显示结构，只画布局里已保存的外形（怎么挂路由见 [布局预览维护](../../layout-plan/references/preview-ops.md)）。这条链只读：不写 `stage_outputs`、不改确认状态、不喂下游。
+**看结构（只读）**：预览里的一台柜子结构页在板件已确认时读同一份冻结文件（`confirmed_panel_sha256` 指向的那份），已生成候选但尚未确认时读当前 `stage_outputs.panel_plan` 供三维审查（不开放顺纹保存），还没有生成过板件时只画布局里已保存的外形（怎么挂路由见 [布局预览维护](../../layout-plan/references/preview-ops.md)）。这条链只读：不写 `stage_outputs`、不改确认状态、不喂下游。
 
 **顺纹方向是板件的属性，不是显示数据**：每块板带 `grain_axis`（`x` 沿宽 / `y` 沿深 / `z` 沿高 / `none` 不限），默认值由**类型**在 `grain_rules.GRAIN_BY_TYPE` 给（侧板 / 门板 / 抽面 / 背板沿高，层板 / 顶板 / 底板 / 踢脚板沿宽，背拉条不限；没点名的类型按沿高），随板件一起进冻结文件。板件页上可以按订单改它（`POST /api/project/{id}/cabinets/{id}/panels` → `revise_stage_output` → 重新冻结），所以**同一类型的板在不同工程里可以不一样**，别再假设"侧板一定沿高"。同一条端点也用来改门板的**铰链侧**（`door_hinge_side`；对开腔那两扇由几何定、不给改）。`_grain_uv()` 把这个轴换算成每个面怎么转、铺几遍：木纹画在贴图横向上，按「这个面的横向是不是顺纹轴」**逐个面**决定转不转，一个全局旋转值必然顾此失彼（`px` 要 0、`py` 要 90°）。渲染端只照着摆，不自己判断。
 
@@ -47,7 +47,7 @@
 | `joint_topology.py` | 大面–端面接触几何；不解析连不连 | calculation |
 | `panel_review.py` | 确认审查清单：净空、板件一行一条、接触去重；不含连不连 | calculation / structured_protocol |
 | `grain_rules.py` | 顺纹方向这个板件属性的默认值、允许取值与规整（进冻结文件） | schema / calculation |
-| `cabinet_panel_page.py` | 一台柜子的板件页。给了已确认冻结板件的投影就画结构；没有只画布局里已保存的外形。`panel_structure_view()` 只把冻结结构投影成页面能画的尺寸、位置、装配、材料，以及把板件带的 `grain_axis` 换算成每个面怎么摆贴图（`_grain_uv()`）；不确认布局，不生成门和层板 | structured_protocol |
+| `cabinet_panel_page.py` | 一台柜子的板件页。给了板件结构投影（已确认冻结板件或待确认候选板件）就画结构；没有只画布局里已保存的外形。`panel_structure_view()` 只把结构投影成页面能画的尺寸、位置、装配、材料，以及把板件带的 `grain_axis` 换算成每个面怎么摆贴图（`_grain_uv()`）；不确认布局，不生成门和层板 | structured_protocol |
 | `validation.py` | 检查点入口；柜体/装配在 `validation_cabinet.py`，板件角色在 `validation_panels.py` | validation |
 | `quantitative_audit.py` / `design_optimization.py` | 旁路分析 | 只写 `stage_analyses` |
 

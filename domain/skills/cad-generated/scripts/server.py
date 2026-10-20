@@ -29,7 +29,7 @@ from runtime_paths import bootstrap_runtime_paths
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -570,29 +570,53 @@ def confirmed_panel_structure(
     raise LookupError(f"已确认板件里没有 {cabinet_id}")
 
 
+def _candidate_panel_structure(
+    project,
+    cabinet_id: str,
+) -> dict[str, Any] | None:
+    """这一台待确认候选板件的结构投影；还没有生成过板件返回 `None`。"""
+    revision = project.latest
+    candidate = revision.stage_outputs.get(WorkflowStage.PANELS_PLANNED.value)
+    if not isinstance(candidate, dict):
+        return None
+    for cabinet in cabinets_from_output(candidate):
+        if str(cabinet.get("id")) == cabinet_id:
+            return panel_structure_view(cabinet)
+    raise LookupError(f"当前板件草稿里没有 {cabinet_id}")
+
+
 def structure_for_panel_page(
     project,
     cabinet_id: str,
 ) -> tuple[dict[str, Any] | None, str]:
     """给板件页的 `(结构, 说明)`。
 
-    结构为 `None` 时说明为什么只有外形——三种情况页面上说法必须不同，别让"没确认"
-    和"冻结文件缺了"看起来像同一件事。
+    已确认时读冻结文件；已生成候选但尚未确认时读当前 `stage_outputs.panel_plan` 供三维审查；
+    尚未生成板件或找不到该柜时退回外形并说明原因。
     """
     revision = project.latest
-    if WorkflowStage.PANELS_PLANNED.value not in revision.approved_stages:
-        return None, ""
+    if WorkflowStage.PANELS_PLANNED.value in revision.approved_stages:
+        try:
+            structure = confirmed_panel_structure(
+                project,
+                cabinet_id,
+                store=JsonProjectStore(STORE_ROOT),
+            )
+        except FrozenPanelsMissing as exc:
+            return None, f"已确认板件读不出来，暂时只能看外形：{exc}。回布局页重跑板件后再看结构。"
+        except LookupError:
+            return None, "冻结板件里没有这台柜（布局可能改过）。回布局页重新生成板件后再看结构。"
+        return structure, ""
     try:
-        structure = confirmed_panel_structure(
-            project,
-            cabinet_id,
-            store=JsonProjectStore(STORE_ROOT),
-        )
-    except FrozenPanelsMissing as exc:
-        return None, f"已确认板件读不出来，暂时只能看外形：{exc}。回布局页重跑板件后再看结构。"
+        candidate = _candidate_panel_structure(project, cabinet_id)
     except LookupError:
-        return None, "冻结板件里没有这台柜（布局可能改过）。回布局页重新生成板件后再看结构。"
-    return structure, ""
+        return None, "当前板件草稿里没有这台柜（布局可能改过）。回布局页重新生成板件后再看结构。"
+    if candidate is not None:
+        return (
+            candidate,
+            "待确认板件草稿 · 点板件看尺寸，透视看内部；确认板件阶段后可改顺纹并冻结",
+        )
+    return None, ""
 
 
 @app.get(
@@ -605,7 +629,7 @@ async def project_cabinet_panels(
     request: Request,
     mode: str | None = None,
 ) -> HTMLResponse:
-    """这一台的板件页。外形来自最新布局；结构来自已确认冻结板件（没有就只画外形）。"""
+    """这一台的板件页。外形来自最新布局；结构来自已确认冻结板件或待确认候选板件（没有就只画外形）。"""
     project = _load_project(project_id)
     try:
         cabinet = cabinet_for_panel_page(project.latest.layout, cabinet_id)
@@ -617,8 +641,9 @@ async def project_cabinet_panels(
     # 「保存并冻结」要带 version 回来，服务端据此拒绝拿过期画面覆盖新内容。
     # 这里给的是**板件**版本（`panel_version`），不是布局版本——改的只有板件，
     # 布局摘要不会动，拿它当版本号这道门等于没有。
-    # 只读分享那一页不给——它也不显示保存入口（门在 `may_edit()`）。
-    editable = may_edit(request) and mode != "view"
+    # 只读分享或尚未确认冻结的草稿不给版本号，也不开放顺纹保存入口。
+    confirmed = WorkflowStage.PANELS_PLANNED.value in project.latest.approved_stages
+    editable = confirmed and may_edit(request) and mode != "view"
     return HTMLResponse(
         content=render_cabinet_panel_page(
             project_id,
@@ -641,12 +666,14 @@ async def project_preview(project_id: str, request: Request, mode: str | None = 
     """
     document = _preview_page_data(project_id)
     read_only = mode == "view" or not may_edit(request)
+    extension_factory = getattr(app.state, "page_extension_factory", None)
     try:
         html = render_project_page(
             project_id,
             document,
             mode=mode,
             read_only=read_only,
+            page_extension=extension_factory(project_id) if extension_factory and not read_only else None,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -817,7 +844,24 @@ async def undo_project_layout_edit(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+# Resolve this once at startup; changing it requires restarting the preview server.
+WEB_CHAT_ENV = "FURNITURE_WEB_CHAT"
+_web_chat_setting = os.environ.get(WEB_CHAT_ENV, "1")
+if _web_chat_setting not in {"0", "1"}:
+    raise ValueError(f"{WEB_CHAT_ENV} must be 0 or 1")
+WEB_CHAT_ENABLED = _web_chat_setting == "1"
+
+if WEB_CHAT_ENABLED:
+    from furniture_chat.integration import install
+
+    install(
+        app,
+        workspace_root=WORKSPACE_ROOT,
+        store_root=lambda: STORE_ROOT,
+        load_project=_load_project,
+        may_edit=may_edit,
+    )
+
 
 if __name__ == "__main__":
     main()
-

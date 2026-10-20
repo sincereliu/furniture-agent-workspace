@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any, Mapping
 
-from furniture_delivery_validation.validation import ValidationReport
+from furniture_contracts.validation import ValidationReport
 
 from .cabinet_envelope import CabinetEnvelope
 

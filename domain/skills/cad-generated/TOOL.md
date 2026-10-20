@@ -23,6 +23,8 @@ orchestrator.run_next(project, output_root="generated", generate_cad=True)
 
 契约见 [运行时契约](references/runtime-contract.md)。实现在 `scripts/furniture_cad/` 与 `scripts/furniture_workflow/`。展示 `stage_outputs.cad_generated`。客户要做交付验证且 `cad_generated` 已确认时，再打开 `domain/skills/delivery-validated/SKILL.md`。
 
+维护模块边界、定位实现与测试时，先看 [项目模块导航](references/module-map.md)。
+
 **多柜（2026-10-02 起逐柜）**：制造、特征树、**CAD 与交付清单都已逐柜**——布局里有几台柜，就出几套柜级产物（`bom.<cabinet_id>.md`、`<cabinet_id>.step`、`<cabinet_id>.drilled-holes.*`、`六面钻文件/{cabinet_id}__{role}.xml`），manifest 的柜级记录带 `cabinet_id`，交付验证会拦住"规划了三台、只有一台有文件"。产物形状是 `{"cabinets": [{"id", "bom"|"tree"|"bridge"}]}`，与板件 `cabinets[]` 一一对应。
 
 **成本口径（2026-10-02 实测）**：桥是**一个源文件起一个进程**，实测约 **4.2 秒/台**，所以 CAD 阶段是 **N 台 ≈ N × 4.2 秒**（2 台 9.3 秒、3 台 12.4 秒、6 台约 25 秒）。拆开看：**导入 build123d 约 2.4 秒**、建模约 0.25–0.7 秒、**viewer 拓扑导出约 1.4 秒**。

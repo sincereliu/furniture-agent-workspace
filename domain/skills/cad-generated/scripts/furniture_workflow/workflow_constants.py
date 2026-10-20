@@ -8,7 +8,7 @@ from typing import Any
 from furniture_cad.cad_bridge import BridgeResult
 
 from .cabinet_pipeline import CabinetPipelineResult
-from .workflow_digest import stable_digest as _stable_digest
+from furniture_contracts.digest import stable_digest as _stable_digest
 from .workflow_project import Project, Revision
 from .workflow_state import WorkflowStage
 

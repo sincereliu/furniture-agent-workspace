@@ -1,10 +1,12 @@
-"""Enforce stage-owned skill scripts plus the disposable temp surface."""
+"""Enforce stage-owned scripts, the independent AI module, and disposable temp."""
 
 from __future__ import annotations
 
 import argparse
 import os
 from pathlib import Path
+
+from runtime_paths import AI_MODULE_RELATIVE_ROOT, STAGE_SKILL_NAMES
 
 
 SCRIPT_SUFFIXES = {
@@ -23,17 +25,9 @@ SCRIPT_SUFFIXES = {
     ".ts",
     ".tsx",
 }
-STAGE_SKILL_NAMES = (
-    "layout-plan",
-    "panel-plan",
-    "manufacture-plan",
-    "feature-tree",
-    "cad-generated",
-    "delivery-validated",
-)
 ALLOWED_SCRIPT_ROOTS = tuple(
     Path("domain") / "skills" / skill_name / "scripts" for skill_name in STAGE_SKILL_NAMES
-) + (Path("temp"),)
+) + (AI_MODULE_RELATIVE_ROOT, Path("temp"))
 #: 根目录点名的例外：只有一个给人双击的启动器，本身不承载逻辑
 #: （只 cd 到仓库根、转去跑布局阶段的 `scripts/open_last_project.py`）。
 #: 别往这里加第二个文件——要加就先问「它为什么不放在某个阶段的 scripts/ 里」。
@@ -71,7 +65,7 @@ def find_violations(workspace_root: Path) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Validate that local scripts only exist in stage skills or temp/."
+        description="Validate stage scripts, the independent AI module, and temp/."
     )
     parser.add_argument(
         "--workspace-root",
@@ -87,7 +81,7 @@ def main() -> int:
             print(f"- {violation}")
         return 1
 
-    print("Workspace script layout is valid: stage-owned domain/skills/*/scripts + temp only.")
+    print("Workspace script layout is valid: stage scripts + domain/modules/ai + temp.")
     return 0
 
 

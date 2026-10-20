@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Sequence
 
-from furniture_delivery_validation.validation import ValidationReport
+from furniture_contracts.validation import ValidationReport
 
 from .confirmed_panels import admit_construction, admit_panels
 from .connectors import ALL_CONNECTORS

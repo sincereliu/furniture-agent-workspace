@@ -74,6 +74,24 @@ STAGE_RUNTIME_PACKAGES = {
 
 
 class SkillArchitectureTests(unittest.TestCase):
+    def test_ai_module_has_its_own_code_tests_and_documentation(self) -> None:
+        module = WORKSPACE_ROOT / "domain/modules/ai"
+        for name in ("furniture_ai", "furniture_chat"):
+            self.assertTrue((module / name / "__init__.py").is_file())
+            self.assertFalse((SKILLS_ROOT / CAD_TOOL_HOME / "scripts" / name).exists())
+        self.assertTrue((module / "README.md").is_file())
+        self.assertTrue((module / "references/ai-integration.md").is_file())
+        self.assertTrue((module / "tests/test_web_chat_feature.py").is_file())
+
+    def test_module_navigation_links_resolve(self) -> None:
+        navigation = SKILLS_ROOT / CAD_TOOL_HOME / "references" / "module-map.md"
+        self.assertTrue(navigation.is_file())
+        links = re.findall(r"\[[^\]]+\]\(([^)]+)\)", navigation.read_text(encoding="utf-8"))
+        self.assertTrue(links)
+        for target in links:
+            with self.subTest(target=target):
+                self.assertTrue((navigation.parent / target).resolve().is_file())
+
     def test_llm_runtime_boundary_policy_is_discoverable(self) -> None:
         policy_relative_path = (
             ".agents/skills/furniture-agent/references/"

@@ -11,6 +11,9 @@ import {
   ELEVATION_MAX_PITCH, baseFit, fitDistance, horizontalAxis,
   isOrthoView, nearAngle, rotationSign, verticalPlaneScale,
 } from "/layout-view/layout_camera.js";
+import {
+  Component, Injectable, signal, computed, effect, bootstrapApplication,
+} from "/layout-view/layout_angular.js";
 
 const pageConfigEl=document.getElementById("page-config");
 const PAGE_CONFIG=pageConfigEl?JSON.parse(pageConfigEl.textContent||"{}"):{};
@@ -24,7 +27,16 @@ const LAYOUT_URL=__LAYOUT_URL__;
 let rooms=__ROOMS_JSON__;
 let layoutVersion=__VERSION_JSON__;
 
-// 收敛散落的顶层可变状态为四个职责清晰的 Store
+// Angular Reactive Signals 与职责清晰的 Store
+const selectedIdSignal=signal(null);
+const activeViewSignal=signal("default_view");
+const dimsModeSignal=signal("selected");
+const statusToastSignal=signal({text:"点击一件家具开始",kind:""});
+const roomIndexSignal=signal(0);
+const leaseSignal=signal(null);
+const workingSignal=signal(null);
+const pendingDecisionsSignal=signal([]);
+
 const syncStore={
   dirty:false,
   epoch:0,
@@ -111,6 +123,7 @@ function render(){
 }
 
 function setStatus(text,kind){
+  statusToastSignal.set({text,kind:kind||""});
   status.textContent=text;
   status.classList.toggle("warn",kind==="warn");
   status.classList.toggle("error",kind==="error");
@@ -287,6 +300,7 @@ function applyDetailValues(detail,item,force){
 }
 function selectItem(id){
   state.selectedId=id;state.blocked=null;
+  selectedIdSignal.set(id);
   const item=scene.items.find(candidate=>candidate.id===id);
   setStatus(item?selectHint(item):"点击一件家具开始");
   render();
@@ -674,11 +688,16 @@ window.addEventListener("keydown",event=>{
 });
 window.addEventListener("keyup",event=>{if(event.key==="Shift")view.setShiftPan(false)});
 
-window.addEventListener("resize",()=>{
+function handleViewportResize(){
   fitCanvas();
   if(!uiStore.viewAnimation)state.distance=fitDistance(canvas,diagonal,view,state.active);
   render();
-});
+}
+window.addEventListener("resize",handleViewportResize);
+if(typeof ResizeObserver==="function"){
+  const stageRo=new ResizeObserver(()=>handleViewportResize());
+  stageRo.observe(canvas.parentElement||canvas);
+}
 const nextFrame=typeof requestAnimationFrame==="function"
   ?requestAnimationFrame
   :callback=>setTimeout(()=>callback(Date.now()),16);
@@ -725,6 +744,7 @@ function animateView(goal,duration){
   uiStore.viewAnimation=nextFrame(step);
 }
 function syncViewControls(){
+  activeViewSignal.set(state.active);
   const select=document.getElementById("view-select");
   if(select)select.value=isOrthoView(state.active)?state.active:"free";
   const button=document.querySelector('[data-view="default_view"]');
@@ -788,6 +808,7 @@ canvas.addEventListener("dblclick",()=>{
 const dimsButton=document.getElementById("toggle-dims");
 const DIMS_CYCLE=[["selected","标注·选中"],["all","标注·全部"],["off","标注·关"]];
 function syncDimsButton(){
+  dimsModeSignal.set(state.dims);
   if(!dimsButton)return;
   const found=DIMS_CYCLE.find(([value])=>value===state.dims);
   dimsButton.textContent=found?found[1]:"标注";
@@ -939,6 +960,7 @@ function syncRoomBand(){
 function showRoom(index,keepCamera){
   if(!rooms||!rooms[index])return;
   syncStore.roomIndex=index;
+  roomIndexSignal.set(index);
   const next=rooms[index].scene;
   scene.room=next.room;
   scene.items=normalizeItems(next.items||[]);
@@ -956,6 +978,7 @@ function showRoom(index,keepCamera){
   }
   if(state.selectedId&&!scene.items.some(item=>item.id===state.selectedId)){
     state.selectedId=null;state.blocked=null;
+    selectedIdSignal.set(null);
   }
   uiStore.panelSignature=null;
   uiStore.detailItemId=undefined;
@@ -1034,6 +1057,7 @@ function applyWorking(payload){
   const badge=document.getElementById("working-badge");
   if(!badge)return;
   const working=payload&&payload.working;
+  workingSignal.set(working||null);
   if(!PROJECT_EDIT_URL||!working){badge.hidden=true;return}
   const revision=payload.revision_number?`第 ${payload.revision_number} 版 · `:"";
   badge.hidden=false;
@@ -1075,6 +1099,7 @@ function applyDecisions(payload){
   const panel=document.getElementById("basis-panel");
   if(!badge)return;
   leaseStore.pendingDecisions=(payload&&payload.decisions&&payload.decisions.pending)||[];
+  pendingDecisionsSignal.set(leaseStore.pendingDecisions);
   if(!leaseStore.pendingDecisions.length){
     badge.hidden=true;badge.removeAttribute("title");badge.setAttribute("aria-expanded","false");
     if(panel)panel.hidden=true;
@@ -1117,6 +1142,7 @@ async function decideBasis(target,action){
 }
 function applyLease(lease){
   leaseStore.shown=lease||null;
+  leaseSignal.set(leaseStore.shown);
   leaseStore.painted="";
   paintLease();
 }
@@ -1315,3 +1341,31 @@ if(shutdownButton){
     }
   });
 }
+
+/* ---------- 8. Angular 根组件引导 (Standalone Component + Signals) ---------- */
+const LayoutWorkspaceAppComponent=Component({
+  selector:"main.app",
+  standalone:true,
+})(class LayoutWorkspaceAppComponent{
+  constructor(){
+    this.selectedId=selectedIdSignal;
+    this.activeView=activeViewSignal;
+    this.dimsMode=dimsModeSignal;
+    this.statusToast=statusToastSignal;
+    this.roomIndex=roomIndexSignal;
+    this.lease=leaseSignal;
+    this.working=workingSignal;
+    this.pendingDecisions=pendingDecisionsSignal;
+  }
+
+});
+bootstrapApplication(LayoutWorkspaceAppComponent);
+
+
+
+// Trusted optional page code receives only these two layout integration hooks.
+const pageHost=Object.freeze({
+  onProjectUpdated:()=>refreshProjectDocument(),
+  onStatusToast:(message,kind)=>setStatus(message,kind),
+});
+__PAGE_EXTENSION_SCRIPT__

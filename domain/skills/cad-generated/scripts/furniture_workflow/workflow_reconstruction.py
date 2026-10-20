@@ -6,7 +6,7 @@ import json
 from typing import Any, Mapping
 
 from furniture_cad.cad_bridge import BridgeResult
-from furniture_delivery_validation.validation import ValidationReport
+from furniture_contracts.validation import ValidationReport
 from furniture_manufacturing.connection_points import ConnectionPoint
 from furniture_manufacturing.features import feature_from_dict
 from furniture_manufacturing.manufacturing_bom import BOMReport

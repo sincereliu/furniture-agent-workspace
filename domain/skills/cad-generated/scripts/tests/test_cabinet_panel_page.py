@@ -32,6 +32,7 @@ import server
 from furniture_layout.open_preview import layout_version, panel_version
 from furniture_layout.project_layout import ProjectLayout
 from furniture_layout.room_page import render_draft_page
+from furniture_panel_planning.panel_pipeline import plan_panel_stage
 from furniture_panel_planning.assembly_tree import flatten_panels_for_handoff
 from furniture_panel_planning.cabinet_panel_page import (
     _FACE_AXES,
@@ -47,21 +48,22 @@ from furniture_workflow.project_layout_edit import (
 )
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from furniture_workflow.workflow_store import JsonProjectStore
-from panel_fixtures import cabinet_data, panel_parameters
+from panel_fixtures import cabinet_data, cabinet_envelope, panel_parameters
 from furniture_orchestrator_test_support import layout_proposal
 
-#: 一份真实的冻结板件：800×600×1000 的双门柜，12 块板。投影的测试都对着它跑。
-FROZEN_PANELS = (
-    WORKSPACE_ROOT
-    / "store"
-    / "project_a3731afe65d34a3faa78d21799ecccf7"
-    / "panels"
-    / "3cf7428c9be3ab60890cb064a4aba7aa00ed85456c0546292f54cb1074c649d0.json"
-)
-
-
-def _frozen_cabinet() -> dict:
-    return json.loads(FROZEN_PANELS.read_text(encoding="utf-8"))["cabinets"][0]
+def _fixture_cabinet() -> dict:
+    """独立的 800×600×900 双门柜样例，不依赖开发机的 Project Store。"""
+    output = plan_panel_stage(
+        [cabinet_envelope(height=900)],
+        {"parameters": panel_parameters(
+            shelves=[
+                {"shelf_type": "fixed", "gap_below_mm": 419},
+                {"shelf_type": "fixed", "gap_below_mm": 100},
+            ],
+            top_gap_mm=259,
+        )},
+    )
+    return json.loads(json.dumps(output))["cabinets"][0]
 
 
 def _grain_repeat_for_test(span_mm: float) -> float:
@@ -337,7 +339,7 @@ class CabinetStructurePageTests(unittest.TestCase):
             server.confirmed_panel_structure(project, "cabinet_missing", store=self.store)
 
     def test_unconfirmed_panels_show_only_the_envelope_and_say_so(self) -> None:
-        """板件阶段没确认过：结构页不出现，页面上说明还没确认。"""
+        """还没生成板件时：结构页不出现，页面上说明还没确认。"""
         project = self.orchestrator.create_project(
             "未确认板件",
             layout_proposal(),
@@ -350,6 +352,24 @@ class CabinetStructurePageTests(unittest.TestCase):
         self.assertNotIn('id="cabinet-structure"', page)
         self.assertIn("板件还没确认", page)
         self.assertIn("绿面是柜门这一面", page)
+
+    def test_candidate_panels_show_structure_draft_before_confirmation(self) -> None:
+        """板件已生成候选但尚未确认：显示 3D 结构草稿供审查，但不开放顺纹保存。"""
+        project = self.orchestrator.create_project(
+            "待确认板件草稿",
+            layout_proposal(),
+            stage_inputs=stage_inputs_from_spec(panel_parameters()),
+        )
+        self.orchestrator.confirm_layout(project)
+        self.orchestrator.run_next(project)
+        page = asyncio.run(
+            server.project_cabinet_panels(project.id, "cabinet_1", _local())
+        ).body.decode("utf-8")
+        self.assertIn("cabinet_1 · 柜体结构", page)
+        self.assertIn('id="cabinet-structure"', page)
+        self.assertIn("待确认板件草稿", page)
+        self.assertIn('version: ""', page)
+        self.assertIn("editor: null", page)
 
     def test_missing_frozen_file_says_the_panels_cannot_be_read(self) -> None:
         """已确认但冻结文件丢了：不装作"还没确认"，页面上直说读不出来。"""
@@ -622,7 +642,7 @@ class PanelGrainDirectionTests(unittest.TestCase):
         self.assertEqual(grain_axis({}), "z")
 
     def test_every_panel_of_a_real_cabinet_gets_a_known_axis(self) -> None:
-        view = panel_structure_view(_frozen_cabinet())
+        view = panel_structure_view(_fixture_cabinet())
         self.assertEqual(len(view["panels"]), 13)
         for panel in view["panels"]:
             grain = panel["grain"]
@@ -632,7 +652,7 @@ class PanelGrainDirectionTests(unittest.TestCase):
 
     def test_projection_keeps_the_rule_table_promise(self) -> None:
         """冻结的一台柜：逐块对一遍方向，顺带把「哪个面转 90°」钉住。"""
-        panels = {panel["panel_type"] + "|" + panel["role"]: panel for panel in panel_structure_view(_frozen_cabinet())["panels"]}
+        panels = {panel["panel_type"] + "|" + panel["role"]: panel for panel in panel_structure_view(_fixture_cabinet())["panels"]}
         for key, panel in panels.items():
             axis = self.EXPECTED[panel["panel_type"]]
             grain = panel["grain"]
@@ -726,7 +746,7 @@ class PanelStructureViewTests(unittest.TestCase):
     """结构投影只搬冻结文件里的数，不重算几何，材料按角色分。"""
 
     def test_projection_copies_geometry_and_assigns_materials(self) -> None:
-        view = panel_structure_view(_frozen_cabinet())
+        view = panel_structure_view(_fixture_cabinet())
         self.assertEqual(view["cabinet_id"], "cabinet_1")
         self.assertEqual(view["envelope_mm"]["width"], 800.0)
         panels = {panel["role"]: panel for panel in view["panels"]}

@@ -33,4 +33,4 @@ description: 用于 delivery_validated 阶段。当用户说"检查一下产物"
 ## 参考导航
 
 - 查什么、怎样算过： [交付验证清单](references/delivery-checklist.md)
-- 运行时在 `scripts/furniture_delivery_validation/`。`ValidationReport` 与交付规则归本包。Orchestrator 只触发、保存和推进状态。
+- 运行时在 `scripts/furniture_delivery_validation/`。交付规则归本包；公共 `ValidationReport` 类型来自 `furniture_contracts.validation`，本包保留兼容导入。Orchestrator 只触发、保存和推进状态。

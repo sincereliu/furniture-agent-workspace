@@ -1,7 +1,7 @@
 """Run the whole integration test suite with the stage packages on sys.path.
 
 The test modules bootstrap their own imports through ``runtime_paths``; this
-script only supplies the shared test directory and discovery parameters, so a
+script supplies stage/module test directories and discovery parameters, so a
 checkout can run every test with one documented command.
 """
 
@@ -24,18 +24,22 @@ TESTS_ROOT = SCRIPT_ROOT / "tests"
 sys.path.insert(0, str(SCRIPT_ROOT))
 
 from backlog_reconcile import reconcile_workspace
-from runtime_paths import bootstrap_runtime_paths
+from runtime_paths import AI_MODULE_RELATIVE_ROOT, bootstrap_runtime_paths
+
+TEST_ROOTS = (TESTS_ROOT, WORKSPACE_ROOT / AI_MODULE_RELATIVE_ROOT / "tests")
 
 
 def _suite(pattern: str) -> unittest.TestSuite:
     bootstrap_runtime_paths(WORKSPACE_ROOT)
-    if str(TESTS_ROOT) not in sys.path:
-        sys.path.insert(0, str(TESTS_ROOT))
-    return unittest.TestLoader().discover(
-        str(TESTS_ROOT),
-        pattern=pattern,
-        top_level_dir=str(TESTS_ROOT),
-    )
+    for tests_root in TEST_ROOTS:
+        if str(tests_root) not in sys.path:
+            sys.path.insert(0, str(tests_root))
+    suite = unittest.TestSuite()
+    for tests_root in TEST_ROOTS:
+        suite.addTests(unittest.TestLoader().discover(
+            str(tests_root), pattern=pattern, top_level_dir=str(tests_root),
+        ))
+    return suite
 
 
 def _flatten(suite: unittest.TestSuite):
@@ -65,7 +69,7 @@ def _unique(cases) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Run every test under cad-generated/scripts/tests."
+        description="Run stage integration tests and independent AI module tests."
     )
     parser.add_argument(
         "--verbose",
@@ -90,7 +94,7 @@ def main() -> int:
     suite = _suite(args.pattern)
     # unittest discards each executed case from the suite, so snapshot first.
     all_ids = [_test_id(test) for test in _flatten(suite)]
-    print(f"Discovered {len(all_ids)} tests in {TESTS_ROOT}", flush=True)
+    print(f"Discovered {len(all_ids)} tests in {len(TEST_ROOTS)} test roots", flush=True)
 
     runner = unittest.TextTestRunner(verbosity=0)
     result = runner.run(suite)

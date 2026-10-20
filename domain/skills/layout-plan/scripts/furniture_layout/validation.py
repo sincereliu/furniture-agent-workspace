@@ -5,7 +5,7 @@ from __future__ import annotations
 from math import isfinite
 from typing import Any
 
-from furniture_delivery_validation.validation import ValidationReport
+from furniture_contracts.validation import ValidationReport
 
 from .placement_check import (
     blocked_openings,
