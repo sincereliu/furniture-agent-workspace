@@ -1,6 +1,6 @@
 # LLM 与运行时边界
 
-适用于创建、修改和审查 `domain/skills/` 下家具阶段包、CAD 执行工具、家具工作流入口、路由 Skill 及其测试。
+适用于创建、修改和审查 `domain/skills/` 下家具阶段包、独立模块 `domain/modules/ai/`、CAD 执行工具、家具工作流入口、路由 Skill 及其测试。本文的运行时代码同时包括阶段 `scripts/` 与独立模块中的实现。
 
 本文只规定 LLM 和代码怎么分。阶段字段归谁、工具怎么调用、目录里有哪些合法值，以各 Skill 和运行时契约为准，不在这里展开。
 
@@ -33,7 +33,7 @@ LLM 做：
 - 不经过 LLM 的结构化 CLI/API 契约；只接受已规范化值。
 - 旁路分析的确定性计算或引擎调用。结果写入 `stage_analyses`，是证据不是阶段事实，不得直接覆盖 `stage_outputs`。用户选中候选后，按字段所有者走 `revise()` 或 `revise_stage_output()`。
 
-写进所属 Skill 或 `references/`，不要写进 `scripts/`：
+写进所属 Skill 或 `references/`，不要写进运行时代码：
 
 - LLM 做判断所需的领域口径、非穷举语义示例和追问标准。
 - 阶段边界、用户可见检查点、何时停止以及何时需要确认。
@@ -49,7 +49,7 @@ LLM 做：
 4. 判断错误是否会造成非法状态、错误几何、加工/BOM 错误或外部副作用？是则必须由代码兜底。
 5. 裸 CLI/API 是否必须在没有 LLM 时执行？是则代码只实现并验证明确的结构化协议，不补做自然语言理解。
 
-无法明确回答第 3、4 或 5 项的运行时逻辑，不新增到 `scripts/`；把决策标准写入所属 Skill。
+无法明确回答第 3、4 或 5 项的运行时逻辑，不新增到运行时代码；把决策标准写入所属 Skill。
 
 ## 默认禁止的运行时实现
 
@@ -70,7 +70,7 @@ LLM 做：
 
 ## 完成前边界审计
 
-1. 查看本次差异：`domain/skills/` 下阶段包、`cad-generated` 工作流、以及 `.agents/skills/furniture-agent/`。列出新增或扩大的分支、映射、默认值和解析器。
+1. 查看本次差异：`domain/skills/` 下阶段包、`domain/modules/ai/`、`cad-generated` 工作流、以及 `.agents/skills/furniture-agent/`。列出新增或扩大的分支、映射、默认值和解析器。
 2. 给每项标注一个代码理由：`schema`、`validation`、`calculation`、`state`、`side_effect` 或 `structured_protocol`。旁路分析标 `calculation` 或 `structured_protocol`，并确认只写入 `stage_analyses`。
 3. 没有上述理由的逻辑移到所属规划 Skill 的 `SKILL.md`、CAD 的 `TOOL.md` 或 `references/`，或删除。
 4. 检查代码中是否出现自然语言示例的复制、把同义词当分类器，或上游阶段静默做下游决策。工艺卡展开若已在所属 Skill 说明，不算违规。

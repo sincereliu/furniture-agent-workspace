@@ -57,7 +57,6 @@ HTTP / function calling / AI 对话
 | `workflow_lease` | 页面和助手的编辑租约 |
 | `project_layout_edit` | 页面编辑门面：版本、租约、几何变更和工作副本协作 |
 | `agent_tool_schema` / `agent_tools` | 工具定义、结构化协议准入和快照；业务动作交给 Orchestrator |
-| `web_agent_chat` | 可选页面助手的公开调用兼容入口，核心工作流不依赖它 |
 
 ## 接入与启动
 
@@ -65,16 +64,18 @@ HTTP / function calling / AI 对话
 | --- | --- |
 | `furniture_contracts/validation` / `digest` | 六阶段共用的校验结果与规范 JSON 内容哈希，仅依赖标准库 |
 | `server.py` | FastAPI 进程、本机访问检查、项目 HTTP 接口、挂载阶段路由和静态资源 |
-| `furniture_chat/conversation` / `http` | 可选页面助手的会话、模型上下文、工具循环和 HTTP 接入；开关与维护见 [AI 接入层维护](ai-integration.md) |
+| `furniture_chat/conversation` / `http` | 可选页面助手的会话、模型上下文、工具循环和 HTTP 接入；开关与维护见 [AI 接入层维护](../../../modules/ai/references/ai-integration.md) |
 | `furniture_chat/integration` / `page` / `templates` / `static` | 助手挂载、可选界面与前端资源；布局阶段只提供空插槽和两个展示回调 |
 | `furniture_ai/contracts` / `service` | 模型接入契约与统一分发 |
 | `furniture_ai/settings` / `discovery` | 本机配置与提供方发现 |
 | `furniture_ai/openai_compatible` | OpenAI 兼容 HTTP 协议适配 |
 | `furniture_ai/codex` / `agy` / `cli_protocol` / `isolation` | 本机 CLI 协议、进程调用与隔离配置 |
-| `runtime_paths.py` | 为入口加载六阶段包路径 |
+| `runtime_paths.py` | 为宿主入口加载六阶段包和独立 AI 模块路径 |
 | `run_tests.py` / `tests/` | 唯一整库回归入口与共享测试样例 |
 | `validate_workspace_layout.py` | 校验脚本归属目录 |
 | `backlog_reconcile.py` / `backlog_landed.py` | 待办版本与已落地版本核对 |
+
+上表的 `furniture_ai`、`furniture_chat` 及其专属测试和维护文档位于 [独立 AI 模块](../../../modules/ai/README.md)，不属于 `cad-generated`。CAD 目录中的服务器只负责条件接入。
 
 公共包位于 `cad-generated/scripts/furniture_contracts/`，沿用现有 `runtime_paths` 加载，无需增加启动步骤。它只定义阶段无关的数据契约和确定性计算，不导入阶段实现或工作流。新增调用使用 `furniture_contracts.validation` 的 `ValidationReport` / `ValidationIssue` / `ValidationSeverity` 及 `furniture_contracts.digest.stable_digest`；旧的交付类型导入和 `workflow_digest` 导入保持兼容。保存的 JSON 字段、错误等级与哈希算法不变。
 

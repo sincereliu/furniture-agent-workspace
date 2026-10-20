@@ -110,7 +110,7 @@ store/<project-id>/
 
 `server.py` 提供独立房间场景、项目列表，以及项目布局预览。房间场景请求体为 `room + items[]`；除 `GET` 外都是 JSON body。完整端点：
 
-AI 模型与聊天端点由可选 `furniture_chat` 路由提供。启动时 `FURNITURE_WEB_CHAT=0` 不导入 AI 包、不注册这些端点，也不挂载 `/web-chat/` 或输出 AI 页面扩展；其余核心端点照常可用。默认 `1`，修改后重启预览进程。禁用、恢复和维护边界见 [AI 接入层维护](ai-integration.md)。
+AI 模型与聊天端点由独立模块 `domain/modules/ai/` 的可选 `furniture_chat` 路由提供。启动时 `FURNITURE_WEB_CHAT=0` 不导入 AI 包、不注册这些端点，也不挂载 `/web-chat/` 或输出 AI 页面扩展；其余核心端点照常可用。默认 `1`，修改后重启预览进程。禁用、恢复和维护边界见 [AI 接入层维护](../../../modules/ai/references/ai-integration.md)。
 
 | 方法 | 路径 | 作用 |
 | --- | --- | --- |

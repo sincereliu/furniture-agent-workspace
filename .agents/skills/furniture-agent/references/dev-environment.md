@@ -72,7 +72,7 @@ Get-ChildItem -Recurse -Directory -Filter .cadgen-store temp, generated -ErrorAc
 .\.venv\Scripts\python.exe domain\skills\cad-generated\scripts\run_tests.py
 ```
 
-入口在 `run_tests.py`，用标准库 `unittest`，不需要额外安装。它调 `runtime_paths.bootstrap_runtime_paths()` 装好各阶段包，再 discover `domain/skills/cad-generated/scripts/tests/` 下的全部测试。加 `-v` 会列出每个未失败用例。
+入口在 `run_tests.py`，用标准库 `unittest`，不需要额外安装。它调 `runtime_paths.bootstrap_runtime_paths()` 装好阶段包和独立 AI 模块，再发现 `domain/skills/cad-generated/scripts/tests/` 与 `domain/modules/ai/tests/` 下的全部测试。原命令与 `-p` 用法不变。加 `-v` 会列出每个未失败用例。
 
 合格结果是最后一行 `ran <总数>, failed 0, errored 0, skipped 0`。退出码 0 表示全绿。
 

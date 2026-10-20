@@ -9,15 +9,15 @@ import sys
 import textwrap
 import unittest
 
-SCRIPTS_ROOT = Path(__file__).resolve().parents[1]
-WORKSPACE_ROOT = SCRIPTS_ROOT.parents[3]
+WORKSPACE_ROOT = Path(__file__).resolve().parents[4]
+SCRIPTS_ROOT = WORKSPACE_ROOT / "domain/skills/cad-generated/scripts"
 
 
 class WebChatFeatureTests(unittest.TestCase):
     def probe(self, code: str, *, enabled: str = "0") -> None:
         env = {**os.environ, "FURNITURE_WEB_CHAT": enabled, "FURNITURE_PREVIEW_BROWSER": "0"}
         result = subprocess.run(
-            [sys.executable, "-c", textwrap.dedent(code)],
+            [sys.executable, "-c", f"import sys\nsys.path.insert(0, {str(Path(__file__).resolve().parent)!r})\n" + textwrap.dedent(code)],
             cwd=SCRIPTS_ROOT,
             env=env,
             capture_output=True,

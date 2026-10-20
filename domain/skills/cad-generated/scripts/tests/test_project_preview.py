@@ -879,7 +879,7 @@ class OpenProjectPreviewTests(unittest.TestCase):
         # 数一遍"每个写端点都走同一道门"：端点加一个，这里就加一。
         # （顺纹保存 `cabinets/{id}/grain` 是后加的，加它时这里从 12 改成 13；
         # 本机大模型配置与项目 AI 对话共 5 个本机端点，位于独立功能包。）
-        chat_http = (SCRIPT_ROOT / "furniture_chat" / "http.py").read_text(encoding="utf-8")
+        chat_http = (WORKSPACE_ROOT / "domain/modules/ai/furniture_chat/http.py").read_text(encoding="utf-8")
         self.assertEqual(
             source.count("if not may_edit(request):")
             + room_http.count("if not may_edit(request):")

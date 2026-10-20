@@ -14,8 +14,22 @@ from validate_workspace_layout import find_violations
 
 
 class WorkspaceLayoutTests(unittest.TestCase):
-    def test_live_workspace_uses_only_stage_skills_and_temp(self) -> None:
+    def test_live_workspace_uses_stage_skills_ai_module_and_temp(self) -> None:
         self.assertEqual(find_violations(WORKSPACE_ROOT), [])
+
+    def test_accepts_ai_module_but_does_not_open_arbitrary_module_roots(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            ai = root / "domain/modules/ai/furniture_ai"
+            ai.mkdir(parents=True)
+            (ai / "service.py").write_text("pass\n", encoding="utf-8")
+            self.assertEqual(find_violations(root), [])
+            unrelated = root / "domain/modules/unrelated"
+            unrelated.mkdir()
+            (unrelated / "tool.py").write_text("pass\n", encoding="utf-8")
+            self.assertEqual(find_violations(root), [
+                "script outside allowed locations: domain/modules/unrelated/tool.py",
+            ])
 
     def test_root_launcher_is_the_only_script_allowed_at_the_root(self) -> None:
         """根目录只放行那一个双击启动器；换一个名字或再加一个都要被拦住。"""

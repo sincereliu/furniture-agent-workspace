@@ -1,6 +1,6 @@
 # AI 接入层维护
 
-`scripts/furniture_ai/` 负责模型连接；它不导入家具工作流、布局、板件或 CAD 包，
+本模块位于 `domain/modules/ai/`，下表路径均相对该模块根目录。`furniture_ai/` 负责模型连接；它不导入家具工作流、布局、板件或 CAD 包，
 不读取家具项目、不执行模型返回的工具调用。接入层接收调用方提供的消息与工具 Schema，
 返回统一的 `thinking`、`content`、`tool_calls`。
 
@@ -24,8 +24,9 @@
 | `furniture_chat/page.py` | 组装可选页面片段，提供聊天 URL 和两个布局回调 |
 | `furniture_chat/templates/` | 助手面板、模型弹窗、按钮和样式；启用时内联输出，保持原有页面交付方式 |
 | `furniture_chat/static/layout_chat.js` | 消息显示、模型设置和登录按钮；只从 `/web-chat/` 提供 |
-| `furniture_workflow/web_agent_chat.py` | 原公开调用的兼容入口；核心工作流不导入它 |
-| `server.py` | 读取功能开关，向可选路由传入项目读取、Store 路径和本机权限检查 |
+| `tests/` | 模型、登录隔离、会话、启停和 HTTP 资源测试 |
+
+宿主 `domain/skills/cad-generated/scripts/server.py` 只读取功能开关，向可选模块传入项目读取、Store 路径和本机权限检查。AI 的实现与维护文档不属于 CAD 阶段。
 
 布局阶段只定义空的 `PageExtension` 插槽，不导入 AI 包，也不嵌入聊天 URL、UI 或脚本。
 扩展通过 `pageHost.onProjectUpdated` 请求刷新项目，或通过 `pageHost.onStatusToast` 显示状态。

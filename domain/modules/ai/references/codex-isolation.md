@@ -1,8 +1,8 @@
 # 网页 Codex 接入边界
 
 本机家具项目调用已安装的 Codex CLI，通过 `app-server --listen stdio://` 通信。
-接入入口在 `scripts/furniture_ai/__init__.py`，Codex 通信与登录在
-`scripts/furniture_ai/codex.py`，路径和环境契约在 `scripts/furniture_ai/isolation.py`。
+模块根目录为 `domain/modules/ai/`。接入入口在 `furniture_ai/__init__.py`，Codex 通信与登录在
+`furniture_ai/codex.py`，路径和环境契约在 `furniture_ai/isolation.py`。
 模块职责与公开接口见 [AI 接入层维护](ai-integration.md)。
 
 ## 独立数据

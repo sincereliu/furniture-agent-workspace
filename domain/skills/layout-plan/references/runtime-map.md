@@ -63,9 +63,9 @@
 
 页面结构在 `templates/room_page.html`，交互胶水在 `templates/room_page.js`，碰撞与拖拽求解在 `static/layout_solver.js`，相机取景辅助在 `static/layout_camera.js`。`room_page.py` 读入两份模板后填充参数，保存预览与实时页面使用同一份组装结果；模板不作为静态资源直接发布。
 
-页面 AI 助手是独立可选功能，界面与脚本归 `cad-generated/scripts/furniture_chat/`，模型连接归 `furniture_ai/`。
+页面 AI 助手是独立可选模块，界面与脚本归 `domain/modules/ai/furniture_chat/`，模型连接归同一模块的 `furniture_ai/`。
 布局页不导入这些包，不默认生成扩展。宿主仅为本机可编辑项目页传入 `PageExtension`；只读与分享页会丢弃扩展。
-扩展可通过两个只面向展示的回调刷新项目或显示状态，不直接读写布局对象。关闭方法和维护入口见 [AI 接入层维护](../../cad-generated/references/ai-integration.md)。
+扩展可通过两个只面向展示的回调刷新项目或显示状态，不直接读写布局对象。关闭方法和维护入口见 [AI 接入层维护](../../../modules/ai/references/ai-integration.md)。
 
 房间页上拖动只是本地先画，松手后后端再换算并检查。改 `placement_check.py` 必须同步改 `static/layout_solver.js`。
 

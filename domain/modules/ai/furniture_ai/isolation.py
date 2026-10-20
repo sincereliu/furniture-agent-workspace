@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Mapping
 
 
-WORKSPACE_ROOT = Path(__file__).resolve().parents[5]
+WORKSPACE_ROOT = Path(__file__).resolve().parents[4]
 
 
 def validate_codex_home(candidate: Path, *, workspace: Path, app_home: Path) -> Path:

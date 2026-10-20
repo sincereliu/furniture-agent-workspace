@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 SCRIPT_ROOT = Path(__file__).resolve().parents[1]
-WORKSPACE_ROOT = Path(__file__).resolve().parents[5]
+WORKSPACE_ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(SCRIPT_ROOT))
 
 import furniture_ai as ai

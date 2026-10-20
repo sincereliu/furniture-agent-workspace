@@ -10,8 +10,8 @@ import tempfile
 import unittest
 from unittest import mock
 
-SCRIPT_ROOT = Path(__file__).resolve().parents[1]
-WORKSPACE_ROOT = Path(__file__).resolve().parents[5]
+WORKSPACE_ROOT = Path(__file__).resolve().parents[4]
+SCRIPT_ROOT = WORKSPACE_ROOT / "domain/skills/cad-generated/scripts"
 sys.path.insert(0, str(SCRIPT_ROOT))
 from runtime_paths import bootstrap_runtime_paths
 
@@ -26,6 +26,9 @@ from furniture_ai import isolation as codex_isolation, codex
 
 
 class CodexIsolationTests(unittest.TestCase):
+    def test_relocated_module_still_protects_the_actual_workspace(self):
+        self.assertEqual(codex_isolation.WORKSPACE_ROOT, server.WORKSPACE_ROOT)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="codex-isolation-", dir=WORKSPACE_ROOT / "temp")
         self.addCleanup(self.temp.cleanup)
