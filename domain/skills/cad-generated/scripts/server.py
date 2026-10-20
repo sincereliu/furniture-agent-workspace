@@ -29,7 +29,7 @@ from runtime_paths import bootstrap_runtime_paths
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -71,14 +71,6 @@ from furniture_workflow.workflow_lease import (
 )
 from furniture_workflow.workflow_store import JsonProjectStore, project_preview_status
 from furniture_workflow.workflow_state import WorkflowStage
-from furniture_workflow.web_agent_chat import (
-    WebChatError,
-    clear_chat_history,
-    get_project_chat_state,
-    public_llm_config,
-    save_llm_config,
-    send_project_chat_message,
-)
 
 API_VERSION = "0.8.0"
 # 最后一页关掉后，超过这个秒数没有页面报「还在」，预览进程就退出。
@@ -671,12 +663,14 @@ async def project_preview(project_id: str, request: Request, mode: str | None = 
     """
     document = _preview_page_data(project_id)
     read_only = mode == "view" or not may_edit(request)
+    extension_factory = getattr(app.state, "page_extension_factory", None)
     try:
         html = render_project_page(
             project_id,
             document,
             mode=mode,
             read_only=read_only,
+            page_extension=extension_factory(project_id) if extension_factory and not read_only else None,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -843,105 +837,23 @@ async def undo_project_layout_edit(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-class LlmConfigSaveRequest(BaseModel):
-    """本机大模型连接配置（保存在本机 `store/_llm_config.json`，不上传仓库）。"""
+# Resolve this once at startup; changing it requires restarting the preview server.
+WEB_CHAT_ENV = "FURNITURE_WEB_CHAT"
+_web_chat_setting = os.environ.get(WEB_CHAT_ENV, "1")
+if _web_chat_setting not in {"0", "1"}:
+    raise ValueError(f"{WEB_CHAT_ENV} must be 0 or 1")
+WEB_CHAT_ENABLED = _web_chat_setting == "1"
 
-    model_config = ConfigDict(extra="forbid")
+if WEB_CHAT_ENABLED:
+    from furniture_chat.integration import install
 
-    provider: Literal["codex_cli", "agy_cli", "openai_compatible"] = "codex_cli"
-    base_url: str = Field(default="")
-    model: str = Field(..., min_length=1)
-    reasoning_effort: Literal["none", "minimal", "low", "medium", "high", "xhigh", "max"] = "high"
-    api_key: str | None = None
-    clear_api_key: bool = False
-
-
-class ProjectChatMessageRequest(BaseModel):
-    """网页端右侧 AI 对话框发来的一条消息。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    message: str = Field(..., min_length=1)
-
-
-@app.get("/api/llm/config")
-async def get_local_llm_config(request: Request):
-    """读取本机大模型脱敏配置（仅本机可用）。"""
-    if not may_edit(request):
-        raise HTTPException(status_code=403, detail="llm config is local only")
-    return public_llm_config(STORE_ROOT)
-
-
-@app.post("/api/llm/config")
-async def save_local_llm_config(req: LlmConfigSaveRequest, request: Request):
-    """保存本机大模型配置（仅本机可用）。"""
-    if not may_edit(request):
-        raise HTTPException(status_code=403, detail="llm config is local only")
-    try:
-        return save_llm_config(
-            STORE_ROOT,
-            provider=req.provider,
-            base_url=req.base_url,
-            model=req.model,
-            reasoning_effort=req.reasoning_effort,
-            api_key=req.api_key,
-            clear_api_key=req.clear_api_key,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-
-@app.get("/api/project/{project_id}/chat")
-async def get_project_chat_endpoint(project_id: str, request: Request):
-    """读取项目对话记录、本机模型配置状态与当前阶段快照（仅本机可用）。"""
-    if not may_edit(request):
-        raise HTTPException(status_code=403, detail="project chat is local only")
-    _load_project(project_id)
-    try:
-        return get_project_chat_state(
-            project_id,
-            workspace_root=WORKSPACE_ROOT,
-            store_root=STORE_ROOT,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-
-@app.post("/api/project/{project_id}/chat")
-async def send_project_chat_endpoint(
-    project_id: str,
-    req: ProjectChatMessageRequest,
-    request: Request,
-):
-    """向项目 AI 助手发送一条消息并执行工具调用（仅本机可用）。"""
-    if not may_edit(request):
-        raise HTTPException(status_code=403, detail="project chat is local only")
-    _load_project(project_id)
-    try:
-        return await asyncio.to_thread(
-            send_project_chat_message,
-            project_id,
-            req.message,
-            workspace_root=WORKSPACE_ROOT,
-            store_root=STORE_ROOT,
-        )
-    except WebChatError as exc:
-        raise HTTPException(
-            status_code=exc.status_code,
-            detail={"code": exc.code, "message": exc.message},
-        ) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-
-@app.delete("/api/project/{project_id}/chat")
-async def clear_project_chat_endpoint(project_id: str, request: Request):
-    """清空当前项目的对话历史（仅本机可用）。"""
-    if not may_edit(request):
-        raise HTTPException(status_code=403, detail="project chat is local only")
-    _load_project(project_id)
-    clear_chat_history(STORE_ROOT, project_id)
-    return {"cleared": True}
+    install(
+        app,
+        workspace_root=WORKSPACE_ROOT,
+        store_root=lambda: STORE_ROOT,
+        load_project=_load_project,
+        may_edit=may_edit,
+    )
 
 
 if __name__ == "__main__":

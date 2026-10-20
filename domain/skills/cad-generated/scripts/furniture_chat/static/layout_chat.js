@@ -1,7 +1,7 @@
 /**
  * 布局工作台右侧 AI 对话栏与本机大模型设置组件（基于 Angular Standalone Component & Reactive Signals）。
  *
- * 支持本机已登录 OAuth CLI（ChatGPT Codex / Gemini AGY，无需 API Key）以及通用 OpenAI 样式本地/兼容模型入口。
+ * Codex 使用仓库外独立登录；同时支持 Gemini AGY 和通用 OpenAI 兼容接口。
  * 按不同厂商与模型家族自动适配对应的思考深度（Thinking / Reasoning Effort）选项与参数叫法。
  * 仅做前端 UI 交互与结构化 HTTP 调用（`/api/llm/config`、`/api/project/{id}/chat`），
  * 不在前端解析自然语言或改写业务规则。
@@ -39,6 +39,19 @@ const PROVIDER_PRESETS = {
   },
 };
 
+const MODEL_SUGGESTIONS = {
+  codex_cli: ["gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-5.6-sol"],
+  agy_cli: [
+    "gemini-3.8-flash-high",
+    "gemini-3.8-flash-medium",
+    "gemini-3.8-flash-low",
+    "gemini-4-argon-high",
+    "gemini-4-argon-medium",
+    "gemini-4-argon-low",
+  ],
+  openai_compatible: ["gpt-oss-120b", "qwen3-coder", "deepseek-r1"],
+};
+
 const AGY_TIERED_PREFIXES = [
   "gemini-4-argon-",
   "gemini-3.8-flash-",
@@ -54,15 +67,15 @@ export function getEffortProfile(provider, model) {
   // 1. OpenAI Codex CLI (gpt-6.1-sol / gpt-6-astra / gpt-5.6-sol 等)
   if (p === "codex_cli") {
     return {
-      paramLabel: "OpenAI Codex · model_reasoning_effort",
-      hint: "通过 Codex CLI `-c model_reasoning_effort=\"...\"` 传递；gpt-6.1-sol 支持 minimal / low / medium / high / xhigh。",
+      paramLabel: "思考深度",
+      hint: "家具项目独立 Codex 登录 · 不使用 Codex App 的登录文件和配置",
       defaultEffort: "high",
       options: [
-        { value: "minimal", shortLabel: "Effort: minimal", fullLabel: "minimal（极简推理）" },
-        { value: "low", shortLabel: "Effort: low", fullLabel: "low（快速推理）" },
-        { value: "medium", shortLabel: "Effort: medium", fullLabel: "medium（标准推理）" },
-        { value: "high", shortLabel: "Effort: high", fullLabel: "high（深度推理 · 推荐）" },
-        { value: "xhigh", shortLabel: "Effort: xhigh", fullLabel: "xhigh（超深推理 · Pro 专属）" },
+        { value: "minimal", shortLabel: "思考 · 极简", fullLabel: "minimal · 极简" },
+        { value: "low", shortLabel: "思考 · 低", fullLabel: "low · 快速" },
+        { value: "medium", shortLabel: "思考 · 中", fullLabel: "medium · 标准" },
+        { value: "high", shortLabel: "思考 · 高", fullLabel: "high · 深度（推荐）" },
+        { value: "xhigh", shortLabel: "思考 · 极高", fullLabel: "xhigh · 极限" },
       ],
     };
   }
@@ -70,15 +83,15 @@ export function getEffortProfile(provider, model) {
   // 2. Google Antigravity / Gemini CLI (agy_cli)
   if (p === "agy_cli") {
     return {
-      paramLabel: "Gemini · Thinking Level (--effort & 模型后缀联动)",
-      hint: "切换档位时会自动同步 Gemini 模型后缀（-low / -medium / -high）与 `--effort` 参数。",
+      paramLabel: "Thinking Level",
+      hint: "本机 AGY OAuth 免密直连 · 切换档位自动联动 Gemini 模型后缀 (-low / -medium / -high)",
       defaultEffort: "high",
       options: [
-        { value: "low", shortLabel: "Thinking: Low", fullLabel: "Low（对应 -low 模型后缀 · 极速）" },
-        { value: "medium", shortLabel: "Thinking: Medium", fullLabel: "Medium（对应 -medium 模型后缀 · 均衡）" },
-        { value: "high", shortLabel: "Thinking: High", fullLabel: "High（对应 -high 模型后缀 · 深度）" },
-        { value: "xhigh", shortLabel: "Effort: xhigh", fullLabel: "xhigh（AGY --effort xhigh 扩展推理）" },
-        { value: "max", shortLabel: "Effort: max", fullLabel: "max（AGY --effort max 最大推理预算）" },
+        { value: "low", shortLabel: "Thinking · Low", fullLabel: "Low · 极速 (-low)" },
+        { value: "medium", shortLabel: "Thinking · Med", fullLabel: "Medium · 均衡 (-medium)" },
+        { value: "high", shortLabel: "Thinking · High", fullLabel: "High · 深度 (-high)" },
+        { value: "xhigh", shortLabel: "Thinking · xhigh", fullLabel: "xhigh · 扩展推理" },
+        { value: "max", shortLabel: "Thinking · max", fullLabel: "max · 最大预算" },
       ],
     };
   }
@@ -86,29 +99,29 @@ export function getEffortProfile(provider, model) {
   // 3. 通用 OpenAI 兼容本地/远端接口
   if (m.includes("gemini")) {
     return {
-      paramLabel: "Gemini (OpenAI 兼容) · reasoning_effort",
-      hint: "Gemini 系列在 OpenAI 兼容接口下支持 low / medium / high 思考预算映射。",
+      paramLabel: "Thinking",
+      hint: "通用 OpenAI 兼容接口 · Gemini 思考预算映射",
       defaultEffort: "high",
       options: [
-        { value: "none", shortLabel: "Thinking: Off", fullLabel: "none（不传 reasoning_effort）" },
-        { value: "low", shortLabel: "Thinking: low", fullLabel: "low（轻量思考预算）" },
-        { value: "medium", shortLabel: "Thinking: medium", fullLabel: "medium（中等思考预算）" },
-        { value: "high", shortLabel: "Thinking: high", fullLabel: "high（深度思考预算）" },
+        { value: "none", shortLabel: "思考 · 关", fullLabel: "none · 关闭" },
+        { value: "low", shortLabel: "思考 · 低", fullLabel: "low · 轻量" },
+        { value: "medium", shortLabel: "思考 · 中", fullLabel: "medium · 标准" },
+        { value: "high", shortLabel: "思考 · 高", fullLabel: "high · 深度" },
       ],
     };
   }
 
   return {
-    paramLabel: "通用 OpenAI 接口 · reasoning_effort",
-    hint: "支持 reasoning_effort 的模型可选 low / medium / high；普通或本地自托管模型请选择 none（不传该参数）。",
+    paramLabel: "思考深度",
+    hint: "标准 /v1/chat/completions 接口 · 本机 127.0.0.1 免填 API Key",
     defaultEffort: /^(o1|o3|o4|gpt-5|gpt-6)/.test(m) ? "high" : "none",
     options: [
-      { value: "none", shortLabel: "思考: 默认/不传", fullLabel: "none（不传 reasoning_effort · 适用于通用本地模型）" },
-      { value: "minimal", shortLabel: "Effort: minimal", fullLabel: "minimal（极简推理）" },
-      { value: "low", shortLabel: "Effort: low", fullLabel: "low（快速推理）" },
-      { value: "medium", shortLabel: "Effort: medium", fullLabel: "medium（均衡推理）" },
-      { value: "high", shortLabel: "Effort: high", fullLabel: "high（深度推理）" },
-      { value: "xhigh", shortLabel: "Effort: xhigh", fullLabel: "xhigh（极限推理）" },
+      { value: "none", shortLabel: "思考 · 默认", fullLabel: "none · 默认（不传）" },
+      { value: "minimal", shortLabel: "思考 · 极简", fullLabel: "minimal · 极简" },
+      { value: "low", shortLabel: "思考 · 低", fullLabel: "low · 快速" },
+      { value: "medium", shortLabel: "思考 · 中", fullLabel: "medium · 标准" },
+      { value: "high", shortLabel: "思考 · 高", fullLabel: "high · 深度" },
+      { value: "xhigh", shortLabel: "思考 · 极高", fullLabel: "xhigh · 极限" },
     ],
   };
 }
@@ -163,8 +176,14 @@ function populateSelectOptions(selectEl, options, selectedValue, useFullLabel) {
   return finalValue;
 }
 
+function populateModelDatalist(datalistEl, provider) {
+  if (!datalistEl) return;
+  const list = MODEL_SUGGESTIONS[provider] || [];
+  datalistEl.innerHTML = list.map((m) => `<option value="${m}"></option>`).join("");
+}
+
 function formatStageBadge(project) {
-  if (!project || typeof project !== "object") return "未加载状态";
+  if (!project || typeof project !== "object") return "未加载";
   const cur = project.current_stage || "layout_plan";
   const approved = Array.isArray(project.approved_stages) ? project.approved_stages : [];
   const isApproved = approved.includes(cur);
@@ -177,7 +196,7 @@ function formatStageBadge(project) {
   }
   if (isApproved && project.next_stage) {
     const nextLabel = STAGE_LABELS[project.next_stage] || project.next_stage;
-    return `${label}已确认 · 可进入${nextLabel}`;
+    return `${label}已确认 → ${nextLabel}`;
   }
   return isApproved ? `${label} · 已确认` : `${label} · 待确认`;
 }
@@ -186,6 +205,8 @@ export const LayoutChatService = Injectable({ providedIn: "root" })(
   class LayoutChatService {
     constructor() {
       this.sending = signal(false);
+      this.activeTurn = signal(null);
+      this.elapsedSec = signal(0);
       this.llm = signal(null);
       this.project = signal(null);
       this.messages = signal([]);
@@ -231,6 +252,7 @@ export const LayoutChatComponent = Component({
       const effortSelect = document.getElementById("chat-effort-select");
       const settingsBtn = document.getElementById("chat-settings-btn");
       const settingsDot = document.getElementById("chat-settings-dot");
+      const modelLabelEl = document.getElementById("chat-model-label");
       const quickBar = document.getElementById("chat-quick-bar");
 
       const modal = document.getElementById("llm-modal");
@@ -239,46 +261,59 @@ export const LayoutChatComponent = Component({
       const baseUrlField = document.getElementById("llm-base-url-field");
       const baseUrlInput = document.getElementById("llm-base-url");
       const modelInput = document.getElementById("llm-model");
+      const modelDatalist = document.getElementById("llm-model-datalist");
       const modalEffortLabel = document.getElementById("llm-effort-label");
       const modalEffortSelect = document.getElementById("llm-effort");
-      const modalEffortHint = document.getElementById("llm-effort-hint");
       const modelHint = document.getElementById("llm-model-hint");
       const apiKeyField = document.getElementById("llm-api-key-field");
       const apiKeyInput = document.getElementById("llm-api-key");
-      const apiKeyHint = document.getElementById("llm-key-hint");
       const modalCloseBtn = document.getElementById("llm-modal-close");
       const modalStatus = document.getElementById("llm-modal-status");
+      const codexAuthBox = document.getElementById("llm-codex-auth");
+      const codexAuthStatus = document.getElementById("llm-codex-auth-status");
+      const codexLoginBtn = document.getElementById("llm-codex-login");
+      const codexLoginLink = document.getElementById("llm-codex-login-link");
+      const codexAuthUrl = "/api/llm/codex/status";
+      const codexLoginUrl = "/api/llm/codex/login";
+      let authPollTimer = null;
+      let authPollInFlight = false;
+      let codexAuthenticated = false;
 
       const svc = this.service;
       const { chatUrl, llmConfigUrl, onProjectUpdated, onStatusToast } = this;
+
+      function syncTabButtons(provider) {
+        if (!modal) return;
+        const activeKey =
+          provider === "codex_cli"
+            ? "codex_cli"
+            : provider === "agy_cli"
+              ? "agy_cli"
+              : "local_openai";
+        modal.querySelectorAll("button[data-llm-preset]").forEach((btn) => {
+          btn.classList.toggle("active", btn.getAttribute("data-llm-preset") === activeKey);
+        });
+      }
 
       function syncModalProviderFields(preferredEffort) {
         if (!providerSelect) return;
         const provider = providerSelect.value;
         const model = modelInput ? modelInput.value.trim() : "";
         const isCli = provider === "codex_cli" || provider === "agy_cli";
+        syncTabButtons(provider);
+        populateModelDatalist(modelDatalist, provider);
+
         if (baseUrlField) baseUrlField.hidden = isCli;
         if (baseUrlInput) baseUrlInput.required = !isCli;
         if (apiKeyField) apiKeyField.hidden = isCli;
-        if (modelHint) {
-          if (provider === "codex_cli") {
-            modelHint.textContent =
-              "直接使用本机 Codex OAuth 登录态（免 API Key）。可选 ChatGPT 模型：gpt-6.1-sol、gpt-6-astra、gpt-6-sol、gpt-5.6-sol";
-          } else if (provider === "agy_cli") {
-            modelHint.textContent =
-              "直接使用本机 AGY / Gemini OAuth 登录态（免 API Key）。可选 Gemini 模型：gemini-4-argon-high、gemini-3.8-flash-high";
-          } else {
-            modelHint.textContent =
-              "填写本地或兼容 OpenAI 接口的模型 ID（本机 127.0.0.1 / localhost 地址免填 API Key）";
-          }
-        }
+        if (codexAuthBox) codexAuthBox.hidden = provider !== "codex_cli";
 
         const profile = getEffortProfile(provider, model);
         if (modalEffortLabel) {
-          modalEffortLabel.textContent = `思考模式 (${profile.paramLabel})`;
+          modalEffortLabel.textContent = profile.paramLabel;
         }
-        if (modalEffortHint) {
-          modalEffortHint.textContent = profile.hint;
+        if (modelHint) {
+          modelHint.textContent = profile.hint;
         }
         const currentVal =
           preferredEffort ||
@@ -299,22 +334,165 @@ export const LayoutChatComponent = Component({
         }
       }
 
+      function extractThinkingSteps(msg) {
+        if (!msg || typeof msg !== "object") return [];
+        if (Array.isArray(msg.thinking_steps) && msg.thinking_steps.length > 0) {
+          return msg.thinking_steps
+            .map((s) => String(s || "").trim())
+            .filter(Boolean);
+        }
+        if (typeof msg.thinking === "string" && msg.thinking.trim()) {
+          return [msg.thinking.trim()];
+        }
+        return [];
+      }
+
       function createToolTraceNode(traceList) {
         const wrap = document.createElement("div");
         wrap.className = "chat-tool-trace";
         for (const item of traceList) {
-          const chip = document.createElement("span");
+          const chip = document.createElement("div");
           chip.className = "chat-tool-chip " + (item.ok ? "ok" : "err");
+          const head = document.createElement("div");
+          head.className = "chat-tool-chip-head";
           const mark = item.ok ? "✓" : "⚠";
-          const suffix = item.progressed ? " · 已更新项目" : "";
+          const suffix = item.progressed ? " · 已更新" : "";
           const errText =
             !item.ok && item.error && item.error.message
               ? ` (${item.error.message})`
               : "";
-          chip.textContent = `${mark} ${item.tool}${suffix}${errText}`;
+          head.textContent = `${mark} 工具调用: ${item.tool}${suffix}${errText}`;
+          chip.appendChild(head);
+
+          if (item.arguments && typeof item.arguments === "object" && Object.keys(item.arguments).length > 0) {
+            const argsEl = document.createElement("div");
+            argsEl.className = "chat-tool-chip-args";
+            argsEl.textContent = JSON.stringify(item.arguments);
+            chip.appendChild(argsEl);
+          }
           wrap.appendChild(chip);
         }
         return wrap;
+      }
+
+      function createThinkingNode(msg, defaultOpen) {
+        const steps = extractThinkingSteps(msg);
+        const tools = Array.isArray(msg.tool_trace) ? msg.tool_trace : [];
+        if (steps.length === 0 && tools.length === 0) return null;
+
+        const details = document.createElement("details");
+        details.className = "chat-thinking";
+        if (defaultOpen) details.open = true;
+
+        const summary = document.createElement("summary");
+        summary.className = "chat-thinking-summary";
+
+        const titleWrap = document.createElement("span");
+        titleWrap.className = "chat-thinking-title";
+        const chevron = document.createElement("span");
+        chevron.className = "chat-thinking-chevron";
+        chevron.textContent = "▸";
+        const titleText = document.createElement("span");
+        titleText.textContent = "💭 思考过程";
+        titleWrap.appendChild(chevron);
+        titleWrap.appendChild(titleText);
+
+        const meta = document.createElement("span");
+        meta.className = "chat-thinking-meta";
+        const metaParts = [];
+        if (steps.length > 0) metaParts.push(`${steps.length} 步推理`);
+        if (tools.length > 0) metaParts.push(`${tools.length} 个工具`);
+        meta.textContent = metaParts.join(" · ");
+
+        summary.appendChild(titleWrap);
+        summary.appendChild(meta);
+        details.appendChild(summary);
+
+        const body = document.createElement("div");
+        body.className = "chat-thinking-body";
+
+        steps.forEach((stepText, idx) => {
+          const stepEl = document.createElement("div");
+          stepEl.className = "chat-thinking-step";
+          if (steps.length > 1) {
+            const label = document.createElement("span");
+            label.className = "chat-thinking-step-label";
+            label.textContent = `Step ${idx + 1}`;
+            stepEl.appendChild(label);
+          }
+          const contentNode = document.createElement("span");
+          contentNode.textContent = stepText;
+          stepEl.appendChild(contentNode);
+          body.appendChild(stepEl);
+        });
+
+        if (tools.length > 0) {
+          body.appendChild(createToolTraceNode(tools));
+        }
+
+        details.appendChild(body);
+        return details;
+      }
+
+      function createLiveThinkingNode(activeTurn, elapsedSec) {
+        const details = document.createElement("details");
+        details.className = "chat-thinking live";
+        details.open = true;
+
+        const summary = document.createElement("summary");
+        summary.className = "chat-thinking-summary";
+
+        const titleWrap = document.createElement("span");
+        titleWrap.className = "chat-thinking-title";
+        const pulse = document.createElement("i");
+        pulse.className = "chat-thinking-pulse";
+        const titleText = document.createElement("span");
+        titleText.textContent = "💭 思考过程（进行中）";
+        titleWrap.appendChild(pulse);
+        titleWrap.appendChild(titleText);
+
+        const meta = document.createElement("span");
+        meta.className = "chat-thinking-meta";
+        meta.textContent = `${Number(elapsedSec || 0).toFixed(1)}s`;
+
+        summary.appendChild(titleWrap);
+        summary.appendChild(meta);
+        details.appendChild(summary);
+
+        const body = document.createElement("div");
+        body.className = "chat-thinking-body";
+
+        const steps = activeTurn && Array.isArray(activeTurn.thinking_steps)
+          ? activeTurn.thinking_steps
+          : [];
+        steps.forEach((stepText, idx) => {
+          const stepEl = document.createElement("div");
+          stepEl.className = "chat-thinking-step";
+          const label = document.createElement("span");
+          label.className = "chat-thinking-step-label";
+          label.textContent = `Step ${idx + 1}`;
+          stepEl.appendChild(label);
+          const contentNode = document.createElement("span");
+          contentNode.textContent = stepText;
+          stepEl.appendChild(contentNode);
+          body.appendChild(stepEl);
+        });
+
+        const tools = activeTurn && Array.isArray(activeTurn.tool_trace)
+          ? activeTurn.tool_trace
+          : [];
+        if (tools.length > 0) {
+          body.appendChild(createToolTraceNode(tools));
+        }
+
+        const statusRow = document.createElement("div");
+        statusRow.className = "chat-thinking-status";
+        statusRow.textContent =
+          (activeTurn && activeTurn.status) || "正在读取项目快照与思考方案…";
+        body.appendChild(statusRow);
+
+        details.appendChild(body);
+        return details;
       }
 
       // Angular Reactive Effect: 阶段标签同步
@@ -325,7 +503,7 @@ export const LayoutChatComponent = Component({
         }
       });
 
-      // Angular Reactive Effect: 模型连接状态与思考深度选择器同步
+      // Angular Reactive Effect: 模型连接状态栏与思考深度选择器同步
       effect(() => {
         const llm = svc.llm();
         const provider = (llm && llm.provider) || "codex_cli";
@@ -339,30 +517,35 @@ export const LayoutChatComponent = Component({
           false,
         );
         if (effortSelect) {
-          effortSelect.title = `${profile.paramLabel} — ${profile.hint}`;
+          effortSelect.title = `${profile.paramLabel}: ${activeEffort}`;
         }
 
-        if (!settingsDot || !settingsBtn) return;
         const configured = Boolean(llm && llm.configured);
+        if (modelLabelEl) {
+          modelLabelEl.textContent = configured ? model : "点击配置模型…";
+        }
+        if (!settingsDot || !settingsBtn) return;
         settingsDot.classList.toggle("ok", configured);
         settingsDot.classList.toggle("warn", !configured);
         if (configured) {
           const modeName =
             llm.provider === "codex_cli"
-              ? "本机 ChatGPT 订阅"
+              ? "ChatGPT 订阅"
               : llm.provider === "agy_cli"
-                ? "本机 Gemini 订阅"
+                ? "Gemini 订阅"
                 : llm.base_url;
-          settingsBtn.title = `当前模型：${llm.model} · ${profile.paramLabel}: ${activeEffort} (${modeName})`;
+          settingsBtn.title = `${modeName} · ${llm.model} (${activeEffort})`;
         } else {
-          settingsBtn.title = "点击选择本机 ChatGPT/Gemini 订阅或配置本地 OpenAI 模型入口";
+          settingsBtn.title = "点击选择 ChatGPT / Gemini 订阅或通用 OpenAI 模型";
         }
       });
 
-      // Angular Reactive Effect: 消息列表与发送按钮状态同步
+      // Angular Reactive Effect: 消息列表与实时思考轨迹同步
       effect(() => {
         const msgs = svc.messages();
         const isSending = svc.sending();
+        const activeTurn = svc.activeTurn();
+        const elapsedSec = svc.elapsedSec();
         const llm = svc.llm();
         if (sendBtn) sendBtn.disabled = isSending;
         if (!messagesEl) return;
@@ -371,29 +554,35 @@ export const LayoutChatComponent = Component({
           const empty = document.createElement("div");
           empty.className = "chat-empty";
           const configured = Boolean(llm && llm.configured);
-          let modelTag = "";
-          if (configured && llm) {
-            const profile = getEffortProfile(llm.provider, llm.model);
-            const matchOpt =
-              profile.options.find((o) => o.value === llm.reasoning_effort) ||
-              profile.options[0];
-            const effortLabel = matchOpt ? matchOpt.shortLabel : llm.reasoning_effort;
-            modelTag = `<br><span style="color:#4f46e5;font-weight:600">当前已连接：${llm.model} (${effortLabel})</span>`;
-          }
-          empty.innerHTML = configured
-            ? `<strong>直接在这里和 AI 对话</strong>${modelTag}<br>你可以让 AI 修改房间家具尺寸、确认当前布局，或生成各台柜子的板件草稿，中间 3D 视图会自动同步更新。`
-            : "<strong>欢迎使用网页端 AI 助手</strong><br>点击右上角「⚙️ 模型设置」，可直接选用本机已登录的 ChatGPT / Gemini 订阅账号（免 API Key）。";
+          const heading = document.createElement("strong");
+          heading.textContent = configured ? `已就绪 · ${llm.model}` : "未连接模型";
+          empty.appendChild(heading);
+          empty.appendChild(document.createElement("br"));
+          empty.appendChild(document.createTextNode(configured
+            ? "输入需求以修改家具尺寸、确认布局或生成板件。"
+            : "点击上方模型栏配置模型；首次使用 Codex 需单独登录。"));
           messagesEl.appendChild(empty);
           return;
         }
 
-        for (const msg of msgs) {
+        let lastAssistantIdx = -1;
+        msgs.forEach((m, idx) => {
+          if (m.role !== "user") lastAssistantIdx = idx;
+        });
+
+        msgs.forEach((msg, idx) => {
           const item = document.createElement("div");
           const role = msg.role === "user" ? "user" : "assistant";
           item.className = `chat-msg ${role}`;
 
-          if (role === "assistant" && Array.isArray(msg.tool_trace) && msg.tool_trace.length > 0) {
-            item.appendChild(createToolTraceNode(msg.tool_trace));
+          if (role === "assistant") {
+            const thinkingNode = createThinkingNode(
+              msg,
+              idx === lastAssistantIdx && !isSending,
+            );
+            if (thinkingNode) {
+              item.appendChild(thinkingNode);
+            }
           }
 
           const bubble = document.createElement("div");
@@ -401,16 +590,13 @@ export const LayoutChatComponent = Component({
           bubble.textContent = msg.content || "";
           item.appendChild(bubble);
           messagesEl.appendChild(item);
-        }
+        });
 
         if (isSending) {
-          const thinking = document.createElement("div");
-          thinking.className = "chat-msg assistant thinking";
-          const bubble = document.createElement("div");
-          bubble.className = "chat-bubble";
-          bubble.textContent = "AI 正在思考并执行工具…";
-          thinking.appendChild(bubble);
-          messagesEl.appendChild(thinking);
+          const thinkingWrap = document.createElement("div");
+          thinkingWrap.className = "chat-msg assistant thinking";
+          thinkingWrap.appendChild(createLiveThinkingNode(activeTurn, elapsedSec));
+          messagesEl.appendChild(thinkingWrap);
         }
 
         messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -424,9 +610,8 @@ export const LayoutChatComponent = Component({
           svc.llm.set(data.llm || null);
           if (data.project) svc.project.set(data.project);
           svc.messages.set(Array.isArray(data.messages) ? data.messages : []);
-        } catch (err) {
-          // 忽略初始加载网络异常
-        }
+          if (data.active_turn) svc.activeTurn.set(data.active_turn);
+        } catch (err) {}
       }
 
       async function sendMessage(text) {
@@ -434,11 +619,19 @@ export const LayoutChatComponent = Component({
         if (!trimmed || svc.sending()) return;
         const llm = svc.llm();
         if (!llm || !llm.configured) {
-          openSettingsModal("请先选择本机 ChatGPT/Gemini 订阅模式或配置本地模型入口");
+          openSettingsModal("请先选择模型");
           return;
         }
 
+        const startMs = Date.now();
+        svc.elapsedSec.set(0);
+        svc.activeTurn.set({
+          status: "正在读取项目快照与思考方案…",
+          thinking_steps: [],
+          tool_trace: [],
+        });
         svc.sending.set(true);
+
         const optimisticUser = {
           id: "temp_user",
           role: "user",
@@ -446,6 +639,22 @@ export const LayoutChatComponent = Component({
         };
         svc.messages.update((prev) => [...prev, optimisticUser]);
         if (inputEl) inputEl.value = "";
+
+        const tickTimer = window.setInterval(() => {
+          svc.elapsedSec.set((Date.now() - startMs) / 1000);
+        }, 200);
+
+        const pollTimer = window.setInterval(async () => {
+          if (!svc.sending()) return;
+          try {
+            const r = await fetch(chatUrl, { cache: "no-store" });
+            if (!r.ok) return;
+            const d = await r.json();
+            if (d && d.active_turn && svc.sending()) {
+              svc.activeTurn.set(d.active_turn);
+            }
+          } catch (e) {}
+        }, 900);
 
         try {
           const resp = await fetch(chatUrl, {
@@ -499,6 +708,9 @@ export const LayoutChatComponent = Component({
             },
           ]);
         } finally {
+          window.clearInterval(tickTimer);
+          window.clearInterval(pollTimer);
+          svc.activeTurn.set(null);
           svc.sending.set(false);
         }
       }
@@ -516,12 +728,7 @@ export const LayoutChatComponent = Component({
           apiKeyInput.value = "";
           apiKeyInput.placeholder = llm.has_api_key
             ? `已保存 (${llm.api_key_masked})，留空保持不变`
-            : "本机地址可留空；远端接口填 API Key";
-        }
-        if (apiKeyHint) {
-          apiKeyHint.textContent = llm.has_api_key
-            ? `当前已保存密钥：${llm.api_key_masked}（仅存本机 store/_llm_config.json）`
-            : "密钥仅保存在本机 store/_llm_config.json，绝不上传 Git。";
+            : "本机地址免填；远端接口填 API Key";
         }
         syncModalProviderFields(llm.reasoning_effort || "high");
         if (modalStatus) {
@@ -529,11 +736,91 @@ export const LayoutChatComponent = Component({
         }
         svc.modalOpen.set(true);
         modal.hidden = false;
+        if (providerSelect && providerSelect.value === "codex_cli") {
+          refreshCodexAuth();
+        }
       }
 
       function closeSettingsModal() {
+        if (authPollTimer) window.clearInterval(authPollTimer);
+        authPollTimer = null;
+        if (codexLoginLink) {
+          codexLoginLink.hidden = true;
+          codexLoginLink.removeAttribute("href");
+        }
         svc.modalOpen.set(false);
         if (modal) modal.hidden = true;
+      }
+
+      async function refreshCodexAuth() {
+        if (authPollInFlight) return;
+        authPollInFlight = true;
+        try {
+          const resp = await fetch(codexAuthUrl, { cache: "no-store" });
+          if (!resp.ok) throw new Error("无法检查独立登录状态");
+          const state = await resp.json();
+          codexAuthenticated = Boolean(state.authenticated);
+          const labels = {
+            authenticated: "已登录 · 使用家具项目的独立凭据",
+            awaiting_login: "等待你在登录页面完成授权…",
+            needs_login: "尚未登录家具项目的 Codex",
+            unavailable: "本机未找到 Codex 程序",
+            error: "无法检查登录状态，请检查运行目录和网络",
+          };
+          if (codexAuthStatus) codexAuthStatus.textContent = labels[state.status] || "正在检查…";
+          if (codexLoginBtn) {
+            codexLoginBtn.disabled = state.authenticated || state.status === "unavailable";
+            codexLoginBtn.textContent = state.authenticated ? "已登录" : state.status === "awaiting_login" ? "重新打开登录页面" : "单独登录 Codex";
+          }
+          if (state.authenticated) {
+            if (authPollTimer) window.clearInterval(authPollTimer);
+            authPollTimer = null;
+            if (codexLoginLink) {
+              codexLoginLink.hidden = true;
+              codexLoginLink.removeAttribute("href");
+            }
+            const configResp = await fetch(llmConfigUrl, { cache: "no-store" });
+            if (configResp.ok) svc.llm.set(await configResp.json());
+          } else if (state.status === "awaiting_login" && modal && !modal.hidden && !authPollTimer) {
+            authPollTimer = window.setInterval(refreshCodexAuth, 2000);
+          }
+        } catch (err) {
+          if (codexAuthStatus) codexAuthStatus.textContent = "无法检查独立登录状态，请稍后重试";
+        } finally {
+          authPollInFlight = false;
+        }
+      }
+
+      if (codexLoginBtn) {
+        codexLoginBtn.addEventListener("click", async () => {
+          codexLoginBtn.disabled = true;
+          if (codexAuthStatus) codexAuthStatus.textContent = "正在启动独立登录…";
+          try {
+            const resp = await fetch(codexLoginUrl, { method: "POST", cache: "no-store" });
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.detail && data.detail.message || "无法启动登录");
+            if (data.auth_url) {
+              const url = new URL(data.auth_url);
+              if (url.protocol !== "https:" || !["auth.openai.com", "chatgpt.com"].includes(url.hostname) || url.username || url.password) {
+                throw new Error("登录地址无效");
+              }
+              // OAuth URL stays only in the current DOM; no browser storage or logs.
+              if (codexLoginLink) {
+                codexLoginLink.href = url.href;
+                codexLoginLink.hidden = false;
+                codexLoginLink.click();
+              }
+            }
+            await refreshCodexAuth();
+            if (!data.authenticated && !authPollTimer) {
+              authPollTimer = window.setInterval(refreshCodexAuth, 2000);
+            }
+          } catch (err) {
+            if (codexAuthStatus) codexAuthStatus.textContent = err.message || "无法启动独立登录";
+          } finally {
+            codexLoginBtn.disabled = codexAuthenticated;
+          }
+        });
       }
 
       if (toggleBtn) {
@@ -574,24 +861,10 @@ export const LayoutChatComponent = Component({
               const data = await resp.json();
               svc.llm.set(data);
               if (typeof onStatusToast === "function") {
-                onStatusToast(`已切换思考模式：${data.model} (${data.reasoning_effort})`);
+                onStatusToast(`已切换：${data.model} (${data.reasoning_effort})`);
               }
             }
           } catch (err) {}
-        });
-      }
-
-      if (providerSelect) {
-        providerSelect.addEventListener("change", () => {
-          const p = providerSelect.value;
-          if (p === "codex_cli" && modelInput) modelInput.value = "gpt-6.1-sol";
-          else if (p === "agy_cli" && modelInput) modelInput.value = "gemini-3.8-flash-high";
-          else if (p === "openai_compatible") {
-            if (baseUrlInput && (!baseUrlInput.value || baseUrlInput.value.startsWith("local://"))) {
-              baseUrlInput.value = "http://127.0.0.1:11434/v1";
-            }
-          }
-          syncModalProviderFields();
         });
       }
 
@@ -632,6 +905,7 @@ export const LayoutChatComponent = Component({
             if (baseUrlInput && preset.base_url) baseUrlInput.value = preset.base_url;
             if (modelInput) modelInput.value = preset.model;
             syncModalProviderFields(preset.effort);
+            if (preset.provider === "codex_cli") refreshCodexAuth();
           });
         });
       }
@@ -639,7 +913,7 @@ export const LayoutChatComponent = Component({
       if (modalForm) {
         modalForm.addEventListener("submit", async (e) => {
           e.preventDefault();
-          if (modalStatus) modalStatus.textContent = "正在保存…";
+          if (modalStatus) modalStatus.textContent = "保存中…";
           try {
             const provider = providerSelect ? providerSelect.value : "codex_cli";
             const isCli = provider === "codex_cli" || provider === "agy_cli";
@@ -669,7 +943,7 @@ export const LayoutChatComponent = Component({
             svc.llm.set(data);
             closeSettingsModal();
             if (typeof onStatusToast === "function") {
-              onStatusToast(`已切换模型：${data.model} (思考模式: ${data.reasoning_effort})`);
+              onStatusToast(`已切换模型：${data.model} (${data.reasoning_effort})`);
             }
           } catch (err) {
             if (modalStatus) modalStatus.textContent = `保存出错：${err}`;

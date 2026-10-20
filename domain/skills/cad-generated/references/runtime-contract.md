@@ -48,7 +48,7 @@ result = orchestrator.run_next(
 
 - 布局确认：`confirm_stage(project, "layout_plan")` 把确认后的布局冻成 `store/<project-id>/layouts/<layout-sha256>.json`。之后板件只读这份冻结布局里的可执行 CAD 单元。
 - **房间级确认**：布局检查点是"**每间都审过**"的派生值——`confirm_room(project, room_id)` 审一间，`pending_room_ids()` 说还差哪几间，全部审过时布局才 `confirmed` 并进 `approved_stages`（下游仍只认这一个闸门，panel / 制造 / CAD 的契约没改）。`confirm_stage(layout_plan)` 一次确认全部，等价于把剩下的房间一次审完。**没动过的房间，确认跟着走**：新 Revision 里某间房的内容与父修订**逐字节相同**且父修订审过它，就自动记入 `approved_rooms` 并在 `inherited_rooms[room_id] = {sha256, from_revision}` 留痕；若这样凑齐了每一间，布局检查点当场成立（不必再让人点一次头）。所以"改一间只审一间"成立，而"改的是没审过的那间"仍要人看。持久化修订必须明确保存 `approved_rooms`；`layout.confirmed` 不用于补造房间确认记录。
-- 内容指纹只有一个实现：`furniture_workflow/workflow_digest.py::stable_digest`——对 `json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",",":"))` 取 sha256。`layout_sha256`、`panel_sha256`、`source_sha256`、`stage_output_sha256` 都走它；**别再各写一份**，否则同一份内容在两个模块里算出两个指纹，冻结文件会互相认不出。交付验证的 `validation._stable_digest` 是同一套算法在独立包里的副本，有测试盯着两者一致。
+- 内容指纹只有一个实现：`furniture_contracts/digest.py::stable_digest`——对 `json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",",":"))` 取 sha256。`layout_sha256`、`panel_sha256`、`source_sha256`、`stage_output_sha256` 都走它；**别再各写一份**，否则同一份内容在两个模块里算出两个指纹，冻结文件会互相认不出。`furniture_workflow.workflow_digest.stable_digest` 与交付验证的 `validation._stable_digest` 保留为同一函数的兼容别名。
 - 板件确认：`confirm_stage(project, "panel_plan")` 把已确认板件冻成 `store/<project-id>/panels/<panel-sha256>.json`，并记下 `confirmed_panel_sha256`。有 Store 时制造、板件旁路分析、CAD `panel-plan.json` 和交付分析哈希都按该哈希读冻结文件，文件缺失则失败；无 Store 时读内存中已确认输出。`retry_stage(project, "manufacture_plan")` 不重跑板件。
 - 同一冻结上游再试规划：`retry_stage(project, stage, stage_input=...)`。适用于未确认或需作废下游的 `panel_plan`、`manufacture_plan`、`feature_tree_planned`。失败只记录该次 attempt，不把 Revision 标为 `FAILED`。
 - 选用某次通过的尝试：`select_stage_attempt(project, stage, number)`，再 `confirm_stage()`。
@@ -110,6 +110,8 @@ store/<project-id>/
 
 `server.py` 提供独立房间场景、项目列表，以及项目布局预览。房间场景请求体为 `room + items[]`；除 `GET` 外都是 JSON body。完整端点：
 
+AI 模型与聊天端点由可选 `furniture_chat` 路由提供。启动时 `FURNITURE_WEB_CHAT=0` 不导入 AI 包、不注册这些端点，也不挂载 `/web-chat/` 或输出 AI 页面扩展；其余核心端点照常可用。默认 `1`，修改后重启预览进程。禁用、恢复和维护边界见 [AI 接入层维护](ai-integration.md)。
+
 | 方法 | 路径 | 作用 |
 | --- | --- | --- |
 | POST | `/api/plan-room` | 规划摆放，返回房间、包络、预览与 Viewer |
@@ -135,6 +137,10 @@ store/<project-id>/
 | GET | `/projects` | 已有项目名单：名字、日期、布局已确认或还没确认 |
 | GET | `/api/projects` | 同一份名单的 JSON。读不动的 `project.json` 跳过 |
 | POST | `/api/preview/shutdown` | 本机请求后让预览服务干净退出（写 · 本机） |
+| GET / POST | `/api/llm/config` | 读取脱敏配置或保存本机模型配置（本机） |
+| GET | `/api/llm/codex/status` | 读取隔离 Codex 登录状态（本机 · 禁止缓存） |
+| POST | `/api/llm/codex/login` | 启动隔离 Codex 登录（本机 · 同源 · 禁止缓存） |
+| GET / POST / DELETE | `/api/project/{project_id}/chat` | 读取项目对话、发送消息驱动现有工具，或清空对话（本机） |
 | POST | `/api/preview/presence` | 记一笔「还有页面开着」。列表页和板件页改走下面的流，不再定时打这个（写 · 本机） |
 | GET | `/api/preview/presence/stream` | 列表页和板件页打开这一条就表示还在。连接上不按钟点再发。最后一页关掉约 5 分钟后进程退出（写 · 本机） |
 

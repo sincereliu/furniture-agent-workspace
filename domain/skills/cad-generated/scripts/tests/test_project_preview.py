@@ -461,15 +461,16 @@ class ProjectPreviewTests(unittest.TestCase):
     def test_content_digest_has_one_implementation(self) -> None:
         """同一份内容只能有一个摘要：冻结哈希、分析血缘、交付校验必须同源。
 
-        交付阶段（`furniture_delivery_validation`）按分层保留了自己的一份实现 ——
-        阶段包不该反向依赖编排层 —— 所以这里用断言把两份钉在一起：值不同就红。
+        交付与工作流都使用无阶段依赖的公共实现，旧导入入口继续兼容。
         """
         from furniture_delivery_validation import validation as delivery_validation
+        from furniture_contracts.digest import stable_digest as shared_digest
         from furniture_workflow import workflow_constants, workflow_digest
         from furniture_workflow.workflow_project import stable_digest
 
         payload = {"b": 1, "a": [2, 3], "文字": "值"}
         digests = {
+            "shared": shared_digest(payload),
             "workflow_digest": workflow_digest.stable_digest(payload),
             "workflow_constants": workflow_constants._stable_digest(payload),
             "workflow_project": stable_digest(payload),
@@ -877,13 +878,16 @@ class OpenProjectPreviewTests(unittest.TestCase):
         self.assertEqual(source.count("_LOCAL_HOSTS"), 2)  # 定义一次 + 判据里读一次
         # 数一遍"每个写端点都走同一道门"：端点加一个，这里就加一。
         # （顺纹保存 `cabinets/{id}/grain` 是后加的，加它时这里从 12 改成 13；
-        # 本机大模型配置与项目 AI 对话共 5 个本机端点，从 13 改成 18。）
+        # 本机大模型配置与项目 AI 对话共 5 个本机端点，位于独立功能包。）
+        chat_http = (SCRIPT_ROOT / "furniture_chat" / "http.py").read_text(encoding="utf-8")
         self.assertEqual(
             source.count("if not may_edit(request):")
-            + room_http.count("if not may_edit(request):"),
+            + room_http.count("if not may_edit(request):")
+            + chat_http.count("if not may_edit(request):"),
             18,
         )
         self.assertNotIn("def access_scope", room_http)
+        self.assertNotIn("request.client.host", chat_http)
         endpoints = source.split("def may_edit")[1]
         self.assertNotIn("request.client.host", endpoints)
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from furniture_delivery_validation.validation import ValidationReport
+from furniture_contracts.validation import ValidationReport
 
 from .cad_bridge import BridgeResult
 

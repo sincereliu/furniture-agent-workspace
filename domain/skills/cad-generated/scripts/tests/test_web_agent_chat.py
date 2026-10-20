@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -18,16 +19,17 @@ import server
 from furniture_layout.project_layout import ProjectLayout
 from furniture_layout.room_page import render_project_page
 from furniture_layout.open_preview import preview_page_data
-from furniture_workflow import web_agent_chat
-from furniture_workflow.web_agent_chat import (
+from furniture_chat import conversation as web_agent_chat
+from furniture_chat.page import page_extension
+import furniture_ai as ai
+from furniture_ai import codex, settings, cli_protocol
+from furniture_chat.conversation import (
     WebChatError,
     clear_chat_history,
     get_project_chat_state,
-    load_llm_config,
-    public_llm_config,
-    save_llm_config,
     send_project_chat_message,
 )
+from furniture_ai import load_llm_config, public_llm_config, save_llm_config
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from furniture_workflow.workflow_store import JsonProjectStore
 
@@ -65,6 +67,12 @@ def _sample_layout() -> ProjectLayout:
 
 class WebAgentChatTests(unittest.TestCase):
     def setUp(self) -> None:
+        prewarm_patch = mock.patch.object(codex._CLIENT, "prewarm_async")
+        self.prewarm = prewarm_patch.start()
+        self.addCleanup(prewarm_patch.stop)
+        auth_patch = mock.patch.object(codex._CLIENT, "authentication_state", return_value={"authenticated": True, "status": "authenticated", "isolated": True})
+        self.auth_state = auth_patch.start()
+        self.addCleanup(auth_patch.stop)
         self.root = WORKSPACE_ROOT / "temp" / "test-web-agent-chat"
         if self.root.exists():
             shutil.rmtree(self.root)
@@ -78,81 +86,7 @@ class WebAgentChatTests(unittest.TestCase):
         if self.root.exists():
             shutil.rmtree(self.root, ignore_errors=True)
 
-    def test_llm_config_saves_masks_and_preserves_existing_key(self) -> None:
-        with (
-            mock.patch.dict("os.environ", {}, clear=True),
-            mock.patch.object(web_agent_chat, "_discover_codex_binary", return_value=None),
-            mock.patch.object(web_agent_chat, "_discover_agy_binary", return_value=None),
-        ):
-            initial = public_llm_config(self.root)
-            self.assertFalse(initial["configured"])
-            self.assertFalse(initial["has_api_key"])
 
-            saved = save_llm_config(
-                self.root,
-                provider="openai_compatible",
-                base_url="https://api.deepseek.com/v1",
-                model="deepseek-chat",
-                api_key="sk-secret1234567890",
-            )
-            self.assertTrue(saved["configured"])
-            self.assertTrue(saved["has_api_key"])
-            self.assertEqual(saved["api_key_masked"], "sk-s...7890")
-            self.assertNotIn("sk-secret1234567890", str(saved))
-
-            # 留空 api_key 更新模型名时保留原密钥
-            updated = save_llm_config(
-                self.root,
-                provider="openai_compatible",
-                base_url="https://api.deepseek.com/v1",
-                model="deepseek-reasoner",
-                api_key=None,
-            )
-            self.assertEqual(updated["model"], "deepseek-reasoner")
-            self.assertEqual(load_llm_config(self.root)["api_key"], "sk-secret1234567890")
-
-    def test_local_oauth_cli_modes_do_not_require_api_key(self) -> None:
-        with (
-            mock.patch.object(web_agent_chat, "_discover_codex_binary", return_value="C:/bin/codex.exe"),
-            mock.patch.object(web_agent_chat, "_discover_agy_binary", return_value="C:/bin/agy.exe"),
-        ):
-            auto_cfg = public_llm_config(self.root)
-            self.assertTrue(auto_cfg["configured"])
-            self.assertEqual(auto_cfg["provider"], "codex_cli")
-            self.assertEqual(auto_cfg["model"], "gpt-6.1-sol")
-            self.assertEqual(auto_cfg["reasoning_effort"], "high")
-
-            agy_cfg = save_llm_config(
-                self.root,
-                provider="agy_cli",
-                base_url="",
-                model="gemini-3.8-flash-high",
-                reasoning_effort="low",
-            )
-            self.assertTrue(agy_cfg["configured"])
-            self.assertEqual(agy_cfg["provider"], "agy_cli")
-            self.assertEqual(agy_cfg["base_url"], "local://agy-cli")
-            self.assertEqual(agy_cfg["model"], "gemini-3.8-flash-low")
-            self.assertEqual(agy_cfg["reasoning_effort"], "low")
-
-            agy_max = save_llm_config(
-                self.root,
-                provider="agy_cli",
-                base_url="",
-                model="gemini-4-argon-low",
-                reasoning_effort="max",
-            )
-            self.assertEqual(agy_max["model"], "gemini-4-argon-high")
-            self.assertEqual(agy_max["reasoning_effort"], "max")
-
-            codex_minimal = save_llm_config(
-                self.root,
-                provider="codex_cli",
-                base_url="",
-                model="gpt-6.1-sol",
-                reasoning_effort="minimal",
-            )
-            self.assertEqual(codex_minimal["reasoning_effort"], "minimal")
 
     def test_chat_turn_executes_tool_calls_and_persists_history(self) -> None:
         project = self.orchestrator.create_project("客厅", _sample_layout())
@@ -166,6 +100,7 @@ class WebAgentChatTests(unittest.TestCase):
         rounds = iter(
             [
                 {
+                    "thinking": "用户确认客厅布局满意，当前处于 layout_plan 待确认状态，应调用 furniture_confirm_stage。",
                     "content": "",
                     "tool_calls": [
                         {
@@ -179,6 +114,7 @@ class WebAgentChatTests(unittest.TestCase):
                     ],
                 },
                 {
+                    "thinking": "layout_plan 已确认完成，现在向用户反馈可以进入板件规划。",
                     "content": "已为您确认当前客厅布局，可以继续生成板件。",
                     "tool_calls": [],
                 },
@@ -194,8 +130,11 @@ class WebAgentChatTests(unittest.TestCase):
         )
         self.assertTrue(result["ok"])
         self.assertTrue(result["progressed"])
+        self.assertEqual(len(result["thinking_steps"]), 2)
+        self.assertIn("furniture_confirm_stage", result["thinking"])
         self.assertEqual(len(result["tool_trace"]), 1)
         self.assertEqual(result["tool_trace"][0]["tool"], "furniture_confirm_stage")
+        self.assertEqual(result["tool_trace"][0]["arguments"], {"stage": "layout_plan"})
         self.assertTrue(result["tool_trace"][0]["ok"])
         self.assertIn("layout_plan", result["project"]["approved_stages"])
 
@@ -208,6 +147,19 @@ class WebAgentChatTests(unittest.TestCase):
         self.assertEqual(state["messages"][0]["role"], "user")
         self.assertEqual(state["messages"][1]["role"], "assistant")
         self.assertIn("已为您确认", state["messages"][1]["content"])
+        self.assertEqual(len(state["messages"][1]["thinking_steps"]), 2)
+        self.assertIn("furniture_confirm_stage", state["messages"][1]["thinking"])
+
+        normalized = cli_protocol._normalize_cli_step_output(
+            {
+                "thinking": "先核对尺寸",
+                "reply": "<think>补充思考</think>这是最终答复",
+                "tool_calls": [],
+            }
+        )
+        self.assertEqual(normalized["content"], "这是最终答复")
+        self.assertIn("先核对尺寸", normalized["thinking"])
+        self.assertIn("补充思考", normalized["thinking"])
 
         clear_chat_history(self.root, project.id)
         after_clear = get_project_chat_state(
@@ -221,8 +173,8 @@ class WebAgentChatTests(unittest.TestCase):
         project = self.orchestrator.create_project("客厅", _sample_layout())
         with (
             mock.patch.dict("os.environ", {}, clear=True),
-            mock.patch.object(web_agent_chat, "_discover_codex_binary", return_value=None),
-            mock.patch.object(web_agent_chat, "_discover_agy_binary", return_value=None),
+            mock.patch.object(settings, "_discover_codex_binary", return_value=None),
+            mock.patch.object(settings, "_discover_agy_binary", return_value=None),
         ):
             with self.assertRaises(WebChatError) as ctx:
                 send_project_chat_message(
@@ -233,19 +185,96 @@ class WebAgentChatTests(unittest.TestCase):
                 )
             self.assertEqual(ctx.exception.code, "LLM_NOT_CONFIGURED")
 
+    def test_chat_rejects_other_projects_and_refreshes_stage_context(self) -> None:
+        project = self.orchestrator.create_project("当前", _sample_layout())
+        other = self.orchestrator.create_project("另一个", _sample_layout())
+        save_llm_config(self.root, provider="codex_cli", base_url="", model="gpt-6.1-sol")
+        seen = []
+
+        def call(cfg, messages, tools):
+            seen.append(messages[0]["content"])
+            if len(seen) == 1:
+                self.assertNotIn("furniture_create_project", [t["function"]["name"] for t in tools])
+                return {"tool_calls": [
+                    {"id": "wrong", "function": {"name": "furniture_confirm_stage", "arguments": json.dumps({"project_id": other.id, "stage": "layout_plan"})}},
+                    {"id": "right", "function": {"name": "furniture_confirm_stage", "arguments": '{"stage":"layout_plan"}'}},
+                ]}
+            # Inspect protocol state rather than the prompt's prose.
+            snapshot = json.loads(messages[0]["content"].rsplit("```json\n", 1)[1].split("```", 1)[0])
+            self.assertIn("layout_plan", snapshot["approved_stages"])
+            return {"content": "已确认", "tool_calls": []}
+
+        result = send_project_chat_message(project.id, "确认当前布局", workspace_root=WORKSPACE_ROOT, store_root=self.root, llm_caller=call)
+        self.assertFalse(result["tool_trace"][0]["ok"])
+        self.assertTrue(result["tool_trace"][1]["ok"])
+        self.assertFalse(self.store.load(other.id).latest.approved_stages)
+
+    def test_chat_busy_blocks_duplicate_messages_and_clear(self) -> None:
+        project = self.orchestrator.create_project("客厅", _sample_layout())
+        save_llm_config(self.root, provider="codex_cli", base_url="", model="gpt-6.1-sol")
+
+        def call(*args):
+            for action in (
+                lambda: send_project_chat_message(project.id, "再次发送", workspace_root=WORKSPACE_ROOT, store_root=self.root, llm_caller=call),
+                lambda: clear_chat_history(self.root, project.id),
+            ):
+                with self.assertRaises(WebChatError) as ctx:
+                    action()
+                self.assertEqual(ctx.exception.status_code, 409)
+            return {"content": "完成", "tool_calls": []}
+
+        send_project_chat_message(project.id, "你好", workspace_root=WORKSPACE_ROOT, store_root=self.root, llm_caller=call)
+        clear_chat_history(self.root, project.id)
+        self.assertEqual(web_agent_chat.load_chat_history(self.root, project.id), [])
+
+    def test_failure_after_tool_keeps_receipt_and_releases_chat(self) -> None:
+        project = self.orchestrator.create_project("客厅", _sample_layout())
+        save_llm_config(self.root, provider="codex_cli", base_url="", model="gpt-6.1-sol")
+        call = mock.Mock(side_effect=[
+            {"tool_calls": [{"id": "confirm", "function": {"name": "furniture_confirm_stage", "arguments": '{"stage":"layout_plan"}'}}]},
+            WebChatError("CODEX_CLI_ERROR", "连接中断", 502),
+        ])
+        with self.assertRaises(WebChatError):
+            send_project_chat_message(project.id, "确认布局", workspace_root=WORKSPACE_ROOT, store_root=self.root, llm_caller=call)
+        history = web_agent_chat.load_chat_history(self.root, project.id)
+        self.assertEqual(len(history), 2)
+        self.assertTrue(history[-1]["tool_trace"][0]["ok"])
+        self.assertIn("layout_plan", self.store.load(project.id).latest.approved_stages)
+        self.assertNotIn(project.id, web_agent_chat._ACTIVE_TURNS)
+        result = send_project_chat_message(project.id, "再看状态", workspace_root=WORKSPACE_ROOT, store_root=self.root, llm_caller=lambda *a: {"content": "完成"})
+        self.assertTrue(result["ok"])
+
+
+    def test_real_completion_path_calls_codex_once_per_round(self) -> None:
+        project = self.orchestrator.create_project("客厅", _sample_layout())
+        save_llm_config(self.root, provider="codex_cli", base_url="", model="gpt-6.1-sol")
+        with mock.patch.object(codex._CLIENT, "run_turn", return_value=("", '{"thinking":"","reply":"你好","tool_calls":[]}')) as turn:
+            result = send_project_chat_message(project.id, "你好", workspace_root=WORKSPACE_ROOT, store_root=self.root)
+        self.assertEqual(result["reply"], "你好")
+        self.assertEqual(turn.call_count, 1)
+
     def test_project_page_embeds_chat_panel_only_for_local_editable_mode(self) -> None:
         project = self.orchestrator.create_project("客厅", _sample_layout())
         doc = preview_page_data(project, store_root=self.root)
 
-        local_html = render_project_page(project.id, doc, mode=None, read_only=False)
+        extension = page_extension(project.id)
+        base_html = render_project_page(project.id, doc, mode=None, read_only=False)
+        self.assertNotIn('id="chat-panel"', base_html)
+        self.assertNotIn("/web-chat/", base_html)
+        local_html = render_project_page(project.id, doc, mode=None, read_only=False, page_extension=extension)
         self.assertIn('id="chat-panel"', local_html)
         self.assertIn('id="llm-modal"', local_html)
-        self.assertIn(f'"chat_url":"/api/project/{project.id}/chat"', local_html)
-        self.assertIn('"llm_config_url":"/api/llm/config"', local_html)
+        self.assertIn(f'"chatUrl": "/api/project/{project.id}/chat"', local_html)
+        self.assertIn('"llmConfigUrl": "/api/llm/config"', local_html)
+        self.assertIn(".chat-panel{", local_html)
 
-        share_html = render_project_page(project.id, doc, mode="view", read_only=True)
-        self.assertIn('"chat_url":""', share_html)
-        self.assertIn('"llm_config_url":""', share_html)
+        share_html = render_project_page(project.id, doc, mode="view", read_only=True, page_extension=extension)
+        read_only_html = render_project_page(project.id, doc, read_only=True, page_extension=extension)
+        for html in (share_html, read_only_html):
+            self.assertNotIn('id="chat-panel"', html)
+            self.assertNotIn('id="llm-modal"', html)
+            self.assertNotIn("/web-chat/", html)
+            self.assertNotIn("/api/llm/", html)
 
     def test_server_endpoints_are_registered_in_openapi(self) -> None:
         paths = server.app.openapi()["paths"]

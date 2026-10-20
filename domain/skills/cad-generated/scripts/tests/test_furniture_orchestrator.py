@@ -47,6 +47,36 @@ class FurnitureOrchestratorLifecycleTests(unittest.TestCase):
             project_store=None,
         )
 
+    def test_next_stage_saves_one_complete_snapshot(self) -> None:
+        project = self.orchestrator.create_project(
+            "单次保存",
+            layout_proposal(),
+            stage_inputs=stage_inputs_from_spec(panel_parameters()),
+        )
+        self.orchestrator.confirm_layout(project)
+        with patch.object(JsonProjectStore, "save") as save:
+            self.orchestrator.project_store = JsonProjectStore(WORKSPACE_ROOT / "store")
+            result = self.orchestrator.run_next(project)
+
+        save.assert_called_once_with(project)
+        self.assertEqual(result.revision.workflow.current, WorkflowStage.PANELS_PLANNED)
+        self.assertTrue(result.revision.latest_attempt(WorkflowStage.PANELS_PLANNED).passed)
+        self.assertIn("panel_plan", save.call_args.args[0].to_dict()["revisions"][-1]["stage_outputs"])
+
+    def test_failed_plan_saves_one_retryable_attempt(self) -> None:
+        project = self.orchestrator.create_project("失败保存", layout_proposal())
+        self.orchestrator.confirm_layout(project)
+        with patch.object(JsonProjectStore, "save") as save:
+            self.orchestrator.project_store = JsonProjectStore(WORKSPACE_ROOT / "store")
+            result = self.orchestrator.run_next(project, stage_input={"n_doors": -1})
+
+        save.assert_called_once_with(project)
+        self.assertEqual(result.revision.workflow.current, WorkflowStage.LAYOUT_PLAN)
+        attempts = result.revision.attempts_for(WorkflowStage.PANELS_PLANNED)
+        self.assertEqual(len(attempts), 1)
+        self.assertFalse(attempts[0].passed)
+        self.assertNotIn("panel_plan", result.revision.stage_outputs)
+
     def test_interactive_workflow_pauses_at_every_stage(self) -> None:
         project = self.orchestrator.create_project(
             "玄关柜",

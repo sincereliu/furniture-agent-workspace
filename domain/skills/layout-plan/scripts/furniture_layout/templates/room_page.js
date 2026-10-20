@@ -14,7 +14,6 @@ import {
 import {
   Component, Injectable, signal, computed, effect, bootstrapApplication,
 } from "/layout-view/layout_angular.js";
-import { mountProjectChat } from "/layout-view/layout_chat.js";
 
 const pageConfigEl=document.getElementById("page-config");
 const PAGE_CONFIG=pageConfigEl?JSON.parse(pageConfigEl.textContent||"{}"):{};
@@ -1357,19 +1356,16 @@ const LayoutWorkspaceAppComponent=Component({
     this.lease=leaseSignal;
     this.working=workingSignal;
     this.pendingDecisions=pendingDecisionsSignal;
-    this.chatRef=null;
   }
-  ngOnInit(){
-    if(PAGE_CONFIG.chat_url&&PAGE_CONFIG.llm_config_url&&!SHARE_FORM){
-      this.chatRef=mountProjectChat({
-        chatUrl:PAGE_CONFIG.chat_url,
-        llmConfigUrl:PAGE_CONFIG.llm_config_url,
-        onProjectUpdated:()=>refreshProjectDocument(),
-        onStatusToast:(msg,kind)=>setStatus(msg,kind),
-      });
-    }
-  }
+
 });
 bootstrapApplication(LayoutWorkspaceAppComponent);
 
 
+
+// Trusted optional page code receives only these two layout integration hooks.
+const pageHost=Object.freeze({
+  onProjectUpdated:()=>refreshProjectDocument(),
+  onStatusToast:(message,kind)=>setStatus(message,kind),
+});
+__PAGE_EXTENSION_SCRIPT__

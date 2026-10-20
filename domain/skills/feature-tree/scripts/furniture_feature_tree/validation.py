@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from furniture_delivery_validation.validation import ValidationReport
+from furniture_contracts.validation import ValidationReport
 
 from .feature_tree_emitter import validate_feature_tree as validate_feature_tree_contract
 

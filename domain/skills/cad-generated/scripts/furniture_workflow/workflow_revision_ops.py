@@ -25,7 +25,7 @@ from .workflow_constants import (
     OrchestrationResult,
 )
 from .workflow_decisions import append_decisions
-from .workflow_digest import stable_digest
+from furniture_contracts.digest import stable_digest
 from .workflow_project import Project, Revision, StageAttempt
 from .workflow_state import (
     STAGE_SEQUENCE,

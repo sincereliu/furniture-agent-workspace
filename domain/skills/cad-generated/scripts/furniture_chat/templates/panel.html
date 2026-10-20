@@ -1,0 +1,36 @@
+    <aside class="chat-panel" id="chat-panel" data-ng-component="LayoutChatComponent" aria-label="AI 助手" hidden>
+      <header class="chat-header">
+        <div class="chat-header-top">
+          <div class="chat-title-wrap">
+            <h2 class="chat-title">AI 助手</h2>
+            <span class="chat-stage-pill" id="chat-stage-pill">加载阶段…</span>
+          </div>
+          <button type="button" class="chat-clear-btn" id="chat-clear-btn" title="清空当前对话记录">清空</button>
+        </div>
+        <div class="chat-model-bar">
+          <button type="button" class="chat-model-btn" id="chat-settings-btn" title="点击切换 AI 模型">
+            <span class="chat-model-btn-main">
+              <i class="status-dot warn" id="chat-settings-dot"></i>
+              <span class="chat-model-name" id="chat-model-label">选择模型…</span>
+            </span>
+            <span class="chat-model-gear">切换 ▾</span>
+          </button>
+          <select id="chat-effort-select" class="chat-effort-select" aria-label="思考深度" title="思考深度">
+            <option value="low">低</option>
+            <option value="medium">中</option>
+            <option value="high" selected>高</option>
+            <option value="xhigh">极高</option>
+          </select>
+        </div>
+      </header>
+      <div class="chat-quick-bar" id="chat-quick-bar">
+        <button type="button" data-prompt="当前布局我确认满意了，请帮我确认布局阶段。">确认布局</button>
+        <button type="button" data-prompt="请帮我确认当前布局，并按默认起点生成板件规划草稿。">生成板件</button>
+        <button type="button" data-prompt="请告诉我当前项目在哪个阶段、有哪些家具和待确认项。">项目状态</button>
+      </div>
+      <div class="chat-messages" id="chat-messages" aria-live="polite"></div>
+      <form class="chat-form" id="chat-form">
+        <textarea id="chat-input" rows="2" placeholder="输入指令与 AI 对话（Enter 发送）"></textarea>
+        <button type="submit" id="chat-send-btn">发送</button>
+      </form>
+    </aside>

@@ -1,0 +1,57 @@
+  <div class="llm-modal-backdrop" id="llm-modal" data-ng-component="LlmConfigModalComponent" role="dialog" aria-modal="true" aria-labelledby="llm-modal-title" hidden>
+    <form class="llm-modal-card" id="llm-config-form">
+      <div class="llm-modal-head">
+        <h3 id="llm-modal-title">AI 模型设置</h3>
+      </div>
+      <div class="llm-tabs" role="tablist" aria-label="模型来源">
+        <button type="button" data-llm-preset="codex_cli" class="active">ChatGPT 订阅</button>
+        <button type="button" data-llm-preset="agy_cli">Gemini 订阅</button>
+        <button type="button" data-llm-preset="local_openai">通用 OpenAI</button>
+      </div>
+      <select id="llm-provider" hidden>
+        <option value="codex_cli">ChatGPT 订阅</option>
+        <option value="agy_cli">Gemini 订阅</option>
+        <option value="openai_compatible">通用 OpenAI</option>
+      </select>
+      <label class="llm-field" id="llm-base-url-field" hidden>
+        <span>接口地址 (Base URL)</span>
+        <input type="url" id="llm-base-url" placeholder="http://127.0.0.1:11434/v1">
+      </label>
+      <div class="llm-grid-2">
+        <label class="llm-field">
+          <span>模型</span>
+          <input type="text" id="llm-model" list="llm-model-datalist" placeholder="gpt-6.1-sol" required>
+          <datalist id="llm-model-datalist"></datalist>
+        </label>
+        <label class="llm-field" id="llm-effort-field">
+          <span id="llm-effort-label">思考深度</span>
+          <select id="llm-effort">
+            <option value="low">low</option>
+            <option value="medium">medium</option>
+            <option value="high" selected>high</option>
+            <option value="xhigh">xhigh</option>
+          </select>
+        </label>
+      </div>
+      <p class="llm-hint" id="llm-model-hint"></p>
+      <div class="llm-codex-auth" id="llm-codex-auth" hidden>
+        <p class="llm-hint">家具项目单独登录，凭据保存在用户主目录的 .furniture-agent 文件夹，位于仓库外。</p>
+        <p class="llm-hint" id="llm-codex-auth-status" role="status">尚未检查登录状态</p>
+        <button type="button" id="llm-codex-login">单独登录 Codex</button>
+        <a id="llm-codex-login-link" target="_blank" rel="noopener noreferrer" hidden>打开登录页面</a>
+      </div>
+      <p class="llm-hint" id="llm-effort-hint" hidden></p>
+      <label class="llm-field" id="llm-api-key-field" hidden>
+        <span>API Key（本机地址免填）</span>
+        <input type="password" id="llm-api-key" autocomplete="off" placeholder="留空或输入 API Key">
+        <p class="llm-hint" id="llm-key-hint" hidden></p>
+      </label>
+      <div class="llm-modal-footer">
+        <span class="llm-modal-status" id="llm-modal-status"></span>
+        <div class="llm-modal-btns">
+          <button type="button" id="llm-modal-close">取消</button>
+          <button type="submit" class="primary">保存</button>
+        </div>
+      </div>
+    </form>
+  </div>

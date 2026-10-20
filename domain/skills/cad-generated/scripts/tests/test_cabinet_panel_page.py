@@ -32,6 +32,7 @@ import server
 from furniture_layout.open_preview import layout_version, panel_version
 from furniture_layout.project_layout import ProjectLayout
 from furniture_layout.room_page import render_draft_page
+from furniture_panel_planning.panel_pipeline import plan_panel_stage
 from furniture_panel_planning.assembly_tree import flatten_panels_for_handoff
 from furniture_panel_planning.cabinet_panel_page import (
     _FACE_AXES,
@@ -47,21 +48,22 @@ from furniture_workflow.project_layout_edit import (
 )
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from furniture_workflow.workflow_store import JsonProjectStore
-from panel_fixtures import cabinet_data, panel_parameters
+from panel_fixtures import cabinet_data, cabinet_envelope, panel_parameters
 from furniture_orchestrator_test_support import layout_proposal
 
-#: 一份真实的冻结板件：800×600×1000 的双门柜，12 块板。投影的测试都对着它跑。
-FROZEN_PANELS = (
-    WORKSPACE_ROOT
-    / "store"
-    / "project_a3731afe65d34a3faa78d21799ecccf7"
-    / "panels"
-    / "3cf7428c9be3ab60890cb064a4aba7aa00ed85456c0546292f54cb1074c649d0.json"
-)
-
-
-def _frozen_cabinet() -> dict:
-    return json.loads(FROZEN_PANELS.read_text(encoding="utf-8"))["cabinets"][0]
+def _fixture_cabinet() -> dict:
+    """独立的 800×600×900 双门柜样例，不依赖开发机的 Project Store。"""
+    output = plan_panel_stage(
+        [cabinet_envelope(height=900)],
+        {"parameters": panel_parameters(
+            shelves=[
+                {"shelf_type": "fixed", "gap_below_mm": 419},
+                {"shelf_type": "fixed", "gap_below_mm": 100},
+            ],
+            top_gap_mm=259,
+        )},
+    )
+    return json.loads(json.dumps(output))["cabinets"][0]
 
 
 def _grain_repeat_for_test(span_mm: float) -> float:
@@ -616,7 +618,7 @@ class PanelGrainDirectionTests(unittest.TestCase):
         self.assertEqual(grain_axis({}), "z")
 
     def test_every_panel_of_a_real_cabinet_gets_a_known_axis(self) -> None:
-        view = panel_structure_view(_frozen_cabinet())
+        view = panel_structure_view(_fixture_cabinet())
         self.assertEqual(len(view["panels"]), 13)
         for panel in view["panels"]:
             grain = panel["grain"]
@@ -626,7 +628,7 @@ class PanelGrainDirectionTests(unittest.TestCase):
 
     def test_projection_keeps_the_rule_table_promise(self) -> None:
         """冻结的一台柜：逐块对一遍方向，顺带把「哪个面转 90°」钉住。"""
-        panels = {panel["panel_type"] + "|" + panel["role"]: panel for panel in panel_structure_view(_frozen_cabinet())["panels"]}
+        panels = {panel["panel_type"] + "|" + panel["role"]: panel for panel in panel_structure_view(_fixture_cabinet())["panels"]}
         for key, panel in panels.items():
             axis = self.EXPECTED[panel["panel_type"]]
             grain = panel["grain"]
@@ -720,7 +722,7 @@ class PanelStructureViewTests(unittest.TestCase):
     """结构投影只搬冻结文件里的数，不重算几何，材料按角色分。"""
 
     def test_projection_copies_geometry_and_assigns_materials(self) -> None:
-        view = panel_structure_view(_frozen_cabinet())
+        view = panel_structure_view(_fixture_cabinet())
         self.assertEqual(view["cabinet_id"], "cabinet_1")
         self.assertEqual(view["envelope_mm"]["width"], 800.0)
         panels = {panel["role"]: panel for panel in view["panels"]}

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from furniture_delivery_validation.validation import ValidationReport
+from furniture_contracts.validation import ValidationReport
 
 from .room_svg import render_preview
 from .project_layout import ProjectLayout
