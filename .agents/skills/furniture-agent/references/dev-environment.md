@@ -5,8 +5,8 @@
 版本钉在子模块 Skill 上，不要在本仓库 `pyproject.toml` 再写一份：
 
 - 子模块：`external/text-to-cad/VERSION`
-- Python pin：`external/text-to-cad/skills/cad/requirements.txt`（里面的 `cadgen[snapshot]==…` 由子模块 `VERSION` 决定，本仓库不再复写版本号）
-- cadgen 要求 Python `>=3.11`；本仓库用 **Python 3.12** + **uv** 管解释器与 `.venv`，**fnm** 管 Node。
+- Python pin：`external/text-to-cad/skills/cad/SKILL.md` 启动行里的 `cadgen==…`，与 `VERSION` 相同。本仓库不再复写版本号。`skills/cad/requirements.txt` 和 `cadgen[snapshot]` 额外依赖都已经没有了，Playwright 跟在 `cadgen` 本体里。
+- cadgen 要求 Python `>=3.11`；本仓库用 **Python 3.12** + **uv** 管解释器与 `.venv`，**fnm** 管 Node。技能自己的 `uvx --python 3.13` 是给智能体宿主单独装一份用的，家具 CAD 不走那条。
 
 Node 不是 CAD 运行时依赖。`cadgen viewer`、STEP 生成、snapshot 都走轮子里的 `_runtime`。只有要在 checkout 里改 cadgen / Viewer 源码并自己 bundle 时才需要 Node。
 
@@ -21,7 +21,8 @@ if (Test-Path .venv) { Remove-Item -Recurse -Force .venv }
 
 uv python install 3.12
 uv sync --python 3.12
-uv pip install -r external/text-to-cad/skills/cad/requirements.txt
+$version = (Get-Content -Raw external/text-to-cad/VERSION).Trim()
+uv pip install "cadgen==$version"
 .\.venv\Scripts\python.exe -m playwright install chromium
 ```
 
@@ -29,10 +30,11 @@ uv pip install -r external/text-to-cad/skills/cad/requirements.txt
 
 ```powershell
 uv sync --python 3.12 --extra furniture-analysis
-uv pip install -r external/text-to-cad/skills/cad/requirements.txt
+$version = (Get-Content -Raw external/text-to-cad/VERSION).Trim()
+uv pip install "cadgen==$version"
 ```
 
-`uv sync` 会重写 `.venv` 里 pyproject 锁定的包，**不会**带上 cadgen。每次 `uv sync` 之后都要再跑一遍上面的 `uv pip install -r .../cad/requirements.txt`。
+`uv sync` 会重写 `.venv` 里 pyproject 锁定的包，**不会**带上 cadgen。每次 `uv sync` 之后都要再跑一遍上面的 `uv pip install "cadgen==$version"`。
 
 ## 核对已经对齐
 
@@ -50,11 +52,11 @@ print('runtime', (root / '_runtime').is_dir())
 
 合格结果：
 
-- `cadgen doctor` 报的版本等于 `external/text-to-cad/VERSION`，且 pin 匹配 `skills/cad/requirements.txt`
+- `cadgen doctor` 报的版本等于 `external/text-to-cad/VERSION`，且 pin 匹配 `skills/cad/SKILL.md` 里的 `cadgen==`
 - `file` 在 `.venv\Lib\site-packages\cadgen\` 下，**不在** `external\text-to-cad\`
 - `runtime` 为 `True`
 
-子模块升级后（pin 变了），删掉旧 `.venv` 按「从零建」重来，或至少重跑 `uv pip install -r external/text-to-cad/skills/cad/requirements.txt`。cadgen 的 freshness gate **不跟踪 cadgen 版本**，升级后清一次缓存，避免旧 tree 被当成 current：
+子模块升级后（pin 变了），删掉旧 `.venv` 按「从零建」重来，或至少重跑 `uv pip install "cadgen==$version"`（`$version` 来自 `VERSION`）。cadgen 的 freshness gate **不跟踪 cadgen 版本**，升级后清一次缓存，避免旧 tree 被当成 current：
 
 ```powershell
 Remove-Item -Recurse -Force "$env:USERPROFILE\.cache\cadgen" -ErrorAction SilentlyContinue
@@ -100,15 +102,15 @@ bundle 脚本是 bash，Windows 用 Git Bash，不要用 PowerShell 直接跑 `.
 
 ```bash
 cd external/text-to-cad
-npm --prefix packages/cadgen-js install
-npm --prefix apps/viewer install
 bash scripts/bundle/bundle.sh
 ```
+
+`bundle.sh` 把 `_runtime` 打进 `packages/cadgen`。Node 构建用 `packages/core`，Viewer 用 `apps/web`，CAD 应用页用 `apps/mcp`。
 
 只有这条路径才适合 editable 安装：
 
 ```powershell
-uv pip install -e "external/text-to-cad/packages/cadgen[snapshot]"
+uv pip install -e "external/text-to-cad/packages/cadgen"
 ```
 
 未 bundle 就 editable，mesh / snapshot / `cadgen viewer` 会找不到 `_runtime`。家具主路径不要走 editable。

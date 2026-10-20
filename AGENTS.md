@@ -21,3 +21,5 @@
 - **动结构性代码前先确认回归基线**：改板件、制造这类会改变产物内容的代码之前，先跑 `domain/stages/cad-generated/scripts/tests/test_panel_output_baseline.py`。它红了先判断是不是**意外**变化——意外就改代码，**不要改基线**；确认是故意的才按该文件头部步骤重新生成，并在提交信息里写清「什么变了、为什么变」。
 - 不要自动写更新日志。只有用户明确要求写更新日志时，才在 `changelog/` 下为这一次更新新建一个 Markdown 文件；不要追加到已有文件，也不要维护根目录 `CHANGELOG.md`。文件名用 `YYYYMMDD.N.md`（同一天已有文件则 `N` 递增）。
 - 实现 `backlog/` 里的条目前，先跑 `domain/stages/cad-generated/scripts/backlog_reconcile.py`。它用 `backlog_landed.py` 里的已落地版本核对待办文件。版本已经落地的条目改到 Done，不再留在 Open。做完一条时，同一次改动里把该条目的已落地版本改成待办里的版本。
+- **网页预览服务运行约定**：启动 Web 预览服务（`open_projects.py` / `server.py`）供浏览器访问时，在终端工具中必须使用 `BypassSandbox: true` 并在后台以守护进程（`IsDaemon: true`）启动。在默认沙箱内运行会因 Windows 网络拦截导致 `socket.socketpair()` 死锁挂起，且外部浏览器无法穿透沙箱端口；测试中包含真实 HTTP/异步服务的用例（如 `test_project_preview.py`）同样避免在沙箱内无超时死等。启动后确认 `/health` 返回 200 再提供访问链接。
+

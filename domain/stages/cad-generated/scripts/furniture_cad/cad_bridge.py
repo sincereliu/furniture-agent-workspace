@@ -262,12 +262,16 @@ class CadBridge:
 
     @staticmethod
     def _generation_payload(stdout: str) -> tuple[dict[str, object] | None, str | None]:
+        # cadgen 0.7.24 --json writes the result, then keeps writing progress
+        # objects (model/state/phase) on stdout. The result is the object that
+        # carries ok. Progress lines have no ok key.
+        saw_result_without_artifact = False
         for line in reversed(stdout.splitlines()):
             try:
                 payload = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            if not isinstance(payload, dict):
+            if not isinstance(payload, dict) or "ok" not in payload:
                 continue
             if payload.get("ok") is not True:
                 return None, "cadgen reported an unsuccessful result"
@@ -279,6 +283,8 @@ class CadBridge:
             has_tree = isinstance(tree, str) and bool(tree.strip())
             if has_package or has_document or has_tree:
                 return payload, None
+            saw_result_without_artifact = True
+        if saw_result_without_artifact:
             return None, "cadgen JSON result had no document, tree, or packagePath"
         return None, "cadgen did not emit a JSON result"
 

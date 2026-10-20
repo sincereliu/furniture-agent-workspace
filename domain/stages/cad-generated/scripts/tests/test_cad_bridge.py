@@ -76,6 +76,46 @@ class CadBridgeTests(unittest.TestCase):
             )
             self.assertTrue((package_path / "components" / "fake.glb").is_file())
 
+    def test_json_result_is_read_past_trailing_progress_lines(self) -> None:
+        module = load_adapter_module()
+        stdout = "\n".join(
+            [
+                json.dumps(
+                    {
+                        "ok": True,
+                        "document": "C:/work/box.step",
+                        "tree": "abc",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "model": "box.py",
+                        "parent": None,
+                        "state": "done",
+                        "phase": "STEP saved",
+                        "progress": None,
+                        "elapsed": 1.0,
+                    }
+                ),
+                "[cadgen] wrote STEP: C:/work/box.step",
+            ]
+        )
+        payload, error = module.CadBridge._generation_payload(stdout)
+        self.assertIsNone(error)
+        self.assertEqual(payload["document"], "C:/work/box.step")
+        self.assertEqual(payload["tree"], "abc")
+
+        failed, failed_error = module.CadBridge._generation_payload(
+            "\n".join(
+                [
+                    json.dumps({"ok": False, "error": "compile failed"}),
+                    json.dumps({"model": "box.py", "state": "failed", "phase": None}),
+                ]
+            )
+        )
+        self.assertIsNone(failed)
+        self.assertEqual(failed_error, "cadgen reported an unsuccessful result")
+
     def test_default_launcher_is_the_model_script(self) -> None:
         module = load_adapter_module()
         bridge = module.CadBridge(workspace_root=WORKSPACE_ROOT)
