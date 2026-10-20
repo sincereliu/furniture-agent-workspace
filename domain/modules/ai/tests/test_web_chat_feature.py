@@ -10,7 +10,7 @@ import textwrap
 import unittest
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[4]
-SCRIPTS_ROOT = WORKSPACE_ROOT / "domain/skills/cad-generated/scripts"
+SCRIPTS_ROOT = WORKSPACE_ROOT / "domain/stages/cad-generated/scripts"
 
 
 class WebChatFeatureTests(unittest.TestCase):

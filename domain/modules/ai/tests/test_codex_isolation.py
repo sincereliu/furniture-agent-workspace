@@ -11,7 +11,7 @@ import unittest
 from unittest import mock
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[4]
-SCRIPT_ROOT = WORKSPACE_ROOT / "domain/skills/cad-generated/scripts"
+SCRIPT_ROOT = WORKSPACE_ROOT / "domain/stages/cad-generated/scripts"
 sys.path.insert(0, str(SCRIPT_ROOT))
 from runtime_paths import bootstrap_runtime_paths
 

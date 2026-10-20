@@ -35,8 +35,8 @@
 ## 验证
 
 ```powershell
-.\.venv\Scripts\python.exe domain/skills/cad-generated/scripts/run_tests.py -p test_codex_isolation.py
-.\.venv\Scripts\python.exe domain/skills/cad-generated/scripts/run_tests.py -p test_web_agent_chat.py
+.\.venv\Scripts\python.exe domain/stages/cad-generated/scripts/run_tests.py -p test_codex_isolation.py
+.\.venv\Scripts\python.exe domain/stages/cad-generated/scripts/run_tests.py -p test_web_agent_chat.py
 ```
 
 新增运行时判断仅用于路径和来源验证、凭据状态与 JSON-RPC 协议、进程及文件副作用。

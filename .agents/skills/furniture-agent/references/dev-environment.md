@@ -64,15 +64,15 @@ Get-ChildItem -Recurse -Directory -Filter .cadgen-store temp, generated -ErrorAc
 
 ## 跑测试
 
-布局阶段维护时，只跑 [布局运行时映射](../../../../domain/skills/layout-plan/references/runtime-map.md) 的「维护时跑哪几个测试」里这次改动碰到的行。下面不带 `-p` 的命令是整库回归。
+布局阶段维护时，只跑 [布局运行时映射](../../../../domain/stages/layout-plan/references/runtime-map.md) 的「维护时跑哪几个测试」里这次改动碰到的行。下面不带 `-p` 的命令是整库回归。
 
 在仓库根目录、PowerShell：
 
 ```powershell
-.\.venv\Scripts\python.exe domain\skills\cad-generated\scripts\run_tests.py
+.\.venv\Scripts\python.exe domain\stages\cad-generated\scripts\run_tests.py
 ```
 
-入口在 `run_tests.py`，用标准库 `unittest`，不需要额外安装。它调 `runtime_paths.bootstrap_runtime_paths()` 装好阶段包和独立 AI 模块，再发现 `domain/skills/cad-generated/scripts/tests/` 与 `domain/modules/ai/tests/` 下的全部测试。原命令与 `-p` 用法不变。加 `-v` 会列出每个未失败用例。
+入口在 `run_tests.py`，用标准库 `unittest`，不需要额外安装。它调 `runtime_paths.bootstrap_runtime_paths()` 装好阶段包和独立 AI 模块，再发现 `domain/stages/cad-generated/scripts/tests/` 与 `domain/modules/ai/tests/` 下的全部测试。原命令与 `-p` 用法不变。加 `-v` 会列出每个未失败用例。
 
 合格结果是最后一行 `ran <总数>, failed 0, errored 0, skipped 0`。退出码 0 表示全绿。
 
@@ -83,7 +83,7 @@ Get-ChildItem -Recurse -Directory -Filter .cadgen-store temp, generated -ErrorAc
 本仓库测试按 `unittest` 写，不依赖 pytest。只想跑单个文件时加 `-p`：
 
 ```powershell
-.\.venv\Scripts\python.exe domain\skills\cad-generated\scripts\run_tests.py -p test_panel_rule_contracts.py
+.\.venv\Scripts\python.exe domain\stages\cad-generated\scripts\run_tests.py -p test_panel_rule_contracts.py
 ```
 
 ## fnm / Node（可选）

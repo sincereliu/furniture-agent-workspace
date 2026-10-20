@@ -112,9 +112,9 @@ def _read_doc_if_exists(workspace_root: Path, relative_path: str) -> str:
 def _stage_doc_paths(project_snapshot: Mapping[str, Any]) -> list[str]:
     """按当前阶段与下一阶段动态选择要挂载的领域 Skill 文档。"""
     docs: list[str] = [
-        "domain/skills/cad-generated/references/agent-tool-contract.md",
-        "domain/skills/layout-plan/SKILL.md",
-        "domain/skills/layout-plan/references/spatial-layout-rules.md",
+        "domain/stages/cad-generated/references/agent-tool-contract.md",
+        "domain/stages/layout-plan/SKILL.md",
+        "domain/stages/layout-plan/references/spatial-layout-rules.md",
     ]
     current_stage = str(project_snapshot.get("current_stage") or "")
     next_stage = str(project_snapshot.get("next_stage") or "")
@@ -124,24 +124,24 @@ def _stage_doc_paths(project_snapshot: Mapping[str, Any]) -> list[str]:
     if "layout_plan" in approved or "panel_plan" in active:
         docs.extend(
             [
-                "domain/skills/panel-plan/SKILL.md",
-                "domain/skills/panel-plan/references/panel-proposal-contract.md",
-                "domain/skills/panel-plan/references/sheet-stock-catalog.md",
+                "domain/stages/panel-plan/SKILL.md",
+                "domain/stages/panel-plan/references/panel-proposal-contract.md",
+                "domain/stages/panel-plan/references/sheet-stock-catalog.md",
             ]
         )
     if "manufacture_plan" in active:
         docs.extend(
             [
-                "domain/skills/manufacture-plan/SKILL.md",
-                "domain/skills/manufacture-plan/references/manufacturing-rules.md",
+                "domain/stages/manufacture-plan/SKILL.md",
+                "domain/stages/manufacture-plan/references/manufacturing-rules.md",
             ]
         )
     if "feature_tree_planned" in active:
-        docs.append("domain/skills/feature-tree/SKILL.md")
+        docs.append("domain/stages/feature-tree/SKILL.md")
     if "cad_generated" in active:
-        docs.append("domain/skills/cad-generated/TOOL.md")
+        docs.append("domain/stages/cad-generated/TOOL.md")
     if "delivery_validated" in active:
-        docs.append("domain/skills/delivery-validated/SKILL.md")
+        docs.append("domain/stages/delivery-validated/SKILL.md")
     return docs
 
 

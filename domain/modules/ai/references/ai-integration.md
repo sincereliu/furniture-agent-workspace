@@ -26,7 +26,7 @@
 | `furniture_chat/static/layout_chat.js` | 消息显示、模型设置和登录按钮；只从 `/web-chat/` 提供 |
 | `tests/` | 模型、登录隔离、会话、启停和 HTTP 资源测试 |
 
-宿主 `domain/skills/cad-generated/scripts/server.py` 只读取功能开关，向可选模块传入项目读取、Store 路径和本机权限检查。AI 的实现与维护文档不属于 CAD 阶段。
+宿主 `domain/stages/cad-generated/scripts/server.py` 只读取功能开关，向可选模块传入项目读取、Store 路径和本机权限检查。AI 的实现与维护文档不属于 CAD 阶段。
 
 布局阶段只定义空的 `PageExtension` 插槽，不导入 AI 包，也不嵌入聊天 URL、UI 或脚本。
 扩展通过 `pageHost.onProjectUpdated` 请求刷新项目，或通过 `pageHost.onStatusToast` 显示状态。
@@ -64,7 +64,7 @@ Codex 的仓库外目录、凭据和进程边界见 [Codex 隔离](codex-isolati
 
 ```powershell
 $env:FURNITURE_WEB_CHAT = "0"
-.\.venv\Scripts\python.exe domain/skills/cad-generated/scripts/server.py
+.\.venv\Scripts\python.exe domain/stages/cad-generated/scripts/server.py
 ```
 
 开关只接受 `0` / `1`，默认 `1` 保持现有行为。修改后须退出并重启预览服务；仅刷新页面不会改变正在运行的服务。
@@ -78,10 +78,10 @@ $env:FURNITURE_WEB_CHAT = "0"
 ## 验证
 
 ```powershell
-.\.venv\Scripts\python.exe domain/skills/cad-generated/scripts/run_tests.py -p test_ai_providers.py
-.\.venv\Scripts\python.exe domain/skills/cad-generated/scripts/run_tests.py -p test_codex_isolation.py
-.\.venv\Scripts\python.exe domain/skills/cad-generated/scripts/run_tests.py -p test_web_agent_chat.py
-.\.venv\Scripts\python.exe domain/skills/cad-generated/scripts/run_tests.py -p test_web_chat_feature.py
+.\.venv\Scripts\python.exe domain/stages/cad-generated/scripts/run_tests.py -p test_ai_providers.py
+.\.venv\Scripts\python.exe domain/stages/cad-generated/scripts/run_tests.py -p test_codex_isolation.py
+.\.venv\Scripts\python.exe domain/stages/cad-generated/scripts/run_tests.py -p test_web_agent_chat.py
+.\.venv\Scripts\python.exe domain/stages/cad-generated/scripts/run_tests.py -p test_web_chat_feature.py
 ```
 
 通道和参数测试不依赖真实账号；独立导入测试检查接入包不会加载家具运行时或启动子进程。

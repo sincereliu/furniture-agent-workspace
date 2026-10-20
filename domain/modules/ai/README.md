@@ -22,7 +22,7 @@ domain/modules/ai/
 仍使用同一个测试入口，自动发现阶段测试与本模块测试：
 
 ```powershell
-.\.venv\Scripts\python.exe domain/skills/cad-generated/scripts/run_tests.py
-.\.venv\Scripts\python.exe domain/skills/cad-generated/scripts/run_tests.py -p test_ai_providers.py
-.\.venv\Scripts\python.exe domain/skills/cad-generated/scripts/run_tests.py -p test_web_chat_feature.py
+.\.venv\Scripts\python.exe domain/stages/cad-generated/scripts/run_tests.py
+.\.venv\Scripts\python.exe domain/stages/cad-generated/scripts/run_tests.py -p test_ai_providers.py
+.\.venv\Scripts\python.exe domain/stages/cad-generated/scripts/run_tests.py -p test_web_chat_feature.py
 ```

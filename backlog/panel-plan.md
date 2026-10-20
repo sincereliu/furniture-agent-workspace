@@ -19,7 +19,7 @@ file_version: 2
 - sheet-capacity-check version 1 — a panel must fit the shop sheet stock
 <!-- backlog-status:end -->
 
-来源是 rabbit0716 在 2026-10-17 写的那份计划。当时它被放进了 `domain/skills/panel-plan/references/backlog.md`。计划改留在这里。
+来源是 rabbit0716 在 2026-10-17 写的那份计划。当时它被放进了 `domain/stages/panel-plan/references/backlog.md`。计划改留在这里。
 
 ## full-height-divider
 
@@ -47,7 +47,7 @@ file_version: 2
 
 验收：2400 高衣柜、2000 处一道横板、缝 0 上一块半高立板 → 下两腔各 373、上部一个 764 通腔；顶板整段（不断开），立板只到横板下表面。
 
-入口：柜内结构物化设计批次 1 的「分段」、柜内结构契约的 `breaks`。文件在 `domain/skills/panel-plan/references/`。
+入口：柜内结构物化设计批次 1 的「分段」、柜内结构契约的 `breaks`。文件在 `domain/stages/panel-plan/references/`。
 
 ## door-rows
 
