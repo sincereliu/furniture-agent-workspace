@@ -13,9 +13,10 @@
   - CAD/STEP → `domain/stages/cad-generated/TOOL.md` 与 `scripts/furniture_cad/`
   - 交付 → `domain/stages/delivery-validated/`
   - AI 模型接入、网页助手、模型设置与登录 → `domain/modules/ai/`；这是独立应用模块，不属于 CAD 或其他家具阶段，代码、界面、测试和维护文档归该模块。
+  - 网页展示（房间页、项目名单、板件页画面）→ `domain/modules/web/`；这也是独立应用模块。摆放求解、拖动换算和板件结构投影仍留在对应阶段。
 
 - 维护某一个阶段的 Skill 时，只改该阶段自己的目录。六个阶段目录是 `domain/stages/` 下的 `layout-plan/`、`panel-plan/`、`manufacture-plan/`、`feature-tree/`、`cad-generated/`、`delivery-validated/`（含各自的 `SKILL.md` 或 `TOOL.md`、`references/`、`scripts/`、`agents/`）。改动必须落到另一个阶段时，先列出要改哪些阶段、哪些文件、为什么不能只留在当前阶段，等开发者看过再改那些文件。用户这次已经点名这些文件，或明确要求跨阶段调整指令和说明时，按该范围改指令和说明，不必再等一次；这个授权不包含改其他阶段的 `scripts/`。
-- 新增或搬移阶段 `scripts/` 或独立模块 `domain/modules/ai/` 中的分支、映射、默认值或解析器前，必须完整读取 [LLM 与运行时边界](.agents/skills/furniture-agent/references/llm-runtime-boundary.md)，并按该文档完成边界审计。只改 Skill 文案、`references/`、测试数据或已有确定性计算时，不必先读该文档。
+- 新增或搬移阶段 `scripts/` 或独立模块 `domain/modules/ai/`、`domain/modules/web/` 中的分支、映射、默认值或解析器前，必须完整读取 [LLM 与运行时边界](.agents/skills/furniture-agent/references/llm-runtime-boundary.md)，并按该文档完成边界审计。只改 Skill 文案、`references/`、测试数据或已有确定性计算时，不必先读该文档。
 - 测试只检查算得对不对、状态对不对，以及约定文件和链接还在不在。新增或搬移上述运行时逻辑时，「这段该不该进 Python」只按该边界文档里的边界审计判断。
 - **动结构性代码前先确认回归基线**：改板件、制造这类会改变产物内容的代码之前，先跑 `domain/stages/cad-generated/scripts/tests/test_panel_output_baseline.py`。它红了先判断是不是**意外**变化——意外就改代码，**不要改基线**；确认是故意的才按该文件头部步骤重新生成，并在提交信息里写清「什么变了、为什么变」。
 - 不要自动写更新日志。只有用户明确要求写更新日志时，才在 `changelog/` 下为这一次更新新建一个 Markdown 文件；不要追加到已有文件，也不要维护根目录 `CHANGELOG.md`。文件名用 `YYYYMMDD.N.md`（同一天已有文件则 `N` 递增）。

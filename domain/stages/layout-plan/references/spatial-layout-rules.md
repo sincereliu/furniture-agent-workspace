@@ -100,7 +100,7 @@ LLM 负责选择贴墙还是贴哪件家具，运行时只验证显式目标并�
 - 与障碍物或另一件家具正体积相交
 - 沿宿主墙遮挡垂直范围相交的门窗
 
-边界接触不算干涉。可编辑视图的拖动按同一套摆放检查求解，干涉、越界或遮挡洞口就停在接触处（JS 侧镜像的判定在 `templates/room_page.js`，改 `placement_check.py` 要同步改它）。项目布局在创建待确认 Revision 前校验；缺房间尺寸或 fill 没有空段均失败。独立房间场景接口还要求非空 `items[]`。
+边界接触不算干涉。可编辑视图的拖动按同一套摆放检查求解，干涉、越界或遮挡洞口就停在接触处（JS 侧镜像的判定在 `furniture_layout/static/layout_solver.js`，由网页模块的 `templates/room_page.js` 调用；改 `placement_check.py` 要同步改求解脚本）。项目布局在创建待确认 Revision 前校验；缺房间尺寸或 fill 没有空段均失败。独立房间场景接口还要求非空 `items[]`。
 
 ## 输出
 

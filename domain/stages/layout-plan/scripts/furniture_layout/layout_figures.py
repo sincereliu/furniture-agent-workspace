@@ -13,7 +13,7 @@ from .room_svg import render_preview
 from .project_layout import ProjectLayout
 from .scene import RoomScene
 from .validation import admit_scene
-from .room_page import render_viewer
+from furniture_web.room_page import render_viewer
 
 
 def room_scene_dict(scene: RoomScene) -> dict[str, Any]:

@@ -1,4 +1,4 @@
-import * as THREE from "../../../../../../vendor/three/0.186.0/three.module.js";
+import * as THREE from "../../../../../vendor/three/0.186.0/three.module.js";
 import assert from "node:assert/strict";
 import { cameraFov, cameraThreePosition, roomToThree, threeToRoom } from "./layout_frame.js";
 import { roomAxes, dimensionAnnotations } from "./layout_annotations.js";

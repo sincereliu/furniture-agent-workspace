@@ -15,6 +15,8 @@ STAGE_NAMES = (
     "delivery-validated",
 )
 AI_MODULE_RELATIVE_ROOT = Path("domain") / "modules" / "ai"
+WEB_MODULE_RELATIVE_ROOT = Path("domain") / "modules" / "web"
+MODULE_RELATIVE_ROOTS = (AI_MODULE_RELATIVE_ROOT, WEB_MODULE_RELATIVE_ROOT)
 
 
 def stage_script_roots(workspace_root: Path) -> tuple[Path, ...]:
@@ -24,7 +26,10 @@ def stage_script_roots(workspace_root: Path) -> tuple[Path, ...]:
 
 def bootstrap_runtime_paths(workspace_root: Path | None = None) -> tuple[Path, ...]:
     root = (workspace_root or Path(__file__).resolve().parents[4]).resolve()
-    script_roots = (*stage_script_roots(root), root / AI_MODULE_RELATIVE_ROOT)
+    script_roots = (
+        *stage_script_roots(root),
+        *(root / relative for relative in MODULE_RELATIVE_ROOTS),
+    )
     for script_root in reversed(script_roots):
         path = str(script_root)
         if path not in sys.path:

@@ -105,10 +105,9 @@ class ApiEntrypointTests(unittest.TestCase):
         scene_path = (
             WORKSPACE_ROOT
             / "domain"
-            / "stages"
-            / "layout-plan"
-            / "scripts"
-            / "furniture_layout"
+            / "modules"
+            / "web"
+            / "furniture_web"
             / "static"
             / "layout_scene.js"
         )

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import * as THREE from "../../../../../../vendor/three/0.186.0/three.module.js";
+import * as THREE from "../../../../../vendor/three/0.186.0/three.module.js";
 import { cameraThreePosition, roomToThree } from "./layout_frame.js";
 import { INK_VIEW_BIAS_MM, biasInkView, inkViewBiasGlsl, logWindowDepth } from "./ink_depth.js";
 

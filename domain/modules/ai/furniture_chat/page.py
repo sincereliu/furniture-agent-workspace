@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from furniture_layout.room_page import PageExtension
+from furniture_web.room_page import PageExtension
 
 ROOT = Path(__file__).resolve().parent
 

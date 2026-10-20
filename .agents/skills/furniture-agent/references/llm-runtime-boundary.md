@@ -1,6 +1,6 @@
 # LLM 与运行时边界
 
-适用于创建、修改和审查 `domain/stages/` 下家具阶段包、独立模块 `domain/modules/ai/`、CAD 执行工具、家具工作流入口、路由 Skill 及其测试。本文的运行时代码同时包括阶段 `scripts/` 与独立模块中的实现。
+适用于创建、修改和审查 `domain/stages/` 下家具阶段包、独立模块 `domain/modules/ai/` 与 `domain/modules/web/`、CAD 执行工具、家具工作流入口、路由 Skill 及其测试。本文的运行时代码同时包括阶段 `scripts/` 与独立模块中的实现。
 
 本文只规定 LLM 和代码怎么分。阶段字段归谁、工具怎么调用、目录里有哪些合法值，以各 Skill 和运行时契约为准，不在这里展开。
 
@@ -70,7 +70,7 @@ LLM 做：
 
 ## 完成前边界审计
 
-1. 查看本次差异：`domain/stages/` 下阶段包、`domain/modules/ai/`、`cad-generated` 工作流、以及 `.agents/skills/furniture-agent/`。列出新增或扩大的分支、映射、默认值和解析器。
+1. 查看本次差异：`domain/stages/` 下阶段包、`domain/modules/ai/`、`domain/modules/web/`、`cad-generated` 工作流、以及 `.agents/skills/furniture-agent/`。列出新增或扩大的分支、映射、默认值和解析器。
 2. 给每项标注一个代码理由：`schema`、`validation`、`calculation`、`state`、`side_effect` 或 `structured_protocol`。旁路分析标 `calculation` 或 `structured_protocol`，并确认只写入 `stage_analyses`。
 3. 没有上述理由的逻辑移到所属规划 Skill 的 `SKILL.md`、CAD 的 `TOOL.md` 或 `references/`，或删除。
 4. 检查代码中是否出现自然语言示例的复制、把同义词当分类器，或上游阶段静默做下游决策。工艺卡展开若已在所属 Skill 说明，不算违规。

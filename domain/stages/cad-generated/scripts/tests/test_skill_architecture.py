@@ -83,6 +83,32 @@ class SkillArchitectureTests(unittest.TestCase):
         self.assertTrue((module / "references/ai-integration.md").is_file())
         self.assertTrue((module / "tests/test_web_chat_feature.py").is_file())
 
+    def test_web_module_owns_the_pages_and_leaves_placement_rules(self) -> None:
+        module = WORKSPACE_ROOT / "domain/modules/web"
+        pages = module / "furniture_web"
+        layout_static = (
+            STAGES_ROOT / "layout-plan" / "scripts" / "furniture_layout" / "static"
+        )
+        self.assertTrue((module / "README.md").is_file())
+        self.assertTrue((module / "references/web-preview.md").is_file())
+        for name in ("room_page.py", "project_list.py", "panel_page.py", "integration.py"):
+            self.assertTrue((pages / name).is_file(), name)
+        self.assertTrue((pages / "templates" / "room_page.html").is_file())
+        self.assertTrue((pages / "static" / "layout_scene.js").is_file())
+        self.assertTrue((pages / "static" / "cabinet_structure.js").is_file())
+        self.assertFalse((layout_static / "layout_scene.js").exists())
+        self.assertTrue((layout_static / "layout_solver.js").is_file())
+        self.assertTrue((layout_static / "layout_drag.js").is_file())
+        panel_page = (
+            STAGES_ROOT
+            / "panel-plan"
+            / "scripts"
+            / "furniture_panel_planning"
+            / "cabinet_panel_page.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("def panel_structure_view(", panel_page)
+        self.assertNotIn("def render_cabinet_panel_page(", panel_page)
+
     def test_module_navigation_links_resolve(self) -> None:
         navigation = STAGES_ROOT / CAD_TOOL_HOME / "references" / "module-map.md"
         self.assertTrue(navigation.is_file())

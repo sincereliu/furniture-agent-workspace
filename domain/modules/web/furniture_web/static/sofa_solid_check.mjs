@@ -1,8 +1,8 @@
 /**
  * 固定沙发要有靠背、扶手和坐垫，并且跟着足迹的正面走。
- * 运行：node domain/stages/layout-plan/scripts/furniture_layout/static/sofa_solid_check.mjs
+ * 运行：node domain/modules/web/furniture_web/static/sofa_solid_check.mjs
  */
-import * as THREE from "../../../../../../vendor/three/0.186.0/three.module.js";
+import * as THREE from "../../../../../vendor/three/0.186.0/three.module.js";
 import { roomToThree } from "./layout_frame.js";
 import {
   isFixedSofa,

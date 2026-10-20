@@ -29,9 +29,9 @@ HTTP / function calling / AI 对话
 | [CAD](../TOOL.md) | `furniture_cad` | `cad_bridge` 调外部 CAD 进程；`validation` 校验桥接结果。逐柜生成 STEP 与 Viewer 包 |
 | [交付](../../delivery-validated/SKILL.md) | `furniture_delivery_validation` | `validation` 核对阶段检查点、逐柜覆盖、文件、大小、摘要及谱系；不重算制造，也不解析 STEP 几何 |
 
-布局预览在 `furniture_layout`：`room_page` / `room_svg` / `project_list` / `open_preview` 管展示；`scene_edit` / `project_edit` 管几何编辑；`scene_store` 管独立场景；`layout_events` 管变更通知；`room_http` 暴露独立房间接口；`room_shell` 只导出房间外壳。三维前端的细分见 [布局运行时映射](../../layout-plan/references/runtime-map.md)。
+布局计算在 `furniture_layout`：`room_page.room_page_payload` 给出页面要画的字典；`room_svg` 配确认用的图；`open_preview` 准备预览数据并打开页面；`scene_edit` / `project_edit` 管几何编辑；`scene_store` 管独立场景；`layout_events` 管变更通知；`room_http` 暴露独立房间接口；`room_shell` 只导出房间外壳。房间页、项目名单和三维画面在 [网页展示模块](../../../modules/web/README.md)。三维脚本的分工见 [布局运行时映射](../../layout-plan/references/runtime-map.md)。
 
-板件展示由 `panel_review` / `cabinet_panel_page` / `grain_rules` 负责；身份与交接在 `cabinet_identity` / `panel_models`。板件审计、优化与制造试验、统计、仿真是旁路分析。制造的 `drilled_holes_glb` / `export_six_side_drill` 负责文件格式转换，实际生成目录与 manifest 由工作流写入。具体规则见 [板件映射](../../panel-plan/references/runtime-map.md)、[制造映射](../../manufacture-plan/references/runtime-map.md)。
+板件结构投影在 `cabinet_panel_page.panel_structure_view`，顺纹规则在 `grain_rules`。板件页 HTML 在网页模块。`panel_review` 是确认审查。身份与交接在 `cabinet_identity` / `panel_models`。板件审计、优化与制造试验、统计、仿真是旁路分析。制造的 `drilled_holes_glb` / `export_six_side_drill` 负责文件格式转换，实际生成目录与 manifest 由工作流写入。具体规则见 [板件映射](../../panel-plan/references/runtime-map.md)、[制造映射](../../manufacture-plan/references/runtime-map.md)。
 
 ## 工作流包
 
@@ -63,7 +63,7 @@ HTTP / function calling / AI 对话
 | 模块 | 职责 |
 | --- | --- |
 | `furniture_contracts/validation` / `digest` | 六阶段共用的校验结果与规范 JSON 内容哈希，仅依赖标准库 |
-| `server.py` | FastAPI 进程、本机访问检查、项目 HTTP 接口、挂载阶段路由和静态资源 |
+| `server.py` | FastAPI 进程、本机访问检查、项目 HTTP 接口、挂载阶段路由和网页模块 |
 | `furniture_chat/conversation` / `http` | 可选页面助手的会话、模型上下文、工具循环和 HTTP 接入；开关与维护见 [AI 接入层维护](../../../modules/ai/references/ai-integration.md) |
 | `furniture_chat/integration` / `page` / `templates` / `static` | 助手挂载、可选界面与前端资源；布局阶段只提供空插槽和两个展示回调 |
 | `furniture_ai/contracts` / `service` | 模型接入契约与统一分发 |
@@ -75,7 +75,7 @@ HTTP / function calling / AI 对话
 | `validate_workspace_layout.py` | 校验脚本归属目录 |
 | `backlog_reconcile.py` / `backlog_landed.py` | 待办版本与已落地版本核对 |
 
-上表的 `furniture_ai`、`furniture_chat` 及其专属测试和维护文档位于 [独立 AI 模块](../../../modules/ai/README.md)，不属于 `cad-generated`。CAD 目录中的服务器只负责条件接入。
+上表的 `furniture_ai`、`furniture_chat` 及其专属测试和维护文档位于 [独立 AI 模块](../../../modules/ai/README.md)，不属于 `cad-generated`。CAD 目录中的服务器只负责条件接入。房间页、项目名单和板件页画面位于 [网页展示模块](../../../modules/web/README.md)，服务器负责挂载。
 
 公共包位于 `cad-generated/scripts/furniture_contracts/`，沿用现有 `runtime_paths` 加载，无需增加启动步骤。它只定义阶段无关的数据契约和确定性计算，不导入阶段实现或工作流。新增调用使用 `furniture_contracts.validation` 的 `ValidationReport` / `ValidationIssue` / `ValidationSeverity` 及 `furniture_contracts.digest.stable_digest`；旧的交付类型导入和 `workflow_digest` 导入保持兼容。保存的 JSON 字段、错误等级与哈希算法不变。
 
@@ -84,7 +84,7 @@ HTTP / function calling / AI 对话
 - 改尺寸和加工公式：改拥有该公式的阶段包。工作流只传递规范输入和结果。
 - 改确认、重试和保存次数：改工作流生命周期；检查失败 attempt、冻结来源、下游失效和修订继承。
 - 改模型提供方：改 `furniture_ai`；项目会话与工具循环归 `furniture_chat/conversation`，网页 HTTP 接入归 `furniture_chat/http`。
-- 改页面：在所属阶段维护渲染与几何编辑，通过 `project_layout_edit` 写项目。
+- 改页面样子：改 [网页展示模块](../../../modules/web/README.md)。改摆放求解或拖动换算仍改布局阶段。页面写项目仍走 `project_layout_edit`。
 - 修改公共结构前先确认跨阶段范围，在 `furniture_contracts` 维护唯一实现，并验证各阶段保存格式、冻结哈希与兼容入口。
 
 结构性改动先跑板件基线，不能为让重构通过而更新基线：

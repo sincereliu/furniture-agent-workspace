@@ -47,7 +47,7 @@
 | `joint_topology.py` | 大面–端面接触几何；不解析连不连 | calculation |
 | `panel_review.py` | 确认审查清单：净空、板件一行一条、接触去重；不含连不连 | calculation / structured_protocol |
 | `grain_rules.py` | 顺纹方向这个板件属性的默认值、允许取值与规整（进冻结文件） | schema / calculation |
-| `cabinet_panel_page.py` | 一台柜子的板件页。给了板件结构投影（已确认冻结板件或待确认候选板件）就画结构；没有只画布局里已保存的外形。`panel_structure_view()` 只把结构投影成页面能画的尺寸、位置、装配、材料，以及把板件带的 `grain_axis` 换算成每个面怎么摆贴图（`_grain_uv()`）；不确认布局，不生成门和层板 | structured_protocol |
+| `cabinet_panel_page.py` | 一台柜子的板件结构投影。`panel_structure_view()` 把结构收成页面能画的尺寸、位置、装配、材料，以及把板件带的 `grain_axis` 换算成每个面怎么摆贴图（`_grain_uv()`）。页面 HTML 在网页模块 `furniture_web/panel_page.py`：给了投影就画结构，没有只画布局里已保存的外形。不确认布局，不生成门和层板 | structured_protocol |
 | `validation.py` | 检查点入口；柜体/装配在 `validation_cabinet.py`，板件角色在 `validation_panels.py` | validation |
 | `quantitative_audit.py` / `design_optimization.py` | 旁路分析 | 只写 `stage_analyses` |
 

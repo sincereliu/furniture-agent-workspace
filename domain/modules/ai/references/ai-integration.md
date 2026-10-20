@@ -28,7 +28,7 @@
 
 宿主 `domain/stages/cad-generated/scripts/server.py` 只读取功能开关，向可选模块传入项目读取、Store 路径和本机权限检查。AI 的实现与维护文档不属于 CAD 阶段。
 
-布局阶段只定义空的 `PageExtension` 插槽，不导入 AI 包，也不嵌入聊天 URL、UI 或脚本。
+网页模块定义空的 `PageExtension` 插槽。布局阶段不导入 AI 包，也不嵌入聊天 URL、UI 或脚本。
 扩展通过 `pageHost.onProjectUpdated` 请求刷新项目，或通过 `pageHost.onStatusToast` 显示状态。
 只读和分享页面即使收到扩展参数，也不会输出它。换模型或修改连接方式时，
 先改所属通道文件；阶段技能、家具默认值和方案判断不放进接入层。

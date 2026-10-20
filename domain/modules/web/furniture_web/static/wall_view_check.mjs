@@ -1,7 +1,7 @@
 /**
  * 墙显隐判据的断言：横在人和房间之间的那面墙不画，留下的墙不透明；
  * 背景墙靠更亮的颜色区分。立面视图只留正对相机那面。
- * 运行：node domain/stages/layout-plan/scripts/furniture_layout/static/wall_view_check.mjs
+ * 运行：node domain/modules/web/furniture_web/static/wall_view_check.mjs
  * （与 frame_check.mjs 同类：纯几何，不需要浏览器）
  */
 import {

@@ -31,7 +31,7 @@ bootstrap_runtime_paths(WORKSPACE_ROOT)
 import server
 from furniture_layout.open_preview import layout_version, panel_version
 from furniture_layout.project_layout import ProjectLayout
-from furniture_layout.room_page import render_draft_page
+from furniture_web.room_page import render_draft_page
 from furniture_panel_planning.panel_pipeline import plan_panel_stage
 from furniture_panel_planning.assembly_tree import flatten_panels_for_handoff
 from furniture_panel_planning.cabinet_panel_page import (
@@ -287,7 +287,7 @@ class CabinetStructurePageTests(unittest.TestCase):
             self.assertNotIn(marker, page)
         source = (
             WORKSPACE_ROOT
-            / "domain/stages/layout-plan/scripts/furniture_layout/static/cabinet_structure.js"
+            / "domain/modules/web/furniture_web/static/cabinet_structure.js"
         ).read_text(encoding="utf-8")
         for gone in ("GRAIN_PRESETS", "function setGrain", "normalizeGrain", "grainControls"):
             self.assertNotIn(gone, source)
@@ -399,7 +399,7 @@ class StructureViewerDirectionTests(unittest.TestCase):
 
     MODULE = (
         WORKSPACE_ROOT
-        / "domain/stages/layout-plan/scripts/furniture_layout/static/cabinet_structure.js"
+        / "domain/modules/web/furniture_web/static/cabinet_structure.js"
     )
 
     def views(self) -> dict[str, list[float]]:

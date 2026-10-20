@@ -19,7 +19,7 @@ from fastapi import HTTPException
 
 import server
 from fake_request_support import local_request
-from furniture_layout.room_page import render_draft_page
+from furniture_web.room_page import render_draft_page
 from furniture_layout.layout_entry import plan_room_scene
 from furniture_layout.scene import RoomScene
 

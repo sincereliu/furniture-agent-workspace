@@ -17,7 +17,7 @@ bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 import server
 from furniture_layout.project_layout import ProjectLayout
-from furniture_layout.room_page import render_project_page
+from furniture_web.room_page import render_project_page
 from furniture_layout.open_preview import preview_page_data
 from furniture_chat import conversation as web_agent_chat
 from furniture_chat.page import page_extension

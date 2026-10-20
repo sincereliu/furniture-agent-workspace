@@ -26,7 +26,7 @@ from furniture_layout import room_http
 from furniture_layout.layout_entry import plan_project_layout, plan_room_scene
 from furniture_layout.project_edit import apply_layout_edit, room_scene_source
 from furniture_layout.project_layout import ProjectLayout
-from furniture_layout.room_page import render_viewer
+from furniture_web.room_page import render_viewer
 from furniture_layout.scene import RoomScene
 from furniture_layout.scene_edit import apply_edit
 from furniture_layout.scene_planning import plan_scene

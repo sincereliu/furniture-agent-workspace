@@ -1,6 +1,6 @@
 /**
  * 围墙要有厚度，并且挖得开门窗。
- * 运行：node domain/stages/layout-plan/scripts/furniture_layout/static/wall_solid_check.mjs
+ * 运行：node domain/modules/web/furniture_web/static/wall_solid_check.mjs
  */
 import { WALL_THICKNESS_MM, openingSolids, wallSolids } from "./wall_solid.js";
 

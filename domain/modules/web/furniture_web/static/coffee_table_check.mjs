@@ -1,6 +1,6 @@
 /**
  * 固定茶几要有桌面、四条腿和中间的空档。
- * 运行：node domain/stages/layout-plan/scripts/furniture_layout/static/coffee_table_check.mjs
+ * 运行：node domain/modules/web/furniture_web/static/coffee_table_check.mjs
  */
 import { coffeeTableParts, isFixedCoffeeTable } from "./coffee_table_solid.js";
 

@@ -1,4 +1,4 @@
-"""本机运行时进程。房间场景路由和布局预览在 layout-plan，这里只把它们挂上。
+"""本机运行时进程。房间场景路由在 layout-plan，网页在 domain/modules/web，这里只把它们挂上。
 
 看已经做过的项目，从布局阶段启动，不要把这一进程当成 CAD 阶段：
 
@@ -38,13 +38,12 @@ from furniture_layout.cabinet_entry import (
     CabinetNotFound,
     cabinet_for_panel_page,
 )
-from furniture_layout.room_page import render_project_page
 from furniture_panel_planning.cabinet_identity import cabinets_from_output
-from furniture_panel_planning.cabinet_panel_page import (
-    panel_structure_view,
-    render_cabinet_panel_page,
-)
-from furniture_layout.project_list import render_project_list
+from furniture_panel_planning.cabinet_panel_page import panel_structure_view
+from furniture_web.integration import mount_layout_view
+from furniture_web.panel_page import render_cabinet_panel_page
+from furniture_web.project_list import render_project_list
+from furniture_web.room_page import render_project_page
 from furniture_layout.open_preview import (
     panel_version,
     preview_server_is_up,
@@ -121,26 +120,8 @@ OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
 app.mount("/generated", StaticFiles(directory=str(OUTPUT_ROOT)), name="generated")
 # 固定的 three.js 0.186.0。页面从这里加载，不放在布局技能里。
 THREE_DIST = WORKSPACE_ROOT / "vendor" / "three" / "0.186.0"
-LAYOUT_PAGE = (
-    WORKSPACE_ROOT
-    / "domain"
-    / "stages"
-    / "layout-plan"
-    / "scripts"
-    / "furniture_layout"
-    / "static"
-)
 app.mount("/vendor/three/0.186.0", StaticFiles(directory=str(THREE_DIST)), name="three_0_186_0")
-class _FreshStaticFiles(StaticFiles):
-    """画面脚本每次都重新取，避免改了旋转箭头浏览器还画旧的。"""
-
-    async def get_response(self, path: str, scope):
-        response = await super().get_response(path, scope)
-        response.headers["Cache-Control"] = "no-store"
-        return response
-
-
-app.mount("/layout-view", _FreshStaticFiles(directory=str(LAYOUT_PAGE)), name="layout_view")
+mount_layout_view(app)
 
 def _room_output_root() -> Path:
     return OUTPUT_ROOT

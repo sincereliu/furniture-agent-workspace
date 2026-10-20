@@ -24,7 +24,7 @@ from runtime_paths import bootstrap_runtime_paths
 
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
-from furniture_layout import room_page
+from furniture_web import room_page
 from furniture_layout.open_preview import preview_page_data
 from furniture_workflow import project_layout_edit as layout_edit
 from furniture_workflow import workflow_decisions
@@ -35,14 +35,7 @@ from furniture_workflow.workflow_store import JsonProjectStore
 from furniture_workflow.agent_tools import TOOL_CREATE_PROJECT, TOOL_RECORD_DECISION, TOOL_REVISE_LAYOUT
 from furniture_workflow.agent_tool_schema import openai_tools
 
-LAYOUT_PAGE = (
-    WORKSPACE_ROOT
-    / "domain"
-    / "stages"
-    / "layout-plan"
-    / "scripts"
-    / "furniture_layout"
-)
+LAYOUT_PAGE = WORKSPACE_ROOT / "domain" / "modules" / "web" / "furniture_web"
 
 
 def rooms() -> list[dict[str, object]]:

@@ -335,10 +335,9 @@ class ProjectPreviewTests(unittest.TestCase):
         scene_path = (
             WORKSPACE_ROOT
             / "domain"
-            / "stages"
-            / "layout-plan"
-            / "scripts"
-            / "furniture_layout"
+            / "modules"
+            / "web"
+            / "furniture_web"
             / "static"
             / "layout_scene.js"
         )
@@ -445,10 +444,9 @@ class ProjectPreviewTests(unittest.TestCase):
         scene_js = (
             WORKSPACE_ROOT
             / "domain"
-            / "stages"
-            / "layout-plan"
-            / "scripts"
-            / "furniture_layout"
+            / "modules"
+            / "web"
+            / "furniture_web"
             / "static"
             / "layout_scene.js"
         ).read_text(encoding="utf-8")
@@ -541,7 +539,7 @@ class ProjectPreviewTests(unittest.TestCase):
         self.assertIn("已保存的工程", page)
         server_source = (SCRIPT_ROOT / "server.py").read_text(encoding="utf-8")
         self.assertNotIn("<h2 id=\"projects-heading\">已保存的工程</h2>", server_source)
-        self.assertIn("furniture_layout.project_list", server_source)
+        self.assertIn("furniture_web.project_list", server_source)
         self.assertIn("关掉最后一页后，预览服务会自己停", page)
         self.assertIn('new EventSource("/api/preview/presence/stream")', page)
         self.assertNotIn("setInterval(pulsePreview", page)
@@ -805,10 +803,9 @@ class OpenProjectPreviewTests(unittest.TestCase):
         script = (
             WORKSPACE_ROOT
             / "domain"
-            / "stages"
-            / "layout-plan"
-            / "scripts"
-            / "furniture_layout"
+            / "modules"
+            / "web"
+            / "furniture_web"
             / "templates"
             / "room_page.js"
         ).read_text(encoding="utf-8")
@@ -824,20 +821,18 @@ class OpenProjectPreviewTests(unittest.TestCase):
         page = (
             WORKSPACE_ROOT
             / "domain"
-            / "stages"
-            / "layout-plan"
-            / "scripts"
-            / "furniture_layout"
+            / "modules"
+            / "web"
+            / "furniture_web"
             / "templates"
             / "room_page.html"
         ).read_text(encoding="utf-8")
         script = (
             WORKSPACE_ROOT
             / "domain"
-            / "stages"
-            / "layout-plan"
-            / "scripts"
-            / "furniture_layout"
+            / "modules"
+            / "web"
+            / "furniture_web"
             / "templates"
             / "room_page.js"
         ).read_text(encoding="utf-8")
@@ -890,6 +885,23 @@ class OpenProjectPreviewTests(unittest.TestCase):
         self.assertNotIn("request.client.host", chat_http)
         endpoints = source.split("def may_edit")[1]
         self.assertNotIn("request.client.host", endpoints)
+
+
+class LayoutViewStaticTests(unittest.TestCase):
+    def test_layout_view_serves_the_scene_and_the_layout_solver(self) -> None:
+        from furniture_web.integration import layout_view
+
+        scene, scene_stat = layout_view.lookup_path("layout_scene.js")
+        solver, solver_stat = layout_view.lookup_path("layout_solver.js")
+        drag, drag_stat = layout_view.lookup_path("layout_drag.js")
+        _missing, missing_stat = layout_view.lookup_path("does-not-exist.js")
+        self.assertIn("modules/web", scene.replace("\\", "/"))
+        self.assertIsNotNone(scene_stat)
+        self.assertIn("layout-plan", solver.replace("\\", "/"))
+        self.assertIsNotNone(solver_stat)
+        self.assertIn("layout-plan", drag.replace("\\", "/"))
+        self.assertIsNotNone(drag_stat)
+        self.assertIsNone(missing_stat)
 
 
 if __name__ == "__main__":

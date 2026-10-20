@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from furniture_layout.room_page import render_draft_page
+from furniture_web.room_page import render_draft_page
 from furniture_layout.layout_entry import write_room_shell, plan_room_scene
 from furniture_layout.scene import RoomScene, require_identifier
 from furniture_layout.scene_planning import plan_scene

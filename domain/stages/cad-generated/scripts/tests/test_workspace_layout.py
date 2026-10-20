@@ -14,7 +14,7 @@ from validate_workspace_layout import find_violations
 
 
 class WorkspaceLayoutTests(unittest.TestCase):
-    def test_live_workspace_uses_stages_ai_module_and_temp(self) -> None:
+    def test_live_workspace_uses_stages_application_modules_and_temp(self) -> None:
         self.assertEqual(find_violations(WORKSPACE_ROOT), [])
 
     def test_accepts_ai_module_but_does_not_open_arbitrary_module_roots(self) -> None:
@@ -23,6 +23,9 @@ class WorkspaceLayoutTests(unittest.TestCase):
             ai = root / "domain/modules/ai/furniture_ai"
             ai.mkdir(parents=True)
             (ai / "service.py").write_text("pass\n", encoding="utf-8")
+            web = root / "domain/modules/web/furniture_web"
+            web.mkdir(parents=True)
+            (web / "room_page.py").write_text("pass\n", encoding="utf-8")
             self.assertEqual(find_violations(root), [])
             unrelated = root / "domain/modules/unrelated"
             unrelated.mkdir()
