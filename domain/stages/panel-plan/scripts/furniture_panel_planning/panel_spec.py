@@ -7,6 +7,12 @@ from math import isfinite
 from typing import Any, Mapping
 
 from .cabinet_envelope import CABINET_CATEGORIES, CabinetEnvelope
+from .drawer_variants import (
+    DEFAULT_FACE,
+    DEFAULT_RUNNER,
+    admit_drawer_variant,
+    drawer_is_materialized,
+)
 from .panel_rules import default_toe_kick_support_count, even_shelf_gap
 
 
@@ -162,7 +168,19 @@ PANEL_STOCK_FIELDS = frozenset(
 )
 #: 可省略的构造字段：不写 = 没有中立板 / 每扇门的铰链侧没定。省略不是「按柜型猜」，
 #: 见 references/interior-structure-contract.md 与 references/door-hinge-side.md。
-PANEL_OPTIONAL_PARAMETER_FIELDS = frozenset({"dividers", "door_hinges"})
+#: 抽屉变体字段同样可省略：不写 = 三节轨 + 盒体前板兼前脸 + 三条净空为 0（今天唯一的做法），
+#: 见 references/drawer-variants-contract.md。
+PANEL_OPTIONAL_PARAMETER_FIELDS = frozenset(
+    {
+        "dividers",
+        "door_hinges",
+        "drawer_runner",
+        "drawer_face",
+        "drawer_top_clearance",
+        "drawer_bottom_clearance",
+        "drawer_bottom_raise",
+    }
+)
 
 PANEL_PARAMETER_FIELDS = (
     PANEL_REQUIRED_PARAMETER_FIELDS | PANEL_STOCK_FIELDS
@@ -172,10 +190,23 @@ PANEL_SPEC_FIELDS = PANEL_PARAMETER_FIELDS
 _SERIALIZED_FIELDS = PANEL_PARAMETER_FIELDS | {
     "furniture_category", "width", "depth", "height",
 }
+#: 变体字段（后加）：等于缺省（= 今天唯一的做法）就不落盘，老工程产出逐字节不变。
+#: 同一张表也是读旧冻结文件时的补值来源：老文件没这些键，读回来就是缺省。
+_DEFAULTED_SERIALIZED_FIELDS: dict[str, Any] = {
+    "drawer_runner": DEFAULT_RUNNER,
+    "drawer_face": DEFAULT_FACE,
+    "drawer_top_clearance": 0.0,
+    "drawer_bottom_clearance": 0.0,
+    "drawer_bottom_raise": 0.0,
+}
 #: 不写也合法的字段：序列化输出为空时不落盘（老工程产出逐字节不变）。
-_OPTIONAL_SERIALIZED_FIELDS = PANEL_OPTIONAL_PARAMETER_FIELDS
-#: 后加的料档字段：老冻结文件里没有，读时按工艺卡默认补（写时一定带上）。
-_READ_DEFAULTED_FIELDS = frozenset({"sheet_width_mm", "sheet_length_mm"})
+_OPTIONAL_SERIALIZED_FIELDS = PANEL_OPTIONAL_PARAMETER_FIELDS - frozenset(
+    _DEFAULTED_SERIALIZED_FIELDS
+)
+#: 后加的字段：老冻结文件里没有，读时按默认补（写时按上面的规则决定带不带）。
+_READ_DEFAULTED_FIELDS = frozenset({"sheet_width_mm", "sheet_length_mm"}) | frozenset(
+    _DEFAULTED_SERIALIZED_FIELDS
+)
 
 
 @dataclass
@@ -223,6 +254,17 @@ class FurnitureSpec:
     #: （对开腔自动 left/right，单开腔留空）。见 references/door-hinge-side.md。
     door_hinges: list[str] = field(default_factory=list)
 
+    #: 抽屉变体：滑轨系统与抽面归属。缺省 = 今天唯一的组合（三节轨 + 盒体前板兼前脸）。
+    #: 角色表与组合规则在 `drawer_variants`，口径见 references/drawer-variants-contract.md。
+    drawer_runner: str = DEFAULT_RUNNER
+    drawer_face: str = DEFAULT_FACE
+
+    #: 抽屉的三条缝/抬升：抽面上缝、抽面下缝、底板相对盒底的上移（托底轨用）。
+    #: 缺省 0 = 今天的做法。它们不是五金参数，是板件的几何事实；五金只做兼容校验。
+    drawer_top_clearance: float = 0.0
+    drawer_bottom_clearance: float = 0.0
+    drawer_bottom_raise: float = 0.0
+
     def __post_init__(self) -> None:
         if self.furniture_category not in CABINET_CATEGORIES:
             raise ValueError(
@@ -236,6 +278,7 @@ class FurnitureSpec:
             "toe_kick_reveal_front", "toe_kick_reveal_back", "back_rail_height",
             "drawer_side_clearance", "drawer_layer_gap", "drawer_bottom_thickness",
             "drawer_back_thickness", "drawer_back_clearance",
+            "drawer_top_clearance", "drawer_bottom_clearance", "drawer_bottom_raise",
             "sheet_width_mm", "sheet_length_mm",
         ):
             value = getattr(self, name)
@@ -251,6 +294,9 @@ class FurnitureSpec:
         self.shelves = _coerce_shelves(self.shelves)
         self.dividers = _coerce_dividers(self.dividers)
         self.door_hinges = _coerce_door_hinges(self.door_hinges)
+        self.drawer_runner, self.drawer_face = admit_drawer_variant(
+            self.drawer_runner, self.drawer_face
+        )
         _validate_objective_invariants(self)
         _validate_sheet_stock(self)
 
@@ -316,6 +362,9 @@ class FurnitureSpec:
         # 不改写文件，新产出一律带上这两个毫米。
         values.setdefault("sheet_width_mm", PROCESS_CARD_SHEET_MM[0])
         values.setdefault("sheet_length_mm", PROCESS_CARD_SHEET_MM[1])
+        # 变体字段是后加的：老冻结文件没有这些键，读回来就是缺省的今天那套。
+        for name, default in _DEFAULTED_SERIALIZED_FIELDS.items():
+            values.setdefault(name, default)
         if "shelves" in values:
             values["shelves"] = _coerce_shelves(values["shelves"])
         return cls(**values)
@@ -330,6 +379,10 @@ def spec_payload(spec: FurnitureSpec) -> dict[str, Any]:
     payload = asdict(spec)
     for name in _OPTIONAL_SERIALIZED_FIELDS:
         if not payload.get(name):
+            payload.pop(name, None)
+    # 变体字段等于缺省就不落盘：没写变体的工程产出与加这些字段之前逐字节相同。
+    for name, default in _DEFAULTED_SERIALIZED_FIELDS.items():
+        if payload.get(name) == default:
             payload.pop(name, None)
     return payload
 
@@ -598,6 +651,7 @@ def _validate_objective_invariants(spec: FurnitureSpec) -> None:
         "toe_kick_height", "back_offset", "front_face_margin", "front_gap",
         "groove_clearance", "toe_kick_reveal_front", "toe_kick_reveal_back",
         "back_rail_height", "drawer_layer_gap", "drawer_back_clearance",
+        "drawer_top_clearance", "drawer_bottom_clearance", "drawer_bottom_raise",
         "top_gap_mm",
     )
     if any(getattr(spec, name) <= 0 for name in positive):
@@ -628,3 +682,42 @@ def _validate_objective_invariants(spec: FurnitureSpec) -> None:
         raise ValueError("at most one shelf gap may be null")
     if spec.door_hinges and len(spec.door_hinges) != spec.n_doors:
         raise ValueError("door_hinges must have exactly one entry per door")
+    _validate_drawer_variant(spec)
+
+
+def _validate_drawer_variant(spec: FurnitureSpec) -> None:
+    """变体准入：这个组合在这一版物化了吗。
+
+    已物化的组合只有「三节轨 + 盒体前板兼前脸 + 三条净空为 0」——即今天唯一的做法。
+    加变体时按阶段一次放开一条：净空（P2）→ 抽面（P3）→ 底板上移（P4）→ 骑马抽（P5）。
+    这里拒的是「字段收了、几何没做」的产物；组合物理上不成立的情况在
+    `drawer_variants.admit_drawer_variant` 就拒了。
+    """
+    if spec.drawer_count <= 0:
+        if _drawer_variant_given(spec):
+            raise ValueError("drawer variant fields require drawer_count > 0")
+        return
+    if not drawer_is_materialized(spec.drawer_runner, spec.drawer_face):
+        raise ValueError(
+            "drawer variant is not materialized yet: runner="
+            f"{spec.drawer_runner}, face={spec.drawer_face}"
+        )
+    if (
+        spec.drawer_top_clearance
+        or spec.drawer_bottom_clearance
+        or spec.drawer_bottom_raise
+    ):
+        raise ValueError(
+            "drawer clearances and bottom_raise are admitted but not materialized yet"
+        )
+
+
+def _drawer_variant_given(spec: FurnitureSpec) -> bool:
+    """写没写出一个「不等于缺省」的抽屉变体。"""
+    return bool(
+        spec.drawer_runner != DEFAULT_RUNNER
+        or spec.drawer_face != DEFAULT_FACE
+        or spec.drawer_top_clearance
+        or spec.drawer_bottom_clearance
+        or spec.drawer_bottom_raise
+    )

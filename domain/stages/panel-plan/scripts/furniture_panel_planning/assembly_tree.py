@@ -33,7 +33,8 @@ INTERIOR_FIELDS = frozenset({"cavity", "zones"})
 CAVITY_FIELDS = frozenset({"width", "height", "depth", "origin"})
 
 _DRAWER_ROLE = re.compile(
-    r"^(drawer_front|drawer_side_L|drawer_side_R|drawer_back|drawer_bottom)_(z-?\d+)$"
+    r"^(drawer_face|drawer_front|drawer_side_L|drawer_side_R|drawer_back|drawer_bottom)"
+    r"_(z-?\d+)$"
 )
 _CONTACT_KEY_FIELDS = ("bearing_id", "end_id", "face", "edge_axis", "edge_sign")
 
@@ -80,12 +81,16 @@ def build_cabinet_tree(
     for index, suffix in enumerate(sorted(drawer_groups, key=_drawer_sort_key), start=1):
         group = drawer_groups[suffix]
         drawer_id = f"{cabinet_id}__drawer_{index}"
+        # 可见前脸：独立抽面优先；「盒体前板兼前脸」的老做法回落到 drawer_front。
         front = next(
+            (item for item in group if item.panel_type == "drawer_face"),
+            None,
+        ) or next(
             (item for item in group if item.panel_type == "drawer_front"),
             None,
         )
         if front is None:
-            raise ValueError(f"{drawer_id} requires a drawer front")
+            raise ValueError(f"{drawer_id} requires a visible drawer front")
         assemblies["drawers"].append(
             {
                 "id": drawer_id,

@@ -34,6 +34,7 @@ from .construction_geometry import (
 )
 from .panel_models import PanelPlacement
 from .panel_spec import FurnitureSpec, resolve_back_mount, thickness_for_material_role
+from .drawer_variants import drawer_part_roles
 from .panel_rules import (
     back_rail_clear_spacing,
     resolve_back_rail_count,
@@ -566,10 +567,15 @@ def _validate_drawer_panels(
     except ValueError as exc:
         report.add_error("INVALID_DRAWER_GEOMETRY", str(exc), "drawer_count")
         return report
-    if len(drawer_panels) != len(expected):
+    # 件数由变体表给（角色数 × 抽数），不再写死「每抽 5 块」。
+    roles = drawer_part_roles(spec.drawer_runner, spec.drawer_face)
+    expected_count = len(roles) * spec.drawer_count
+    if len(drawer_panels) != expected_count:
         report.add_error(
             "DRAWER_PANEL_COUNT_MISMATCH",
-            "generated drawer panel count must match 5 panels per drawer instance",
+            "generated drawer panel count must match "
+            f"{len(roles)} panels per drawer instance "
+            f"({spec.drawer_runner}/{spec.drawer_face}), got {len(drawer_panels)}",
             "drawer_count",
         )
     _mismatch_boxes(
