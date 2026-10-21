@@ -40,6 +40,7 @@ from furniture_layout.cabinet_entry import (
 )
 from furniture_panel_planning.cabinet_identity import cabinets_from_output
 from furniture_panel_planning.cabinet_panel_page import panel_structure_view
+from furniture_web.home_page import render_home_page
 from furniture_web.integration import mount_layout_view
 from furniture_web.panel_page import render_cabinet_panel_page
 from furniture_web.project_list import render_project_list
@@ -366,13 +367,10 @@ async def project_index():
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    return """
-    <html><body style="font-family:sans-serif;padding:40px;">
-    <h1>Furniture Agent</h1>
-    <p><a href="/projects">已经做过的项目</a></p>
-    <p><a href="/docs">API 文档 (Swagger)</a></p>
-    </body></html>
-    """
+    return HTMLResponse(
+        content=render_home_page(API_VERSION, _project_rows()),
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 def enable_local_layout_edit() -> None:

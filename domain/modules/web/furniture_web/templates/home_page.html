@@ -1,0 +1,884 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Furniture Agent · 工作台总览与控制台</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #112824;
+      --ink-secondary: #2f4841;
+      --muted: #5d756d;
+      --line: #d8e3dc;
+      --line-subtle: #e8f0ec;
+      --paper: #f4f6f2;
+      --panel-bg: #ffffff;
+      --green-deep: #0f352e;
+      --green-mid: #184e44;
+      --green-bright: #277a64;
+      --green-badge: #e8f6ed;
+      --green-text: #21684c;
+      --accent: #d8ebb8;
+      --accent-dark: #12392f;
+      --shadow-sm: 0 2px 8px rgba(15, 53, 46, 0.04);
+      --shadow-md: 0 8px 24px rgba(15, 53, 46, 0.07);
+      --shadow-lg: 0 16px 40px rgba(15, 53, 46, 0.1);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      font: 14px/1.6 "Microsoft YaHei", "PingFang SC", system-ui, -apple-system, sans-serif;
+      background:
+        radial-gradient(circle at 10% 0%, #e2ede5 0, transparent 40rem),
+        radial-gradient(circle at 95% 20%, #f3eee0 0, transparent 35rem),
+        var(--paper);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    a { color: inherit; }
+    .shell { width: min(1200px, calc(100% - 48px)); margin: 0 auto; }
+
+    /* Topbar */
+    .topbar {
+      height: 78px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 32px;
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 14px;
+      text-decoration: none;
+    }
+    .brand-mark {
+      display: grid;
+      place-items: center;
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: var(--green-mid);
+      color: #fff;
+      font: 800 20px/1 Georgia, serif;
+      box-shadow: 0 6px 14px rgba(24, 78, 68, 0.2);
+    }
+    .brand-title {
+      font-size: 17px;
+      font-weight: 800;
+      line-height: 1.2;
+      color: var(--ink);
+      letter-spacing: -.02em;
+    }
+    .brand-tag {
+      display: inline-block;
+      font: 700 10px/1.4 system-ui, sans-serif;
+      letter-spacing: .12em;
+      color: #6b8279;
+      text-transform: uppercase;
+    }
+    .topbar-nav {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .topbar-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-radius: 99px;
+      background: #e9f6ee;
+      border: 1px solid #d3ebd9;
+      color: #216949;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #25b364;
+      box-shadow: 0 0 0 3px rgba(37, 179, 100, 0.25);
+    }
+    .nav-link-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 14px;
+      border-radius: 9px;
+      background: var(--panel-bg);
+      border: 1px solid var(--line);
+      color: var(--ink-secondary);
+      font-size: 13px;
+      font-weight: 700;
+      text-decoration: none;
+      transition: all .16s ease;
+      box-shadow: var(--shadow-sm);
+    }
+    .nav-link-btn:hover {
+      border-color: #88baa2;
+      color: var(--green-mid);
+      transform: translateY(-1px);
+    }
+    .nav-link-btn.primary {
+      background: var(--green-mid);
+      border-color: var(--green-mid);
+      color: #ffffff;
+    }
+    .nav-link-btn.primary:hover {
+      background: var(--green-bright);
+    }
+
+    /* Cockpit Hero Grid */
+    .cockpit-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.45fr) minmax(340px, 1fr);
+      gap: 24px;
+      margin-bottom: 42px;
+    }
+    .cockpit-card {
+      background: var(--panel-bg);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      box-shadow: var(--shadow-md);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .cockpit-hero {
+      position: relative;
+      background: linear-gradient(135deg, #0e3029 0%, #17483e 50%, #255d50 100%);
+      color: #ffffff;
+      padding: 38px 42px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 320px;
+    }
+    .cockpit-hero:before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 85% 15%, rgba(255, 255, 255, 0.12) 0, transparent 35%),
+        linear-gradient(90deg, transparent 49.5%, rgba(255, 255, 255, 0.04) 50%, transparent 50.5%);
+      background-size: auto, 32px 32px;
+    }
+    .hero-eyebrow {
+      font: 800 11px/1.4 system-ui, sans-serif;
+      letter-spacing: .2em;
+      text-transform: uppercase;
+      color: #a4d8bd;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .hero-eyebrow:before {
+      content: "";
+      width: 14px;
+      height: 2px;
+      background: var(--accent);
+    }
+    .cockpit-hero h1 {
+      margin: 0 0 14px;
+      font-size: clamp(28px, 3.2vw, 38px);
+      line-height: 1.25;
+      font-weight: 800;
+      letter-spacing: -.03em;
+    }
+    .cockpit-hero h1 em {
+      color: var(--accent);
+      font-style: normal;
+    }
+    .cockpit-hero p {
+      margin: 0 0 26px;
+      color: #d2e7dc;
+      font-size: 14px;
+      line-height: 1.65;
+      max-width: 38em;
+    }
+    .cockpit-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      position: relative;
+      z-index: 2;
+    }
+    .btn-cta {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 24px;
+      border-radius: 12px;
+      background: var(--accent);
+      color: var(--accent-dark);
+      font-size: 14px;
+      font-weight: 800;
+      text-decoration: none;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+      transition: all .16s ease;
+    }
+    .btn-cta:hover {
+      background: #e3f3ce;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+    }
+    .btn-subtle {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 20px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.24);
+      color: #ffffff;
+      font-size: 13px;
+      font-weight: 700;
+      text-decoration: none;
+      backdrop-filter: blur(6px);
+      transition: all .16s ease;
+    }
+    .btn-subtle:hover {
+      background: rgba(255, 255, 255, 0.22);
+      border-color: rgba(255, 255, 255, 0.4);
+      transform: translateY(-2px);
+    }
+
+    /* Telemetry & Quick Resume */
+    .cockpit-telemetry {
+      padding: 26px 28px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 20px;
+      background: #ffffff;
+    }
+    .telemetry-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--line-subtle);
+    }
+    .telemetry-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--ink);
+      letter-spacing: -.01em;
+    }
+    .telemetry-tag {
+      font: 700 11px/1 ui-monospace, monospace;
+      color: var(--green-text);
+      background: var(--green-badge);
+      padding: 4px 8px;
+      border-radius: 6px;
+    }
+    .stat-matrix {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .stat-tile {
+      background: #f8faf8;
+      border: 1px solid var(--line-subtle);
+      border-radius: 14px;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .stat-tile-num {
+      font: 700 24px/1.1 Georgia, serif;
+      color: var(--green-mid);
+    }
+    .stat-tile-label {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    /* Quick Resume Box */
+    .resume-box {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px 16px;
+      background: #fdfefe;
+      box-shadow: var(--shadow-sm);
+    }
+    .resume-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .resume-label {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: #728c82;
+    }
+    .resume-status {
+      font-size: 11px;
+      font-weight: 700;
+      color: #277354;
+    }
+    .resume-project-name {
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--ink);
+      margin: 0 0 4px;
+      display: block;
+      text-decoration: none;
+    }
+    .resume-meta {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 12px;
+      display: flex;
+      gap: 12px;
+    }
+    .resume-btn {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      padding: 9px 14px;
+      border-radius: 10px;
+      background: #eef6f0;
+      border: 1px solid #d4ebd9;
+      color: var(--green-mid);
+      font-size: 13px;
+      font-weight: 700;
+      text-decoration: none;
+      transition: all .16s ease;
+    }
+    .resume-btn:hover {
+      background: var(--green-mid);
+      color: #ffffff;
+      border-color: var(--green-mid);
+    }
+
+    /* Pipeline Section */
+    .section-wrap { margin-bottom: 46px; }
+    .section-titlebar {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+    .section-titlebar h2 {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -.03em;
+      color: var(--ink);
+    }
+    .section-titlebar p {
+      margin: 4px 0 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .pipeline-track {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 12px;
+      position: relative;
+    }
+    .pipeline-node {
+      background: var(--panel-bg);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 18px 16px 14px;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      transition: all .18s ease;
+    }
+    .pipeline-node:hover {
+      border-color: #7ab89b;
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-md);
+    }
+    .node-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .node-step {
+      font: 800 11px/1 ui-monospace, monospace;
+      color: #557267;
+      background: #eef3ee;
+      padding: 3px 6px;
+      border-radius: 5px;
+    }
+    .node-role {
+      font-size: 10px;
+      font-weight: 700;
+      color: #277354;
+      background: #e8f5ec;
+      padding: 2px 6px;
+      border-radius: 99px;
+    }
+    .node-title {
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--ink);
+      margin: 0 0 2px;
+    }
+    .node-stage-id {
+      font: 600 11px/1.3 ui-monospace, monospace;
+      color: #8c9e96;
+      margin-bottom: 10px;
+      display: block;
+    }
+    .node-desc {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+      margin-bottom: 14px;
+      flex: 1;
+    }
+    .node-flow {
+      border-top: 1px dashed var(--line-subtle);
+      padding-top: 10px;
+      font: 600 11px/1.3 ui-monospace, monospace;
+      color: #4a6d5f;
+    }
+    .node-flow span {
+      display: block;
+      color: #9aa8a1;
+      font-size: 10px;
+      margin-bottom: 2px;
+    }
+
+    /* Core Workspaces Matrix */
+    .workspace-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 20px;
+      margin-bottom: 46px;
+    }
+    .workspace-card {
+      background: var(--panel-bg);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 24px 26px;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
+      text-decoration: none;
+      transition: all .2s ease;
+    }
+    .workspace-card:hover {
+      border-color: #7ab89b;
+      transform: translateY(-3px);
+      box-shadow: var(--shadow-md);
+    }
+    .ws-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: #edf6f0;
+      display: grid;
+      place-items: center;
+      color: var(--green-mid);
+      font-size: 20px;
+      margin-bottom: 16px;
+    }
+    .ws-title {
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--ink);
+      margin: 0 0 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .ws-title .arrow {
+      color: #7eb49b;
+      font-size: 18px;
+      transition: transform .16s ease;
+    }
+    .workspace-card:hover .ws-title .arrow {
+      transform: translateX(3px);
+      color: var(--green-mid);
+    }
+    .ws-desc {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.6;
+      margin-bottom: 20px;
+      flex: 1;
+    }
+    .ws-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .ws-badge {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: #f4f6f3;
+      border: 1px solid #e2eae4;
+      color: #556c63;
+      font-weight: 600;
+    }
+
+    /* Diagnostics Banner */
+    .diagnostics-bar {
+      background: #fbfcfb;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      margin-bottom: 46px;
+      flex-wrap: wrap;
+    }
+    .diag-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .diag-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: #eef6f0;
+      color: var(--green-mid);
+      display: grid;
+      place-items: center;
+      font-weight: bold;
+    }
+    .diag-text h4 { margin: 0; font-size: 13px; font-weight: 800; color: var(--ink); }
+    .diag-text p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+    .diag-links {
+      display: flex;
+      gap: 16px;
+      font-size: 12px;
+    }
+    .diag-links a {
+      color: #49695f;
+      text-decoration: none;
+      font-weight: 700;
+    }
+    .diag-links a:hover { text-decoration: underline; color: var(--green-mid); }
+
+    /* Footer */
+    footer {
+      margin-top: auto;
+      border-top: 1px solid var(--line);
+      padding: 28px 0;
+      color: #859890;
+      font-size: 12px;
+      background: rgba(244, 246, 242, 0.7);
+    }
+    .footer-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .footer-inner a {
+      color: #556f64;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .footer-inner a:hover { text-decoration: underline; }
+
+    /* Responsive */
+    @media (max-width: 1080px) {
+      .cockpit-grid { grid-template-columns: 1fr; }
+      .pipeline-track { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .workspace-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 640px) {
+      .shell { width: calc(100% - 24px); }
+      .topbar { height: 68px; margin-bottom: 20px; }
+      .topbar-nav .topbar-badge { display: none; }
+      .cockpit-hero { padding: 26px 20px; }
+      .pipeline-track { grid-template-columns: 1fr; }
+      .stat-matrix { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <!-- Topbar -->
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="返回工作台总览">
+        <span class="brand-mark">F</span>
+        <div>
+          <span class="brand-title">Furniture Agent</span>
+          <span class="brand-tag">工作台控制台 · Studio Console</span>
+        </div>
+      </a>
+      <div class="topbar-nav">
+        <span class="topbar-badge">
+          <span class="status-dot"></span>
+          <span>系统在线 · v__API_VERSION__</span>
+        </span>
+        <a class="nav-link-btn primary" href="/projects">工程档案目录 ↗</a>
+        <a class="nav-link-btn" href="/docs">API 接口调试 ↗</a>
+      </div>
+    </header>
+
+    <!-- Cockpit Hero Grid -->
+    <section class="cockpit-grid">
+      <!-- Left: Studio Introduction & Core Concept -->
+      <div class="cockpit-card cockpit-hero">
+        <div>
+          <div class="hero-eyebrow">Studio Workbench Architecture</div>
+          <h1>端到端智能家具<em>全流程工坊</em></h1>
+          <p>
+            统一协调大语言模型开放理解与确定性工程内核准入。从房间门窗干涉求解、板件拆解与木纹铰链，到生产 BOM 清单、参数化特征树规划与 STEP 实体装配，提供全链路闭环交付。
+          </p>
+        </div>
+        <div class="cockpit-actions">
+          <a class="btn-cta" href="/projects">进入工程档案管理库 <span>↗</span></a>
+          <a class="btn-subtle" href="/docs">交互式 API 调试 <span>↗</span></a>
+        </div>
+      </div>
+
+      <!-- Right: Telemetry & Quick Resume -->
+      <div class="cockpit-card cockpit-telemetry">
+        <div class="telemetry-header">
+          <span class="telemetry-title">工坊运行态势 · Workbench Telemetry</span>
+          <span class="telemetry-tag">ACTIVE</span>
+        </div>
+        <div class="stat-matrix">
+          <div class="stat-tile">
+            <span class="stat-tile-num">__READY_COUNT__</span>
+            <span class="stat-tile-label">已就绪工程方案</span>
+          </div>
+          <div class="stat-tile">
+            <span class="stat-tile-num">6</span>
+            <span class="stat-tile-label">工业标准闭环阶段</span>
+          </div>
+          <div class="stat-tile">
+            <span class="stat-tile-num">100%</span>
+            <span class="stat-tile-label">确定性物理准入</span>
+          </div>
+          <div class="stat-tile">
+            <span class="stat-tile-num">v__API_VERSION__</span>
+            <span class="stat-tile-label">内核运行时版本</span>
+          </div>
+        </div>
+
+        <!-- Quick Resume Box -->
+        __QUICK_RESUME_BLOCK__
+      </div>
+    </section>
+
+    <!-- Three Core Workspaces Section -->
+    <section class="section-wrap">
+      <div class="section-titlebar">
+        <div>
+          <h2>工坊核心工作区</h2>
+          <p>按功能域划分的核心入口，清晰分工，互不重叠。</p>
+        </div>
+      </div>
+      <div class="workspace-grid">
+        <!-- Space 1: Project Management -->
+        <a class="workspace-card" href="/projects">
+          <div class="ws-icon">🗄</div>
+          <div class="ws-title">
+            <span>工程档案目录库</span>
+            <span class="arrow">→</span>
+          </div>
+          <p class="ws-desc">
+            统一检索并管理所有落盘保存的家具工程方案，按房间与家具数量过滤，跟踪 Revision 演进历史与锁定状态。
+          </p>
+          <div class="ws-badges">
+            <span class="ws-badge">多工程检索</span>
+            <span class="ws-badge">版本追溯</span>
+            <span class="ws-badge">可用性审查</span>
+          </div>
+        </a>
+
+        <!-- Space 2: 3D Visualization -->
+        <a class="workspace-card" href="/projects">
+          <div class="ws-icon">📐</div>
+          <div class="ws-title">
+            <span>三维空间与交互画布</span>
+            <span class="arrow">→</span>
+          </div>
+          <p class="ws-desc">
+            进入任意工程的 3D 渲染视图，在毫米级物理坐标系中进行家具拖拽、实时干涉求解、贴墙吸附与多视角漫游。
+          </p>
+          <div class="ws-badges">
+            <span class="ws-badge">Three.js 全景</span>
+            <span class="ws-badge">碰撞检测</span>
+            <span class="ws-badge">门窗避让</span>
+          </div>
+        </a>
+
+        <!-- Space 3: CAD/CAM Engineering -->
+        <a class="workspace-card" href="/docs">
+          <div class="ws-icon">⚙</div>
+          <div class="ws-title">
+            <span>CAD 与生产制造中心</span>
+            <span class="arrow">→</span>
+          </div>
+          <p class="ws-desc">
+            调用 CadQuery / OpenCASCADE 几何建模管线，执行板件打孔坐标提取、BOM 清单核算、特征树生成与 STEP 实体导出。
+          </p>
+          <div class="ws-badges">
+            <span class="ws-badge">STEP 实体导出</span>
+            <span class="ws-badge">五金打孔</span>
+            <span class="ws-badge">生产 BOM</span>
+          </div>
+        </a>
+      </div>
+    </section>
+
+    <!-- Six-Stage Pipeline Flow Section -->
+    <section class="section-wrap">
+      <div class="section-titlebar">
+        <div>
+          <h2>六阶段端到端协同流水线</h2>
+          <p>大语言模型负责方案理解与推荐，确定性 Python 运行时保证制造物理准入。</p>
+        </div>
+      </div>
+      <div class="pipeline-track">
+        <!-- Step 1 -->
+        <div class="pipeline-node">
+          <div class="node-header">
+            <span class="node-step">01</span>
+            <span class="node-role">空间规划</span>
+          </div>
+          <div class="node-title">布局规划</div>
+          <span class="node-stage-id">layout_plan</span>
+          <div class="node-desc">解析房间门窗开口、规划家具摆放位、实时干涉求解与动线预留。</div>
+          <div class="node-flow">
+            <span>产出物</span>
+            户型空间坐标与家具外形
+          </div>
+        </div>
+
+        <!-- Step 2 -->
+        <div class="pipeline-node">
+          <div class="node-header">
+            <span class="node-step">02</span>
+            <span class="node-role">结构拆解</span>
+          </div>
+          <div class="node-title">板件规划</div>
+          <span class="node-stage-id">panel_plan</span>
+          <div class="node-desc">柜身分解为顶底侧背板与层板抽屉，计算标准料厚、顺纹轴向与铰链侧。</div>
+          <div class="node-flow">
+            <span>产出物</span>
+            板件结构清单与木纹方向
+          </div>
+        </div>
+
+        <!-- Step 3 -->
+        <div class="pipeline-node">
+          <div class="node-header">
+            <span class="node-step">03</span>
+            <span class="node-role">工艺生产</span>
+          </div>
+          <div class="node-title">制造方案</div>
+          <span class="node-stage-id">manufacture_plan</span>
+          <div class="node-desc">材质封边（ABS）、连接件装配（三合一/木榫）、自动化打孔排布与 BOM 表。</div>
+          <div class="node-flow">
+            <span>产出物</span>
+            打孔坐标与生产级 BOM
+          </div>
+        </div>
+
+        <!-- Step 4 -->
+        <div class="pipeline-node">
+          <div class="node-header">
+            <span class="node-step">04</span>
+            <span class="node-role">参数拓扑</span>
+          </div>
+          <div class="node-title">特征树规划</div>
+          <span class="node-stage-id">feature_tree_planned</span>
+          <div class="node-desc">提取装配拓扑关系树，构建草图基准面与特征依赖，为几何内核铺路。</div>
+          <div class="node-flow">
+            <span>产出物</span>
+            装配拓扑有向无环图
+          </div>
+        </div>
+
+        <!-- Step 5 -->
+        <div class="pipeline-node">
+          <div class="node-header">
+            <span class="node-step">05</span>
+            <span class="node-role">实体建模</span>
+          </div>
+          <div class="node-title">CAD 几何生成</div>
+          <span class="node-stage-id">cad_generated</span>
+          <div class="node-desc">CadQuery / OpenCASCADE 驱动装配体建模，导出毫米级标准 STEP 模型。</div>
+          <div class="node-flow">
+            <span>产出物</span>
+            STEP 装配文件与干涉审查
+          </div>
+        </div>
+
+        <!-- Step 6 -->
+        <div class="pipeline-node">
+          <div class="node-header">
+            <span class="node-step">06</span>
+            <span class="node-role">质检验收</span>
+          </div>
+          <div class="node-title">交付验证</div>
+          <span class="node-stage-id">delivery_validated</span>
+          <div class="node-desc">数控机床加工参数合规性校验、物理配合验证与不可逆 SHA256 存证。</div>
+          <div class="node-flow">
+            <span>产出物</span>
+            交付凭据与生产锁定
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Diagnostics Banner -->
+    <section class="diagnostics-bar">
+      <div class="diag-left">
+        <div class="diag-icon">⚙</div>
+        <div class="diag-text">
+          <h4>系统运行时接口与环境支持</h4>
+          <p>FastAPI 本机服务监听 127.0.0.1:8000 · 支持 OpenAPI 3.0 标准协议</p>
+        </div>
+      </div>
+      <div class="diag-links">
+        <a href="/docs">Swagger UI 调试</a>
+        <a href="/redoc">ReDoc 文档</a>
+        <a href="/health">服务健康状态</a>
+        <a href="/api/projects">工程数据 JSON</a>
+      </div>
+    </section>
+  </div>
+
+  <!-- Footer -->
+  <footer>
+    <div class="shell footer-inner">
+      <div>
+        <strong>Furniture Agent Studio</strong> · 智能家具定制全流程工坊控制台
+      </div>
+      <div>
+        <a href="/projects">工程档案目录</a> · 
+        <a href="/docs">API 文档</a> · 
+        <a href="/health">系统健康</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>
