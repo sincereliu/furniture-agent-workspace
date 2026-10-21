@@ -3,6 +3,7 @@ import { roomToThree } from "./layout_frame.js";
 import { openingSolids, wallSolids } from "./wall_solid.js";
 import { chairParts } from "./chair_solid.js";
 import { coffeeTableParts } from "./coffee_table_solid.js";
+import { deskParts } from "./desk_solid.js";
 import { sofaFrame, sofaLocalBox, sofaMount, sofaParts } from "./sofa_solid.js";
 import { INK, celMaterial, furnitureColor, woodTexture } from "./layout_diorama.js";
 
@@ -79,6 +80,8 @@ export function addRoomBox(parent, box, material) {
     new THREE.BoxGeometry(x1 - x0, z1 - z0, y1 - y0),
     material,
   );
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
   mesh.position.set(...roomToThree((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2));
   parent.add(mesh);
   return mesh;
@@ -104,7 +107,7 @@ export function addMesh(parent, mesh, pickables) {
   return mesh;
 }
 
-function addShapedItem(parent, pickables, item, parts, materials, selected, addInk) {
+function addShapedItem(parent, pickables, item, parts, materials, selected, addInk, blocked) {
   const frame = sofaFrame(item.footprint, item.z_start);
   if (!parts || !frame) return false;
   const mount = sofaMount(frame);
@@ -116,7 +119,8 @@ function addShapedItem(parent, pickables, item, parts, materials, selected, addI
     new THREE.Vector3(...mount.z),
   ));
   parent.add(group);
-  const ink = selected ? 0x6a4520 : INK;
+  const ink = blocked ? 0xd93838 : (selected ? 0xf59e0b : INK);
+  const thick = (selected || blocked) ? 22 : 14;
   for (const part of parts) {
     const local = sofaLocalBox(part.box);
     const mesh = markRoom(new THREE.Mesh(
@@ -125,7 +129,9 @@ function addShapedItem(parent, pickables, item, parts, materials, selected, addI
     ));
     mesh.position.set(...local.center);
     mesh.userData = { kind: "item", itemId: item.id };
-    addInk(mesh, ink);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    addInk(mesh, ink, thick);
     group.add(mesh);
     pickables.push(mesh);
   }
@@ -144,7 +150,7 @@ export function addSofa(parent, pickables, item, selected, blocked, addInk) {
         cushion: celMaterial(0xd4c9bb),
         wood: celMaterial(0x3a312b),
       };
-  return addShapedItem(parent, pickables, item, parts, materials, selected, addInk);
+  return addShapedItem(parent, pickables, item, parts, materials, selected, addInk, blocked);
 }
 
 export function addCoffeeTable(parent, pickables, item, selected, blocked, addInk) {
@@ -158,7 +164,7 @@ export function addCoffeeTable(parent, pickables, item, selected, blocked, addIn
         leg: celMaterial(0x3a322c),
         shelf: celMaterial(0xc9bfb0),
       };
-  return addShapedItem(parent, pickables, item, parts, materials, selected, addInk);
+  return addShapedItem(parent, pickables, item, parts, materials, selected, addInk, blocked);
 }
 
 export function addChair(parent, pickables, item, selected, blocked, addInk) {
@@ -172,7 +178,21 @@ export function addChair(parent, pickables, item, selected, blocked, addInk) {
         back: cushion,
         leg: celMaterial(0x3a322c),
       };
-  return addShapedItem(parent, pickables, item, parts, materials, selected, addInk);
+  return addShapedItem(parent, pickables, item, parts, materials, selected, addInk, blocked);
+}
+
+export function addDesk(parent, pickables, item, selected, blocked, addInk) {
+  const parts = deskParts(item.width, item.depth, item.height);
+  const base = furnitureColor(item, selected, blocked);
+  const top = celMaterial(base);
+  const materials = selected || blocked
+    ? { top, leg: top, apron: top }
+    : {
+        top,
+        leg: celMaterial(0x3a322c),
+        apron: celMaterial(0xc9bfb0),
+      };
+  return addShapedItem(parent, pickables, item, parts, materials, selected, addInk, blocked);
 }
 
 export function footprintCenter(footprint) {
@@ -260,6 +280,7 @@ export function buildRoomStage(content, width, depth, height, openings, obstacle
   ));
   floorMesh.rotation.x = -Math.PI / 2;
   floorMesh.position.set(...roomToThree(width / 2, depth / 2, 0));
+  floorMesh.receiveShadow = true;
   content.add(floorMesh);
   addInk(floorMesh, 0xb8b0a4);
 
@@ -281,7 +302,7 @@ export function buildRoomStage(content, width, depth, height, openings, obstacle
     const inks = [];
     for (const box of solid.boxes) {
       const mesh = markRoom(addRoomBox(group, box, material));
-      inks.push(addInk(mesh, 0xb8b0a4));
+      inks.push(addInk(mesh, 0x4a433b, 12));
     }
     group.userData.material = material;
     group.userData.inks = inks;
@@ -313,7 +334,9 @@ export function buildRoomStage(content, width, depth, height, openings, obstacle
       prismGeometry(obstacle.footprint, obstacle.z_start, obstacle.z_end),
       celMaterial(0xd98986),
     ));
-    addInk(obstacleMesh, 0x6a3030);
+    obstacleMesh.castShadow = true;
+    obstacleMesh.receiveShadow = true;
+    addInk(obstacleMesh, 0x6a3030, 16);
     content.add(obstacleMesh);
   }
 

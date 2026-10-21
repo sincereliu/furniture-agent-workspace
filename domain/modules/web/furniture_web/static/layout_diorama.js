@@ -1,11 +1,11 @@
 import * as THREE from "three";
 import { roomToThree } from "./layout_frame.js";
 
-export const INK = 0x4a433b;
+export const INK = 0x28231d;
 const BASE_SCALE = 1.22;
 
 const CEL_RAMP = (() => {
-  const data = new Uint8Array([214, 230, 244, 255]);
+  const data = new Uint8Array([85, 155, 215, 255]);
   const texture = new THREE.DataTexture(data, 4, 1);
   texture.format = THREE.RedFormat;
   texture.magFilter = THREE.NearestFilter;
@@ -152,9 +152,14 @@ export function addDiorama(parent, width, depth, addInk) {
   const top = new THREE.Mesh(new THREE.PlaneGeometry(side, side), celMaterial(0xffffff, { map: pavement }));
   top.rotation.x = -Math.PI / 2;
   top.position.set(...roomToThree(width / 2, depth / 2, topZ + 1));
+  top.receiveShadow = true;
+  top.layers.enable(1);
   parent.add(top);
   const plinth = new THREE.Mesh(new THREE.BoxGeometry(side, thick, side), celMaterial(0xd6d1c7));
   plinth.position.set(...roomToThree(width / 2, depth / 2, topZ - thick / 2));
+  plinth.receiveShadow = true;
+  plinth.castShadow = true;
+  plinth.layers.enable(1);
   parent.add(plinth);
-  addInk(plinth, 0xb5aea2);
+  addInk(plinth, 0x3d352e, 16);
 }

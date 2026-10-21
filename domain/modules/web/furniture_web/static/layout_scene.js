@@ -5,6 +5,7 @@ import { roomAxes, dimensionAnnotations } from "./layout_annotations.js";
 import { ELEVATION_PITCH, wallVisibility } from "./wall_view.js";
 import { isFixedChair } from "./chair_solid.js";
 import { isFixedCoffeeTable } from "./coffee_table_solid.js";
+import { isFixedDesk } from "./desk_solid.js";
 import { isFixedSofa } from "./sofa_solid.js";
 import { inkViewBiasGlsl } from "./ink_depth.js";
 import { INK, addDiorama, addSky, celMaterial, furnitureColor } from "./layout_diorama.js";
@@ -13,6 +14,7 @@ import {
   ROOM_LAYER,
   addChair,
   addCoffeeTable,
+  addDesk,
   addDimensions,
   addMesh,
   addSofa,
@@ -44,15 +46,67 @@ function inkMaterial(color) {
   return material;
 }
 
-function addInk(mesh, color = INK) {
-  const ink = new THREE.LineSegments(
-    new THREE.EdgesGeometry(mesh.geometry, 25),
-    inkMaterial(color),
+function createOutlineMaterial(thickness = 14, color = INK, opacity = 1.0) {
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uThickness: { value: thickness },
+      uColor: { value: new THREE.Color(color) },
+      opacity: { value: opacity },
+    },
+    vertexShader: `
+      uniform float uThickness;
+      void main() {
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vec3 n = normalize(normalMatrix * normal);
+        mv.xyz += n * uThickness;
+        gl_Position = projectionMatrix * mv;
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 uColor;
+      uniform float opacity;
+      void main() {
+        gl_FragColor = vec4(uColor, opacity);
+      }
+    `,
+    side: THREE.BackSide,
+    transparent: opacity < 0.999,
+    depthWrite: opacity >= 0.999,
+  });
+  Object.defineProperty(mat, "opacity", {
+    get() {
+      return this.uniforms.opacity.value;
+    },
+    set(v) {
+      this.uniforms.opacity.value = v;
+      this.transparent = v < 0.999;
+    },
+  });
+  return mat;
+}
+
+function addInk(mesh, color = INK, thickness = 14) {
+  if (mesh.geometry && mesh.geometry.type === "PlaneGeometry") {
+    const ink = new THREE.LineSegments(
+      new THREE.EdgesGeometry(mesh.geometry, 25),
+      inkMaterial(color),
+    );
+    ink.raycast = () => {};
+    mesh.add(ink);
+    mesh.userData.ink = ink;
+    return ink;
+  }
+  const outline = new THREE.Mesh(
+    mesh.geometry,
+    createOutlineMaterial(thickness, color),
   );
-  ink.raycast = () => {};
-  mesh.add(ink);
-  mesh.userData.ink = ink;
-  return ink;
+  outline.castShadow = false;
+  outline.receiveShadow = false;
+  outline.raycast = () => {};
+  if (mesh.layers) outline.layers.mask = mesh.layers.mask;
+  mesh.add(outline);
+  mesh.userData.ink = outline;
+  return outline;
 }
 
 export function mountLayout(canvas) {
@@ -61,7 +115,9 @@ export function mountLayout(canvas) {
     antialias: true,
     logarithmicDepthBuffer: true,
   });
-  renderer.setClearColor(0xeef2f6, 1);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.setClearColor(0xf2efe9, 1);
   const camera = new THREE.PerspectiveCamera(48, 1, 10, 500000);
   camera.up.set(0, 1, 0);
   const LENS_BASE = 48;
@@ -73,10 +129,14 @@ export function mountLayout(canvas) {
   nightFill.layers.set(0);
   const moon = new THREE.DirectionalLight(0xfffcf5, 0.48);
   moon.layers.set(0);
-  const roomFill = new THREE.HemisphereLight(0xffffff, 0xede8df, 0.85);
+  const roomFill = new THREE.HemisphereLight(0xfffdfa, 0xdcd5c9, 0.76);
   roomFill.layers.set(ROOM_LAYER);
-  const roomKey = new THREE.DirectionalLight(0xfffaf0, 0.52);
+  const roomKey = new THREE.DirectionalLight(0xfffaf0, 0.95);
   roomKey.layers.set(ROOM_LAYER);
+  roomKey.castShadow = true;
+  roomKey.shadow.mapSize.set(2048, 2048);
+  roomKey.shadow.bias = -0.0004;
+  roomKey.shadow.normalBias = 0.02;
   scene.add(nightFill, moon, roomFill, roomKey);
 
   // 分层缓存：房间舞台（围墙/地板/城市底座/坐标轴）、家具网格池（按 id 增量更新）、动态标注与手柄
@@ -308,7 +368,17 @@ export function mountLayout(canvas) {
     const width = room.width_mm;
     const depth = room.depth_mm;
     const height = room.height_mm;
-    roomKey.position.set(...roomToThree(width * 0.15, depth * 1.35, height * 2.4));
+    roomKey.position.set(...roomToThree(width * 0.25, depth * 1.35, height * 2.8));
+    roomKey.target.position.set(...roomToThree(width / 2, depth / 2, 0));
+    if (!roomKey.target.parent) scene.add(roomKey.target);
+    const d = Math.max(width, depth) * 0.95;
+    roomKey.shadow.camera.left = -d;
+    roomKey.shadow.camera.right = d;
+    roomKey.shadow.camera.top = d;
+    roomKey.shadow.camera.bottom = -d;
+    roomKey.shadow.camera.near = 100;
+    roomKey.shadow.camera.far = height * 7;
+    roomKey.shadow.camera.updateProjectionMatrix();
     moon.position.set(...roomToThree(-width, -depth * 0.4, height * 4));
     addDiorama(stageGroup, width, depth, addInk);
     stageGroup.userData.outline = {
@@ -360,13 +430,18 @@ export function mountLayout(canvas) {
         const itemPickables = [];
         const drewShape = (isFixedSofa(item) && addSofa(itemGroup, itemPickables, item, selected, blocked, addInk))
           || (isFixedCoffeeTable(item) && addCoffeeTable(itemGroup, itemPickables, item, selected, blocked, addInk))
-          || (isFixedChair(item) && addChair(itemGroup, itemPickables, item, selected, blocked, addInk));
+          || (isFixedChair(item) && addChair(itemGroup, itemPickables, item, selected, blocked, addInk))
+          || (isFixedDesk(item) && addDesk(itemGroup, itemPickables, item, selected, blocked, addInk));
         if (!drewShape) {
           const mesh = markRoom(new THREE.Mesh(
             prismGeometry(item.footprint, itemZStart, itemZEnd),
             celMaterial(furnitureColor(item, selected, blocked)),
           ));
-          addInk(mesh, selected ? 0x6a4520 : INK);
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+          const outlineColor = blocked ? 0xd93838 : (selected ? 0xf59e0b : INK);
+          const outlineThick = (selected || blocked) ? 22 : 14;
+          addInk(mesh, outlineColor, outlineThick);
           mesh.userData = { kind: "item", itemId: item.id };
           addMesh(itemGroup, mesh, itemPickables);
         }

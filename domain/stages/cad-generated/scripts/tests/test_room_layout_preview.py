@@ -697,6 +697,107 @@ class ProjectLayoutAdmissionTests(unittest.TestCase):
         self.assertIn('import { chairParts } from "./chair_solid.js";', meshes_js)
         self.assertIn("export function addChair", meshes_js)
 
+    def test_desk_solid_visualization_contract(self) -> None:
+        """书桌具有独立的外形固件与检查脚本，在三维场景中不渲染为普通方块。"""
+        static_dir = WORKSPACE_ROOT / "domain/modules/web/furniture_web/static"
+        desk_solid = static_dir / "desk_solid.js"
+        desk_check = static_dir / "desk_solid_check.mjs"
+        self.assertTrue(desk_solid.is_file(), "desk_solid.js 必须存在")
+        self.assertTrue(desk_check.is_file(), "desk_solid_check.mjs 必须存在")
+
+        content = desk_solid.read_text(encoding="utf-8")
+        self.assertIn("export function isFixedDesk", content)
+        self.assertIn("export function deskParts", content)
+
+        scene_js = (static_dir / "layout_scene.js").read_text(encoding="utf-8")
+        self.assertIn('import { isFixedDesk } from "./desk_solid.js";', scene_js)
+        self.assertIn("addDesk", scene_js)
+        self.assertIn("isFixedDesk(item) && addDesk(", scene_js)
+
+        meshes_js = (static_dir / "layout_meshes.js").read_text(encoding="utf-8")
+        self.assertIn('import { deskParts } from "./desk_solid.js";', meshes_js)
+        self.assertIn("export function addDesk", meshes_js)
+
+    def test_desk_parts_geometry_and_clearance(self) -> None:
+        """书桌几何无共面干涉、四腿落地、正面留有通透的腿部与椅子推入空档。"""
+        def clamp(val: float, lo: float, hi: float) -> float:
+            return min(hi, max(lo, val))
+
+        def py_desk_parts(W: float, D: float, H: float):
+            if not (W >= 400 and D >= 300 and H >= 400):
+                return None
+            gap = 2.0
+            top_t = clamp(H * 0.045, 20.0, 36.0)
+            leg = clamp(min(W, D) * 0.06, 28.0, 48.0)
+            inset = clamp(min(W, D) * 0.04, 14.0, 32.0)
+            leg_top = H - top_t - gap
+            if leg_top < 200 or inset + leg > W / 2 - 8 or inset + leg > D / 2 - 8:
+                return None
+            parts = [{"role": "top", "box": [0.0, 0.0, H - top_t, W, D, H]}]
+            uL0, uL1 = inset, inset + leg
+            uR0, uR1 = W - inset - leg, W - inset
+            vRear0, vRear1 = inset, inset + leg
+            vFront0, vFront1 = D - inset - leg, D - inset
+            for u0, v0, u1, v1 in [
+                (uL0, vRear0, uL1, vRear1),
+                (uR0, vRear0, uR1, vRear1),
+                (uL0, vFront0, uL1, vFront1),
+                (uR0, vFront0, uR1, vFront1),
+            ]:
+                parts.append({"role": "leg", "box": [u0, v0, 0.0, u1, v1, leg_top]})
+            apron_t = clamp(leg * 0.45, 14.0, 20.0)
+            rear_apron_h = clamp(H * 0.22, 100.0, 220.0)
+            rear_apron_top = leg_top - gap
+            rear_apron_bottom = rear_apron_top - rear_apron_h
+            rear_u0, rear_u1 = uL1 + gap, uR0 - gap
+            rear_v0 = vRear0 + (leg - apron_t) / 2
+            rear_v1 = rear_v0 + apron_t
+            if rear_u1 - rear_u0 >= 40 and rear_apron_bottom >= 80:
+                parts.append({"role": "apron", "box": [rear_u0, rear_v0, rear_apron_bottom, rear_u1, rear_v1, rear_apron_top]})
+            side_apron_h = clamp(H * 0.08, 40.0, 70.0)
+            side_apron_top = rear_apron_top - gap
+            side_apron_bottom = side_apron_top - side_apron_h
+            side_v0, side_v1 = vRear1 + gap, vFront0 - gap
+            left_u0 = uL0 + (leg - apron_t) / 2
+            left_u1 = left_u0 + apron_t
+            right_u0 = uR0 + (leg - apron_t) / 2
+            right_u1 = right_u0 + apron_t
+            if side_v1 - side_v0 >= 40 and side_apron_bottom >= 100:
+                parts.append({"role": "apron", "box": [left_u0, side_v0, side_apron_bottom, left_u1, side_v1, side_apron_top]})
+                parts.append({"role": "apron", "box": [right_u0, side_v0, side_apron_bottom, right_u1, side_v1, side_apron_top]})
+            return parts
+
+        for w, d, h in [(1400, 700, 750), (1200, 600, 750), (1600, 800, 750), (1000, 500, 720), (800, 400, 700)]:
+            parts = py_desk_parts(w, d, h)
+            self.assertIsNotNone(parts)
+            # 无共面检查
+            faces = []
+            for p in parts:
+                u0, v0, w0, u1, v1, w1 = p["box"]
+                faces.extend([
+                    ("u", u0, v0, w0, v1, w1), ("u", u1, v0, w0, v1, w1),
+                    ("v", v0, u0, w0, u1, w1), ("v", v1, u0, w0, u1, w1),
+                    ("w", w0, u0, v0, u1, v1), ("w", w1, u0, v0, u1, v1),
+                ])
+            for i in range(len(faces)):
+                for j in range(i + 1, len(faces)):
+                    a, b = faces[i], faces[j]
+                    if a[0] != b[0] or abs(a[1] - b[1]) > 0.5:
+                        continue
+                    s1 = min(a[4], b[4]) - max(a[2], b[2])
+                    s2 = min(a[5], b[5]) - max(a[3], b[3])
+                    self.assertFalse(s1 > 1.0 and s2 > 1.0, f"共面冲突: {a[0]}={a[1]} 在尺寸 {w}x{d}x{h}")
+
+            # 膝部空间通透（桌面前半段中央完全留空供椅子推入）
+            knee_u, knee_v, knee_w = w / 2, d * 0.75, h * 0.45
+            in_knee = any(
+                p["box"][0] < knee_u < p["box"][3]
+                and p["box"][1] < knee_v < p["box"][4]
+                and p["box"][2] < knee_w < p["box"][5]
+                for p in parts
+            )
+            self.assertFalse(in_knee, "膝部空间被部件阻挡")
+
 
 if __name__ == "__main__":
     unittest.main()
