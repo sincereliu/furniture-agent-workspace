@@ -3,6 +3,7 @@ import { OrbitControls } from "/vendor/three/0.186.0/OrbitControls.js";
 import { cameraFov, cameraThreePosition, roomToThree, threeToRoom } from "./layout_frame.js";
 import { roomAxes, dimensionAnnotations } from "./layout_annotations.js";
 import { ELEVATION_PITCH, wallVisibility } from "./wall_view.js";
+import { isFixedChair } from "./chair_solid.js";
 import { isFixedCoffeeTable } from "./coffee_table_solid.js";
 import { isFixedSofa } from "./sofa_solid.js";
 import { inkViewBiasGlsl } from "./ink_depth.js";
@@ -10,6 +11,7 @@ import { INK, addDiorama, addSky, celMaterial, furnitureColor } from "./layout_d
 import { createLabelOverlay } from "./layout_overlay.js";
 import {
   ROOM_LAYER,
+  addChair,
   addCoffeeTable,
   addDimensions,
   addMesh,
@@ -357,7 +359,8 @@ export function mountLayout(canvas) {
         const itemGroup = new THREE.Group();
         const itemPickables = [];
         const drewShape = (isFixedSofa(item) && addSofa(itemGroup, itemPickables, item, selected, blocked, addInk))
-          || (isFixedCoffeeTable(item) && addCoffeeTable(itemGroup, itemPickables, item, selected, blocked, addInk));
+          || (isFixedCoffeeTable(item) && addCoffeeTable(itemGroup, itemPickables, item, selected, blocked, addInk))
+          || (isFixedChair(item) && addChair(itemGroup, itemPickables, item, selected, blocked, addInk));
         if (!drewShape) {
           const mesh = markRoom(new THREE.Mesh(
             prismGeometry(item.footprint, itemZStart, itemZEnd),

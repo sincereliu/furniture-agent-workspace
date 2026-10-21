@@ -43,12 +43,13 @@
 | 房间页三维视口组装、相机控制、射线拾取与句柄同步 | `static/layout_scene.js` | calculation |
 | 日间工作室天空球、建筑微缩底座、卡通光照材质与缓存化地砖/台面贴图 | `static/layout_diorama.js` | calculation |
 | 文字标签 DOM 层、SVG 引线与左下角坐标轴角标 | `static/layout_overlay.js` | calculation |
-| 围墙/地板台子、家具棱柱、沙发/茶几网格、旋转环与尺寸标注线 | `static/layout_meshes.js` | calculation |
+| 围墙/地板台子、家具棱柱、沙发/茶几/椅子网格、旋转环与尺寸标注线 | `static/layout_meshes.js` | calculation |
 | 前端碰撞、越界、门窗遮挡、四向净距与整数毫米二分拖拽求解（对应 `placement_check.py`） | `static/layout_solver.js` | calculation |
 | 正视图预设、基准取景距离、立面竖直平面比例与旋转方向符号 | `static/layout_camera.js` | calculation |
 | 预览围墙的厚度、转角和门窗洞，房间坐标 | `static/wall_solid.js` | calculation |
 | 不进生产的沙发在预览里的靠背、扶手和坐垫。要做成柜的沙发仍是盒子 | `static/sofa_solid.js` | calculation |
 | 不进生产的茶几在预览里的桌面、腿和层板。要做成柜的茶几仍是盒子 | `static/coffee_table_solid.js` | calculation |
+| 不进生产的椅子在预览里的立柱、腿、座面和靠背。要做成柜的椅子仍是盒子 | `static/chair_solid.js` | calculation |
 | 预览边线沿视线拉近 1 毫米，贴墙时仍画在墙前面 | `static/ink_depth.js` | calculation |
 | 页面入口将规范布局输出一次转换为画布模型；渲染层只读取该模型 | `static/layout_payload.js` | calculation |
 | 房间的东、南、上怎么画到屏幕上 | `static/layout_frame.js` | calculation |
@@ -119,6 +120,7 @@ node domain/modules/web/furniture_web/static/<检查脚本>
 | `static/wall_solid.js` | `wall_solid_check.mjs` |
 | `static/sofa_solid.js` | `sofa_solid_check.mjs` |
 | `static/coffee_table_solid.js` | `coffee_table_check.mjs` |
+| `static/chair_solid.js` | `chair_solid_check.mjs` |
 | `static/ink_depth.js`、`static/layout_scene.js` 的边线深度 | `ink_depth_check.mjs` |
 | `cabinet_entry.py` | `test_cabinet_panel_page.py` |
 | `static/layout_scene.js`、`static/layout_diorama.js`、`static/layout_overlay.js`、`static/layout_meshes.js` | `test_project_preview.py` |

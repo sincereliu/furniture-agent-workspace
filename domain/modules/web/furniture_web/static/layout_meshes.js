@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { roomToThree } from "./layout_frame.js";
 import { openingSolids, wallSolids } from "./wall_solid.js";
+import { chairParts } from "./chair_solid.js";
 import { coffeeTableParts } from "./coffee_table_solid.js";
 import { sofaFrame, sofaLocalBox, sofaMount, sofaParts } from "./sofa_solid.js";
 import { INK, celMaterial, furnitureColor, woodTexture } from "./layout_diorama.js";
@@ -156,6 +157,20 @@ export function addCoffeeTable(parent, pickables, item, selected, blocked, addIn
         top,
         leg: celMaterial(0x3a322c),
         shelf: celMaterial(0xc9bfb0),
+      };
+  return addShapedItem(parent, pickables, item, parts, materials, selected, addInk);
+}
+
+export function addChair(parent, pickables, item, selected, blocked, addInk) {
+  const parts = chairParts(item.width, item.depth, item.height);
+  const base = furnitureColor(item, selected, blocked);
+  const cushion = celMaterial(base);
+  const materials = selected || blocked
+    ? { seat: cushion, back: cushion, leg: cushion }
+    : {
+        seat: celMaterial(0xd4c9bb),
+        back: cushion,
+        leg: celMaterial(0x3a322c),
       };
   return addShapedItem(parent, pickables, item, parts, materials, selected, addInk);
 }

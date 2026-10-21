@@ -615,5 +615,88 @@ class ProjectLayoutAdmissionTests(unittest.TestCase):
             plan_project_layout([{**bedroom_room(), "items": items}])
 
 
+    def test_study_with_desk_bookcase_and_unmanufactured_chair(self) -> None:
+        """书房包含定制书柜、成品书桌与活动椅子：椅子不进制造，但留在布局中占位。"""
+        room = {
+            "id": "study",
+            "name": "书房",
+            "width_mm": 4000,
+            "depth_mm": 3600,
+            "height_mm": 2800,
+            "items": [
+                {
+                    "id": "bookcase",
+                    "category": "bookcase",
+                    "furniture_category": "floor_cabinet",
+                    "width": 1800,
+                    "depth": 350,
+                    "height": 2100,
+                    "placement": {
+                        "mode": "wall",
+                        "host_wall": "north",
+                    },
+                },
+                {
+                    "id": "desk",
+                    "category": "desk",
+                    "width": 1400,
+                    "depth": 700,
+                    "height": 750,
+                    "placement": {
+                        "mode": "wall",
+                        "host_wall": "south",
+                    },
+                },
+                {
+                    "id": "chair",
+                    "category": "chair",
+                    "width": 550,
+                    "depth": 550,
+                    "height": 850,
+                    "manufacture": False,
+                    "placement": {
+                        "mode": "free",
+                        "origin_x_mm": 1800,
+                        "origin_y_mm": 1800,
+                    },
+                },
+            ],
+        }
+        output = plan_project_layout([room])
+        items = {item["id"]: item for item in output["rooms"][0]["items"]}
+        self.assertIn("chair", items)
+        self.assertEqual(items["chair"]["category"], "chair")
+        self.assertFalse(items["chair"]["manufacture"])
+
+        # 下游仅包含需要生产的书柜，椅子与成品桌不进入制造单元清单
+        self.assertEqual([unit["id"] for unit in output["cad"]["units"]], ["bookcase"])
+        restored = ProjectLayout.from_dict(output)
+        self.assertEqual(
+            [unit.id for unit in restored.executable_units()],
+            ["bookcase"],
+        )
+
+    def test_chair_solid_visualization_contract(self) -> None:
+        """椅子具有独立的外形固件与检查脚本，在三维场景中不渲染为普通方块。"""
+        static_dir = WORKSPACE_ROOT / "domain/modules/web/furniture_web/static"
+        chair_solid = static_dir / "chair_solid.js"
+        chair_check = static_dir / "chair_solid_check.mjs"
+        self.assertTrue(chair_solid.is_file(), "chair_solid.js 必须存在")
+        self.assertTrue(chair_check.is_file(), "chair_solid_check.mjs 必须存在")
+
+        content = chair_solid.read_text(encoding="utf-8")
+        self.assertIn("export function isFixedChair", content)
+        self.assertIn("export function chairParts", content)
+
+        scene_js = (static_dir / "layout_scene.js").read_text(encoding="utf-8")
+        self.assertIn('import { isFixedChair } from "./chair_solid.js";', scene_js)
+        self.assertIn("addChair", scene_js)
+        self.assertIn("isFixedChair(item) && addChair(", scene_js)
+
+        meshes_js = (static_dir / "layout_meshes.js").read_text(encoding="utf-8")
+        self.assertIn('import { chairParts } from "./chair_solid.js";', meshes_js)
+        self.assertIn("export function addChair", meshes_js)
+
+
 if __name__ == "__main__":
     unittest.main()
