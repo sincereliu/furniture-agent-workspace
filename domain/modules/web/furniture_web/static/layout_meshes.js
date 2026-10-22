@@ -139,10 +139,11 @@ function addShapedItem(parent, pickables, item, parts, materials, selected, addI
       materials[part.role],
     ));
     mesh.position.set(...local.center);
-    mesh.userData = { kind: "item", itemId: item.id };
+    mesh.userData = { kind: "item", itemId: item.id, cartoonInk: { color: ink } };
     mesh.castShadow = true;
     mesh.receiveShadow = true;
-    addInk(mesh, ink, thick);
+    // 部件贴墙、相交时，膨胀壳会被墙裁掉或从相邻部件里露出黑边。
+    addInk(mesh, ink, thick, { edges: true });
     group.add(mesh);
     pickables.push(mesh);
   }

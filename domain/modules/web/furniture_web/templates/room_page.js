@@ -1,5 +1,6 @@
 import { mountLayout } from "/layout-view/layout_scene.js";
 import { normalizeItems } from "/layout-view/layout_payload.js";
+import { createLayoutPersistence, LayoutWriteError, placementChanged } from "/layout-view/layout_persistence.js";
 import { groundDragDelta, wallSnap } from "/layout-view/layout_drag.js";
 import {
   contactStop, detailValues, distancesOf, footprintCenter, heightProbe,
@@ -25,7 +26,7 @@ const PROJECT_UNDO_URL=__UNDO_URL__;
 const PANEL_URL_BASE=__PANEL_URL_BASE__;
 const LAYOUT_URL=__LAYOUT_URL__;
 let rooms=__ROOMS_JSON__;
-let layoutVersion=__VERSION_JSON__;
+const initialLayoutVersion=__VERSION_JSON__;
 
 // Angular Reactive Signals 与职责清晰的 Store
 const selectedIdSignal=signal(null);
@@ -38,15 +39,9 @@ const workingSignal=signal(null);
 const pendingDecisionsSignal=signal([]);
 
 const syncStore={
-  dirty:false,
-  epoch:0,
-  fetchEpoch:-1,
   events:null,
   leaseQuery:"",
   roomIndex:0,
-  pendingWrites:0,
-  writeTail:Promise.resolve(),
-  deferredDocument:null,
 };
 const pullStore={now:1,from:1,end:1};
 const uiStore={
@@ -63,6 +58,15 @@ scene.obstacles=scene.obstacles||[];
 scene.openings=scene.openings||[];
 const canvas=document.getElementById("scene"),status=document.getElementById("status");
 const view=mountLayout(canvas);
+const layoutPersistence=createLayoutPersistence({
+  readUrl:LAYOUT_URL||`/api/room-scene/${encodeURIComponent(SCENE_ID)}`,
+  editUrl:PROJECT_EDIT_URL||`/api/room-scene/${encodeURIComponent(SCENE_ID)}/edit`,
+  version:initialLayoutVersion,versioned:Boolean(PROJECT_EDIT_URL),
+  getLeaseToken:()=>leaseStore.token,
+  isInteracting:()=>Boolean(drag||state.orbiting||state.panning),
+  onMetadata:applyDocumentMetadata,
+  onDocument:showDocument,
+});
 let room=scene.room;
 let HOME_TARGET=[room.width_mm/2,room.depth_mm/2,room.height_mm*.3];
 const target=[...HOME_TARGET];
@@ -519,47 +523,23 @@ canvas.addEventListener("pointermove",event=>{
 });
 
 /* ---------- 5. 落盘保存与房间文档同步 ---------- */
-async function reload(){
-  if(PROJECT_EDIT_URL){await refreshProjectDocument();return}
-  const epoch=syncStore.epoch;
-  try{
-    const response=await fetch(`/api/room-scene/${encodeURIComponent(SCENE_ID)}`);
-    if(!response.ok)return;
-    const next=await response.json();
-    if(epoch!==syncStore.epoch)return;
-    applySceneItems(next);
-  }catch(error){}
-}
-function applySceneItems(payload){
-  if(sceneBusy()){syncStore.deferredDocument=payload;return}
-  syncStore.deferredDocument=null;
-  scene.items=normalizeItems(payload.items||[]);
-}
-function applyDocument(payload){
-  if(payload.version!==undefined)layoutVersion=String(payload.version);
+function refreshProjectDocument(){return layoutPersistence.refresh()}
+function applyDocumentMetadata(payload){
   if(payload.lease!==undefined)applyLease(payload.lease||null);
   if(payload.working)applyWorking(payload);
   if(payload.decisions)applyDecisions(payload);
-  if(!payload.rooms)return;
-  if(sceneBusy()){syncStore.deferredDocument=payload;return}
-  syncStore.deferredDocument=null;
+}
+function showDocument(payload){
+  if(!payload.rooms){
+    scene.items=normalizeItems(payload.items||[]);
+    render();
+    return;
+  }
   rooms=payload.rooms;
   const currentId=scene.room&&scene.room.id;
   let index=rooms.findIndex(entry=>entry.id===currentId);
   if(index<0)index=0;
   showRoom(index,true);
-}
-async function refreshProjectDocument(){
-  const epoch=syncStore.epoch;
-  try{
-    const response=await fetch(LAYOUT_URL,{cache:"no-store",headers:{Accept:"application/json"}});
-    if(!response.ok)return false;
-    const payload=await response.json();
-    if(epoch!==syncStore.epoch)return false;
-    applyDocument(payload);
-    syncStore.dirty=false;
-    return true;
-  }catch(error){return false}
 }
 async function persist(item,kind,sizes){
   if(READ_ONLY)return false;
@@ -588,28 +568,9 @@ async function persist(item,kind,sizes){
     }
     if(kind!=="rotate")op.origin_z_mm=Math.round(placement.origin_z_mm||0);
   }
-  const url=PROJECT_EDIT_URL||`/api/room-scene/${encodeURIComponent(SCENE_ID)}/edit`;
-  // Capture the operation now, but write it after earlier saves acknowledge their version.
-  const previousWrite=syncStore.writeTail;
-  let finishWrite;
-  syncStore.writeTail=new Promise(resolve=>{finishWrite=resolve});
-  syncStore.pendingWrites+=1;
-  syncStore.epoch+=1;
-  await previousWrite;
   try{
-    const headers={"Content-Type":"application/json"};
-    if(leaseStore.token)headers["X-Edit-Lease"]=leaseStore.token;
-    if(PROJECT_EDIT_URL)op.expected_version=layoutVersion;
-    const response=await fetch(url,{method:"POST",headers,body:JSON.stringify(op)});
-    if(!response.ok){
-      const detail=await response.json().catch(()=>({}));
-      await reportWriteFailure(response.status,detail,item);
-      return false;
-    }
-    const next=await response.json();
-    syncStore.epoch+=1;
+    const next=await layoutPersistence.write(op);
     if(PROJECT_EDIT_URL){
-      applyDocument(next);
       if(kind==="resize"){
         setStatus(`已保存 ${item.label}。这一版布局给板件用。改过的这间要再看一眼，看过才算确认。`);
         return true;
@@ -622,46 +583,35 @@ async function persist(item,kind,sizes){
         : `已保存 ${item.label}（同一版，草稿中${working.ops?` · 已调整 ${working.ops} 次`:""}）`)+suffix);
       return true;
     }
-    applySceneItems(next);
     setStatus(`已保存 ${item.label}`);
     return true;
   }catch(error){
-    setStatus("保存失败："+error,"error");
-    await reload();
+    if(error instanceof LayoutWriteError)reportWriteFailure(error.status,error.detail,error.expectedVersion);
+    else setStatus("保存失败："+error,"error");
     return false;
-  }finally{
-    syncStore.pendingWrites-=1;
-    finishWrite();
-    flushLayoutNotice();
   }
 }
-async function reportWriteFailure(status,detail,item){
+function reportWriteFailure(status,detail,expectedVersion){
   const raw=detail&&detail.detail!==undefined?detail.detail:detail;
   const message=typeof raw==="string"?raw:JSON.stringify(raw||status);
   if(status===423){
     setStatus("助手正在处理这个项目，你的这次改动没有保存；它做完就还给你","warn");
-    await refreshProjectDocument();
     return;
   }
   if(status===409){
     const current=(raw&&raw.current_version)||"";
-    const mineMoved=current&&layoutVersion&&current.split(":")[0]!==layoutVersion.split(":")[0];
+    const mineMoved=current&&expectedVersion&&current.split(":")[0]!==expectedVersion.split(":")[0];
     setStatus(mineMoved
       ? "布局已在别处更新（画面已为你刷新），刚才那次拖动没有保存"
       : "这一版刚被确认过，画面没变，请再拖一次","warn");
-    await refreshProjectDocument();
     return;
   }
   if(status===403){setStatus("这一页没有写权限（分享或只读）","error");return}
   setStatus(`改动被拒绝，已回到原位：${message}`,"error");
-  await reload();
 }
 
 function dragChanged(activeDrag){
-  const before=activeDrag.startPlacement,after=activeDrag.item.placement;
-  if(before.mode!==after.mode||(before.host_wall||null)!==(after.host_wall||null))return true;
-  if(["origin_x_mm","origin_y_mm","origin_z_mm"].some(key=>Math.round(before[key]||0)!==Math.round(after[key]||0)))return true;
-  return Math.round(normalizeAngle(before.rotation_z_deg||0)*10)!==Math.round(normalizeAngle(after.rotation_z_deg||0)*10);
+  return placementChanged(activeDrag.startPlacement,activeDrag.item.placement);
 }
 
 canvas.addEventListener("pointerup",event=>{
@@ -1015,7 +965,6 @@ function showRoom(index,keepCamera){
   syncRoomUrl();
   render();
 }
-function layoutVersionOf(payload){return String(payload.version||"")}
 
 /* ---------- 7. 编辑租约、工作副本与决策台账 ---------- */
 const LEASE_URL=LAYOUT_URL?LAYOUT_URL.replace(/\/layout$/,"/edit-lease"):"";
@@ -1148,26 +1097,13 @@ function toggleBasisPanel(){
 }
 async function decideBasis(target,action){
   if(!DECISIONS_URL)return;
-  const answer=await leasePost(DECISIONS_URL,{expected_version:layoutVersion,action,target});
-  if(answer.status===423){
-    const detail=await answer.json().catch(()=>({}));
-    applyLease((detail&&detail.detail)||null);
-    setStatus("编辑权在别人手里 · 先点「收回编辑权」再确认","warn");
-    return;
+  try{
+    await layoutPersistence.write({action,target},DECISIONS_URL);
+    setStatus(action==="confirm"?"已记下：客户确认了这条":"已记下：客户划掉了这条");
+  }catch(error){
+    if(error instanceof LayoutWriteError)reportWriteFailure(error.status,error.detail,error.expectedVersion);
+    else setStatus("没记上："+error,"error");
   }
-  if(answer.status===409){
-    setStatus("页面上的内容已经过期 · 刷新后再确认","warn");
-    return;
-  }
-  if(!answer.ok){
-    const detail=await answer.json().catch(()=>({}));
-    setStatus("没记上："+((detail&&detail.detail)||answer.status),"error");
-    return;
-  }
-  const document=await answer.json();
-  if(document.version!==undefined)layoutVersion=String(document.version);
-  applyDecisions(document);
-  setStatus(action==="confirm"?"已记下：客户确认了这条":"已记下：客户划掉了这条");
 }
 function applyLease(lease){
   leaseStore.shown=lease||null;
@@ -1252,34 +1188,11 @@ window.addEventListener("pagehide",()=>{
     });
   }catch(error){}
 });
-function sceneBusy(){
-  return Boolean(drag||state.orbiting||state.panning||syncStore.pendingWrites);
-}
 function applyLayoutNotice(notice){
-  if(!notice||typeof notice!=="object")return;
-  if(Object.prototype.hasOwnProperty.call(notice,"lease"))applyLease(notice.lease||null);
-  if(notice.working)applyWorking(notice);
-  if(notice.decisions)applyDecisions(notice);
-  if(notice.version===undefined)return;
-  if(layoutVersionOf(notice)===layoutVersion){syncStore.dirty=false;return}
-  syncStore.epoch+=1;
-  syncStore.dirty=true;
-  if(!sceneBusy())flushLayoutNotice();
+  layoutPersistence.notice(notice);
 }
 function flushLayoutNotice(){
-  if(sceneBusy())return;
-  if(syncStore.deferredDocument){
-    const payload=syncStore.deferredDocument;
-    if(payload.rooms)applyDocument(payload);
-    else applySceneItems(payload);
-  }
-  if(!syncStore.dirty||!LAYOUT_URL)return;
-  if(syncStore.fetchEpoch===syncStore.epoch)return;
-  const epoch=syncStore.epoch;
-  syncStore.fetchEpoch=epoch;
-  refreshProjectDocument().then(ok=>{
-    if(!ok&&syncStore.fetchEpoch===epoch)syncStore.fetchEpoch=-1;
-  });
+  layoutPersistence.flush();
 }
 function watchLayout(){
   if(!LAYOUT_URL)return;
@@ -1300,6 +1213,7 @@ if(roomBand){
     if(!button)return;
     const index=Number(button.dataset.roomIndex);
     if(!Number.isInteger(index)||!rooms||!rooms[index]||index===syncStore.roomIndex)return;
+    if(layoutPersistence.busy){setStatus("布局正在操作或保存，完成后再切换房间","warn");return}
     showRoom(index,false);
   });
 }

@@ -8,6 +8,7 @@ import { isFixedCoffeeTable } from "./coffee_table_solid.js";
 import { isFixedDesk } from "./desk_solid.js";
 import { isFixedSofa } from "./sofa_solid.js";
 import { inkViewBiasGlsl } from "./ink_depth.js";
+import { createCartoonOutline } from "./cartoon_outline.js";
 import { INK, addDiorama, addSky, celMaterial, furnitureColor } from "./layout_diorama.js";
 import { createLabelOverlay } from "./layout_overlay.js";
 import { pickOpeningMarker, updateOpeningMarker } from "./opening_markers.js";
@@ -148,13 +149,14 @@ function expandFootprint(footprint, t) {
   });
 }
 
-function addInk(mesh, color = INK, thickness = 14) {
-  if (mesh.geometry && mesh.geometry.type === "PlaneGeometry") {
+export function addInk(mesh, color = INK, thickness = 14, { edges = false } = {}) {
+  if (mesh.geometry && (edges || mesh.geometry.type === "PlaneGeometry")) {
     const ink = new THREE.LineSegments(
-      new THREE.EdgesGeometry(mesh.geometry, 25),
-      inkMaterial(color),
+      new THREE.EdgesGeometry(mesh.geometry, 25), inkMaterial(color),
     );
+    if (edges) ink.material.opacity = 0.45;
     ink.raycast = () => {};
+    ink.layers.mask = mesh.layers.mask;
     mesh.add(ink);
     mesh.userData.ink = ink;
     return ink;
@@ -207,6 +209,7 @@ export function mountLayout(canvas) {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.setClearColor(0xf2efe9, 1);
+  const drawCartoonOutline = createCartoonOutline(renderer);
   const camera = new THREE.PerspectiveCamera(48, 1, 10, 500000);
   camera.up.set(0, 1, 0);
   const LENS_BASE = 48;
@@ -470,6 +473,7 @@ export function mountLayout(canvas) {
     sky.position.copy(controls.target);
     renderer.autoClear = true;
     renderer.render(scene, camera);
+    drawCartoonOutline([stageGroup, itemsGroup], camera);
   }
 
   function setFovForZoom(zoom) {
