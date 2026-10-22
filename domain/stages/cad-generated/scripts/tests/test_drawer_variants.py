@@ -1,11 +1,13 @@
-"""抽屉变体：组合准入、缺省不落盘、角色表与件数。
+"""抽屉滑轨系统：抽芯档、后缝下限、轨腔与"格高 → 上下间隙"。
 
-这一版（P1）只修通道：变体字段进来、组合合法性由表判、已物化的组合只有
-「三节轨 + 盒体前板兼前脸 + 三条净空为 0」。所以这里钉三件事：
+三件事在这里钉住：
 
-1. **缺省 = 今天**：不写变体字段时 spec 序列化里没有这些键，产出逐字节不变；
-2. **没物化的组合不许进**：字段收了、几何没做的产物比报错更糟；
-3. **件数从角色表来**：校验不再写死「每抽 5 块」，加变体只加一行数据。
+1. **盒高由格高给**：盒高 = 格高 − 下间隙 − 上间隙，按 10 取整，余量进上间隙；
+2. **盒深取抽芯档**：盒深必须落在档上，后缝是结果（可装深度 − 盒深）；
+3. **口径按滑轨系统查表**：三节轨与托底轨的间隙、档位、轨腔高度各不相同；
+   格高落在经验区间之外只警告，不拦确认。
+
+口径见 references/drawer-runner-rules.md。
 """
 
 from __future__ import annotations
@@ -22,13 +24,15 @@ from runtime_paths import bootstrap_runtime_paths
 
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
+from furniture_panel_planning.construction_geometry import (
+    drawer_cell_report,
+    drawer_panel_boxes,
+)
 from furniture_panel_planning.drawer_variants import (
-    ALLOWED_VARIANTS,
-    ROLES_BY_VARIANT,
-    drawer_part_count,
-    drawer_part_roles,
-    material_role_of_role,
-    panel_type_of_role,
+    cell_gaps,
+    cell_warnings,
+    min_rear_clearance,
+    pick_box_depth,
 )
 from furniture_panel_planning.panel_planning import plan_panels
 from furniture_panel_planning.panel_spec import FurnitureSpec, spec_payload
@@ -36,17 +40,15 @@ from furniture_panel_planning.structure_planning import CabinetStructure
 from furniture_panel_planning.validation import validate_panels
 from panel_fixtures import furniture_spec
 
-VARIANT_KEYS = (
-    "drawer_runner",
-    "drawer_face",
-    "drawer_top_clearance",
-    "drawer_bottom_clearance",
-    "drawer_bottom_raise",
-)
 
+def drawer_cabinet(
+    drawer_count: int = 3, runner: str = "side_mount", **overrides
+) -> FurnitureSpec:
+    """整高抽屉区：抽屉占满内部净高，不要门也不要层板。
 
-def drawer_cabinet(drawer_count: int = 3) -> FurnitureSpec:
-    """整高抽屉区：抽屉占满内部净高，不要门也不要层板。"""
+    后缝默认给 20（三节轨要求 > 0、托底轨 > 10）：这是提案值，不是代码默认。
+    """
+    values = {"drawer_back_clearance": 20.0, **overrides}
     return furniture_spec(
         furniture_category="floor_cabinet",
         width=800,
@@ -55,176 +57,166 @@ def drawer_cabinet(drawer_count: int = 3) -> FurnitureSpec:
         n_doors=0,
         shelf_count=0,
         drawer_count=drawer_count,
+        drawer_runner=runner,
+        **values,
     )
 
 
-class DrawerVariantDefaultTests(unittest.TestCase):
-    """缺省就是今天那套：三节轨 + 盒体前板兼前脸，而且不落盘。"""
+def boxes_by_type(spec: FurnitureSpec) -> dict[str, list]:
+    structure = CabinetStructure.from_spec(spec)
+    grouped: dict[str, list] = {}
+    for box in drawer_panel_boxes(spec, structure):
+        grouped.setdefault(box.panel_id.split("_z")[0], []).append(box)
+    return grouped
 
-    def test_defaults_are_todays_combination(self) -> None:
+
+class DrawerRunnerAdmissionTests(unittest.TestCase):
+    """滑轨系统只有两个值，缺省不落盘。"""
+
+    def test_default_runner_is_side_mount_and_stays_out_of_the_payload(self) -> None:
         spec = drawer_cabinet()
         self.assertEqual(spec.drawer_runner, "side_mount")
-        self.assertEqual(spec.drawer_face, "box_face")
-        self.assertEqual(spec.drawer_top_clearance, 0.0)
-        self.assertEqual(spec.drawer_bottom_clearance, 0.0)
-        self.assertEqual(spec.drawer_bottom_raise, 0.0)
+        self.assertNotIn("drawer_runner", spec_payload(spec))
 
-    def test_default_variant_stays_out_of_the_payload(self) -> None:
-        payload = spec_payload(drawer_cabinet())
-        for key in VARIANT_KEYS:
-            self.assertNotIn(key, payload)
-
-    def test_old_frozen_spec_reads_back_with_defaults(self) -> None:
+    def test_old_frozen_spec_reads_back_as_side_mount(self) -> None:
         payload = spec_payload(drawer_cabinet())
         restored = FurnitureSpec.from_dict(payload)
         self.assertEqual(restored.drawer_runner, "side_mount")
-        self.assertEqual(restored.drawer_face, "box_face")
-        # 读回来再写一遍仍然不落盘：序列化是幂等的。
-        self.assertEqual(spec_payload(restored), payload)
 
-    def test_unknown_variant_field_is_rejected(self) -> None:
-        """还没物化的字段不悄悄收下——收下就等于假装做了。"""
-        payload = spec_payload(drawer_cabinet())
-        payload["drawer_nominal_width_mm"] = 300.0
-        with self.assertRaisesRegex(ValueError, "does not support"):
-            FurnitureSpec.from_dict(payload)
+    def test_explicit_runner_is_serialized(self) -> None:
+        spec = drawer_cabinet(runner="undermount")
+        self.assertEqual(spec_payload(spec)["drawer_runner"], "undermount")
 
-
-class DrawerVariantAdmissionTests(unittest.TestCase):
-    """组合合法性（物理上不成立）与物化状态（还没做）分开报。"""
-
-    def test_unknown_runner_is_rejected(self) -> None:
+    def test_synonym_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "drawer_runner must be one of"):
-            furniture_spec(
-                n_doors=0, shelf_count=0, drawer_count=3,
-                drawer_runner="三节轨",
-            )
+            drawer_cabinet(runner="三节轨")
 
-    def test_unknown_face_is_rejected(self) -> None:
-        with self.assertRaisesRegex(ValueError, "drawer_face must be one of"):
-            furniture_spec(
-                n_doors=0, shelf_count=0, drawer_count=3,
-                drawer_face="panel",
-            )
-
-    def test_metal_box_has_no_wooden_front_board(self) -> None:
-        """骑马抽的左右侧板是五金，不存在「盒体前板兼前脸」这种组合。"""
-        with self.assertRaisesRegex(ValueError, "no wooden front board"):
-            furniture_spec(
-                n_doors=0, shelf_count=0, drawer_count=3,
-                drawer_runner="metal_box", drawer_face="box_face",
-            )
-
-    def test_unmaterialized_runner_is_rejected(self) -> None:
-        with self.assertRaisesRegex(ValueError, "not materialized yet"):
-            furniture_spec(
-                n_doors=0, shelf_count=0, drawer_count=3,
-                drawer_runner="undermount",
-            )
-
-    def test_unmaterialized_face_is_rejected(self) -> None:
-        with self.assertRaisesRegex(ValueError, "not materialized yet"):
-            furniture_spec(
-                n_doors=0, shelf_count=0, drawer_count=3,
-                drawer_face="applied",
-            )
-
-    def test_unmaterialized_clearances_are_rejected(self) -> None:
-        with self.assertRaisesRegex(ValueError, "clearances and bottom_raise"):
-            furniture_spec(
-                n_doors=0, shelf_count=0, drawer_count=3,
-                drawer_top_clearance=3.0,
-            )
-        with self.assertRaisesRegex(ValueError, "clearances and bottom_raise"):
-            furniture_spec(
-                n_doors=0, shelf_count=0, drawer_count=3,
-                drawer_bottom_raise=18.0,
-            )
-
-    def test_variant_fields_need_drawers(self) -> None:
-        with self.assertRaisesRegex(ValueError, "require drawer_count > 0"):
+    def test_runner_without_drawers_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "requires drawer_count > 0"):
             furniture_spec(drawer_runner="undermount")
 
-    def test_negative_clearance_is_rejected(self) -> None:
-        with self.assertRaisesRegex(ValueError, "cannot be negative"):
-            furniture_spec(
-                n_doors=0, shelf_count=0, drawer_count=3,
-                drawer_top_clearance=-1.0,
-            )
+
+class DrawerRearClearanceTests(unittest.TestCase):
+    """后缝下限按滑轨系统给：三节轨 > 0、托底轨 > 10。"""
+
+    def test_side_mount_requires_a_positive_rear_clearance(self) -> None:
+        with self.assertRaisesRegex(ValueError, "必须大于 0mm"):
+            drawer_cabinet(drawer_back_clearance=0.0)
+
+    def test_undermount_requires_more_than_ten(self) -> None:
+        with self.assertRaisesRegex(ValueError, "必须大于 10mm"):
+            drawer_cabinet(runner="undermount", drawer_back_clearance=10.0)
+
+    def test_limits_are_exposed_for_both_runners(self) -> None:
+        self.assertEqual(min_rear_clearance("side_mount"), 0.0)
+        self.assertEqual(min_rear_clearance("undermount"), 10.0)
 
 
-class DrawerRoleTableTests(unittest.TestCase):
-    """角色表是件数与板件类型的唯一来源。"""
+class DrawerCellGapTests(unittest.TestCase):
+    """格高 → (下间隙, 上间隙)：区间左开右闭，超出上限按 20/20。"""
 
-    def test_part_counts_cover_every_allowed_variant(self) -> None:
-        expected = {
-            ("side_mount", "box_face"): 5,
-            ("side_mount", "applied"): 6,
-            ("undermount", "box_face"): 5,
-            ("undermount", "applied"): 6,
-            ("metal_box", "applied"): 3,
-        }
-        self.assertEqual(set(ROLES_BY_VARIANT), set(expected))
-        for variant, count in expected.items():
-            with self.subTest(variant=variant):
-                self.assertEqual(drawer_part_count(*variant), count)
+    def test_side_mount_bands(self) -> None:
+        self.assertEqual(cell_gaps("side_mount", 70.0), (10.0, 10.0))
+        self.assertEqual(cell_gaps("side_mount", 130.0), (10.0, 10.0))
+        self.assertEqual(cell_gaps("side_mount", 130.5), (10.0, 20.0))
+        self.assertEqual(cell_gaps("side_mount", 220.0), (10.0, 20.0))
+        self.assertEqual(cell_gaps("side_mount", 220.5), (20.0, 20.0))
+        self.assertEqual(cell_gaps("side_mount", 260.0), (20.0, 20.0))
+        # 超过上限仍是 20/20，但会报警告
+        self.assertEqual(cell_gaps("side_mount", 300.0), (20.0, 20.0))
 
-    def test_metal_box_drops_the_wooden_box_sides(self) -> None:
-        roles = drawer_part_roles("metal_box", "applied")
-        self.assertEqual(roles, ("face", "box_back", "box_bottom"))
-        self.assertNotIn("box_side_l", roles)
+    def test_undermount_bands(self) -> None:
+        self.assertEqual(cell_gaps("undermount", 200.0), (20.0, 10.0))
+        self.assertEqual(cell_gaps("undermount", 220.0), (20.0, 10.0))
+        self.assertEqual(cell_gaps("undermount", 220.5), (20.0, 20.0))
 
-    def test_applied_face_adds_one_part(self) -> None:
-        without = drawer_part_roles("side_mount", "box_face")
-        with_face = drawer_part_roles("side_mount", "applied")
-        self.assertEqual(set(with_face) - set(without), {"face"})
-        self.assertEqual(len(with_face), len(without) + 1)
-
-    def test_roles_map_to_the_frozen_panel_type_vocabulary(self) -> None:
-        known = {"drawer_face", "drawer_front", "drawer_side", "drawer_back", "drawer_bottom"}
-        for roles in ALLOWED_VARIANTS:
-            for role in drawer_part_roles(*roles):
-                with self.subTest(role=role):
-                    self.assertIn(panel_type_of_role(role), known)
-        # 「盒体前板兼前脸」沿用旧词表 drawer_front：老冻结文件钉着它。
-        self.assertEqual(panel_type_of_role("box_front"), "drawer_front")
-
-    def test_only_the_visible_face_uses_door_material(self) -> None:
-        self.assertEqual(material_role_of_role("face"), "door")
-        for role in ("box_front", "box_side_l", "box_back", "box_bottom"):
-            self.assertEqual(material_role_of_role(role), "carcass")
-
-    def test_unknown_role_is_rejected(self) -> None:
-        with self.assertRaisesRegex(ValueError, "unknown drawer role"):
-            panel_type_of_role("drawer_lid")
-
-
-class DrawerRoleTableValidationTests(unittest.TestCase):
-    """校验跟着角色表走，而不是跟着常量 5 走。"""
-
-    def test_generated_panels_match_the_role_table(self) -> None:
-        spec = drawer_cabinet(3)
-        placements = plan_panels(spec, CabinetStructure.from_spec(spec))
-        drawer_panels = [p for p in placements if "drawer" in p.panel_type]
-        self.assertEqual(len(drawer_panels), 3 * drawer_part_count("side_mount", "box_face"))
+    def test_cell_warnings_are_not_blocking(self) -> None:
         self.assertEqual(
-            {p.panel_type for p in drawer_panels},
-            {"drawer_front", "drawer_side", "drawer_back", "drawer_bottom"},
+            [w["code"] for w in cell_warnings("side_mount", 65.0)],
+            ["DRAWER_CELL_TOO_LOW"],
+        )
+        self.assertEqual(
+            [w["code"] for w in cell_warnings("side_mount", 300.0)],
+            ["DRAWER_CELL_TOO_HIGH"],
+        )
+        self.assertEqual(
+            cell_warnings("undermount", 75.0)[0]["code"], "DRAWER_CELL_TOO_LOW"
+        )
+        # 托底轨没有格高上限
+        self.assertEqual(cell_warnings("undermount", 900.0), [])
+
+
+class DrawerBoxChainTests(unittest.TestCase):
+    """盒高、盒深、轨腔都从格高与档位来。"""
+
+    def test_box_height_is_ten_millimetre_step(self) -> None:
+        spec = drawer_cabinet(3)
+        cell = drawer_cell_report(spec, CabinetStructure.from_spec(spec))
+        self.assertAlmostEqual(cell["cell_height"], 914.0 / 3, places=6)
+        self.assertEqual(cell["box_height"] % 10, 0)
+        self.assertEqual(cell["box_height"], 260.0)
+        # 取整余量进上间隙：上间隙 = 规范值 + 余量
+        self.assertAlmostEqual(
+            cell["upper_gap"],
+            cell["cell_height"] - cell["lower_gap"] - cell["box_height"],
+            places=6,
         )
 
-    def test_validation_passes_for_the_materialized_variant(self) -> None:
+    def test_box_depth_comes_from_the_ladder(self) -> None:
+        spec = drawer_cabinet(3)
+        cell = drawer_cell_report(spec, CabinetStructure.from_spec(spec))
+        self.assertEqual(cell["box_depth"], 500.0)  # 三节轨档：200/250/.../500
+        # 后缝是结果：可装深度 535 − 盒深 500 = 35 > 要求 20
+        self.assertAlmostEqual(cell["rear_clearance"], 35.0, places=6)
+
+        under_spec = drawer_cabinet(3, runner="undermount")
+        under = drawer_cell_report(under_spec, CabinetStructure.from_spec(under_spec))
+        self.assertEqual(under["box_depth"], 490.0)  # 托底轨档：240/290/.../490
+        self.assertAlmostEqual(under["rear_clearance"], 45.0, places=6)
+
+    def test_pick_box_depth_requires_the_rear_clearance(self) -> None:
+        with self.assertRaisesRegex(ValueError, "放不下任何一档抽芯"):
+            pick_box_depth("side_mount", 190.0, 20.0)
+
+    def test_undermount_raises_the_bottom_panel(self) -> None:
+        spec = drawer_cabinet(2, runner="undermount")
+        grouped = boxes_by_type(spec)
+        side = grouped["drawer_side_L"][0]
+        bottom = grouped["drawer_bottom"][0]
+        self.assertAlmostEqual(bottom.pos_z, side.pos_z + 11.0, places=6)
+        # 三节轨不抬：底板与侧板同底
+        flat = boxes_by_type(drawer_cabinet(2))
+        self.assertAlmostEqual(
+            flat["drawer_bottom"][0].pos_z, flat["drawer_side_L"][0].pos_z, places=6
+        )
+
+    def test_box_height_is_shorter_than_the_cell(self) -> None:
+        """盒体不再占满空间：上下都留了间隙。"""
+        spec = drawer_cabinet(3)
+        structure = CabinetStructure.from_spec(spec)
+        cell = drawer_cell_report(spec, structure)
+        side = boxes_by_type(spec)["drawer_side_L"][0]
+        self.assertAlmostEqual(
+            side.pos_z, structure.internal_z_start + cell["lower_gap"], places=6
+        )
+        self.assertAlmostEqual(side.size_z, cell["box_height"], places=6)
+        self.assertLess(side.size_z, cell["cell_height"])
+
+    def test_three_drawers_in_a_tall_cabinet_warns(self) -> None:
         spec = drawer_cabinet(3)
         structure = CabinetStructure.from_spec(spec)
         report = validate_panels(spec, structure, plan_panels(spec, structure))
-        self.assertTrue(report.passed, [issue.code for issue in report.issues])
+        self.assertIn("DRAWER_CELL_TOO_HIGH", {issue.code for issue in report.issues})
+        self.assertTrue(report.passed, "格高超出经验区间只警告，不拦确认")
 
-    def test_missing_panel_reports_the_table_driven_count(self) -> None:
-        spec = drawer_cabinet(3)
+    def test_four_drawers_stay_inside_the_band(self) -> None:
+        spec = drawer_cabinet(4)
         structure = CabinetStructure.from_spec(spec)
-        placements = plan_panels(spec, structure)
-        report = validate_panels(spec, structure, placements[:-1])
-        codes = {issue.code for issue in report.issues}
-        self.assertIn("DRAWER_PANEL_COUNT_MISMATCH", codes)
+        report = validate_panels(spec, structure, plan_panels(spec, structure))
+        self.assertNotIn("DRAWER_CELL_TOO_HIGH", {issue.code for issue in report.issues})
+        self.assertEqual(
+            drawer_cell_report(spec, structure)["box_height"] % 10, 0
+        )
 
 
 if __name__ == "__main__":

@@ -28,19 +28,23 @@ from .construction_geometry import (
     back_rail_boxes,
     divider_panel_boxes,
     door_panel_boxes,
+    drawer_cell_report,
     drawer_panel_boxes,
     shelf_panel_boxes,
     toe_kick_support_boxes,
 )
 from .panel_models import PanelPlacement
 from .panel_spec import FurnitureSpec, resolve_back_mount, thickness_for_material_role
-from .drawer_variants import drawer_part_roles
 from .panel_rules import (
     back_rail_clear_spacing,
     resolve_back_rail_count,
     toe_kick_support_clear_spacing,
 )
 from .structure_planning import CabinetStructure
+
+
+#: 每抽五块（前/左右/后/底）。滑轨系统只改尺寸与基准，不改件数。
+DRAWER_PANELS_PER_INSTANCE = 5
 
 
 def validate_panels(
@@ -564,18 +568,21 @@ def _validate_drawer_panels(
 
     try:
         expected = drawer_panel_boxes(spec, structure)
+        cell = drawer_cell_report(spec, structure)
     except ValueError as exc:
         report.add_error("INVALID_DRAWER_GEOMETRY", str(exc), "drawer_count")
         return report
-    # 件数由变体表给（角色数 × 抽数），不再写死「每抽 5 块」。
-    roles = drawer_part_roles(spec.drawer_runner, spec.drawer_face)
-    expected_count = len(roles) * spec.drawer_count
+    # 格高落在车间经验区间之外：只提示，不拦确认（口径见 drawer-runner-rules）。
+    for warning in cell.get("warnings", ()):
+        report.add_warning(warning["code"], warning["message"], "drawer_count")
+    # 每抽 5 块（前/左右/后/底）：滑轨系统只改尺寸，不改件数。
+    expected_count = DRAWER_PANELS_PER_INSTANCE * spec.drawer_count
     if len(drawer_panels) != expected_count:
         report.add_error(
             "DRAWER_PANEL_COUNT_MISMATCH",
             "generated drawer panel count must match "
-            f"{len(roles)} panels per drawer instance "
-            f"({spec.drawer_runner}/{spec.drawer_face}), got {len(drawer_panels)}",
+            f"{DRAWER_PANELS_PER_INSTANCE} panels per drawer instance, "
+            f"got {len(drawer_panels)}",
             "drawer_count",
         )
     _mismatch_boxes(

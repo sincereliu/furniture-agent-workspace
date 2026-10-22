@@ -234,15 +234,15 @@ def _validate_assembly_tree(
                 expected_id,
             )
             continue
-        report.issues.extend(
-            _validate_scoped_joints(expected_id, box, panel_ids).issues
-        )
-        front_id = drawer.get("front_id")
         box_ids = {
             item.get("id")
             for item in box.get("panels", [])
             if isinstance(item, Mapping)
         }
+        report.issues.extend(
+            _validate_scoped_joints(expected_id, box, box_ids).issues
+        )
+        front_id = drawer.get("front_id")
         if front_id not in box_ids:
             report.add_error(
                 "DRAWER_FRONT_NOT_IN_BOX",

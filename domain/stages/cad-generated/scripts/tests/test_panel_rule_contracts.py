@@ -271,6 +271,7 @@ class PanelRuleContractTests(unittest.TestCase):
             n_doors=0,
             shelf_count=0,
             drawer_count=3,
+            drawer_back_clearance=20.0,
         )
 
         structure = CabinetStructure.from_spec(spec)
@@ -303,7 +304,7 @@ class PanelRuleContractTests(unittest.TestCase):
                 round(side_bottom.pos_y, 3),
                 round(side_bottom.pos_z, 3),
             ),
-            (18.0, 535.0, 267.167, 31.0, 27.0, 86.0),
+            (18.0, 500.0, 260.0, 31.0, 62.0, 88.0),
         )
         self.assertEqual(
             (
@@ -311,7 +312,7 @@ class PanelRuleContractTests(unittest.TestCase):
                 round(bottom_bottom.size_y, 3),
                 round(bottom_bottom.size_z, 3),
             ),
-            (702.0, 517.0, 18.0),
+            (702.0, 482.0, 18.0),
         )
         self.assertEqual(
             (
@@ -584,7 +585,7 @@ class PanelRuleContractTests(unittest.TestCase):
         )
 
     def test_assembly_tree_nests_drawer_boxes(self) -> None:
-        params = panel_parameters(n_doors=0, drawer_count=3)
+        params = panel_parameters(n_doors=0, drawer_count=3, drawer_back_clearance=20.0)
         params["shelves"] = []
         params["top_gap_mm"] = 0
         output = plan_panel_stage((cabinet_envelope(),), params)

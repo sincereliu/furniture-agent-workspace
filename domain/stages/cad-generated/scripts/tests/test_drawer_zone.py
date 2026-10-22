@@ -33,6 +33,7 @@ from furniture_manufacturing.manufacturing_bom import (
 )
 from furniture_manufacturing.manufacturing_models import PanelRecord
 from furniture_manufacturing.validation import validate_manufacturing
+from furniture_panel_planning.construction_geometry import drawer_cell_report
 from furniture_panel_planning.panel_planning import plan_panels
 from furniture_panel_planning.structure_planning import CabinetStructure
 from furniture_panel_planning.validation import validate_panels
@@ -89,6 +90,7 @@ class DrawerZoneTests(unittest.TestCase):
             n_doors=n_doors,
             shelf_count=shelf_count,
             drawer_count=drawer_count,
+            drawer_back_clearance=20.0,
         )
         placements = plan_panels(spec, CabinetStructure.from_spec(spec))
         return spec, placements
@@ -120,32 +122,30 @@ class DrawerZoneTests(unittest.TestCase):
         self.assertEqual(len(instance_keys), 3)
         self.assertTrue(all(count == 5 for count in instance_keys.values()))
 
-    def test_bottom_drawer_front_covers_bottom_panel(self) -> None:
-        """底抽前板全盖底板（front_overlap=18）：侧板高 = 前板高 − 36。"""
-        _, placements = self._drawer_cabinet(3)
+    def test_drawer_box_sits_inside_its_cell(self) -> None:
+        """盒高由格高减上下间隙给出：盒体比抽面矮，上下都留了空间。"""
+        spec, placements = self._drawer_cabinet(3)
+        structure = CabinetStructure.from_spec(spec)
+        cell = drawer_cell_report(spec, structure)
         drawer_panels = [p for p in placements if "drawer" in p.panel_type]
         fronts = sorted(
             (p for p in drawer_panels if p.panel_type == "drawer_front"),
             key=lambda p: p.pos_z,
         )
-        sides = [
-            p for p in drawer_panels if p.panel_type == "drawer_side"
-        ]
-        # 三个抽屉的前板高度相同（均分净高 − 层缝）
-        front_h = fronts[0].size_z  # 未取整的实际前板高
-        self.assertTrue(
-            all(abs(p.size_z - front_h) < 1e-6 for p in fronts)
+        sides = sorted(
+            (p for p in drawer_panels if p.panel_type == "drawer_side"),
+            key=lambda p: p.pos_z,
         )
-        # 底抽（最小 front_z）：前板向下覆盖 18 → 侧板 pos_z = front_z + 18，高 = front_h − 36
-        bottom_front_z = fronts[0].pos_z
-        bottom_sides = [p for p in sides if p.pos_z == bottom_front_z + 18]
-        self.assertEqual(len(bottom_sides), 2)
-        self.assertTrue(all(abs(p.size_z - (front_h - 36)) < 1e-6 for p in bottom_sides))
-        # 上两层抽屉：侧板 pos_z = 各自 front_z（无覆盖），高 = front_h
-        for front in fronts[1:]:
-            band_sides = [p for p in sides if p.pos_z == front.pos_z]
-            self.assertEqual(len(band_sides), 2)
-            self.assertTrue(all(abs(p.size_z - front_h) < 1e-6 for p in band_sides))
+        fronts_h = [p.size_z for p in fronts]
+        self.assertTrue(all(abs(h - fronts_h[0]) < 1e-6 for h in fronts_h))
+        # 三个抽屉的盒高一致，且比抽面矮（上下间隙 + 10 取整的余量）
+        sides_h = sorted({round(p.size_z, 6) for p in sides})
+        self.assertEqual(sides_h, [cell["box_height"]])
+        self.assertLess(sides_h[0], fronts_h[0])
+        # 每层盒体起点 = 该层格的起点 + 下间隙
+        for index, side_z in enumerate(sorted({round(p.pos_z, 6) for p in sides})):
+            expected = structure.internal_z_start + index * cell["cell_height"] + cell["lower_gap"]
+            self.assertAlmostEqual(side_z, expected, places=6)
 
     def test_panel_validation_rejects_drawer_geometry_mismatch(self) -> None:
         spec, placements = self._drawer_cabinet(3)

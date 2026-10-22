@@ -25,16 +25,20 @@
 
 ## 当前执行口径
 
-- 每层抽屉带高 `band_h = internal_height / drawer_count`
-- 抽屉前板高 `front_h = band_h - drawer_layer_gap`
-- 抽屉前板宽 `front_w = internal_width - 2 × front_face_margin`
+盒体与抽面**各算各的**：盒高由格高减上下间隙、抽面仍按带高减层缝。滑轨系统的数值
+（档位、间隙、轨腔）见 [抽屉滑轨规则](drawer-runner-rules.md)。
+
+- 每层抽屉带高（=格高） `band_h = internal_height / drawer_count`
+- 抽面高 `front_h = band_h - drawer_layer_gap`；抽面宽 `front_w = internal_width - 2 × front_face_margin`
+- 抽面 Z 起点按抽屉带自下而上布置；首层不追加层缝，其余层在带起点额外加入 `drawer_layer_gap`
+- 上下间隙由格高查表：`下间隙, 上间隙 = cell_gaps(runner, band_h)`
+- 盒体高 `box_h = (band_h - 下间隙 - 上间隙)` 向下取到 10 的整数倍，余量进上间隙
+- 盒体 Z 起点 `box_z = 格起点 + 下间隙`；底板 Z `box_z + 轨腔高度`
 - 盒体宽 `box_w = internal_width - 2 × drawer_side_clearance`
-- 盒体深 `box_d = internal_depth - board_thickness - drawer_back_clearance`
-- 底板 Y 向尺寸 `bottom_size_y = box_d - board_thickness`
-- 抽屉前板的 Z 起点按抽屉带自下而上布置；首层不追加层缝，其余层在带起点额外加入 `drawer_layer_gap`
-- 底抽前板按“一块板厚的底板覆盖量”处理，`overlap = board_thickness`；其余抽屉 `overlap = 0`
-- 盒体高 `box_h = front_h - 2 × overlap`
-- 盒体 Z 起点 `box_z = front_z + overlap`
+- 可装深度 `= 内深 - board_thickness`（内嵌：抽面占一块板厚）
+- 盒体深 `box_d` 取抽芯档里满足「可装深度 − 档 > 后缝下限」的最大一档；`drawer_back_clearance` 是最小要求，实际后缝 `= 可装深度 - box_d`
+- 底板 Y 向尺寸 `bottom_size_y = box_d - drawer_back_thickness`
+- 背板通高到盒底（贴底板端面），不坐在底板上
 
 ## 来源与校准状态
 
@@ -67,5 +71,5 @@
 ## 限制与后续
 
 - 本文件记录的是当前仓库执行口径，便于把抽屉规则从入口文档中独立出来。
-- 变体（三节轨/托底轨/骑马抽、独立抽面）的件数与角色归属见 [抽屉变体契约](drawer-variants-contract.md)；本文件只写今天物化的那一条（三节轨 + 盒体前板兼前脸）。
+- 变体（三节轨/托底轨）的出件口径见 [抽屉滑轨规则](drawer-runner-rules.md)；本文件只写链条顺序。
 - 混合门抽屉区、分区抽屉、异形前脸、覆盖方式差异等未被当前拓扑支持时，必须在 LLM 侧继续消歧，不得由运行时猜测。

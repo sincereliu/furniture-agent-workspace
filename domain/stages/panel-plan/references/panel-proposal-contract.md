@@ -25,7 +25,7 @@
 - 中立板（可选）：`dividers`；每项是 {seam_index, seam_align?}，不写就是没有中立板。
 - 门铰链侧（可选）：`door_hinges`；从左到右每扇门一项，取值 left 或 right，长度必须等于门数。
 - 抽屉尺寸链输入：`drawer_side_clearance`、`drawer_layer_gap`、`drawer_back_clearance`
-- 抽屉变体（可选）：`drawer_runner`、`drawer_face`、`drawer_top_clearance`、`drawer_bottom_clearance`、`drawer_bottom_raise`；都不写就取三节轨 side_mount、盒体前板兼前脸 box_face、三条净空为 0，即今天唯一的做法。口径见 [抽屉变体契约](drawer-variants-contract.md)。
+- 抽屉滑轨系统（可选）：`drawer_runner`；取值 side_mount（三节轨，缺省）或 undermount（托底轨）。换轨只改这一个字段：档位、上下间隙、轨腔高度全部查表，见 [抽屉滑轨规则](drawer-runner-rules.md)。
 - 可选料档：`board_thickness`、`back_thickness`、`door_thickness`、`drawer_bottom_thickness`、`drawer_back_thickness`、`sheet_width_mm`、`sheet_length_mm`；省略则按 [料档与工艺卡](sheet-stock-catalog.md) 展开。
 - 柜体身份（可选）：`cabinet_id`；这不是构造字段，运行时在准入前弹出，缺省 cabinet_1，不得包含 __。
 
@@ -33,7 +33,7 @@
 
 - `shelves` 每项是 `{shelf_type: fixed|movable, gap_below_mm: 数值|null}`；列表顺序、均分、计算层和净高口径见 [层板规则](shelf-planning-rules.md)。整组净高省略时准入均分。恰好一项为 `null` 时只闭合那一层，不对其余层均分。不保留 `shelf_count`。
 - 当前 `drawer_count>0` 的规范语义只表示整高抽屉区；必须同时提交空 `shelves` 与 `n_doors=0`。
-- 抽屉变体字段**只在 `drawer_count>0` 时成立**，且只接受已经物化的组合（今天是三节轨 + 盒体前板兼前脸 + 三条净空为 0）。写一个还没物化的组合会被准入拒绝，不会出一版"字段收了、几何没做"的板件——见 [抽屉变体契约](drawer-variants-contract.md)。
+- `drawer_back_clearance` 是**最小后缝要求**，不是实际尺寸：准入只校验它严格大于该滑轨系统的下限（三节轨 > 0、托底轨 > 10），实际后缝由抽芯档决定、只会更大。盒高、盒深都不由提案给，见 [抽屉滑轨规则](drawer-runner-rules.md)。
 - `dividers` 每项是 {seam_index, seam_align?}：`seam_align` 不写按 `center`。**不写 id、不写 thickness_mm**——中立板是柜体板，厚度取已准入的 `board_thickness`；`seam_index` 越界或同一缝出现两块，准入/评估直接拒。**不写 `dividers` 等于没有中立板**，不是"按柜型猜一块"。两条客观冲突同样直接拒：与整高抽屉区共存；`n_doors < 2`（一扇门没有内缝可对）。
 - `door_hinges` 是**逐扇**的铰链侧：写的是"门往哪边开"这个设计决定，不是工艺参数。规则见 [门板铰链侧](door-hinge-side.md)——**对开腔那两位必须 left、right**（写反直接拒）；**单开腔不给就报警告** `DOOR_HINGE_SIDE_UNKNOWN`（不拦确认，留给板件页上点选或下一版补齐）；整排都是对开腔时可以完全不写。留空的门不能开门、也排不了铰链孔，制造会拦。
 
@@ -69,7 +69,7 @@
 
 - 料档按工艺卡，不写入假设清单：柜体板 18、9 厘背板 9、门与抽屉盒同柜体板、板幅 1220×2440。覆盖时只允许目录值，见 [料档与工艺卡](sheet-stock-catalog.md)。客户说要长板（1220×2745）时两个数一起写，只写一个是没说清。
 - `back_mount=groove`、背板后移 18、前脸边距 1.5、前脸深度缝 2、槽深 6、槽余量 1、背拉条高 70。
-- 抽屉每侧净空 13、层缝 1.5、后净空 0。
+- 抽屉每侧净空 13、层缝 1.5、后缝 20（三节轨要 > 0、托底轨要 > 10）；滑轨系统不写就是三节轨。盒高与盒深由代码按格高和抽芯档算，不写成假设。
 - 落地柜：踢脚 50、前后退让 1/30、2 门、`drawer_count=0`、4 层固定层板。层板只写 `shelf_type`，不写 `gap_below_mm` 和 `top_gap_mm`。不写 `toe_kick_support_count`。准入按该柜外形尺寸写入均分净高和支撑数。
 - 吊柜：踢脚 0、前后退让 0、2 门、`drawer_count=0`、1 层固定层板。层板净高同样整组不写。不写支撑数；踢脚高为 0 时展开为 0。
 - 用户要整高抽屉时：`drawer_count` 用其给出的抽数，空 `shelves`、`n_doors=0`、`top_gap_mm=0`，其余仍用上列工艺起点。

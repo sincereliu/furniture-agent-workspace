@@ -35,6 +35,10 @@
   （`temp/verify_baseline_delta.py`）。加它是因为"板件两个平面尺寸进不进得去料"
   是判 error 的前提，不能由校验临时猜一档。这一步没有动任何板件尺寸、位置与接触：
   四个用例都没有中立板，背板仍是一整块 `back_panel`。
+- 2026-10-24：**抽屉原先没有被基线覆盖**（四个用例都是门柜）。改盒高口径
+  （盒高 = 格高 − 上下间隙，按 10 取整；盒深取抽芯档，后缝是结果）时补了一条
+  三抽用例 `drawers_three`，因此 `_BASELINE` 多一项。**原有四份摘要逐字不变**——
+  抽屉与门柜互斥，抽屉改动不影响门柜产出。
 """
 
 from __future__ import annotations
@@ -68,6 +72,8 @@ _BASELINE = {
     "wardrobe_with_shelves": "ceb228128880bdda65cadd424386b51ea66f514c993884c1a6d30b06778b29e2",
     "wall_cabinet": "15a9008422c571b78b8526d96f4f666dc8d0bc05a0d6ad31a1f7aecee780e724",
     "two_cabinets": "68075a34b9f01e9c807d9be13a95111e9dc00b266582806acd6e524463c20a2e",
+    # 2026-10-24 新增（不是重建）：抽屉原先没有基线用例，盒高改口径后补一条。
+    "drawers_three": "29797716068723a4a379862e7eea934f5c9008e38d79f2bd457afce0d69e0b0c",
 }
 
 
@@ -110,6 +116,19 @@ CASES: dict[str, dict] = {
                          _item("cabinet_2", width=900, host_wall="east")])],
         "parameters": "floor_cabinet",
     },
+    # 抽屉三抽：盒高按格高取整、盒深取抽芯档、后缝是结果。这个案例自带覆盖参数，
+    # 因为后缝下限要求提案给一个正数（三节轨 > 0）。
+    "drawers_three": {
+        "rooms": [_room([_item("drawer_cab")])],
+        "parameters": "floor_cabinet",
+        "overrides": {
+            "n_doors": 0,
+            "shelves": [],
+            "top_gap_mm": 0.0,
+            "drawer_count": 3,
+            "drawer_back_clearance": 20.0,
+        },
+    },
 }
 
 
@@ -124,7 +143,7 @@ def panel_digest(case: dict) -> str:
             "rooms": json.loads(json.dumps(case["rooms"])),
             "movable_shelf_connector": "two_in_one",
             "door_hinge_side": None,
-            **panel_parameters(case["parameters"]),
+            **panel_parameters(case["parameters"], **case.get("overrides", {})),
         }
         result = confirm_through(
             orchestrator, "基线", spec, through_stage=WorkflowStage.PANELS_PLANNED

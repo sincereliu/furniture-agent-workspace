@@ -5,6 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Sequence
 
+from .drawer_variants import (
+    bottom_raise,
+    cell_gaps,
+    cell_warnings,
+    floor_to_step,
+    pick_box_depth,
+)
 from .interior_structure import evaluate_interior
 from .panel_rules import (
     back_rail_clear_spacing,
@@ -361,34 +368,76 @@ def _cavity_bounds(
     return bounds
 
 
+def drawer_cell_report(
+    spec: FurnitureSpec,
+    structure: CabinetStructure,
+) -> dict[str, Any]:
+    """一格抽屉的空间账：格高、上下间隙、盒高（取整后）、盒深（档位）与后缝。
+
+    求解与校验都只读这里，避免第二套公式。口径见
+    references/drawer-runner-rules.md：盒高 = 格高 − 上下间隙，按 10 取整，
+    余量进上间隙；盒深取抽芯档，后缝是结果。
+    """
+    count = spec.drawer_count
+    if count <= 0:
+        return {}
+    runner = spec.drawer_runner
+    cell_height = structure.internal_height / count
+    lower_gap, upper_gap = cell_gaps(runner, cell_height)
+    box_height_raw = cell_height - lower_gap - upper_gap
+    box_height = floor_to_step(box_height_raw)
+    if box_height <= 0:
+        raise ValueError("drawer cell leaves a non-positive box height")
+    # 取整余量进上间隙：下间隙保持规范值，盒体不往轨上压。
+    upper_gap += box_height_raw - box_height
+    raise_mm = bottom_raise(runner)
+    bottom_t = spec.drawer_bottom_thickness
+    if raise_mm + bottom_t >= box_height:
+        raise ValueError("drawer cell leaves no room for a drawer back panel")
+    available_depth = (
+        structure.internal_y_end - structure.internal_y_start - spec.board_thickness
+    )
+    box_depth = pick_box_depth(runner, available_depth, spec.drawer_back_clearance)
+    return {
+        "runner": runner,
+        "cell_height": cell_height,
+        "lower_gap": lower_gap,
+        "upper_gap": upper_gap,
+        "box_height": box_height,
+        "box_depth": box_depth,
+        "rear_clearance": available_depth - box_depth,
+        "bottom_raise": raise_mm,
+        "warnings": cell_warnings(runner, cell_height),
+    }
+
+
 def drawer_panel_boxes(
     spec: FurnitureSpec,
     structure: CabinetStructure,
 ) -> list[PanelBox]:
-    """Return the admitted full-height drawer dimension chain.
+    """Return the admitted drawer dimension chain.
 
-    Formulas live here so validation can compare against the same numbers
-    the solver materializes. See references/drawer-dimension-chain.md.
+    盒高由格高减上下间隙给出（再按 10 取整），盒深取抽芯档；口径见
+    references/drawer-runner-rules.md。抽面仍按今天的口径（带高减层缝）。
     """
-    count = spec.drawer_count
-    if count <= 0:
+    cell = drawer_cell_report(spec, structure)
+    if not cell:
         return []
+    count = spec.drawer_count
     board = spec.board_thickness
     slide_gap = spec.drawer_side_clearance
     layer_gap = spec.drawer_layer_gap
     bottom_t = spec.drawer_bottom_thickness
     back_t = spec.drawer_back_thickness
-    back_clear = spec.drawer_back_clearance
     iw = structure.internal_width
-    internal_depth = structure.internal_y_end - structure.internal_y_start
-    band_h = structure.internal_height / count
-    front_h = band_h - layer_gap
+    band_h = cell["cell_height"]
     front_w = iw - 2 * spec.front_face_margin
     box_w = iw - 2 * slide_gap
-    box_d = internal_depth - board - back_clear
-    box_back_y = structure.internal_y_start + back_clear
-    bottom_size_y = box_d - board
-    if min(front_h, front_w, box_w, box_d, bottom_size_y) <= 0:
+    box_d = cell["box_depth"]
+    box_h = cell["box_height"]
+    box_back_y = structure.internal_y_start + cell["rear_clearance"]
+    bottom_size_y = box_d - back_t
+    if min(front_w, box_w, bottom_size_y, box_h) <= 0:
         raise ValueError("admitted drawer parameters leave non-positive geometry")
 
     boxes: list[PanelBox] = []
@@ -396,9 +445,10 @@ def drawer_panel_boxes(
         front_z = structure.internal_z_start + index * band_h + (
             layer_gap if index > 0 else 0.0
         )
-        overlap = board if index == 0 else 0.0
-        box_h = front_h - 2 * overlap
-        box_z = front_z + overlap
+        front_h = band_h - layer_gap
+        cell_z = structure.internal_z_start + index * band_h
+        box_z = cell_z + cell["lower_gap"]
+        bottom_z = box_z + cell["bottom_raise"]
         suffix = f"z{front_z:.0f}"
         boxes.extend(
             [
@@ -433,7 +483,7 @@ def drawer_panel_boxes(
                     panel_id=f"drawer_back_{suffix}",
                     size_x=box_w - 2 * board,
                     size_y=back_t,
-                    size_z=box_h - 2 * board,
+                    size_z=box_h,
                     pos_x=structure.internal_x_start + slide_gap + board,
                     pos_y=box_back_y,
                     pos_z=box_z,
@@ -444,8 +494,8 @@ def drawer_panel_boxes(
                     size_y=bottom_size_y,
                     size_z=bottom_t,
                     pos_x=structure.internal_x_start + slide_gap + board,
-                    pos_y=box_back_y + board,
-                    pos_z=box_z,
+                    pos_y=box_back_y + back_t,
+                    pos_z=bottom_z,
                 ),
             ]
         )

@@ -8,10 +8,10 @@ from typing import Any, Mapping
 
 from .cabinet_envelope import CABINET_CATEGORIES, CabinetEnvelope
 from .drawer_variants import (
-    DEFAULT_FACE,
     DEFAULT_RUNNER,
-    admit_drawer_variant,
-    drawer_is_materialized,
+    admit_runner,
+    min_rear_clearance,
+    runner_label,
 )
 from .panel_rules import default_toe_kick_support_count, even_shelf_gap
 
@@ -175,10 +175,6 @@ PANEL_OPTIONAL_PARAMETER_FIELDS = frozenset(
         "dividers",
         "door_hinges",
         "drawer_runner",
-        "drawer_face",
-        "drawer_top_clearance",
-        "drawer_bottom_clearance",
-        "drawer_bottom_raise",
     }
 )
 
@@ -194,10 +190,6 @@ _SERIALIZED_FIELDS = PANEL_PARAMETER_FIELDS | {
 #: 同一张表也是读旧冻结文件时的补值来源：老文件没这些键，读回来就是缺省。
 _DEFAULTED_SERIALIZED_FIELDS: dict[str, Any] = {
     "drawer_runner": DEFAULT_RUNNER,
-    "drawer_face": DEFAULT_FACE,
-    "drawer_top_clearance": 0.0,
-    "drawer_bottom_clearance": 0.0,
-    "drawer_bottom_raise": 0.0,
 }
 #: 不写也合法的字段：序列化输出为空时不落盘（老工程产出逐字节不变）。
 _OPTIONAL_SERIALIZED_FIELDS = PANEL_OPTIONAL_PARAMETER_FIELDS - frozenset(
@@ -254,16 +246,9 @@ class FurnitureSpec:
     #: （对开腔自动 left/right，单开腔留空）。见 references/door-hinge-side.md。
     door_hinges: list[str] = field(default_factory=list)
 
-    #: 抽屉变体：滑轨系统与抽面归属。缺省 = 今天唯一的组合（三节轨 + 盒体前板兼前脸）。
-    #: 角色表与组合规则在 `drawer_variants`，口径见 references/drawer-variants-contract.md。
+    #: 抽屉滑轨系统：决定抽芯档、后缝下限、轨腔高度与格高对应的上下间隙。
+    #: 缺省 = 三节轨；口径与数值见 references/drawer-runner-rules.md。
     drawer_runner: str = DEFAULT_RUNNER
-    drawer_face: str = DEFAULT_FACE
-
-    #: 抽屉的三条缝/抬升：抽面上缝、抽面下缝、底板相对盒底的上移（托底轨用）。
-    #: 缺省 0 = 今天的做法。它们不是五金参数，是板件的几何事实；五金只做兼容校验。
-    drawer_top_clearance: float = 0.0
-    drawer_bottom_clearance: float = 0.0
-    drawer_bottom_raise: float = 0.0
 
     def __post_init__(self) -> None:
         if self.furniture_category not in CABINET_CATEGORIES:
@@ -278,7 +263,6 @@ class FurnitureSpec:
             "toe_kick_reveal_front", "toe_kick_reveal_back", "back_rail_height",
             "drawer_side_clearance", "drawer_layer_gap", "drawer_bottom_thickness",
             "drawer_back_thickness", "drawer_back_clearance",
-            "drawer_top_clearance", "drawer_bottom_clearance", "drawer_bottom_raise",
             "sheet_width_mm", "sheet_length_mm",
         ):
             value = getattr(self, name)
@@ -294,9 +278,7 @@ class FurnitureSpec:
         self.shelves = _coerce_shelves(self.shelves)
         self.dividers = _coerce_dividers(self.dividers)
         self.door_hinges = _coerce_door_hinges(self.door_hinges)
-        self.drawer_runner, self.drawer_face = admit_drawer_variant(
-            self.drawer_runner, self.drawer_face
-        )
+        self.drawer_runner = admit_runner(self.drawer_runner)
         _validate_objective_invariants(self)
         _validate_sheet_stock(self)
 
@@ -651,7 +633,6 @@ def _validate_objective_invariants(spec: FurnitureSpec) -> None:
         "toe_kick_height", "back_offset", "front_face_margin", "front_gap",
         "groove_clearance", "toe_kick_reveal_front", "toe_kick_reveal_back",
         "back_rail_height", "drawer_layer_gap", "drawer_back_clearance",
-        "drawer_top_clearance", "drawer_bottom_clearance", "drawer_bottom_raise",
         "top_gap_mm",
     )
     if any(getattr(spec, name) <= 0 for name in positive):
@@ -682,42 +663,23 @@ def _validate_objective_invariants(spec: FurnitureSpec) -> None:
         raise ValueError("at most one shelf gap may be null")
     if spec.door_hinges and len(spec.door_hinges) != spec.n_doors:
         raise ValueError("door_hinges must have exactly one entry per door")
-    _validate_drawer_variant(spec)
+    _validate_drawer_runner(spec)
 
 
-def _validate_drawer_variant(spec: FurnitureSpec) -> None:
-    """变体准入：这个组合在这一版物化了吗。
+def _validate_drawer_runner(spec: FurnitureSpec) -> None:
+    """滑轨系统准入：后缝下限按系统给，写不到下限直接拒。
 
-    已物化的组合只有「三节轨 + 盒体前板兼前脸 + 三条净空为 0」——即今天唯一的做法。
-    加变体时按阶段一次放开一条：净空（P2）→ 抽面（P3）→ 底板上移（P4）→ 骑马抽（P5）。
-    这里拒的是「字段收了、几何没做」的产物；组合物理上不成立的情况在
-    `drawer_variants.admit_drawer_variant` 就拒了。
+    后缝是**抽屉背板外表面到柜背**的距离，三节轨必须 > 0、托底轨必须 > 10
+    （托底轨后部固定件要让位）。盒深取档后实际后缝只会更大，不会更小。
     """
     if spec.drawer_count <= 0:
-        if _drawer_variant_given(spec):
-            raise ValueError("drawer variant fields require drawer_count > 0")
+        if spec.drawer_runner != DEFAULT_RUNNER:
+            raise ValueError("drawer_runner requires drawer_count > 0")
         return
-    if not drawer_is_materialized(spec.drawer_runner, spec.drawer_face):
+    label = runner_label(spec.drawer_runner)
+    limit = min_rear_clearance(spec.drawer_runner)
+    if not spec.drawer_back_clearance > limit:
         raise ValueError(
-            "drawer variant is not materialized yet: runner="
-            f"{spec.drawer_runner}, face={spec.drawer_face}"
+            f"{label}：抽屉背板外表面到柜背必须大于 {limit:g}mm"
+            f"（现在是 {spec.drawer_back_clearance:g}mm）"
         )
-    if (
-        spec.drawer_top_clearance
-        or spec.drawer_bottom_clearance
-        or spec.drawer_bottom_raise
-    ):
-        raise ValueError(
-            "drawer clearances and bottom_raise are admitted but not materialized yet"
-        )
-
-
-def _drawer_variant_given(spec: FurnitureSpec) -> bool:
-    """写没写出一个「不等于缺省」的抽屉变体。"""
-    return bool(
-        spec.drawer_runner != DEFAULT_RUNNER
-        or spec.drawer_face != DEFAULT_FACE
-        or spec.drawer_top_clearance
-        or spec.drawer_bottom_clearance
-        or spec.drawer_bottom_raise
-    )
