@@ -14,12 +14,36 @@ const CEL_RAMP = (() => {
   return texture;
 })();
 
+function applyDryBrushRim(material) {
+  material.customProgramCacheKey = () => "cel-dry-brush";
+  material.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "vec3 outgoingLight = reflectedLight.directDiffuse + reflectedLight.indirectDiffuse + totalEmissiveRadiance;",
+      `
+      vec3 outgoingLight = reflectedLight.directDiffuse + reflectedLight.indirectDiffuse + totalEmissiveRadiance;
+      // Studio dry-brush rim highlight (手办干扫高光与边缘微光)
+      float rimTerm = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.2);
+      float topBias = clamp(normal.y * 0.35 + 0.65, 0.45, 1.0);
+      outgoingLight += vec3(0.98, 0.96, 0.92) * (rimTerm * 0.32 * topBias);
+      `
+    );
+  };
+  const origClone = material.clone;
+  material.clone = function () {
+    const cloned = origClone.call(this);
+    applyDryBrushRim(cloned);
+    return cloned;
+  };
+  return material;
+}
+
 export function celMaterial(color, extra) {
-  return new THREE.MeshToonMaterial(Object.assign({
+  const mat = new THREE.MeshToonMaterial(Object.assign({
     color,
     gradientMap: CEL_RAMP,
     side: THREE.DoubleSide,
   }, extra));
+  return applyDryBrushRim(mat);
 }
 
 function makeBoard(width, height, draw) {

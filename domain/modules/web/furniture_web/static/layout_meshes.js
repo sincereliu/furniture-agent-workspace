@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { roomToThree } from "./layout_frame.js";
 import { openingSolids, wallSolids } from "./wall_solid.js";
+import { wallSurfacePositions } from "./wall_surface.js";
 import { chairParts } from "./chair_solid.js";
 import { coffeeTableParts } from "./coffee_table_solid.js";
 import { deskParts } from "./desk_solid.js";
@@ -39,16 +40,25 @@ export function prismGeometry(footprint, z0, z1) {
   const push = (a, b, c) => positions.push(...a, ...b, ...c);
   for (let i = 0; i < n; i += 1) {
     const j = (i + 1) % n;
-    push(bottom[i], bottom[j], top[j]);
-    push(bottom[i], top[j], top[i]);
+    push(bottom[i], top[j], bottom[j]);
+    push(bottom[i], top[i], top[j]);
   }
   for (let i = 1; i < n - 1; i += 1) {
-    push(top[0], top[i], top[i + 1]);
-    push(bottom[0], bottom[i + 1], bottom[i]);
+    push(top[0], top[i + 1], top[i]);
+    push(bottom[0], bottom[i], bottom[i + 1]);
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
   geometry.computeVertexNormals();
+  geometry.userData = { footprint, z0, z1 };
+  return geometry;
+}
+
+export function wallGeometry(boxes, padding = 0) {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(wallSurfacePositions(boxes, padding), 3));
+  geometry.computeVertexNormals();
+  geometry.userData.wallBoxes = boxes;
   return geometry;
 }
 
@@ -300,8 +310,11 @@ export function buildRoomStage(content, width, depth, height, openings, obstacle
     const material = wallMaterial.clone();
     const group = new THREE.Group();
     const inks = [];
-    for (const box of solid.boxes) {
-      const mesh = markRoom(addRoomBox(group, box, material));
+    if (solid.boxes.length) {
+      const mesh = markRoom(new THREE.Mesh(wallGeometry(solid.boxes), material));
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      group.add(mesh);
       inks.push(addInk(mesh, 0x4a433b, 12));
     }
     group.userData.material = material;
