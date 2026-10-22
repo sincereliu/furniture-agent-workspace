@@ -167,7 +167,7 @@ export function addSky() {
 }
 
 /** 正方形厚底座。采用干净明亮的工作室建筑模型台面，突出户型本身。 */
-export function addDiorama(parent, width, depth, addInk) {
+export function addDiorama(parent, width, depth, addStageInk) {
   const side = Math.max(width, depth) * BASE_SCALE;
   const thick = Math.min(260, Math.max(160, side * 0.04));
   const pavement = pavementTexture();
@@ -185,5 +185,5 @@ export function addDiorama(parent, width, depth, addInk) {
   plinth.castShadow = true;
   plinth.layers.enable(1);
   parent.add(plinth);
-  addInk(plinth, 0x3d352e, 16);
+  addStageInk(plinth, 0x3d352e, 16);
 }

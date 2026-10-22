@@ -1,16 +1,8 @@
 import * as THREE from "three";
 import { contactMaskMaterial, createWallContactUpdater } from "./wall_contact.js";
+import { OUTLINE_STYLE, furnitureInkRadius } from "./outline_style.js";
 
-const OUTLINE_RADIUS_PX = 3;
-
-// 按整件家具的投影尺寸收放线宽，避免远景小家具被固定粗线吞掉。
-function projectedInkRadius(bounds, camera, cssHeight) {
-  const center = bounds.getCenter(new THREE.Vector3()).applyMatrix4(camera.matrixWorldInverse);
-  const diameter = bounds.getSize(new THREE.Vector3()).length();
-  const depth = camera.isPerspectiveCamera ? Math.max(camera.near, -center.z) : 1;
-  const pixels = diameter * Math.abs(camera.projectionMatrix.elements[5]) * cssHeight / (2 * depth);
-  return THREE.MathUtils.clamp(0.8 + pixels * 0.006, 0.85, 2.4);
-}
+const OUTLINE_RADIUS_PX = OUTLINE_STYLE.sampleRadiusPx;
 
 // 将同一件家具的所有部件投成整体蒙版，只在整体外侧扩出粗轮廓。
 // 墙和其他实体保留遮挡，半透明墙按实际透明度衰减蒙版。
@@ -24,7 +16,12 @@ export function createCartoonOutline(renderer) {
   const idScene = new THREE.Scene();
   const proxies = new Map();
   const items = new Map();
-  const prepare = createWallContactUpdater();
+  const updateContacts = createWallContactUpdater();
+  let contacts = null;
+  const prepare = (roots, camera) => {
+    camera.updateMatrixWorld(true);
+    contacts = updateContacts(roots, camera);
+  };
   const blocker = new THREE.MeshBasicMaterial({
     color: 0, opacity: 0, side: THREE.DoubleSide, blending: THREE.NoBlending,
   });
@@ -90,10 +87,10 @@ export function createCartoonOutline(renderer) {
             }
             // 整圈保留基础外框，仅在背光侧小幅加重，不把迎光侧削成内部细线。
             vec2 outward = -vec2(float(x), float(y)) / sqrt(d);
-            float weight = 1.12 - 0.12 * dot(outward, vec2(-0.6, 0.8));
+            float weight = float(${OUTLINE_STYLE.weightBase}) - float(${OUTLINE_STYLE.weightVariation}) * dot(outward, vec2(${OUTLINE_STYLE.lightDirection.join(", ")}));
             float radius = sampleId.a * ${OUTLINE_RADIUS_PX}.0 * weight;
             if (inside) radius *= 0.5;
-            float edge = 1.0 - smoothstep(radius - 0.5, radius + 0.5, sqrt(d));
+            float edge = 1.0 - smoothstep(radius - float(${OUTLINE_STYLE.edgeSoftnessPx}), radius + float(${OUTLINE_STYLE.edgeSoftnessPx}), sqrt(d));
             vec4 sampleMask = texture2D(uMask, sampleUv);
             sampleMask *= edge;
             if (sampleMask.a > neighbor.a) {
@@ -122,9 +119,10 @@ export function createCartoonOutline(renderer) {
   const clearColor = new THREE.Color();
 
   const draw = (roots, camera) => {
-    camera.updateMatrixWorld(true);
+    if (!contacts) throw new Error("Call prepare(roots, camera) before each outline draw");
+    const preparedContacts = contacts;
+    contacts = null;
     renderer.getSize(size);
-    const contacts = prepare(roots, camera);
     const inks = new Set();
     for (const root of roots) root.traverse(node => {
       if (node.userData.ink) inks.add(node.userData.ink);
@@ -180,7 +178,7 @@ export function createCartoonOutline(renderer) {
         if (!proxy.inkMaterial) proxy.inkMaterial = contactMaskMaterial();
         maskMaterial = proxy.inkMaterial;
         maskMaterial.color.setHex(style.color);
-        const contact = contacts.get(source);
+        const contact = preparedContacts.get(source);
         const uniforms = maskMaterial.userData.contactUniforms;
         uniforms.uContactBoxes.value = contact?.texture || null;
         uniforms.uContactCount.value = contact?.count || 0;
@@ -201,7 +199,7 @@ export function createCartoonOutline(renderer) {
     });
     for (const [itemId, bounds] of itemBounds) {
       // 身份蒙版的 RGB 保留 ID，alpha 携带同一件家具共享的线宽。
-      items.get(itemId).id.opacity = projectedInkRadius(bounds, camera, size.y) / OUTLINE_RADIUS_PX;
+      items.get(itemId).id.opacity = furnitureInkRadius(bounds, camera, size.y) / OUTLINE_RADIUS_PX;
     }
     for (const [source, proxy] of proxies) if (!activeSources.has(source)) {
       maskScene.remove(proxy.mask);
@@ -240,6 +238,5 @@ export function createCartoonOutline(renderer) {
       renderer.autoClear = previousAutoClear;
     }
   };
-  draw.prepare = prepare;
-  return draw;
+  return { prepare, draw };
 }

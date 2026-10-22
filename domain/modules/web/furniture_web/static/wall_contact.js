@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { roomToThree } from "./layout_frame.js";
+import { OUTLINE_STYLE } from "./outline_style.js";
 
 const CONTACT_MM = 0.5;
 
@@ -51,7 +52,7 @@ export function createWallContactUpdater() {
       let state = states.get(source);
       if (!state || state.geometry !== source.geometry || state.ink !== ink) {
         state?.texture.dispose();
-        const edges = new THREE.EdgesGeometry(source.geometry, 25);
+        const edges = new THREE.EdgesGeometry(source.geometry, OUTLINE_STYLE.edgeAngleDeg);
         state = {
           geometry: source.geometry, ink,
           positions: edges.getAttribute("position").clone(),

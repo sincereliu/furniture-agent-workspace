@@ -6,20 +6,17 @@ registerHooks({ resolve(specifier, context, next) {
 } });
 const { createWallContactUpdater } = await import("./wall_contact.js");
 const { wallGeometry, addDesk, addChair, addSofa, addCoffeeTable, ROOM_LAYER } = await import("./layout_meshes.js");
+const { addFurnitureInk } = await import("./layout_ink.js");
 const root = new THREE.Group(), camera = new THREE.PerspectiveCamera();
 camera.layers.enable(ROOM_LAYER);
 const wall = new THREE.Mesh(wallGeometry([[-1000, -100, 0, 3000, 0, 2000]]), new THREE.MeshBasicMaterial());
 root.add(wall);
-const addInk = mesh => {
-  const ink = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, 25), new THREE.LineBasicMaterial());
-  mesh.add(ink); mesh.userData.ink = ink;
-};
 for (const add of [addDesk, addChair, addSofa, addCoffeeTable]) {
   const group = new THREE.Group(), parts = [];
   root.add(group);
   add(group, parts, { id: "sample", width: 1200, depth: 600, height: 750, z_start: 0,
     footprint: [[0, 0], [1200, 0], [1200, 600], [0, 600]],
-  }, false, false, addInk);
+  }, false, false, addFurnitureInk);
   const baseZ = -new THREE.Box3().setFromObject(group).min.z;
   group.position.z = baseZ;
   const update = createWallContactUpdater();
@@ -66,8 +63,7 @@ for (const add of [addDesk, addChair, addSofa, addCoffeeTable]) {
 // 一个接触棱跨过窗洞时，只保留洞口范围的线，不整条隐藏。
 const spanning = new THREE.Mesh(new THREE.BoxGeometry(1000, 200, 500), new THREE.MeshBasicMaterial());
 spanning.position.set(500, 600, 250);
-spanning.userData.cartoonInk = { color: 0x28231d };
-addInk(spanning); root.add(spanning);
+addFurnitureInk(spanning, { itemId: "spanning", color: 0x28231d }); root.add(spanning);
 wall.geometry = wallGeometry([[-1000, -100, 0, 400, 0, 2000], [600, -100, 0, 3000, 0, 2000]]);
 createWallContactUpdater()([root], camera);
 const lines = spanning.userData.ink.geometry.getAttribute("position");

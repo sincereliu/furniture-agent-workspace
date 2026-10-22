@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { registerHooks } from "node:module";
 import * as THREE from "../../../../../vendor/three/0.186.0/three.module.js";
 import { cameraThreePosition, roomToThree } from "./layout_frame.js";
 import { INK_VIEW_BIAS_MM, biasInkView, inkViewBiasGlsl, logWindowDepth } from "./ink_depth.js";
+registerHooks({ resolve(specifier, context, next) {
+  return next(specifier === "three" ? new URL("../../../../../vendor/three/0.186.0/three.module.js", import.meta.url).href : specifier, context);
+} });
+const { addFurnitureInk, addStageInk } = await import("./layout_ink.js");
 
 const NEAR = 10;
 const FAR = 500000;
@@ -16,7 +21,14 @@ assert.equal(inkViewBiasGlsl(), [
   "gl_Position = projectionMatrix * mvPosition;",
 ].join("\n\t"));
 assert.match(sceneJs, /logarithmicDepthBuffer:\s*true/);
-assert.match(sceneJs, /inkViewBiasGlsl\(\)/);
+for (const add of [mesh => addFurnitureInk(mesh, { itemId: "depth", color: 0x28231d }), addStageInk]) {
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(100, 100));
+  const ink = add(mesh);
+  const shader = { vertexShader: "#include <project_vertex>" };
+  ink.material.onBeforeCompile(shader);
+  assert.match(shader.vertexShader, /mvPosition\.z \+= 1\.0;/, "真实细线材质接入视线偏移");
+  assert.equal(ink.material.depthTest, true);
+}
 
 function viewPoint(camera, roomPoint) {
   camera.updateMatrixWorld(true);

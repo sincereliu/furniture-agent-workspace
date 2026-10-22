@@ -17,6 +17,16 @@ domain/modules/web/
 - [页面边界](references/web-preview.md)
 - [三维预览视觉规范与参考图](references/visual-style.md)：修改三维展示前必读，保持已确认的卡通手办风。
 
+修改描边后，在仓库根目录运行统一检查（使用现有 Node、`.venv` 中的 Playwright 和已安装的 Chromium）：
+
+```powershell
+.\.venv\Scripts\python.exe domain/modules/web/scripts/check_outline.py
+```
+
+命令运行六组 Node 检查和真实 WebGL 像素检查，并在 `temp/outline-checks/` 保存 `results.json` 和 11 张固定场景截图。可用 `--output temp/outline-before` / `--output temp/outline-after` 分别保存改动前后结果供比较。任何脚本、浏览器断言、页面运行错误或依赖缺失都会返回非零退出码；不会把未运行的浏览器检查当作通过。它自行启动并清理临时本机静态服务，不读写项目，不要求已有预览服务。真实 HTTP/Chromium 检查应在沙箱外执行。
+
+职责与检查范围见 [视觉规范](references/visual-style.md)。截图仍须人工核对卡通手办风，像素断言不能替代审美判断。
+
 页面行为仍由现有预览测试覆盖：
 
 ```powershell

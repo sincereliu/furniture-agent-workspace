@@ -10,7 +10,8 @@
 <script type="module">
 import * as THREE from "three";
 import { createCartoonOutline } from "./cartoon_outline.js";
-import { addInk, mountLayout } from "./layout_scene.js";
+import { mountLayout } from "./layout_scene.js";
+import { addFurnitureInk } from "./layout_ink.js";
 import { addDesk, addChair, addSofa, wallGeometry, ROOM_LAYER } from "./layout_meshes.js";
 const renderer = new THREE.WebGLRenderer({ canvas: document.querySelector("canvas"), antialias: true, logarithmicDepthBuffer: true, preserveDrawingBuffer: true });
 renderer.setClearColor(0xf2efe9, 1);
@@ -36,16 +37,22 @@ function size(width, height, ratio) {
   camera.left = -width / 2; camera.right = width / 2; camera.top = height / 2; camera.bottom = -height / 2;
   camera.updateProjectionMatrix();
 }
+let framePixels = null;
 function render(effect = true) {
   outline.prepare([roots], camera);
   renderer.autoClear = true; renderer.render(scene, camera);
-  if (effect) outline([roots], camera);
+  if (effect) outline.draw([roots], camera);
+  framePixels = null;
 }
 function pixel(x, y) {
-  const ratio = renderer.getPixelRatio(), bytes = new Uint8Array(4), gl = renderer.getContext();
+  const ratio = renderer.getPixelRatio(), gl = renderer.getContext();
   if (x < 0 || y < 0 || x >= gl.drawingBufferWidth / ratio || y >= gl.drawingBufferHeight / ratio) throw new Error(`Pixel outside canvas: ${x}, ${y}`);
-  gl.readPixels(Math.floor((x + 0.5) * ratio), gl.drawingBufferHeight - 1 - Math.floor((y + 0.5) * ratio), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
-  return [...bytes].slice(0, 3);
+  if (!framePixels) {
+    framePixels = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4);
+    gl.readPixels(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight, gl.RGBA, gl.UNSIGNED_BYTE, framePixels);
+  }
+  const offset = ((gl.drawingBufferHeight - 1 - Math.floor((y + 0.5) * ratio)) * gl.drawingBufferWidth + Math.floor((x + 0.5) * ratio)) * 4;
+  return [...framePixels.slice(offset, offset + 3)];
 }
 const dark = rgb => Math.max(...rgb) < 85;
 const equal = (a, b) => a.every((value, i) => Math.abs(value - b[i]) <= 2);
@@ -79,7 +86,7 @@ function contactChecks(check) {
     roots.add(group);
     add(group, meshes, { id: name, width, depth, height, z_start: 0,
       footprint: [[0, 0], [width, 0], [width, depth], [0, depth]],
-    }, false, false, addInk);
+    }, false, false, addFurnitureInk);
     const bounds = new THREE.Box3().setFromObject(group);
     group.position.z = -bounds.min.z;
     // 椅子的真实后立柱缩在足迹里；选其柱顶的后棱，其余选桌面/靠背顶后棱。
@@ -127,7 +134,7 @@ function contactChecks(check) {
   for (const [add, x, width, depth, height] of [[addDesk, 0, 1000, 600, 750], [addChair, 1200, 600, 600, 850], [addSofa, 2050, 1600, 900, 850]]) {
     add(roots, [], { id: `preview-${x}`, width, depth, height, z_start: 0,
       footprint: [[x, 0], [x + width, 0], [x + width, depth], [x, depth]],
-    }, false, false, addInk);
+    }, false, false, addFurnitureInk);
   }
   camera.left = -2300; camera.right = 2300; camera.top = 1380; camera.bottom = -1380;
   camera.position.set(4500, 2600, 4000); camera.lookAt(1800, 450, 200);
@@ -139,7 +146,7 @@ function detachedSofaChecks(check) {
   const group = new THREE.Group(); roots.add(group);
   addSofa(group, [], {id:"detached-sofa", width:1000, depth:850, height:850, z_start:0,
     footprint:[[0,80],[1000,80],[1000,930],[0,930]],
-  }, false, false, addInk);
+  }, false, false, addFurnitureInk);
   camera = new THREE.OrthographicCamera(-1000,1000,750,-750,1,20000);
   camera.layers.enable(ROOM_LAYER);
   for (const ratio of [1,2]) for (const side of [-1,1]) {

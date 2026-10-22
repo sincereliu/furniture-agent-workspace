@@ -10,7 +10,7 @@ registerHooks({
   },
 });
 
-const { addInk } = await import("./layout_scene.js");
+const { addFurnitureInk, addStageInk } = await import("./layout_ink.js");
 const { createCartoonOutline } = await import("./cartoon_outline.js");
 const { addSofa, addChair, addCoffeeTable, addDesk, ROOM_LAYER } = await import("./layout_meshes.js");
 const maskFrames = [];
@@ -55,7 +55,7 @@ for (const [add, width, depth, height] of samples) {
       id: "shaped", width, depth, height, z_start: 0,
       footprint: [[3000, 0], [3000, width], [3000 - depth, width], [3000 - depth, 0]],
     };
-    assert.equal(add(group, pickables, item, selected, blocked, addInk), true);
+    assert.equal(add(group, pickables, item, selected, blocked, addFurnitureInk), true);
     assert.ok(pickables.length > 0);
     group.updateMatrixWorld(true);
     for (const mesh of pickables) {
@@ -93,7 +93,8 @@ for (const [add, width, depth, height] of samples) {
     }
     obstacles.updateMatrixWorld(true);
     maskFrames.length = 0;
-    drawOutline([group, obstacles], camera);
+    drawOutline.prepare([group, obstacles], camera);
+    drawOutline.draw([group, obstacles], camera);
     assert.equal(maskFrames.length, 3, "绘制颜色、家具身份蒙版，再合成粗轮廓");
     const [mask, ids, composite] = maskFrames;
     assert.equal(mask.objects.length, pickables.length + 2, "部件进入同一蒙版；边线与全透明墙不进入蒙版");
@@ -127,12 +128,14 @@ for (const [add, width, depth, height] of samples) {
 }
 
 const plainBox = new THREE.Mesh(new THREE.BoxGeometry(400, 500, 600));
-assert.ok(addInk(plainBox).isMesh, "普通盒体保留原来的膨胀轮廓");
+assert.ok(addStageInk(plainBox).isMesh, "场景盒体保留原来的膨胀轮廓");
 const plane = new THREE.Mesh(new THREE.PlaneGeometry(400, 500));
 plane.layers.set(ROOM_LAYER);
-assert.ok(addInk(plane).isLineSegments);
+assert.ok(addStageInk(plane).isLineSegments);
 assert.equal(plane.userData.ink.layers.mask, plane.layers.mask);
 maskFrames.length = 0;
-drawOutline([new THREE.Group()], camera);
+const empty = [new THREE.Group()];
+drawOutline.prepare(empty, camera);
+drawOutline.draw(empty, camera);
 assert.equal(maskFrames.length, 0, "没有卡通家具时不执行额外绘制");
 console.log("Cartoon outlines use a whole-furniture mask, light internal seams, wall occlusion and selection colors.");

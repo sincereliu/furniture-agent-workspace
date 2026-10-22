@@ -22,8 +22,8 @@
 
 | 项目 | 保持的效果 | 当前实现 |
 | --- | --- | --- |
-| 整体外框 | 连续、深色、有轻重变化，包住每件家具整体 | `static/cartoon_outline.js` 使用颜色和家具身份蒙版，按整件包围盒的投影尺寸计算基础线宽（0.85–2.4 CSS 像素），再按轮廓朝向乘以 1.0–1.24 的轻重系数，以半像素过渡柔化边缘；各方向均保留基础外框，不能通过削弱半圈外框制造轻重差异。身份蒙版 alpha 携带共享线宽，DPR 不改变 CSS 线宽。不同家具交界各描半宽，避免合并或叠成双倍粗线 |
-| 内部结构线 | 细、低对比，不抢外轮廓 | `static/layout_scene.js` 中的真实棱边线，透明度 0.45；沿视线拉近 1 mm 防止贴面闪烁 |
+| 整体外框 | 连续、深色、有轻重变化，包住每件家具整体 | `static/cartoon_outline.js` 使用颜色和家具身份蒙版，按 `static/outline_style.js` 中的统一规则，以整件包围盒的投影尺寸计算基础线宽（0.85–2.4 CSS 像素），再按轮廓朝向乘以 1.0–1.24 的轻重系数，以半像素过渡柔化边缘；各方向均保留基础外框，不能通过削弱半圈外框制造轻重差异。身份蒙版 alpha 携带共享线宽，DPR 不改变 CSS 线宽。不同家具交界各描半宽，避免合并或叠成双倍粗线 |
+| 内部结构线 | 细、低对比，不抢外轮廓 | `static/layout_ink.js` 创建真实棱边线，透明度由 `outline_style.js` 统一设为 0.45；沿视线拉近 1 mm 防止贴面闪烁 |
 | 部件交接 | 没有错位粗黑框、穿插黑块或悬空黑线 | 同件家具共用身份，不同件保留各自边界，不逐块套膨胀描边壳 |
 | 遮挡 | 墙及前方实体遮挡家具；透明墙对应衰减轮廓 | 颜色蒙版保留墙体透明度；身份蒙版保留墙后家具身份，避免给家具内部涂黑 |
 | 贴墙接触 | 真正接触墙的粗轮廓和细棱边消失，离墙后恢复；其余外框保持粗而清晰 | `static/wall_contact.js` 按部件棱边与挖除门窗后的实体墙块求交（0.5 mm 接触公差），裁掉接触细线与颜色蒙版的屏幕扩边范围；身份蒙版不裁空，避免产生内部黑框。完全淡出的墙不裁家具轮廓 |
@@ -41,11 +41,10 @@
 - 保持既有几何、点选和遮挡行为。相关检查：
 
 ```powershell
-node domain/modules/web/furniture_web/static/shaped_item_ink_check.mjs
-node domain/modules/web/furniture_web/static/cartoon_outline_check.mjs
-node domain/modules/web/furniture_web/static/ink_depth_check.mjs
-node domain/modules/web/furniture_web/static/wall_contact_check.mjs
+.\.venv\Scripts\python.exe domain/modules/web/scripts/check_outline.py
 ```
+
+该命令自动运行 `outline_style_check.mjs`、`shaped_item_ink_check.mjs`、`cartoon_outline_check.mjs`、`ink_depth_check.mjs`、`wall_contact_check.mjs`、`wall_surface_check.mjs` 及真实浏览器像素检查。它还在 `temp/outline-checks/` 输出 JSON 结果和 11 张固定截图：离墙沙发，以及两种画布宽度下房间的常规、远景、反向、选中和碰撞状态。改动前后可用 `--output` 保存到不同目录，逐张核对；不自动重写已确认的参考图。任一检查失败、页面运行错误或检查未执行都会使命令失败。需要沙箱外的真实 HTTP/Chromium 环境。
 
 在已经启动的预览服务打开 `/layout-view/cartoon_outline_browser_check.html`，点击 **Run WebGL checks**。该页实际读取 WebGL 像素，检查同件接缝、同色家具接触、前后遮挡、选中颜色、透明/不透明墙、迎光/背光线宽差异和缩远收细，以及 DPR 1/2 和画布尺寸变化；另用真实椅子、书桌、沙发检查贴墙消线与离墙恢复，覆盖左右视角、透视相机和选中/碰撞颜色；结果应全部通过。页面下方通过真实 `mountLayout` 入口展示书柜、书桌、椅子和沙发，提供缩远、换视角、书柜选中与碰撞状态供目视核对。单元检查另覆盖正交/透视镜头、DPR 与画布尺寸对线宽的影响，以及真实间隙、退让部件、门窗洞口、旋转、墙体淡出、资源清理、代理复用和三个绘制阶段抛错后的状态恢复。
 

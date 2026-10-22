@@ -28,7 +28,11 @@ function harness() {
       frames.push({ meshes, target: this.target, autoClear: this.autoClear });
     },
   };
-  return { renderer, frames, draw: createCartoonOutline(renderer) };
+  const outline = createCartoonOutline(renderer);
+  return { renderer, frames, outline, draw(roots, camera) {
+    outline.prepare(roots, camera);
+    outline.draw(roots, camera);
+  } };
 }
 function part(itemId, x) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(100, 100, 100), new THREE.MeshBasicMaterial());
@@ -41,8 +45,10 @@ const a1 = part("a", -100), b = part("b", 100), a2 = part("a", 0);
 root.add(a1, b, a2); // 故意交错排列，身份不能依赖同件部件是否连续。
 root.updateMatrixWorld(true);
 const camera = new THREE.PerspectiveCamera();
-const { renderer, frames, draw } = harness();
+const { renderer, frames, draw, outline } = harness();
+assert.throws(() => outline.draw([root], camera), /prepare/);
 draw([root], camera);
+assert.throws(() => outline.draw([root], camera), /prepare/, "每帧明确准备一次，不能沿用上一帧的接触状态");
 const initialMasks = frames[0].meshes.slice(), initialIds = frames[1].meshes.slice();
 const aIds = initialIds.filter(mesh => mesh.userData.itemId === "a");
 const bId = initialIds.find(mesh => mesh.userData.itemId === "b");

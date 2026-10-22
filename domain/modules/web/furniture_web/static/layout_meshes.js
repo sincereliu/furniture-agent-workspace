@@ -7,7 +7,8 @@ import { chairParts } from "./chair_solid.js";
 import { coffeeTableParts } from "./coffee_table_solid.js";
 import { deskParts } from "./desk_solid.js";
 import { sofaFrame, sofaLocalBox, sofaMount, sofaParts } from "./sofa_solid.js";
-import { INK, celMaterial, furnitureColor, woodTexture } from "./layout_diorama.js";
+import { celMaterial, furnitureColor, woodTexture } from "./layout_diorama.js";
+import { furnitureInkColor } from "./outline_style.js";
 
 export const ROOM_LAYER = 1;
 const DIAL_COLOR = 0xf5c400;
@@ -118,7 +119,7 @@ export function addMesh(parent, mesh, pickables) {
   return mesh;
 }
 
-function addShapedItem(parent, pickables, item, parts, materials, selected, addInk, blocked) {
+function addShapedItem(parent, pickables, item, parts, materials, selected, addFurnitureInk, blocked) {
   const frame = sofaFrame(item.footprint, item.z_start);
   if (!parts || !frame) return false;
   const mount = sofaMount(frame);
@@ -130,8 +131,7 @@ function addShapedItem(parent, pickables, item, parts, materials, selected, addI
     new THREE.Vector3(...mount.z),
   ));
   parent.add(group);
-  const ink = blocked ? 0xd93838 : (selected ? 0xf59e0b : INK);
-  const thick = (selected || blocked) ? 22 : 14;
+  const ink = furnitureInkColor(selected, blocked);
   for (const part of parts) {
     const local = sofaLocalBox(part.box);
     const mesh = markRoom(new THREE.Mesh(
@@ -139,18 +139,17 @@ function addShapedItem(parent, pickables, item, parts, materials, selected, addI
       materials[part.role],
     ));
     mesh.position.set(...local.center);
-    mesh.userData = { kind: "item", itemId: item.id, cartoonInk: { color: ink } };
+    mesh.userData.kind = "item";
     mesh.castShadow = true;
     mesh.receiveShadow = true;
-    // 部件贴墙、相交时，膨胀壳会被墙裁掉或从相邻部件里露出黑边。
-    addInk(mesh, ink, thick, { edges: true });
+    addFurnitureInk(mesh, { itemId: item.id, color: ink });
     group.add(mesh);
     pickables.push(mesh);
   }
   return true;
 }
 
-export function addSofa(parent, pickables, item, selected, blocked, addInk) {
+export function addSofa(parent, pickables, item, selected, blocked, addFurnitureInk) {
   const parts = sofaParts(item.width, item.depth, item.height);
   const base = furnitureColor(item, selected, blocked);
   const fabric = celMaterial(base);
@@ -162,10 +161,10 @@ export function addSofa(parent, pickables, item, selected, blocked, addInk) {
         cushion: celMaterial(0xd4c9bb),
         wood: celMaterial(0x3a312b),
       };
-  return addShapedItem(parent, pickables, item, parts, materials, selected, addInk, blocked);
+  return addShapedItem(parent, pickables, item, parts, materials, selected, addFurnitureInk, blocked);
 }
 
-export function addCoffeeTable(parent, pickables, item, selected, blocked, addInk) {
+export function addCoffeeTable(parent, pickables, item, selected, blocked, addFurnitureInk) {
   const parts = coffeeTableParts(item.width, item.depth, item.height);
   const base = furnitureColor(item, selected, blocked);
   const top = celMaterial(base);
@@ -176,10 +175,10 @@ export function addCoffeeTable(parent, pickables, item, selected, blocked, addIn
         leg: celMaterial(0x3a322c),
         shelf: celMaterial(0xc9bfb0),
       };
-  return addShapedItem(parent, pickables, item, parts, materials, selected, addInk, blocked);
+  return addShapedItem(parent, pickables, item, parts, materials, selected, addFurnitureInk, blocked);
 }
 
-export function addChair(parent, pickables, item, selected, blocked, addInk) {
+export function addChair(parent, pickables, item, selected, blocked, addFurnitureInk) {
   const parts = chairParts(item.width, item.depth, item.height);
   const base = furnitureColor(item, selected, blocked);
   const cushion = celMaterial(base);
@@ -190,10 +189,10 @@ export function addChair(parent, pickables, item, selected, blocked, addInk) {
         back: cushion,
         leg: celMaterial(0x3a322c),
       };
-  return addShapedItem(parent, pickables, item, parts, materials, selected, addInk, blocked);
+  return addShapedItem(parent, pickables, item, parts, materials, selected, addFurnitureInk, blocked);
 }
 
-export function addDesk(parent, pickables, item, selected, blocked, addInk) {
+export function addDesk(parent, pickables, item, selected, blocked, addFurnitureInk) {
   const parts = deskParts(item.width, item.depth, item.height);
   const base = furnitureColor(item, selected, blocked);
   const top = celMaterial(base);
@@ -204,7 +203,7 @@ export function addDesk(parent, pickables, item, selected, blocked, addInk) {
         leg: celMaterial(0x3a322c),
         apron: celMaterial(0xc9bfb0),
       };
-  return addShapedItem(parent, pickables, item, parts, materials, selected, addInk, blocked);
+  return addShapedItem(parent, pickables, item, parts, materials, selected, addFurnitureInk, blocked);
 }
 
 export function footprintCenter(footprint) {
@@ -283,7 +282,7 @@ export function createRotateDialMeshes(item, z) {
   return { arrow, grab };
 }
 
-export function buildRoomStage(content, width, depth, height, openings, obstacles, addInk) {
+export function buildRoomStage(content, width, depth, height, openings, obstacles, addStageInk) {
   const boards = woodTexture();
   boards.repeat.set(Math.max(width / 1200, 1), Math.max(depth / 1200, 1));
   const floorMesh = markRoom(new THREE.Mesh(
@@ -294,7 +293,7 @@ export function buildRoomStage(content, width, depth, height, openings, obstacle
   floorMesh.position.set(...roomToThree(width / 2, depth / 2, 0));
   floorMesh.receiveShadow = true;
   content.add(floorMesh);
-  addInk(floorMesh, 0xb8b0a4);
+  addStageInk(floorMesh, 0xb8b0a4);
 
   const step = [200, 250, 500, 1000, 2000, 5000].find((value) => Math.max(width, depth) / value <= 14) || 5000;
   const grid = [];
@@ -317,7 +316,7 @@ export function buildRoomStage(content, width, depth, height, openings, obstacle
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       group.add(mesh);
-      inks.push(addInk(mesh, 0x4a433b, 12));
+      inks.push(addStageInk(mesh, 0x4a433b, 12));
     }
     group.userData.material = material;
     group.userData.inks = inks;
@@ -357,7 +356,7 @@ export function buildRoomStage(content, width, depth, height, openings, obstacle
     ));
     obstacleMesh.castShadow = true;
     obstacleMesh.receiveShadow = true;
-    addInk(obstacleMesh, 0x6a3030, 16);
+    addStageInk(obstacleMesh, 0x6a3030, 16);
     content.add(obstacleMesh);
   }
 
