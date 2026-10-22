@@ -44,6 +44,9 @@ const syncStore={
   events:null,
   leaseQuery:"",
   roomIndex:0,
+  pendingWrites:0,
+  writeTail:Promise.resolve(),
+  deferredDocument:null,
 };
 const pullStore={now:1,from:1,end:1};
 const uiStore={
@@ -397,6 +400,7 @@ canvas.addEventListener("pointerdown",event=>{
   if(picked&&picked.kind==="height"&&pickedItem){
     view.setEnabled(false);
     drag={kind:"height",item:pickedItem,startScreen:[sx,sy],moved:false,
+      startPlacement:{...pickedItem.placement},
       startZ:pickedItem.placement.origin_z_mm||0};
     canvas.classList.add("moving");
     setStatus(`离地高度 ${Math.round(pickedItem.z_start)} mm`);
@@ -410,8 +414,9 @@ canvas.addEventListener("pointerdown",event=>{
     const origin=projector()([center[0],center[1],height]);
     const startAngle=Math.atan2(sy-origin.y,sx-origin.x)*180/Math.PI;
     drag={kind:"rotate",item:pickedItem,center,height,origin,startAngle,lastAngle:startAngle,
+      startPlacement:{...pickedItem.placement},
       accumulated:0,moved:false,startScreen:[sx,sy],
-      startRotation:pickedItem.placement.rotation_z_deg||0,startMode:pickedItem.placement.mode,
+      startRotation:pickedItem.placement.rotation_z_deg||0,
       sign:rotationSign(projector(),room.width_mm,center,height)};
     canvas.classList.add("moving");
     setStatus(`旋转 ${pickedItem.label}…`);
@@ -425,8 +430,9 @@ canvas.addEventListener("pointerdown",event=>{
     const placement=pickedItem.placement;
     state.selectedId=pickedItem.id;state.blocked=null;
     drag={kind:"move",item:pickedItem,startScreen:[sx,sy],moved:false,
+      startPlacement:{...pickedItem.placement},
       startOrigin:[placement.origin_x_mm||0,placement.origin_y_mm||0],
-      startZ:placement.origin_z_mm||0,startMode:placement.mode,startWall:placement.host_wall,
+      startZ:placement.origin_z_mm||0,
       horizontal:horizontalAxis(camera()),elevation:isElevation(),
       startFootprint:pickedItem.footprint.map(point=>[...point])};
     if(placement.mode==="wall"&&!drag.elevation){
@@ -515,12 +521,19 @@ canvas.addEventListener("pointermove",event=>{
 /* ---------- 5. 落盘保存与房间文档同步 ---------- */
 async function reload(){
   if(PROJECT_EDIT_URL){await refreshProjectDocument();return}
+  const epoch=syncStore.epoch;
   try{
     const response=await fetch(`/api/room-scene/${encodeURIComponent(SCENE_ID)}`);
     if(!response.ok)return;
     const next=await response.json();
-    scene.items=normalizeItems(next.items||[]);
+    if(epoch!==syncStore.epoch)return;
+    applySceneItems(next);
   }catch(error){}
+}
+function applySceneItems(payload){
+  if(sceneBusy()){syncStore.deferredDocument=payload;return}
+  syncStore.deferredDocument=null;
+  scene.items=normalizeItems(payload.items||[]);
 }
 function applyDocument(payload){
   if(payload.version!==undefined)layoutVersion=String(payload.version);
@@ -528,6 +541,8 @@ function applyDocument(payload){
   if(payload.working)applyWorking(payload);
   if(payload.decisions)applyDecisions(payload);
   if(!payload.rooms)return;
+  if(sceneBusy()){syncStore.deferredDocument=payload;return}
+  syncStore.deferredDocument=null;
   rooms=payload.rooms;
   const currentId=scene.room&&scene.room.id;
   let index=rooms.findIndex(entry=>entry.id===currentId);
@@ -574,10 +589,17 @@ async function persist(item,kind,sizes){
     if(kind!=="rotate")op.origin_z_mm=Math.round(placement.origin_z_mm||0);
   }
   const url=PROJECT_EDIT_URL||`/api/room-scene/${encodeURIComponent(SCENE_ID)}/edit`;
-  const headers={"Content-Type":"application/json"};
-  if(leaseStore.token)headers["X-Edit-Lease"]=leaseStore.token;
-  if(PROJECT_EDIT_URL)op.expected_version=layoutVersion;
+  // Capture the operation now, but write it after earlier saves acknowledge their version.
+  const previousWrite=syncStore.writeTail;
+  let finishWrite;
+  syncStore.writeTail=new Promise(resolve=>{finishWrite=resolve});
+  syncStore.pendingWrites+=1;
+  syncStore.epoch+=1;
+  await previousWrite;
   try{
+    const headers={"Content-Type":"application/json"};
+    if(leaseStore.token)headers["X-Edit-Lease"]=leaseStore.token;
+    if(PROJECT_EDIT_URL)op.expected_version=layoutVersion;
     const response=await fetch(url,{method:"POST",headers,body:JSON.stringify(op)});
     if(!response.ok){
       const detail=await response.json().catch(()=>({}));
@@ -585,6 +607,7 @@ async function persist(item,kind,sizes){
       return false;
     }
     const next=await response.json();
+    syncStore.epoch+=1;
     if(PROJECT_EDIT_URL){
       applyDocument(next);
       if(kind==="resize"){
@@ -599,13 +622,17 @@ async function persist(item,kind,sizes){
         : `已保存 ${item.label}（同一版，草稿中${working.ops?` · 已调整 ${working.ops} 次`:""}）`)+suffix);
       return true;
     }
-    scene.items=normalizeItems(next.items||[]);
+    applySceneItems(next);
     setStatus(`已保存 ${item.label}`);
     return true;
   }catch(error){
     setStatus("保存失败："+error,"error");
     await reload();
     return false;
+  }finally{
+    syncStore.pendingWrites-=1;
+    finishWrite();
+    flushLayoutNotice();
   }
 }
 async function reportWriteFailure(status,detail,item){
@@ -630,6 +657,13 @@ async function reportWriteFailure(status,detail,item){
   await reload();
 }
 
+function dragChanged(activeDrag){
+  const before=activeDrag.startPlacement,after=activeDrag.item.placement;
+  if(before.mode!==after.mode||(before.host_wall||null)!==(after.host_wall||null))return true;
+  if(["origin_x_mm","origin_y_mm","origin_z_mm"].some(key=>Math.round(before[key]||0)!==Math.round(after[key]||0)))return true;
+  return Math.round(normalizeAngle(before.rotation_z_deg||0)*10)!==Math.round(normalizeAngle(after.rotation_z_deg||0)*10);
+}
+
 canvas.addEventListener("pointerup",event=>{
   if(state.panning){
     state.panning=false;canvas.classList.remove("panning");
@@ -638,12 +672,7 @@ canvas.addEventListener("pointerup",event=>{
   }
   if(drag){
     const item=drag.item,moved=drag.moved,kind=drag.kind;
-    const unchanged=kind==="rotate"
-      ?(item.placement.rotation_z_deg===drag.startRotation&&item.placement.mode===drag.startMode)
-      :kind==="height"?Math.round(item.placement.origin_z_mm||0)===Math.round(drag.startZ)
-      :kind==="move"&&drag.startMode==="wall"&&item.placement.mode==="wall"
-        &&item.placement.host_wall===drag.startWall
-        &&Math.round(item.placement.origin_z_mm||0)===Math.round(drag.startZ);
+    const unchanged=!dragChanged(drag);
     drag=null;state.blocked=null;canvas.classList.remove("moving");
     view.setEnabled(true);
     canvas.releasePointerCapture(event.pointerId);
@@ -1224,7 +1253,7 @@ window.addEventListener("pagehide",()=>{
   }catch(error){}
 });
 function sceneBusy(){
-  return Boolean(drag||state.orbiting||state.panning);
+  return Boolean(drag||state.orbiting||state.panning||syncStore.pendingWrites);
 }
 function applyLayoutNotice(notice){
   if(!notice||typeof notice!=="object")return;
@@ -1238,7 +1267,13 @@ function applyLayoutNotice(notice){
   if(!sceneBusy())flushLayoutNotice();
 }
 function flushLayoutNotice(){
-  if(!syncStore.dirty||sceneBusy()||!LAYOUT_URL)return;
+  if(sceneBusy())return;
+  if(syncStore.deferredDocument){
+    const payload=syncStore.deferredDocument;
+    if(payload.rooms)applyDocument(payload);
+    else applySceneItems(payload);
+  }
+  if(!syncStore.dirty||!LAYOUT_URL)return;
   if(syncStore.fetchEpoch===syncStore.epoch)return;
   const epoch=syncStore.epoch;
   syncStore.fetchEpoch=epoch;

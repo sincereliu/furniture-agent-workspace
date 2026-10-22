@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { roomToThree } from "./layout_frame.js";
 import { openingSolids, wallSolids } from "./wall_solid.js";
 import { wallSurfacePositions } from "./wall_surface.js";
+import { createOpeningMarker } from "./opening_markers.js";
 import { chairParts } from "./chair_solid.js";
 import { coffeeTableParts } from "./coffee_table_solid.js";
 import { deskParts } from "./desk_solid.js";
@@ -319,6 +320,7 @@ export function buildRoomStage(content, width, depth, height, openings, obstacle
     }
     group.userData.material = material;
     group.userData.inks = inks;
+    group.userData.openings = [];
     group.userData.wallCenter = new THREE.Vector3(...roomToThree(...solid.center));
     group.userData.wallNormal = new THREE.Vector3(...roomToThree(...solid.normal)).normalize();
     group.userData.wallId = solid.id;
@@ -328,10 +330,11 @@ export function buildRoomStage(content, width, depth, height, openings, obstacle
   }
   wallMaterial.dispose();
 
-  for (const opening of openingSolids(width, depth, openings)) {
+  for (const [index, opening] of openingSolids(width, depth, openings).entries()) {
+    const wall = shells.find((shell) => shell.userData.wallId === opening.wall);
     const windowGlow = opening.kind === "window";
-    addRoomBox(
-      content,
+    const mesh = addRoomBox(
+      wall,
       insetOpening(opening.wall, opening.box),
       new THREE.MeshBasicMaterial({
         color: windowGlow ? 0xc8e6f5 : 0xd7be9e,
@@ -340,6 +343,10 @@ export function buildRoomStage(content, width, depth, height, openings, obstacle
         side: THREE.DoubleSide,
       }),
     );
+    mesh.userData.baseOpacity = mesh.material.opacity;
+    mesh.userData.marker = createOpeningMarker(opening, openings[index]);
+    content.add(mesh.userData.marker);
+    wall.userData.openings.push(mesh);
   }
 
   for (const obstacle of obstacles) {

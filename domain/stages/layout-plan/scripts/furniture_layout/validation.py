@@ -74,6 +74,7 @@ def admit_scene(scene: RoomScene) -> ValidationReport:
         expected_items = place_items(
             scene.room,
             tuple(_spec_from_placed(item) for item in scene.items),
+            existing_items=scene.items,
         )
     except ValueError as exc:
         report.add_error("INVALID_PLACEMENT", str(exc), "items")

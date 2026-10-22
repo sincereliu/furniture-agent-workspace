@@ -15,6 +15,10 @@
 
 画面脚本先从这个目录取。`layout_solver.js` 和 `layout_drag.js` 不在这里，挂载时再去布局阶段找，所以页面里的地址不用改。
 
+房间墙体淡出时，`opening_markers.js` 保留对应门窗的无填充虚线框：门有地面底边，窗保留窗台高度。轮廓按深度参与遮挡且不写深度、不投影；悬停显示门窗 ID、宽高和窗台高度。`layout_scene.js` 随墙体透明度切换实体与轮廓，提示由 `layout_overlay.js` 显示。几何、淡出和悬停遮挡检查运行 `node domain/modules/web/furniture_web/static/opening_markers_check.mjs`。
+
+房间页按松手顺序串行保存，每次使用上一笔保存确认的版本号；操作提交时先固定本次坐标。拖动、转动视角或保存期间，整份布局响应暂存，空闲后再替换画面；写入使在途旧读取失效，避免旧坐标覆盖新拖动。同墙拖动也比较完整位置，不能只凭墙名和高度跳过保存。延迟响应、连续保存、旧读取与拒绝恢复检查运行 `node domain/modules/web/furniture_web/static/layout_persistence_check.mjs`。
+
 ## 留在原处
 
 | 干什么 | 留在 |

@@ -10,6 +10,7 @@ import { isFixedSofa } from "./sofa_solid.js";
 import { inkViewBiasGlsl } from "./ink_depth.js";
 import { INK, addDiorama, addSky, celMaterial, furnitureColor } from "./layout_diorama.js";
 import { createLabelOverlay } from "./layout_overlay.js";
+import { pickOpeningMarker, updateOpeningMarker } from "./opening_markers.js";
 import {
   ROOM_LAYER,
   addChair,
@@ -260,6 +261,7 @@ export function mountLayout(canvas) {
   const overlay = createLabelOverlay(canvas, camera);
   let pickables = [];
   let wallShells = [];
+  let hoveredOpening = null;
   const WALL_FADE_MS = 150;
   let wallFade = [];
   let wallFadeFrom = [];
@@ -279,6 +281,7 @@ export function mountLayout(canvas) {
   }
 
   function refreshWalls() {
+    clearOpeningHover();
     if (!wallShells.length) return;
     const geometry = wallShells.map((wall) => ({
       id: wall.userData.wallId,
@@ -322,6 +325,11 @@ export function mountLayout(canvas) {
       wall.userData.material.opacity = opacity;
       wall.userData.material.depthWrite = opacity >= 0.999;
       wall.userData.material.color.setHex(state.color === null ? wall.userData.baseColor : state.color);
+      for (const opening of wall.userData.openings) {
+        opening.material.opacity = opening.userData.baseOpacity * opacity;
+        opening.material.depthWrite = opacity >= 0.999;
+        updateOpeningMarker(opening.userData.marker, 1 - opacity);
+      }
       for (const ink of wall.userData.inks) {
         ink.visible = wall.visible;
         ink.material.opacity = Math.min(1, opacity * 1.35);
@@ -349,6 +357,42 @@ export function mountLayout(canvas) {
     ndc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
     ndc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
   }
+
+  function clearOpeningHover() {
+    if (hoveredOpening) {
+      updateOpeningMarker(hoveredOpening, hoveredOpening.userData.opacity, false);
+      hoveredOpening = null;
+    }
+    overlay.showTooltip(null);
+  }
+
+  function refreshOpeningHover(event) {
+    if (event.buttons || event.pointerType === "touch") return;
+    clientNdc(event.clientX, event.clientY);
+    scene.updateMatrixWorld(true);
+    raycaster.setFromCamera(ndc, camera);
+    raycaster.params.Line.threshold = 7 * camera.position.distanceTo(controls.target)
+      * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * 2 / Math.max(canvas.clientHeight, 1);
+    const markers = wallShells.flatMap(wall => wall.userData.openings.map(opening => opening.userData.marker));
+    const occluders = [];
+    for (const group of [stageGroup, itemsGroup]) group.traverseVisible((object) => {
+      if (object.isMesh && !object.userData.openingMarker && object.material.opacity > 0.002) occluders.push(object);
+    });
+    const marker = pickOpeningMarker(markers, raycaster, occluders);
+    if (marker !== hoveredOpening) {
+      clearOpeningHover();
+      hoveredOpening = marker;
+      if (marker) updateOpeningMarker(marker, marker.userData.opacity, true);
+      draw();
+    }
+    overlay.showTooltip(marker ? marker.userData.text : null, event.clientX, event.clientY);
+  }
+  canvas.addEventListener("pointermove", refreshOpeningHover);
+  canvas.addEventListener("pointerup", refreshOpeningHover);
+  for (const name of ["pointerleave", "pointerdown"]) canvas.addEventListener(name, () => {
+    clearOpeningHover();
+    draw();
+  });
 
   function applyRoomLimits() {
     const diagonal = content.userData.roomDiagonal || 0;
@@ -486,6 +530,7 @@ export function mountLayout(canvas) {
   }
 
   function sync(data, options) {
+    clearOpeningHover();
     const selectedId = options.selectedId;
     const readOnly = options.readOnly;
     const dimsMode = options.dims === false ? "off" : (options.dims || "selected");
@@ -564,10 +609,17 @@ export function mountLayout(canvas) {
           addMesh(annotationsGroup, dial.grab, pickables);
         }
         const heightHandle = new THREE.Mesh(
-          new THREE.SphereGeometry(26, 16, 12),
+          new THREE.LatheGeometry([
+            new THREE.Vector2(0, -110),
+            new THREE.Vector2(48, -42),
+            new THREE.Vector2(18, -42),
+            new THREE.Vector2(18, 42),
+            new THREE.Vector2(48, 42),
+            new THREE.Vector2(0, 110),
+          ], 16),
           new THREE.MeshBasicMaterial({ color: 0x3b82f6 }),
         );
-        heightHandle.position.set(...roomToThree(center[0], center[1], itemZEnd + 72));
+        heightHandle.position.set(...roomToThree(center[0], center[1], itemZEnd + 156));
         heightHandle.userData = { kind: "height", itemId: item.id };
         addMesh(annotationsGroup, heightHandle, pickables);
       }

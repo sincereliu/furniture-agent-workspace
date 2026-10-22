@@ -172,7 +172,12 @@ CORNER_OF = {
 }
 
 
-def place_items(room: RoomModel, specs: Sequence[ItemSpec]) -> tuple[PlacedItem, ...]:
+def place_items(
+    room: RoomModel,
+    specs: Sequence[ItemSpec],
+    *,
+    existing_items: Sequence[PlacedItem] = (),
+) -> tuple[PlacedItem, ...]:
     """摆下一间房的包络。
 
     固定宽度里写了 against 的先占它声明的那一头。普通固定宽度柜子接着按清单
@@ -182,8 +187,33 @@ def place_items(room: RoomModel, specs: Sequence[ItemSpec]) -> tuple[PlacedItem,
     _reject_corner_claims(specs)
     _reject_shared_item_ends(specs)
     _reject_against_targets(specs)
+    # 编辑已有布局时，普通定宽墙摆沿用已保存的沿墙位置。新件、换墙、
+    # against 约束和 fill 仍由摆放规则计算；不把派生坐标塞回请求协议。
+    previous_by_id = {item.id: item for item in existing_items}
     placed: dict[str, PlacedItem] = {}
-    _place_group(room, [spec for spec in specs if not spec.placement.fill], placed)
+    for spec in specs:
+        previous = previous_by_id.get(spec.id)
+        request = spec.placement
+        if (
+            previous is None or request.mode != "wall" or request.fill
+            or request.against or previous.placement.mode != "wall"
+            or previous.placement.fill
+            or previous.placement.host_wall != request.host_wall
+        ):
+            continue
+        wall = request.host_wall
+        along = {
+            "north": previous.placement.origin_x_mm,
+            "east": previous.placement.origin_y_mm,
+            "south": room.width_mm - previous.placement.origin_x_mm,
+            "west": room.depth_mm - previous.placement.origin_y_mm,
+        }.get(wall)
+        if along is None or spec.width is None:
+            raise ValueError(f"item {spec.id!r} requires a valid fixed wall envelope")
+        placement = resolve_placement(room, request, along_mm=along)
+        placed[spec.id] = build_placed_item(spec, room, placement, width=spec.width)
+    _place_group(room, [spec for spec in specs if not spec.placement.fill
+                       and spec.id not in placed], placed)
     _place_group(room, [spec for spec in specs if spec.placement.fill], placed)
     ordered = [spec for spec in specs if not spec.placement.fill]
     ordered += [spec for spec in specs if spec.placement.fill]

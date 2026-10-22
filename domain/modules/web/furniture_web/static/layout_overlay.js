@@ -66,8 +66,33 @@ export function createLabelOverlay(canvas, camera) {
   let labelLeaders = null;
   let labelEntries = [];
   let axisGizmo = null;
+  let tooltip = null;
+
+  function showTooltip(text, clientX, clientY) {
+    if (!text) {
+      if (tooltip) tooltip.style.display = "none";
+      return;
+    }
+    labelLayer = labelLayer || ensureLabelLayer(canvas);
+    if (!labelLayer) return;
+    if (!tooltip) {
+      tooltip = makeLabelElement(labelLayer, { text });
+      tooltip.classList.add("scene-opening-tooltip");
+      tooltip.setAttribute("role", "tooltip");
+      tooltip.style.zIndex = "4";
+      tooltip.style.maxWidth = "calc(100% - 16px)";
+      tooltip.style.whiteSpace = "normal";
+    }
+    tooltip.textContent = text;
+    tooltip.style.display = "block";
+    const rect = canvas.getBoundingClientRect();
+    const x = Math.max(8, Math.min(clientX - rect.left + 12, rect.width - tooltip.offsetWidth - 8));
+    const y = Math.max(8, Math.min(clientY - rect.top + 12, rect.height - tooltip.offsetHeight - 8));
+    tooltip.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
+  }
 
   function clear() {
+    showTooltip(null);
     for (const entry of labelEntries) entry.el.remove();
     labelEntries = [];
     labelLayer = labelLayer || ensureLabelLayer(canvas);
@@ -171,5 +196,5 @@ export function createLabelOverlay(canvas, camera) {
     drawAxisGizmo();
   }
 
-  return { clear, addLabel, refresh };
+  return { clear, addLabel, refresh, showTooltip };
 }

@@ -73,6 +73,8 @@
 
 房间页上拖动只是本地先画，松手后后端再换算并检查。改 `placement_check.py` 必须同步改本阶段 `static/layout_solver.js`。
 
+项目局部编辑通过 `plan_scene(..., existing_items=scene.items)` 保留普通定宽靠墙件已经保存的沿墙位置，移动一把椅子不会重新排这类柜子。同墙改尺寸或离地高度也保留沿墙起点，越界或干涉则拒绝；新件、换墙、显式 `against` 和 `fill` 仍按摆放规则求解。准入重建使用同一份已保存位置，继续核对贴墙朝向、足迹、净距与空间干涉，不把原点写回墙摆输入协议。位置稳定性与保存重读的回归检查：`.venv/Scripts/python.exe domain/stages/layout-plan/scripts/tests/test_edit_position_stability.py`。
+
 数据链路为 `规范请求 → scene_planning.plan_scene → RoomScene → layout_figures / room_page`。项目读取只接受带明确 `schema_version` 的当前检查点；房间源与已摆放输出是两份明确契约。编辑通过 `PlacedItem.to_source()` 去掉派生字段，重算后才交给项目编排层保存。没有历史字段别名、自动推断摆放模式、扁平房间输出或旧预览页面分支。
 
 预览几何与标签锚点统一使用房间坐标 `[x, y, z]`（宽、深、高，毫米）。进入 Three.js 时调用 `layout_frame.roomToThree()`，相机回读与拾取返回时调用 `threeToRoom()`；不在调用方手写换序。屏幕像素坐标与 Three.js 原生网格旋转仍由渲染层计算。固定轴和边线随场景内容构建，相机移动时只更新投影与墙面显示。

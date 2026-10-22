@@ -22,7 +22,7 @@ from .scene_edit import apply_edit
 def room_scene_source(scene: RoomScene) -> dict[str, Any]:
     """把一间已摆放的房间还原成场景源（房间定义 + 每件的摆放请求）。
 
-    只保留输入字段；footprint、净距和墙摆变换在下次规划时重算。
+    只保留输入字段；footprint、净距重算，已保存的墙摆位置由编辑上下文保留。
     """
     return {
         "room": scene.room.to_dict(),
@@ -53,7 +53,9 @@ def apply_layout_edit(
     index = _target_index(layout, item_id)
     scene = layout.rooms[index]
     edited = apply_edit(room_scene_source(scene), op)
-    replanned = plan_scene(edited["room"], edited["items"])
+    replanned = plan_scene(
+        edited["room"], edited["items"], existing_items=scene.items,
+    )
     rooms = list(layout.rooms)
     rooms[index] = replanned
     return replace(layout, rooms=tuple(rooms), confirmed=False)
