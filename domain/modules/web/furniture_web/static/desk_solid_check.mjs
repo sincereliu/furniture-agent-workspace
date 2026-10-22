@@ -1,8 +1,18 @@
 /**
- * 固定书桌要有桌面、四条立腿、后方防窥挡板/背拉条与侧面拉条，正面留有开阔的膝部空档（Knee space）。
+ * 写字台几何保持尺寸边界、桌下净空与无共面闪烁。
  * 运行：node domain/modules/web/furniture_web/static/desk_solid_check.mjs
  */
 import { deskParts, isFixedDesk } from "./desk_solid.js";
+import { registerHooks } from "node:module";
+import * as THREE from "../../../../../vendor/three/0.186.0/three.module.js";
+
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier === "three") specifier = new URL("../../../../../vendor/three/0.186.0/three.module.js", import.meta.url).href;
+    return next(specifier, context);
+  },
+});
+const { deskPartGeometry } = await import("./desk_geometry.js");
 
 function expect(condition, message) {
   if (!condition) throw new Error(message);
@@ -44,7 +54,8 @@ function expectDesk(width, depth, height) {
   expect(parts, `放得下的书桌要能拆开 ${width}×${depth}×${height}`);
   for (const part of parts) {
     const [u0, v0, w0, u1, v1, w1] = part.box;
-    expect(u1 - u0 > 8 && v1 - v0 > 8 && w1 - w0 > 8, `块太薄 ${part.box}`);
+    expect(part.box.every(Number.isFinite), `尺寸必须有限 ${part.box}`);
+    expect(u1 > u0 && v1 > v0 && w1 > w0, `实体必须有正厚度 ${part.box}`);
     expect(
       u0 >= -1e-6 && v0 >= -1e-6 && w0 >= -1e-6
         && u1 <= width + 1e-6 && v1 <= depth + 1e-6 && w1 <= height + 1e-6,
@@ -58,13 +69,31 @@ function expectDesk(width, depth, height) {
   const top = tops[0].box;
   expect(top[0] === 0 && top[1] === 0 && top[3] === width && top[4] === depth && top[5] === height, "桌面盖住外形的顶");
   expect(top[2] > height * 0.7, "桌面是薄板");
+  const thickness = top[5] - top[2];
+  const geometry = deskPartGeometry(tops[0], [width, thickness, depth]);
+  geometry.computeBoundingBox();
+  const size = geometry.boundingBox.getSize(new THREE.Vector3());
+  expect(Math.abs(size.x - width) < 0.001 && Math.abs(size.y - thickness) < 0.001
+    && Math.abs(size.z - depth) < 0.001, "圆角实体保持桌面的外接尺寸");
+  const desktop = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial());
+  const cast = (x, z) => new THREE.Raycaster(new THREE.Vector3(x, height, z), new THREE.Vector3(0, -1, 0)).intersectObject(desktop);
+  expect(cast(0, 0).length > 0, "桌面中央可点选");
+  expect(cast(-width / 2 + 1, -depth / 2 + 1).length === 0, "圆角切去的角落不误命中实体");
+  geometry.dispose(); desktop.material.dispose();
 
   const legs = parts.filter((part) => part.role === "leg");
   expect(legs.length === 4, "四条桌腿");
-  expect(legs.every((part) => part.box[2] === 0 && part.box[5] < top[2] - 1), "腿落地，顶在桌面下面");
+  const feet = parts.filter((part) => part.role === "foot");
+  expect(feet.length === 2 && feet.every((part) => part.box[2] === 0), "两侧框架落地");
+  expect(legs.every((part) => part.box[2] > 0 && part.box[5] < top[2] - 1), "立柱位于底梁与桌面之间");
 
   const aprons = parts.filter((part) => part.role === "apron");
-  expect(aprons.length >= 1, "包含后方挡板/拉条");
+  expect(aprons.length >= 1, "包含框架横梁");
+
+  const fronts = parts.filter((part) => part.role === "front");
+  expect(fronts.length === 2 && fronts[0].box[3] < fronts[1].box[0], "抽屉前脸之间保留实际缝隙");
+  expect(fronts.every((part) => part.box[2] > height * 0.78 && part.box[4] < depth), "浅抽屉退入桌沿内且不占膝部空间");
+  expect(parts.filter((part) => part.role === "pull").every((part) => part.box[4] < depth), "拉手不超出足迹");
 
   // 膝部/椅子推入空间通透检查：桌子前部中间下方必须是空的
   const kneeU = width / 2;
@@ -78,6 +107,7 @@ expectDesk(1200, 600, 750);
 expectDesk(1600, 800, 750);
 expectDesk(1000, 500, 720);
 expectDesk(800, 400, 700);
+expectDesk(400, 300, 400);
 expect(deskParts(200, 200, 200) === null, "太小的外形继续用盒子");
 
 expect(isFixedDesk({ category: "desk" }), "没写成柜的书桌用书桌外形");
@@ -92,4 +122,4 @@ expect(!isFixedDesk({ category: "sofa" }), "只认书桌，沙发用沙发外形
 expect(!isFixedDesk({ category: "coffee_table" }), "只认书桌，茶几用茶几外形");
 expect(!isFixedDesk({ category: "书桌" }), "不把名称当分类");
 
-console.log("fixed desk keeps desktop, legs, rear baffle, side aprons, and open knee space inside the envelope");
+console.log("desk parts stay inside the envelope with separate drawer faces, grounded frames and open knee space");

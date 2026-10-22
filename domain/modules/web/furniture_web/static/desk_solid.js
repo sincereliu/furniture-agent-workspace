@@ -19,8 +19,8 @@ function clamp(value, lo, hi) {
 }
 
 /**
- * 整块桌面盖住外形的顶，四条腿立于四角，桌下后侧带加强挡板/背拉条，
- * 两侧带浅横档拉条，正面完全开敞作为开阔的膝部与椅子推入空间（Knee space）。
+ * 薄桌面、退入的双抽屉盒与两侧纤细雪橇框架。
+ * 抽屉前脸不等分，短拉手退在桌面前沿内；桌下中部保持膝部空间。
  * 放不下就返回 null，调用方改画盒子。
  * 每块是 { role, box:[u0,v0,w0,u1,v1,w1] }。相邻的面至少错开 2 mm，避免共面闪烁。
  */
@@ -31,9 +31,9 @@ export function deskParts(width, depth, height) {
   if (!(W >= 400 && D >= 300 && H >= 400)) return null;
 
   const gap = 2;
-  const topT = clamp(H * 0.045, 20, 36);
-  const leg = clamp(Math.min(W, D) * 0.06, 28, 48);
-  const inset = clamp(Math.min(W, D) * 0.04, 14, 32);
+  const topT = clamp(H * 0.032, 18, 26);
+  const leg = clamp(Math.min(W, D) * 0.038, 18, 26);
+  const inset = clamp(Math.min(W, D) * 0.075, 22, 48);
   const legTop = H - topT - gap;
   if (legTop < 200) return null;
   if (inset + leg > W / 2 - 8 || inset + leg > D / 2 - 8) return null;
@@ -41,10 +41,10 @@ export function deskParts(width, depth, height) {
   const parts = [];
   const add = (role, box) => parts.push({ role, box });
 
-  // 1. 桌面：外形顶部整块面板，厚度 topT
+  // 桌面外接尺寸保持足迹；圆角由渲染几何生成。
   add("top", [0, 0, H - topT, W, D, H]);
 
-  // 2. 四条桌腿：位于四角，向内缩进 inset，顶在桌面下方 legTop
+  // 两侧框架的立柱和落地横梁，较大的桌面挑出让支架显得轻巧。
   const uL0 = inset;
   const uL1 = inset + leg;
   const uR0 = W - inset - leg;
@@ -56,15 +56,16 @@ export function deskParts(width, depth, height) {
   const vFront1 = D - inset;
 
   // 四腿：左后、右后、左前、右前
-  add("leg", [uL0, vRear0, 0, uL1, vRear1, legTop]);
-  add("leg", [uR0, vRear0, 0, uR1, vRear1, legTop]);
-  add("leg", [uL0, vFront0, 0, uL1, vFront1, legTop]);
-  add("leg", [uR0, vFront0, 0, uR1, vFront1, legTop]);
+  add("leg", [uL0, vRear0, leg + gap, uL1, vRear1, legTop]);
+  add("leg", [uR0, vRear0, leg + gap, uR1, vRear1, legTop]);
+  add("leg", [uL0, vFront0, leg + gap, uL1, vFront1, legTop]);
+  add("leg", [uR0, vFront0, leg + gap, uR1, vFront1, legTop]);
+  add("foot", [uL0, vRear0, 0, uL1, vFront1, leg]);
+  add("foot", [uR0, vRear0, 0, uR1, vFront1, leg]);
 
-  // 3. 后方挡板 / 背拉条（Modesty Baffle / Stretcher）
-  // 位于左右后腿之间，后侧不落地，给脚部留出悬空空间
-  const apronT = clamp(leg * 0.45, 14, 20);
-  const rearApronH = clamp(H * 0.22, 100, 220);
+  // 纤细后横梁，不再用大挡板压住桌下空间。
+  const apronT = leg;
+  const rearApronH = leg;
   const rearApronTop = legTop - gap;
   const rearApronBottom = rearApronTop - rearApronH;
 
@@ -77,9 +78,8 @@ export function deskParts(width, depth, height) {
     add("apron", [rearU0, rearV0, rearApronBottom, rearU1, rearV1, rearApronTop]);
   }
 
-  // 4. 两侧横档拉条（Side Aprons / Rails）
-  // 位于前腿与后腿之间，提供结构支撑；顶面下移 2mm 避免与后挡板共面
-  const sideApronH = clamp(H * 0.08, 40, 70);
+  // 两侧上横梁，与立柱留出细缝，避免重叠面闪烁。
+  const sideApronH = leg;
   const sideApronTop = rearApronTop - gap;
   const sideApronBottom = sideApronTop - sideApronH;
 
@@ -95,6 +95,24 @@ export function deskParts(width, depth, height) {
     add("apron", [rightU0, sideV0, sideApronBottom, rightU1, sideV1, sideApronTop]);
   }
 
-  // 正面（vFront 向室内）完全开敞，不设前横档，确保椅子可以轻松推进去，留足膝部活动空间
+  // 退入桌面下的浅抽屉：两块前脸之间保留真实缝隙。
+  const drawerU0 = uL1 + gap * 2;
+  const drawerU1 = uR0 - gap * 2;
+  const drawerTop = legTop - 6;
+  const drawerH = clamp(H * 0.09, 38, 70);
+  const drawerBottom = drawerTop - drawerH;
+  const drawerFront = D - 24;
+  const faceT = 16;
+  const split = drawerU0 + (drawerU1 - drawerU0) * 0.38;
+  add("drawer", [drawerU0, inset + leg + 8, drawerBottom + gap,
+    drawerU1, drawerFront - faceT - gap, drawerTop - gap]);
+  for (const [u0, u1] of [[drawerU0, split - gap], [split + gap, drawerU1]]) {
+    add("front", [u0, drawerFront - faceT, drawerBottom, u1, drawerFront, drawerTop]);
+    const pullW = clamp((u1 - u0) * 0.32, 38, 112);
+    const pullU = (u0 + u1) / 2;
+    add("pull", [pullU - pullW / 2, drawerFront + gap, drawerTop - 18,
+      pullU + pullW / 2, drawerFront + 10, drawerTop - 12]);
+  }
+
   return parts;
 }

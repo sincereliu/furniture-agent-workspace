@@ -20,6 +20,12 @@
 
 `static/sofa_solid.js` 保留部件尺寸边界，`static/sofa_upholstery.js` 在边界内生成封闭曲面、法线和包边。`static/furniture_edges.js` 给细线与贴墙模块提供相同的真实包边；曲面接触墙而包边未接触时，`wall_contact.js` 另按真实三角面检测接触。尺寸、摆放足迹及制造数据不随曲面改变。
 
+### 写字台造型
+
+现成写字台使用薄圆角桌面、桌下内缩的浅双抽屉和两侧纤细深色框架。抽屉前脸不等分，保留窄分缝和短拉手；桌下中部通透，后横梁保持纤细。沿用低饱和木色、浅色抽屉与统一的外粗内细描边，圆角桌面只画上下边缘，不画曲面离散产生的竖线。
+
+`static/desk_solid.js` 计算部件边界，`static/desk_geometry.js` 在桌面边界内生成圆角实体和真实边缘；`static/layout_meshes.js` 接入相同的点选、选中和碰撞反馈。造型仅用于网页预览，不改变布局足迹或制造数据。运行 `node domain/modules/web/furniture_web/static/desk_solid_check.mjs` 检查部件边界、净空、共面与圆角点选，再用下述浏览器检查核对实际画面。
+
 下图记录统一家具描边、加入轻重和投影线宽后的实际房间画面，供后续维护核对本次实现；它不替代上方已确认的风格参考。
 
 ![统一描边后的书柜、书桌、椅子与沙发](images/unified-furniture-outline.jpg)

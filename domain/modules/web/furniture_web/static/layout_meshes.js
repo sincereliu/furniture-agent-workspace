@@ -6,6 +6,7 @@ import { createOpeningMarker } from "./opening_markers.js";
 import { chairParts } from "./chair_solid.js";
 import { coffeeTableParts } from "./coffee_table_solid.js";
 import { deskParts } from "./desk_solid.js";
+import { deskPartGeometry } from "./desk_geometry.js";
 import { sofaFrame, sofaLocalBox, sofaMount, sofaParts } from "./sofa_solid.js";
 import { sofaPartGeometry } from "./sofa_upholstery.js";
 import { celMaterial, furnitureColor, woodTexture } from "./layout_diorama.js";
@@ -198,13 +199,17 @@ export function addDesk(parent, pickables, item, selected, blocked, addFurniture
   const base = furnitureColor(item, selected, blocked);
   const top = celMaterial(base);
   const materials = selected || blocked
-    ? { top, leg: top, apron: top }
+    ? { top, leg: top, foot: top, apron: top, drawer: top, front: top, pull: top }
     : {
         top,
-        leg: celMaterial(0x3a322c),
-        apron: celMaterial(0xc9bfb0),
+        leg: celMaterial(0x484943),
+        foot: celMaterial(0x484943),
+        apron: celMaterial(0x484943),
+        drawer: celMaterial(0x857562),
+        front: celMaterial(0xd8d1c3),
+        pull: celMaterial(0x81705a),
       };
-  return addShapedItem(parent, pickables, item, parts, materials, selected, addFurnitureInk, blocked);
+  return addShapedItem(parent, pickables, item, parts, materials, selected, addFurnitureInk, blocked, deskPartGeometry);
 }
 
 export function footprintCenter(footprint) {
