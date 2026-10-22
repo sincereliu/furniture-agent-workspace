@@ -15,6 +15,7 @@ domain/modules/web/
 宿主的 `runtime_paths.bootstrap_runtime_paths()` 加载本模块路径。打开项目的命令不变。
 
 - [页面边界](references/web-preview.md)
+- [三维预览视觉规范与参考图](references/visual-style.md)：修改三维展示前必读，保持已确认的卡通手办风。
 
 页面行为仍由现有预览测试覆盖：
 

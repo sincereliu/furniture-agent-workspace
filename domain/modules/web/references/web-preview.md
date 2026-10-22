@@ -2,6 +2,8 @@
 
 本模块位于 `domain/modules/web/`。下面说的是浏览器里看见的那几页。
 
+三维画面的风格、描边层次及验收参考见 [三维预览视觉规范](visual-style.md)。修改或重构渲染代码时一并遵守。
+
 ## 本模块拥有
 
 | 干什么 | 文件 |
@@ -16,7 +18,11 @@
 
 画面脚本先从这个目录取。`layout_solver.js` 和 `layout_drag.js` 不在这里，挂载时再去布局阶段找，所以页面里的地址不用改。
 
-沙发、椅子、茶几和书桌采用整体粗外框、轻内部线的卡通描边。`cartoon_outline.js` 将家具部件投成整体蒙版，在可见整体外侧扩出约 3 CSS 像素的轮廓；墙与其他实体参与遮挡，半透明墙衰减轮廓。内部结构线沿真实棱边描绘，透明度 0.45，沿视线拉近 1 mm；部件不套实体膨胀壳，避免交接处露出错位黑边。选中和碰撞沿用对应轮廓颜色。几何对齐、旋转、蒙版、图层、点选和颜色检查运行 `node domain/modules/web/furniture_web/static/shaped_item_ink_check.mjs`；深度精度检查运行 `node domain/modules/web/furniture_web/static/ink_depth_check.mjs`。
+卡通描边由 `layout_scene.js` 调用 `cartoon_outline.js`；`layout_meshes.js` 在部件上标记所属 `itemId` 和轮廓颜色。描边模块拥有颜色/身份蒙版、遮挡计算及渲染状态恢复；按原网格复用蒙版代理，移除家具时清理代理和专有材质，借用的几何仍由原场景释放。视觉细则、参数、参考图和检查入口统一维护在 [三维预览视觉规范](visual-style.md)，本文件只记录模块职责。
+
+房间内生产家具的棱柱和现成家具的部件都进入同一套整体蒙版，内部只画轻棱边。`cartoon_outline.js` 根据整件家具的投影尺寸、镜头和画布计算线宽，再按屏幕轮廓朝向平滑调节轻重；这些确定性显示计算不依据 `manufacture` 分配描边样式。
+
+`wall_contact.js` 从实际墙块与家具棱边计算接触，预先裁掉细线，并给颜色蒙版提供贴墙裁边数据；`layout_scene.js` 在主场景渲染前调用描边器的 `prepare()`，确保拖动和墙体淡出后即时恢复或裁线。这些计算只影响预览，不更改摆放、足迹或制造数据。
 
 房间墙体淡出时，`opening_markers.js` 保留对应门窗的无填充虚线框：门有地面底边，窗保留窗台高度。轮廓按深度参与遮挡且不写深度、不投影；悬停显示门窗 ID、宽高和窗台高度。`layout_scene.js` 随墙体透明度切换实体与轮廓，提示由 `layout_overlay.js` 显示。几何、淡出和悬停遮挡检查运行 `node domain/modules/web/furniture_web/static/opening_markers_check.mjs`。
 

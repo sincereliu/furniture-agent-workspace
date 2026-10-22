@@ -20,6 +20,7 @@ const renderer = {
   clearColor: new THREE.Color(0xf2efe9), clearAlpha: 1,
   getDrawingBufferSize: value => value.set(2400, 1600),
   getSize: value => value.set(1200, 800),
+  getPixelRatio: () => 2,
   getRenderTarget: () => activeTarget,
   setRenderTarget: value => { activeTarget = value; },
   getClearColor(value) { return value.copy(this.clearColor); },
@@ -93,8 +94,8 @@ for (const [add, width, depth, height] of samples) {
     obstacles.updateMatrixWorld(true);
     maskFrames.length = 0;
     drawOutline([group, obstacles], camera);
-    assert.equal(maskFrames.length, 2, "先绘制可见整体蒙版，再合成粗轮廓");
-    const [mask, composite] = maskFrames;
+    assert.equal(maskFrames.length, 3, "绘制颜色、家具身份蒙版，再合成粗轮廓");
+    const [mask, ids, composite] = maskFrames;
     assert.equal(mask.objects.length, pickables.length + 2, "部件进入同一蒙版；边线与全透明墙不进入蒙版");
     for (const original of pickables) {
       const copied = mask.objects.find(({ mesh }) => mesh.geometry === original.geometry).mesh;
@@ -107,8 +108,15 @@ for (const [add, width, depth, height] of samples) {
     const faded = mask.objects.find(({ mesh }) => mesh.geometry === obstacles.children[1].geometry);
     assert.equal(faded.opacity, 0.3);
     assert.equal(faded.mesh.material.blendDstAlpha, THREE.OneMinusSrcAlphaFactor);
+    assert.equal(ids.objects.length, pickables.length + 1, "身份蒙版忽略半透明墙，保留不透明遮挡");
+    const partIds = ids.objects.filter(({ mesh }) => mesh.userData.itemId === item.id);
+    assert.equal(new Set(partIds.map(({ mesh }) => mesh.material)).size, 1, "同一家具的部件共用身份");
+    assert.equal(ids.target.samples, 0);
+    assert.equal(ids.target.texture.minFilter, THREE.NearestFilter);
     assert.equal(mask.target.width, 2400);
     assert.equal(mask.target.height, 1600);
+    assert.equal(ids.target.width, 2400);
+    assert.equal(ids.target.height, 1600);
     assert.deepEqual(composite.objects[0].mesh.material.uniforms.uCssPixel.value.toArray(), [1 / 1200, 1 / 800]);
     assert.equal(composite.autoClear, false);
     assert.equal(renderer.getRenderTarget(), null);

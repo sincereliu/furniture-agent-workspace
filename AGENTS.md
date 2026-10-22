@@ -3,6 +3,7 @@
 ## 按需读取
 
 - 做家具或查找阶段入口，先读 [家具智能体](.agents/skills/furniture-agent/SKILL.md)；改代码再按对应阶段 Skill/TOOL 的导航读具体文件。
+- 修改 Web 三维画面、家具预览或描边代码前，先读 [三维预览视觉规范](domain/modules/web/references/visual-style.md)，沿用已确认的「卡通手办风」及其参考图。修复或重构须保留视觉风格；用户明确要求改变风格时再调整规范。
 - 默认只在 `domain/`、`.agents/` 搜索和列目录。`store/`、`generated/`、`temp/`、`changelog/`、`external/`、`vendor/` 及根 `README.md`、`domain/stages/cad-generated/references/runtime-contract.md`，仅在当前任务、阶段技能或工具结果点名后读取，且只读点名范围。
 - `external/` 是上游子模块：仅在用户点名 CAD/科学分析 Skill，或阶段触发表指向它时读该 Skill，不浏览其余内容；升级只移动子模块指针。
 - `vendor/` 是版本钉死的构建文件（当前 `vendor/three/0.186.0/`，预览挂同名 URL）：仅核对点名文件，不读其余库源码；升级替换构建文件。

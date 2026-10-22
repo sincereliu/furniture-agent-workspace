@@ -471,6 +471,7 @@ export function mountLayout(canvas) {
 
   function draw() {
     sky.position.copy(controls.target);
+    drawCartoonOutline.prepare([stageGroup, itemsGroup], camera);
     renderer.autoClear = true;
     renderer.render(scene, camera);
     drawCartoonOutline([stageGroup, itemsGroup], camera);
@@ -578,8 +579,8 @@ export function mountLayout(canvas) {
           mesh.receiveShadow = true;
           const outlineColor = blocked ? 0xd93838 : (selected ? 0xf59e0b : INK);
           const outlineThick = (selected || blocked) ? 22 : 14;
-          addInk(mesh, outlineColor, outlineThick);
-          mesh.userData = { kind: "item", itemId: item.id };
+          mesh.userData = { kind: "item", itemId: item.id, cartoonInk: { color: outlineColor } };
+          addInk(mesh, outlineColor, outlineThick, { edges: true });
           addMesh(itemGroup, mesh, itemPickables);
         }
         if (item.footprint.length >= 4) {
