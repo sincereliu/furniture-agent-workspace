@@ -61,13 +61,12 @@ def plan_manufacturing(
 | 接触 | `joints` | 面-边接触拓扑（大面/端面） |
 | 其他 | `quantity`, `depends_on`, `note`, `door_overlay` | 数量、依赖、备注、门盖方式 |
 
-**`requested_options`（4 个合法键）**——制造层选型：
+**`requested_options`（3 个合法键）**——制造层选型：
 
 | 键 | 作用 |
 |---|---|
 | `options` | 连接件嵌套选项（透传给各 `Connector.boms`） |
 | `movable_shelf_connector` | 活动层板连接方式（`two_in_one` / `shelf_pin`） |
-| `door_hinge_side` | **老冻结文件**的单门铰链侧兜底（`left` / `right`）；新工程由板件阶段写在门板上，这里不需要给 |
 | `edge_banding` | 封边条选型（`{material, thickness}`） |
 
 **`appearance`**——按材质角色的材质选型：
@@ -138,7 +137,7 @@ def plan_manufacturing(
         ▼ 准入（查表校验，失败即拒）
    _normalize_appearance               → appearance_by_role
    _normalize_edge_banding_selection   → 封边条选型
-   movable_shelf_connector 校验 / door_hinge_side 兜底（新工程读门板）
+   movable_shelf_connector 校验；铰链侧只读门板上的 door_hinge_side
         │
         ▼ 逐块板物化 _manufacturing_panel(placement, 选型)
      ├─ material / thickness   ← spec + material_role（权威来源）

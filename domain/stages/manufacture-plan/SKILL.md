@@ -21,7 +21,7 @@ description: 用于 manufacture_plan 阶段。当用户说"用什么五金""三�
 - 封边：封哪些边、封边条材质和厚度。选型 `{material, thickness}` 经 `requested_options.edge_banding` 输入（默认 ABS 1.0mm），由代码查表准入。封边宽度（等于板厚）和颜色（同色取 surface 的花色）由代码派生。
 - 连接：螺钉、木榫、偏心件（三合一/二合一）、槽、胶合。接触默认连不连见 [连接与接触默认规则](references/connection-contact-defaults.md)。
 - 活动层板连接：`movable_shelf_connector`（`two_in_one` 二合一 / `shelf_pin` 层板托）。有活动层板时必须显式选择，经 `requested_options` 传入并盖章到 `PanelRecord`。没提供时运行时拒绝，不静默补齐。
-- 五金：铰链、滑轨、拉手、层板托、固定、防倾倒及荷载。**铰链侧由板件阶段给**（门板上的 `door_hinge_side`），制造只读、不推导；只有老冻结文件没带这个值时才回退：单门读制造输入 `door_hinge_side`，双门按门板位置派生（最多两扇）。不从意图重建，也不硬编码覆盖。
+- 五金：铰链、滑轨、拉手、层板托、固定、防倾倒及荷载。**铰链侧由板件阶段写在门板上**（`door_hinge_side`），制造只读。没写的门点名拒绝，不按位置补，也不从制造输入补。
 - 公差和净空：门缝、安装/设备缝隙、地墙不平、安全余量。
 
 口径见 [制造规则](references/manufacturing-rules.md)。同义说法由 LLM 对到目录里的变体；脚本不做关键词识别、同义词映射或开放方案排序。五金变体与打孔参数以 `scripts/furniture_manufacturing/hardware_catalog.yaml`、`hardware_rules.yaml` 为准：LLM 只选变体，孔的数值用目录里该变体的数，不另写一套坐标。目录没有的数值不要猜进工具参数，标在结果旁待确认。

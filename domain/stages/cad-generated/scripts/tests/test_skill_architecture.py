@@ -539,6 +539,19 @@ class SkillArchitectureTests(unittest.TestCase):
         )
         self.assertNotIn("furniture_panel_planning", layout_imports)
         self.assertNotIn("furniture_manufacturing", layout_imports)
+        feature_tree_package = (
+            STAGES_ROOT
+            / "feature-tree"
+            / "scripts"
+            / "furniture_feature_tree"
+        )
+        feature_tree_source = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in feature_tree_package.rglob("*.py")
+        )
+        self.assertNotIn("furniture_manufacturing", feature_tree_source)
+        self.assertNotIn("furniture_panel_planning", feature_tree_source)
+        self.assertNotIn("furniture_layout", feature_tree_source)
 
     def test_geometric_rules_live_in_their_owning_stages(self) -> None:
         panel_package = (

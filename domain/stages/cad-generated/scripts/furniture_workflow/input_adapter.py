@@ -13,7 +13,6 @@ MANUFACTURING_SPEC_FIELDS = frozenset(
     {
         "options",
         "movable_shelf_connector",
-        "door_hinge_side",
         "edge_banding",
     }
 )

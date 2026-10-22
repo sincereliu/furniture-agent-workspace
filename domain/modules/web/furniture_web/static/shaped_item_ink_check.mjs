@@ -72,13 +72,15 @@ for (const [add, width, depth, height] of samples) {
       assert.deepEqual(hits, [], "边线不影响家具点选");
       mesh.geometry.computeBoundingBox();
       ink.geometry.computeBoundingBox();
-      assert.ok(ink.geometry.boundingBox.equals(mesh.geometry.boundingBox), "贴墙的线必须留在原部件边界上");
+      const soft = mesh.geometry.userData.seamPositions;
+      if (!soft) assert.ok(ink.geometry.boundingBox.equals(mesh.geometry.boundingBox), "贴墙的线必须留在原部件边界上");
       const positions = ink.geometry.getAttribute("position");
-      assert.equal(positions.count, 24, "十二条真实棱边，不包含盒体对角线");
+      assert.equal(positions.count, soft ? soft.length / 3 : 24, "只绘制指定包边或盒体真实棱边");
       const bounds = mesh.geometry.boundingBox;
       for (let i = 0; i < positions.count; i++) {
         const point = new THREE.Vector3().fromBufferAttribute(positions, i);
-        for (const axis of ["x", "y", "z"]) {
+        if (soft) assert.ok(bounds.clone().expandByScalar(0.001).containsPoint(point), "包边位于软包外形内");
+        else for (const axis of ["x", "y", "z"]) {
           assert.ok(point[axis] === bounds.min[axis] || point[axis] === bounds.max[axis]);
         }
         const bodyWorld = point.clone().applyMatrix4(mesh.matrixWorld);

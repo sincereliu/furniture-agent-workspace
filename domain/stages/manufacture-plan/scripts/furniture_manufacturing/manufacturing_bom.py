@@ -51,13 +51,11 @@ MANUFACTURING_READINESS_LABELS = {
 }
 
 VALID_MOVABLE_SHELF_CONNECTORS = frozenset({"two_in_one", "shelf_pin"})
-VALID_DOOR_HINGE_SIDES = frozenset({"left", "right"})
 
 MANUFACTURING_OPTION_FIELDS = frozenset(
     {
         "options",
         "movable_shelf_connector",
-        "door_hinge_side",
         "edge_banding",
     }
 )
@@ -111,58 +109,19 @@ def default_joint_connection(female: PanelRecord, male: PanelRecord) -> str:
     return "on"
 
 
-def _legacy_door_hinge_sides(
-    placements: Sequence[ConfirmedPanel],
-    single_door_side: str | None,
-) -> dict[str, str | None]:
-    """**旧冻结文件**的兼容路径：按门板 X 位置猜铰链侧。
-
-    只对没有 `door_hinge_side` 的老板件有效（所以最多两扇）。新板件由板件阶段
-    给值，走 `_resolve_door_hinge_sides`，不再进这里。
-    """
-    doors = sorted(
-        (p for p in placements if p.panel_type == "door"),
-        key=lambda p: (p.pos_x, p.id),
-    )
-    if not doors:
-        return {}
-    if len(doors) == 1:
-        if single_door_side not in VALID_DOOR_HINGE_SIDES:
-            raise ValueError(
-                "door_hinge_side must be 'left' or 'right' for a single door"
-            )
-        return {doors[0].id: single_door_side}
-    if len(doors) == 2:
-        return {doors[0].id: "left", doors[1].id: "right"}
-    raise ValueError("door_hinge_side derivation supports at most 2 doors")
-
-
 def _resolve_door_hinge_sides(
     placements: Sequence[ConfirmedPanel],
-    single_door_side: str | None,
 ) -> dict[str, str | None]:
-    """每块门板的铰链侧：**以板件阶段给的为准**，缺的才回退到旧推导。
-
-    铰链侧是设计决定（门往哪边开），板件阶段已经把它写进门板；制造只消费它，
-    不再自己按门序推 —— 那条派生规则只能处理 ≤2 扇，多门直接失效。
-    兼容：老冻结文件里的门板没有这个字段，仍按门序推导（≤2 扇）。
-    """
+    """每块门板的铰链侧以板件阶段写入的值为准。缺了就点名，不在这里推。"""
     doors = [item for item in placements if item.panel_type == "door"]
     if not doors:
         return {}
-    carried = {item.id: item.door_hinge_side for item in doors if item.door_hinge_side}
-    if len(carried) == len(doors):
-        return carried
-    # 只要有一扇带着值、又有一扇没带，就不是老数据：板件阶段已经在推对开腔了。
-    # 掉进下面的按门序猜没有意义（它猜不出三扇以上），直接点名。
-    if carried:
-        undecided = [item.id for item in doors if not item.door_hinge_side]
+    missing = [item.id for item in doors if not item.door_hinge_side]
+    if missing:
         raise ValueError(
-            "door hinge side is not decided yet: " + ", ".join(undecided)
+            "door hinge side is not decided yet: " + ", ".join(missing)
         )
-    # 一扇都没带：只可能是老冻结文件（新板件至少对开腔会带值）。老路径只认 ≤2 扇。
-    derived = _legacy_door_hinge_sides(placements, single_door_side)
-    return derived
+    return {item.id: item.door_hinge_side for item in doors}
 
 
 def _resolve_joint_connections(panels: list[PanelRecord]) -> None:
@@ -358,8 +317,7 @@ def plan_manufacturing(
                 "when movable shelves exist"
             )
         movable_shelf_connector = ""
-    door_hinge_side = options.get("door_hinge_side")
-    hinge_side_by_label = _resolve_door_hinge_sides(placements, door_hinge_side)
+    hinge_side_by_label = _resolve_door_hinge_sides(placements)
     back_mount = spec.back_mount
     appearance_by_role = _normalize_appearance(appearance, placements)
     edge_banding_selection = _normalize_edge_banding_selection(

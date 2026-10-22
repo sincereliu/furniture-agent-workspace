@@ -27,7 +27,8 @@ function seatCount(inner) {
 
 /**
  * 靠背贴 v=0，扶手在两侧，坐垫在中间。放不下就返回 null，调用方改画盒子。
- * 每块是 { role, box:[u0,v0,w0,u1,v1,w1] }。相邻的面至少错开 2 mm，避免共面闪烁。
+ * 每块包含 role、box:[u0,v0,w0,u1,v1,w1]；软包另带 surface（shell/arm/base/seat/back）。
+ * box 是软包的尺寸边界，预览曲面由 sofa_upholstery.js 生成；接触处允许少量嵌合，避免悬空。
  */
 export function sofaParts(width, depth, height) {
   const W = width;
@@ -35,8 +36,8 @@ export function sofaParts(width, depth, height) {
   const H = height;
   if (!(W >= 280 && D >= 280 && H >= 180)) return null;
 
-  let arm = clamp(W * 0.09, 56, 180);
-  let back = clamp(D * 0.26, 70, D * 0.46);
+  let arm = clamp(W * 0.11, 110, 190);
+  let back = clamp(D * 0.16, 56, D * 0.3);
   const legH = clamp(H * 0.1, 28, 100);
   const gap = 2;
   const maxArm = (W - 80) / 2;
@@ -45,29 +46,31 @@ export function sofaParts(width, depth, height) {
   arm = Math.min(arm, maxArm);
   back = Math.min(back, maxBack);
 
-  let seatTop = clamp(H * 0.46, legH + 36, H * 0.62);
-  let armTop = clamp(H * 0.7, seatTop + 24, H - 16);
+  let seatTop = clamp(H * 0.49, legH + 36, H * 0.62);
+  let armTop = clamp(H * 0.68, seatTop + 24, H - 16);
   if (!(armTop > seatTop + 8 && armTop < H - 4)) return null;
 
-  const cushionH = clamp(H * 0.14, 36, Math.min(120, (seatTop - legH) * 0.55));
+  const cushionH = clamp(H * 0.18, 36, Math.min(160, (seatTop - legH) * 0.55));
   const deckTop = seatTop - cushionH - gap;
   if (deckTop < legH + 8) return null;
 
   const seatU0 = arm + gap;
   const seatU1 = W - arm - gap;
   const seatV0 = back + gap;
-  const jut = Math.min(90, Math.max(28, (D - back) * 0.22));
+  const jut = Math.min(170, Math.max(36, (D - back) * 0.22));
   const seatV1 = D - gap;
   if (seatU1 - seatU0 < 80 || seatV1 - seatV0 < 80) return null;
   if (back + jut > seatV1 - 24) return null;
 
   const parts = [];
-  const add = (role, box) => parts.push({ role, box });
+  const add = (role, box, surface) => parts.push({ role, box, ...(surface ? { surface } : {}) });
 
-  add("fabric", [0, 0, 0, W, back, H]);
-  add("fabric", [0, back + gap, 0, arm, D, armTop]);
-  add("fabric", [W - arm, back + gap, 0, W, D, armTop]);
-  add("deck", [seatU0, seatV0, legH, seatU1, seatV1, deckTop]);
+  const armBottom = Math.max(legH + gap, deckTop - 50);
+  const baseInset = Math.min(20, arm * 0.15);
+  add("fabric", [0, 0, legH, W, back, H], "shell");
+  add("fabric", [0, back + gap, armBottom, arm, D, armTop], "arm");
+  add("fabric", [W - arm, back + gap, armBottom, W, D, armTop], "arm");
+  add("deck", [baseInset, seatV0 + 4, legH, W - baseInset, seatV1, deckTop], "base");
 
   const count = seatCount(seatU1 - seatU0);
   const seam = 14;
@@ -75,17 +78,17 @@ export function sofaParts(width, depth, height) {
   if (cushW < 40) return null;
   for (let i = 0; i < count; i += 1) {
     const u0 = seatU0 + i * (cushW + seam);
-    add("cushion", [u0, seatV0 + 6, deckTop + gap, u0 + cushW, seatV1 - 6, seatTop]);
+    add("cushion", [u0, seatV0 + 6, deckTop + gap, u0 + cushW, seatV1 - 6, seatTop], "seat");
   }
 
-  const backZ0 = Math.max(seatTop + gap, H * 0.5);
+  const backZ0 = seatTop - Math.min(cushionH * 0.18, 25);
   const backZ1 = H - 8;
   const backV1 = back + jut;
   if (backZ1 - backZ0 >= 30) {
     const bcW = (seatU1 - seatU0 - seam * (count - 1)) / count;
     for (let i = 0; i < count; i += 1) {
       const u0 = seatU0 + i * (bcW + seam);
-      add("cushion", [u0, back * 0.55, backZ0, u0 + bcW, backV1, backZ1]);
+      add("cushion", [u0, back * 0.7, backZ0, u0 + bcW, backV1, backZ1], "back");
     }
   }
 
@@ -95,6 +98,8 @@ export function sofaParts(width, depth, height) {
   if (footV0 > seatV0 + 8) {
     add("wood", [arm + 6, footV0, 0, arm + 6 + leg, footV1, legH - gap]);
     add("wood", [W - arm - 6 - leg, footV0, 0, W - arm - 6, footV1, legH - gap]);
+    add("wood", [arm + 6, 12, 0, arm + 6 + leg, 12 + leg, legH - gap]);
+    add("wood", [W - arm - 6 - leg, 12, 0, W - arm - 6, 12 + leg, legH - gap]);
   }
 
   return parts;

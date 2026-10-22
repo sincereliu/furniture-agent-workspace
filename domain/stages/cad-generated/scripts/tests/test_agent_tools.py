@@ -536,7 +536,7 @@ class AgentToolSurfaceTests(unittest.TestCase):
             {
                 "project_id": project_id,
                 "stage_input": {
-                    "door_hinge_side": "left",
+                    "edge_banding": {"material": "pvc", "thickness": "t2_0"},
                     "appearance": _appearance_valid(),
                 },
             },
@@ -545,8 +545,8 @@ class AgentToolSurfaceTests(unittest.TestCase):
         self.assertEqual(generated["project"]["current_stage"], "manufacture_plan")
         view = generated["project"]["current_view"]
         self.assertEqual(
-            view["cabinets"][0]["bom"]["requested_options"]["door_hinge_side"],
-            "left",
+            view["cabinets"][0]["bom"]["requested_options"]["edge_banding"],
+            {"material": "pvc", "thickness": "t2_0"},
         )
         self.assertEqual(view["cabinets"][0]["bom"]["appearance"], _appearance_valid())
         self.assertNotIn("appearance", view["cabinets"][0]["bom"]["requested_options"])
@@ -558,14 +558,19 @@ class AgentToolSurfaceTests(unittest.TestCase):
             {
                 "project_id": project_id,
                 "stage_input": {
-                    "parameters": {"door_hinge_side": "right"},
+                    "parameters": {
+                        "edge_banding": {"material": "pvc", "thickness": "t2_0"},
+                    },
                     "appearance": _appearance_valid(),
                 },
             },
         )
         self.assertTrue(generated["ok"], generated)
         view = generated["project"]["current_view"]
-        self.assertEqual(view["cabinets"][0]["bom"]["requested_options"]["door_hinge_side"], "right")
+        self.assertEqual(
+            view["cabinets"][0]["bom"]["requested_options"]["edge_banding"],
+            {"material": "pvc", "thickness": "t2_0"},
+        )
         self.assertEqual(view["cabinets"][0]["bom"]["appearance"], _appearance_valid())
 
     def _confirmed_layout(self) -> str:
@@ -651,19 +656,22 @@ class OrchestratorRunNextStageInputTests(unittest.TestCase):
         result = orchestrator.run_next(
             project,
             stage_input={
-                "door_hinge_side": "left",
+                "edge_banding": {"material": "pvc", "thickness": "t2_0"},
                 "appearance": _appearance_valid(),
             },
         )
         stored = result.revision.stage_inputs["manufacturing"]
-        self.assertEqual(stored["parameters"]["door_hinge_side"], "left")
-        self.assertNotIn("door_hinge_side", stored)
+        self.assertEqual(
+            stored["parameters"]["edge_banding"],
+            {"material": "pvc", "thickness": "t2_0"},
+        )
+        self.assertNotIn("edge_banding", stored)
         self.assertEqual(stored["appearance"], _appearance_valid())
         self.assertEqual(
             primary_manufactured_bom(result.revision)["requested_options"][
-                "door_hinge_side"
+                "edge_banding"
             ],
-            "left",
+            {"material": "pvc", "thickness": "t2_0"},
         )
 
 

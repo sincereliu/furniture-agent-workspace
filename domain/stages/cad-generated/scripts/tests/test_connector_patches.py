@@ -92,19 +92,15 @@ class PanelAndConnectorPatchTests(unittest.TestCase):
         self.assertEqual(doors["left_door"].door_hinge_side, "left")
         self.assertEqual(doors["right_door"].door_hinge_side, "right")
 
-    def test_single_door_hinge_side_is_a_manufacturing_option(self) -> None:
+    def test_single_door_hinge_side_comes_from_the_panel(self) -> None:
         spec = furniture_spec(n_doors=1)
         placements = plan_panels(spec, CabinetStructure.from_spec(spec))
-
-        # 单门铰链侧是制造输入：未提供时运行时拒绝
-        with self.assertRaisesRegex(ValueError, "door_hinge_side"):
+        with self.assertRaisesRegex(ValueError, "door hinge side is not decided yet"):
             plan_manufacturing(spec, placements)
 
-        bom = plan_manufacturing(
-            spec,
-            placements,
-            requested_options={"door_hinge_side": "right"},
-        )
+        decided = furniture_spec(n_doors=1, door_hinges=["right"])
+        placements = plan_panels(decided, CabinetStructure.from_spec(decided))
+        bom = plan_manufacturing(decided, placements)
         door = next(p for p in bom.panels if p.panel_type == "door")
         self.assertEqual(door.door_hinge_side, "right")
 

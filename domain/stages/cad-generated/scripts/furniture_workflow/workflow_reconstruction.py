@@ -20,9 +20,6 @@ from furniture_manufacturing.manufacturing_models import (
     PanelRecord,
 )
 from furniture_panel_planning.cabinet_identity import handoffs_from_output
-from furniture_panel_planning.panel_models import PanelPlacement
-from furniture_panel_planning.panel_spec import FurnitureSpec
-from furniture_panel_planning.structure_planning import CabinetStructure
 
 from .cabinet_pipeline import CabinetPipelineResult
 from .workflow_cabinets import cabinets_from_bridges
@@ -74,13 +71,10 @@ class ReconstructionMixin:
         return tuple(
             CabinetPipelineResult(
                 cabinet_id=cabinet_id,
-                spec=spec,
-                structure=CabinetStructure.from_spec(spec),
-                placements=placements,
                 panels=boms[cabinet_id].panels,
                 bom=boms[cabinet_id],
             )
-            for cabinet_id, spec, placements in self._cabinet_handoffs(
+            for cabinet_id, _spec, _placements in self._cabinet_handoffs(
                 revision, project_id=project_id
             )
         )
@@ -137,21 +131,15 @@ class ReconstructionMixin:
         revision: Revision,
         *,
         project_id: str | None = None,
-    ) -> list[tuple[str, FurnitureSpec, list[PanelPlacement]]]:
-        """**逐柜**的 `(id, spec, 该柜的板件放置)`——制造阶段按它一台一台算。
+    ) -> list[tuple[str, Mapping[str, Any], list[Any]]]:
+        """**逐柜**的 `(id, 规格字典, 板件字典)`。
 
-        以前只取主柜（`_spec_from_revision` / `_placements_from_revision`），
-        所以布局里摆了三台也只有一台有 BOM。
+        制造直接抄这些字典里的加工字段，不在这里重建板件类型。
         """
         output = self._confirmed_panel_output(revision, project_id=project_id)
-        handoffs = handoffs_from_output(output)
         return [
-            (
-                cabinet_id,
-                FurnitureSpec.from_dict(spec),
-                [PanelPlacement.from_dict(item) for item in panels],
-            )
-            for cabinet_id, spec, _, panels in handoffs
+            (cabinet_id, spec, panels)
+            for cabinet_id, spec, _, panels in handoffs_from_output(output)
         ]
 
     @staticmethod

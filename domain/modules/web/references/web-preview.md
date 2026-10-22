@@ -24,7 +24,7 @@
 
 房间内生产家具的棱柱和现成家具的部件都进入同一套整体蒙版，内部只画轻棱边。`cartoon_outline.js` 根据整件家具的投影尺寸、镜头和画布计算线宽，再按屏幕轮廓朝向平滑调节轻重；这些确定性显示计算不依据 `manufacture` 分配描边样式。
 
-`wall_contact.js` 从实际墙块与家具棱边计算接触，预先裁掉细线，并给颜色蒙版提供贴墙裁边数据；它负责可见性，不另设线宽或风格。每帧顺序为 `prepare(roots, camera)` → 主场景渲染 → `draw(roots, camera)`：准备只执行一次，`draw()` 消费本帧接触数据，漏掉准备或重复消费会明确报错，避免沿用上一帧状态。这些计算只影响预览，不更改摆放、足迹或制造数据。
+`wall_contact.js` 从实际墙块与家具棱边、软包包边及软包三角曲面计算接触，预先裁掉细线，并给颜色蒙版提供贴墙裁边数据；它负责可见性，不另设线宽或风格。细线与贴墙模块共用 `furniture_edges.js`，沙发曲面和包边由 `sofa_upholstery.js` 在部件尺寸边界内生成。每帧顺序为 `prepare(roots, camera)` → 主场景渲染 → `draw(roots, camera)`：准备只执行一次，`draw()` 消费本帧接触数据，漏掉准备或重复消费会明确报错，避免沿用上一帧状态。这些计算只影响预览，不更改摆放、足迹或制造数据。
 
 房间墙体淡出时，`opening_markers.js` 保留对应门窗的无填充虚线框：门有地面底边，窗保留窗台高度。轮廓按深度参与遮挡且不写深度、不投影；悬停显示门窗 ID、宽高和窗台高度。`layout_scene.js` 随墙体透明度切换实体与轮廓，提示由 `layout_overlay.js` 显示。几何、淡出和悬停遮挡检查运行 `node domain/modules/web/furniture_web/static/opening_markers_check.mjs`。
 

@@ -53,11 +53,11 @@ def plan_every_cabinet(
     """**逐柜**做制造计划：布局里有几台，就出几份 BOM。
 
     以前只对主柜算一次，所以拆成三台只有一台能走到车间。柜的**身份与顺序**
-    都来自板件阶段（布局决定的），这里不挑、不排、不漏。
+    都来自板件阶段（布局决定的），这里不挑、不排、不漏。交给制造的是规格字典
+    和板件字典。
 
-    **逐柜选项**：`stage_input["cabinets"][柜名]` 可以覆盖 `parameters` / `appearance`——
-    铰链方向、活动层板连接方式这些本来就是**按柜**定的（一台单门、一台双门时，
-    共享一份 `door_hinge_side` 根本表达不了：实测撞到过）。
+    **逐柜选项**：`stage_input["cabinets"][柜名]` 可以覆盖 `parameters` / `appearance`。
+    活动层板连接、封边这些是按柜定的。铰链侧在门板上，不在这里改。
     """
     shared_options = dict(stage_input.get("parameters", {}))
     shared_appearance = dict(stage_input.get("appearance", {}))

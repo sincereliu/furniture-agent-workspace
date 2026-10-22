@@ -189,7 +189,11 @@ class FurnitureOrchestratorFreezeTests(unittest.TestCase):
                 second = orchestrator.retry_stage(
                     project,
                     WorkflowStage.MANUFACTURING_PLANNED,
-                    stage_input={"parameters": {"door_hinge_side": "left"}},
+                    stage_input={
+                        "parameters": {
+                            "edge_banding": {"material": "pvc", "thickness": "t2_0"},
+                        }
+                    },
                 )
                 plan_panels.assert_not_called()
 
@@ -205,9 +209,9 @@ class FurnitureOrchestratorFreezeTests(unittest.TestCase):
             )
             self.assertEqual(
                 primary_manufactured_bom(second.revision)["requested_options"].get(
-                    "door_hinge_side"
+                    "edge_banding"
                 ),
-                "left",
+                {"material": "pvc", "thickness": "t2_0"},
             )
 
             frozen_path.unlink()

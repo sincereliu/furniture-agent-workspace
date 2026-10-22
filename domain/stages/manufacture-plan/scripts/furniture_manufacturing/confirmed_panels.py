@@ -42,8 +42,7 @@ _PANEL_DEFAULTS = {
     "joints": (),
     "role": "",
     "parent_id": "",
-    #: 门板的铰链侧。**板件阶段给**：对开由几何定，单开由提案给。
-    #: 这里只搬，不推导——推导是旧冻结文件的兼容路径（见 `manufacturing_bom`）。
+    #: 门板的铰链侧。板件阶段写入：对开由几何定，单开由提案给。这里只搬。
     "door_hinge_side": None,
 }
 _CONTACT_FIELDS = (
@@ -135,8 +134,7 @@ class ConfirmedPanel:
     joints: tuple[Contact, ...]
     role: str
     parent_id: str
-    #: 门板的铰链侧，由**板件阶段**给（对开由几何定、单开由提案给）。
-    #: 老冻结文件没有这个值，制造按门序回退推导，见 `manufacturing_bom`。
+    #: 门板的铰链侧，由板件阶段写入。没写的门在制造入口被点名拒绝。
     door_hinge_side: str | None = None
 
 

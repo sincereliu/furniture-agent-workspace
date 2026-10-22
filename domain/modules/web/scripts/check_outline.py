@@ -19,6 +19,8 @@ WEB_ROOT = Path(__file__).resolve().parents[1]
 WORKSPACE = WEB_ROOT.parents[2]
 STATIC = WEB_ROOT / "furniture_web" / "static"
 NODE_CHECKS = (
+    "sofa_solid_check.mjs",
+    "sofa_upholstery_check.mjs",
     "outline_style_check.mjs",
     "cartoon_outline_check.mjs",
     "shaped_item_ink_check.mjs",

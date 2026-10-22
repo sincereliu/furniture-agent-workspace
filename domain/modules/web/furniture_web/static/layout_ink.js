@@ -3,11 +3,12 @@ import { INK } from "./layout_diorama.js";
 import { footprintCenter, prismGeometry, wallGeometry } from "./layout_meshes.js";
 import { inkViewBiasGlsl } from "./ink_depth.js";
 import { OUTLINE_STYLE } from "./outline_style.js";
+import { furnitureEdges } from "./furniture_edges.js";
 
 // 内部细线与场景平面线共用深度偏移；家具整体外框由 cartoon_outline 绘制。
 function addEdges(mesh, color, opacity) {
   const ink = new THREE.LineSegments(
-    new THREE.EdgesGeometry(mesh.geometry, OUTLINE_STYLE.edgeAngleDeg), inkMaterial(color),
+    furnitureEdges(mesh.geometry), inkMaterial(color),
   );
   ink.material.opacity = opacity;
   ink.raycast = () => {};

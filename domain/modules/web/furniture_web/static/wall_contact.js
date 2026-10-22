@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { roomToThree } from "./layout_frame.js";
-import { OUTLINE_STYLE } from "./outline_style.js";
+import { furnitureEdges } from "./furniture_edges.js";
 
 const CONTACT_MM = 0.5;
 
@@ -52,7 +52,7 @@ export function createWallContactUpdater() {
       let state = states.get(source);
       if (!state || state.geometry !== source.geometry || state.ink !== ink) {
         state?.texture.dispose();
-        const edges = new THREE.EdgesGeometry(source.geometry, OUTLINE_STYLE.edgeAngleDeg);
+        const edges = furnitureEdges(source.geometry);
         state = {
           geometry: source.geometry, ink,
           positions: edges.getAttribute("position").clone(),
@@ -84,6 +84,22 @@ export function createWallContactUpdater() {
         let start = 0;
         for (const [lo, hi] of cuts) { push(start, lo); start = Math.max(start, hi); }
         push(start, 1);
+      }
+      // 光滑软包可能面接触墙而包边不接触；蒙版仍按真实曲面三角形判断。
+      if (source.geometry.userData.seamPositions) {
+        const surface = source.geometry.getAttribute("position"), index = source.geometry.index;
+        const bounds = new THREE.Box3().setFromBufferAttribute(surface).applyMatrix4(source.matrixWorld);
+        const triangle = new THREE.Triangle();
+        for (const box of boxes) {
+          if (contacts.has(box) || !bounds.intersectsBox(box.clone().expandByScalar(CONTACT_MM))) continue;
+          const expanded = box.clone().expandByScalar(CONTACT_MM);
+          for (let i = 0; i < index.count; i += 3) {
+            [triangle.a, triangle.b, triangle.c].forEach((point, offset) => {
+              point.fromBufferAttribute(surface, index.getX(i + offset)).applyMatrix4(source.matrixWorld);
+            });
+            if (expanded.intersectsTriangle(triangle)) { contacts.add(box); break; }
+          }
+        }
       }
       if (ink?.isLineSegments) {
         const current = ink.geometry.getAttribute("position");

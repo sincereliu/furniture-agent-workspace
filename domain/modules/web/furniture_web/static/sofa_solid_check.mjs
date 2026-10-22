@@ -62,7 +62,8 @@ function expectShape(width, depth, height, seats) {
       `块超出外形尺寸 ${part.box}`,
     );
   }
-  assertNoCoplanar(parts);
+  // 软包边界允许嵌合，不能把包围盒的相交当成曲面共面；硬质结构仍检查实际盒面。
+  assertNoCoplanar(parts.filter(part => !part.surface));
   const back = parts.find((part) => part.role === "fabric" && part.box[1] === 0 && part.box[5] === height);
   expect(back, "靠背贴着背面，顶到外形高度");
   const arms = parts.filter((part) => part.role === "fabric" && part.box[5] < height);
@@ -70,6 +71,8 @@ function expectShape(width, depth, height, seats) {
   expect(arms.some((part) => part.box[0] === 0), "左扶手贴着左端");
   expect(arms.some((part) => part.box[3] === width), "右扶手贴着右端");
   expect(arms.every((part) => part.box[5] < height - 4 && part.box[1] > 0), "扶手比靠背矮，并且在靠背前面");
+  const deck = parts.find(part => part.role === "deck");
+  expect(arms.every(part => part.box[2] > deck.box[2] && part.box[2] < deck.box[5]), "扶手嵌入底座上沿，不从地面竖起");
   const seat = parts.filter((part) => part.role === "cushion" && part.box[5] < height * 0.75);
   expect(seat.length === seats, `坐垫 ${seat.length} 块，期望 ${seats}`);
   expect(seat.every((part) => part.box[5] < height - 4 && part.box[1] > back.box[4]), "坐垫在靠背前面，而且更矮");
@@ -79,7 +82,8 @@ function expectShape(width, depth, height, seats) {
     backCushions.every((part) => part.box[4] > back.box[4] + 10 && part.box[5] < height - 4),
     "靠垫探出靠背，顶部留下靠背的上沿",
   );
-  expect(parts.filter((part) => part.role === "wood").length === 2, "正面两只脚");
+  expect(parts.filter((part) => part.role === "wood").length === 4, "前后各两只脚支撑离地底座");
+  expect(backCushions.every(part => part.box[2] < seat[0].box[5]), "靠包下缘嵌入坐垫，连接处不悬空");
 }
 
 expectShape(2100, 900, 850, 3);

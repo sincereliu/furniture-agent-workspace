@@ -58,7 +58,7 @@
 - **身份与几何不许写在覆盖里**：`cabinet_id` / `furniture_category` / `width` / `depth` / `height` 只来自包络（布局），覆盖里写了会被拒。
 - **柜名必须认识**：覆盖里出现布局里没有的柜名直接拒（不静默忽略）。
 - 平铺写法（`stage_inputs_from_spec`）用 `panel_cabinets: {柜名: {…}}`。
-- **制造选项同理**：`stage_inputs.manufacturing.cabinets[柜名]` 可覆盖 `parameters`（如 `door_hinge_side`）与 `appearance`——一台双门、一台单门时，共享一份铰链方向根本表达不了。
+- **制造选项同理**：`stage_inputs.manufacturing.cabinets[柜名]` 可覆盖 `parameters`（`movable_shelf_connector`、`edge_banding`）与 `appearance`。铰链侧不在制造选项里，用本阶段的 `door_hinges` 写到每块门板上。
 - 改过板件产物（`revise_stage_output`）后，**每台柜自己的 spec 会写回它自己的覆盖**；不要再把某一台的参数抄给全部柜。
 
 **旁路分析也要指名**：`panel_unit_audit` 默认**逐台**跑（报告里 `cabinet_ids` + 逐台明细，问题条目带 `cabinet_id`），`config.cabinet_id` 可以只审一台；`panel_optimization` **必须**指名（多柜工程里不指就报错），候选自带 `cabinet_id`，落地只改那一台。

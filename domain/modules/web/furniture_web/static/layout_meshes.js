@@ -7,6 +7,7 @@ import { chairParts } from "./chair_solid.js";
 import { coffeeTableParts } from "./coffee_table_solid.js";
 import { deskParts } from "./desk_solid.js";
 import { sofaFrame, sofaLocalBox, sofaMount, sofaParts } from "./sofa_solid.js";
+import { sofaPartGeometry } from "./sofa_upholstery.js";
 import { celMaterial, furnitureColor, woodTexture } from "./layout_diorama.js";
 import { furnitureInkColor } from "./outline_style.js";
 
@@ -119,7 +120,7 @@ export function addMesh(parent, mesh, pickables) {
   return mesh;
 }
 
-function addShapedItem(parent, pickables, item, parts, materials, selected, addFurnitureInk, blocked) {
+function addShapedItem(parent, pickables, item, parts, materials, selected, addFurnitureInk, blocked, geometryForPart) {
   const frame = sofaFrame(item.footprint, item.z_start);
   if (!parts || !frame) return false;
   const mount = sofaMount(frame);
@@ -135,7 +136,7 @@ function addShapedItem(parent, pickables, item, parts, materials, selected, addF
   for (const part of parts) {
     const local = sofaLocalBox(part.box);
     const mesh = markRoom(new THREE.Mesh(
-      new THREE.BoxGeometry(...local.size),
+      geometryForPart ? geometryForPart(part, local.size) : new THREE.BoxGeometry(...local.size),
       materials[part.role],
     ));
     mesh.position.set(...local.center);
@@ -157,11 +158,11 @@ export function addSofa(parent, pickables, item, selected, blocked, addFurniture
     ? { fabric, deck: fabric, cushion: fabric, wood: fabric }
     : {
         fabric,
-        deck: celMaterial(0x776e64),
+        deck: celMaterial(0x8a8074),
         cushion: celMaterial(0xd4c9bb),
         wood: celMaterial(0x3a312b),
       };
-  return addShapedItem(parent, pickables, item, parts, materials, selected, addFurnitureInk, blocked);
+  return addShapedItem(parent, pickables, item, parts, materials, selected, addFurnitureInk, blocked, sofaPartGeometry);
 }
 
 export function addCoffeeTable(parent, pickables, item, selected, blocked, addFurnitureInk) {

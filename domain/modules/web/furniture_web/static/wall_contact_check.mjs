@@ -7,6 +7,7 @@ registerHooks({ resolve(specifier, context, next) {
 const { createWallContactUpdater } = await import("./wall_contact.js");
 const { wallGeometry, addDesk, addChair, addSofa, addCoffeeTable, ROOM_LAYER } = await import("./layout_meshes.js");
 const { addFurnitureInk } = await import("./layout_ink.js");
+const { sofaPartGeometry } = await import("./sofa_upholstery.js");
 const root = new THREE.Group(), camera = new THREE.PerspectiveCamera();
 camera.layers.enable(ROOM_LAYER);
 const wall = new THREE.Mesh(wallGeometry([[-1000, -100, 0, 3000, 0, 2000]]), new THREE.MeshBasicMaterial());
@@ -25,7 +26,7 @@ for (const add of [addDesk, addChair, addSofa, addCoffeeTable]) {
   for (const mesh of parts) {
     const state = touching.get(mesh);
     const lines = mesh.userData.ink.geometry.getAttribute("position");
-    if (!state.count) assert.equal(lines.count, 24, "退让的桌腿等部件保留全部棱边");
+    if (!state.count) assert.equal(lines.count, state.positions.count, "退让部件保留原有棱边或包边");
     for (let i = 0; i < lines.count; i += 2) {
       const a = new THREE.Vector3().fromBufferAttribute(lines, i).applyMatrix4(mesh.matrixWorld);
       const b = new THREE.Vector3().fromBufferAttribute(lines, i + 1).applyMatrix4(mesh.matrixWorld);
@@ -36,7 +37,7 @@ for (const add of [addDesk, addChair, addSofa, addCoffeeTable]) {
   update([root], camera);
   for (const mesh of parts) {
     assert.equal(touching.get(mesh).count, 0, "真实2mm间隙不算贴墙");
-    assert.equal(mesh.userData.ink.geometry.getAttribute("position").count, 24, "移离墙后恢复棱边");
+    assert.equal(mesh.userData.ink.geometry.getAttribute("position").count, touching.get(mesh).positions.count, "移离墙后恢复棱边和包边");
   }
   group.position.z = baseZ;
   wall.material.opacity = 0;
@@ -60,6 +61,19 @@ for (const add of [addDesk, addChair, addSofa, addCoffeeTable]) {
   assert.equal(touching.size, 0);
   assert.equal(released, 1);
 }
+// 靠包曲面能接触墙，而侧面中线包边并不接触：蒙版不能只检查包边。
+const curved = new THREE.Mesh(sofaPartGeometry({ surface: "back" }, [600,400,200]), new THREE.MeshBasicMaterial());
+curved.geometry.computeBoundingBox();
+curved.position.set(500,600,-curved.geometry.boundingBox.min.z);
+addFurnitureInk(curved, { itemId:"curved", color:0x28231d }); root.add(curved);
+const updateCurved = createWallContactUpdater();
+const curvedState = updateCurved([root], camera).get(curved);
+assert.ok(curvedState.count > 0, "无接触包边时仍检测真实软包曲面");
+assert.equal(curved.userData.ink.geometry.getAttribute("position").count, curvedState.positions.count);
+curved.position.z += 2;
+assert.equal(updateCurved([root],camera).get(curved).count, 0, "软包移离墙后恢复蒙版外框");
+root.remove(curved); updateCurved([root], camera);
+curved.geometry.dispose(); curved.material.dispose();
 // 一个接触棱跨过窗洞时，只保留洞口范围的线，不整条隐藏。
 const spanning = new THREE.Mesh(new THREE.BoxGeometry(1000, 200, 500), new THREE.MeshBasicMaterial());
 spanning.position.set(500, 600, 250);
