@@ -38,7 +38,7 @@ class WorkspaceLayoutTests(unittest.TestCase):
         """根目录只放行那一个双击启动器；换一个名字或再加一个都要被拦住。"""
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
-            (root / "open_last_project.bat").write_text("@echo off\n", encoding="utf-8")
+            (root / "start.bat").write_text("@echo off\n", encoding="utf-8")
             self.assertEqual(find_violations(root), [])
 
             (root / "another_launcher.bat").write_text("@echo off\n", encoding="utf-8")

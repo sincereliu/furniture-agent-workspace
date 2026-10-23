@@ -749,7 +749,25 @@ class OpenProjectPreviewTests(unittest.TestCase):
         start.assert_called_once()
         command = start.call_args.args[0]
         self.assertTrue(str(command[1]).endswith("open_projects.py"))
+        self.assertIn("--no-browser", command)
         opener.assert_called_once()
+        self.assertTrue(result["opened"])
+
+    def test_home_url(self) -> None:
+        self.assertEqual(open_preview.home_url(), "http://127.0.0.1:8000/")
+
+    def test_open_home_preview(self) -> None:
+        with mock.patch.dict(os.environ, {"FURNITURE_PREVIEW_BROWSER": "1"}):
+            with mock.patch.object(
+                open_preview, "preview_server_is_up", return_value=True
+            ):
+                with mock.patch.object(
+                    open_preview.webbrowser, "open", return_value=True
+                ) as opener:
+                    result = open_preview.open_home_preview(
+                        workspace_root=WORKSPACE_ROOT,
+                    )
+        opener.assert_called_once_with("http://127.0.0.1:8000/", new=2)
         self.assertTrue(result["opened"])
 
     def test_windows_preview_spawn_is_created_by_wmi(self) -> None:

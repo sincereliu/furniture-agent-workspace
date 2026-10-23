@@ -29,9 +29,9 @@ ALLOWED_SCRIPT_ROOTS = tuple(
     Path("domain") / "stages" / stage_name / "scripts" for stage_name in STAGE_NAMES
 ) + MODULE_RELATIVE_ROOTS + (Path("temp"),)
 #: 根目录点名的例外：只有一个给人双击的启动器，本身不承载逻辑
-#: （只 cd 到仓库根、转去跑布局阶段的 `scripts/open_last_project.py`）。
+#: （只 cd 到仓库根、转去跑布局阶段的 `scripts/open_workbench.py`）。
 #: 别往这里加第二个文件——要加就先问「它为什么不放在某个阶段的 scripts/ 里」。
-ALLOWED_ROOT_SCRIPTS = frozenset({Path("open_last_project.bat")})
+ALLOWED_ROOT_SCRIPTS = frozenset({Path("start.bat")})
 EXCLUDED_ROOTS = {".git", ".venv", "external", "vendor"}
 FORBIDDEN_TOP_LEVEL_CODE_TREES = {"packages", "scripts", "scratch", "tests", "tmp"}
 
