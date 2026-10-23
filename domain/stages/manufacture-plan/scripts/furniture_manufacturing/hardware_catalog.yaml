@@ -63,17 +63,6 @@ drawer_slides:
       - name: 悍高
         model: HG-3S
 
-  隐藏轨:
-    mounting: 底装
-    gap_requirement_mm: 12.7        # 每侧间隙
-    extension: 100%
-    standard_lengths_mm: [270, 300, 350, 400, 450, 500, 550]
-    brands:
-      - name: 默认
-        model: YCG-01
-      - name: Blum
-        model: 760H
-
 # ── 铰链 ──────────────────────────────────────────────
 hinges:
   HJ-100:

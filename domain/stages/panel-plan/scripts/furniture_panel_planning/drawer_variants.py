@@ -16,6 +16,11 @@ RUNNER_UNDERMOUNT = "undermount"
 RUNNERS: tuple[str, ...] = (RUNNER_SIDE_MOUNT, RUNNER_UNDERMOUNT)
 DEFAULT_RUNNER = RUNNER_SIDE_MOUNT
 
+#: 抽屉区贴哪一头：贴柜内底面，或贴顶板下表面。
+DRAWER_ANCHOR_BOTTOM = "bottom"
+DRAWER_ANCHOR_TOP = "top"
+DRAWER_ANCHORS: tuple[str, ...] = (DRAWER_ANCHOR_BOTTOM, DRAWER_ANCHOR_TOP)
+
 #: 盒高按 10 取整（车间口径）。
 BOX_HEIGHT_STEP_MM = 10.0
 
@@ -23,6 +28,7 @@ BOX_HEIGHT_STEP_MM = 10.0
 #:
 #: - `depth_ladder_mm`：抽芯深度档（不含抽面），盒深必须落在档上；
 #: - `min_rear_clearance_mm`：抽屉背板外表面到柜背的下限，**必须严格大于**；
+#: - `side_clearance_mm`：抽盒与柜体的**每侧**间隙，省略提案时按它展开；
 #: - `bottom_raise_mm`：底板底面到盒体底面的距离（托底轨藏轨用）；
 #: - `cell_gaps`：格高 → (下间隙, 上间隙)，左开右闭、按顺序匹配；超出最后一档用
 #:   `gaps_above_max`；
@@ -32,6 +38,7 @@ PROFILES: dict[str, dict[str, Any]] = {
     RUNNER_SIDE_MOUNT: {
         "label": "三节轨",
         "depth_ladder_mm": (200.0, 250.0, 300.0, 350.0, 400.0, 450.0, 500.0),
+        "side_clearance_mm": 13.0,
         "min_rear_clearance_mm": 0.0,
         "bottom_raise_mm": 0.0,
         "cell_gaps": (
@@ -46,6 +53,7 @@ PROFILES: dict[str, dict[str, Any]] = {
     RUNNER_UNDERMOUNT: {
         "label": "托底轨",
         "depth_ladder_mm": (240.0, 290.0, 340.0, 390.0, 440.0, 490.0),
+        "side_clearance_mm": 6.5,
         "min_rear_clearance_mm": 10.0,
         "bottom_raise_mm": 11.0,
         "cell_gaps": (
@@ -66,6 +74,14 @@ def admit_runner(value: Any) -> str:
     return text
 
 
+def admit_anchor(value: Any) -> str:
+    """规范抽屉区贴哪一头。只认规范名，不做同义词。"""
+    text = str(value if value is not None else DRAWER_ANCHOR_BOTTOM).strip()
+    if text not in DRAWER_ANCHORS:
+        raise ValueError("drawer_anchor must be one of: " + ", ".join(DRAWER_ANCHORS))
+    return text
+
+
 def profile(runner: str) -> dict[str, Any]:
     try:
         return PROFILES[runner]
@@ -76,6 +92,11 @@ def profile(runner: str) -> dict[str, Any]:
 def min_rear_clearance(runner: str) -> float:
     """后缝下限（实际后缝必须严格大于这个值）。"""
     return float(profile(runner)["min_rear_clearance_mm"])
+
+
+def side_clearance(runner: str) -> float:
+    """抽盒与柜体的每侧间隙（省略提案时按它展开）。"""
+    return float(profile(runner)["side_clearance_mm"])
 
 
 def bottom_raise(runner: str) -> float:
@@ -134,6 +155,14 @@ def cell_warnings(runner: str, cell_height: float) -> list[dict[str, str]]:
 def floor_to_step(value: float, step: float = BOX_HEIGHT_STEP_MM) -> float:
     """向下取到 step 的整倍数（盒高按 10 取整）。"""
     return floor(value / step) * step
+
+
+def drawer_panels_per_instance(front_board: bool = True) -> int:
+    """一抽出几块板：抽面 + 左右侧板 + 背板 + 底板（+ 前板）。
+
+    前板可能有、可能没有：没有时抽面直接当盒体前墙。
+    """
+    return 6 if front_board else 5
 
 
 def pick_box_depth(runner: str, available_depth: float, rear_clearance: float) -> float:

@@ -312,7 +312,8 @@ class PanelRuleContractTests(unittest.TestCase):
                 round(bottom_bottom.size_y, 3),
                 round(bottom_bottom.size_z, 3),
             ),
-            (702.0, 482.0, 18.0),
+            # 前板、背板都夹在侧板之间，底板夹在它们中间：500 − 18 − 18
+            (702.0, 464.0, 18.0),
         )
         self.assertEqual(
             (
@@ -605,7 +606,7 @@ class PanelRuleContractTests(unittest.TestCase):
         self.assertEqual(cavity["height"], 914)
         self.assertEqual(cavity["depth"], 553)
         self.assertEqual(cavity["origin"], {"x": 18, "y": 27, "z": 68})
-        self.assertEqual(cabinet["interior"]["zones"][0]["kind"], "full_height_drawers")
+        self.assertEqual(cabinet["interior"]["zones"][0]["kind"], "drawers")
         self.assertEqual(
             cabinet["interior"]["zones"][0]["members"],
             [

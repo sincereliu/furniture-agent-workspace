@@ -28,12 +28,16 @@ CABINET_OUTPUT_FIELDS = frozenset(
 )
 ASSEMBLY_OBJECT_FIELDS = frozenset({"carcass", "base", "fronts", "drawers"})
 BASE_CONSTRUCTIONS = frozenset({"integrated"})
-ZONE_KINDS = frozenset({"doors", "full_height_drawers"})
+ZONE_KINDS = frozenset({"doors", "drawers", "full_height_drawers"})
+#: 抽屉区可以写的 kind。`full_height_drawers` 是加"净高抽屉区"之前的老名字，
+#: 老冻结文件里还是它，所以读的时候仍然认。
+DRAWER_ZONE_KINDS = frozenset({"drawers", "full_height_drawers"})
 INTERIOR_FIELDS = frozenset({"cavity", "zones"})
 CAVITY_FIELDS = frozenset({"width", "height", "depth", "origin"})
 
 _DRAWER_ROLE = re.compile(
-    r"^(drawer_front|drawer_side_L|drawer_side_R|drawer_back|drawer_bottom)_(z-?\d+)$"
+    r"^(drawer_front|drawer_box_front|drawer_side_L|drawer_side_R|drawer_back|drawer_bottom)"
+    r"_(z-?\d+)$"
 )
 _CONTACT_KEY_FIELDS = ("bearing_id", "end_id", "face", "edge_axis", "edge_sign")
 
@@ -117,7 +121,7 @@ def build_cabinet_tree(
         zones.append(
             {
                 "id": f"{cabinet_id}__zone_front",
-                "kind": "full_height_drawers",
+                "kind": "drawers",
                 "members": drawer_ids,
             }
         )

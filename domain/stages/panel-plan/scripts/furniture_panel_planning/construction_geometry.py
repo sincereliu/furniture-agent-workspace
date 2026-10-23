@@ -382,7 +382,26 @@ def drawer_cell_report(
     if count <= 0:
         return {}
     runner = spec.drawer_runner
-    cell_height = structure.internal_height / count
+    # 抽屉区的高度：落在哪一格 > 显式净高 > 整个柜内净高。
+    if spec.drawer_bay_index is not None:
+        bays = shelf_bays(spec, structure)
+        index = spec.drawer_bay_index
+        if index > len(bays):
+            raise ValueError(
+                f"drawer_bay_index {index} is out of range (1..{len(bays)})"
+            )
+        zone_start, zone_height = bays[index - 1]
+    elif spec.drawer_clear_height_mm is not None:
+        zone_height = spec.drawer_clear_height_mm
+        if zone_height > structure.internal_height:
+            raise ValueError("drawer clear height exceeds the internal height")
+        zone_start = structure.internal_z_start
+        if spec.drawer_anchor == "top":
+            zone_start = structure.internal_z_end - zone_height
+    else:
+        zone_height = structure.internal_height
+        zone_start = structure.internal_z_start
+    cell_height = zone_height / count
     lower_gap, upper_gap = cell_gaps(runner, cell_height)
     box_height_raw = cell_height - lower_gap - upper_gap
     box_height = floor_to_step(box_height_raw)
@@ -400,6 +419,8 @@ def drawer_cell_report(
     box_depth = pick_box_depth(runner, available_depth, spec.drawer_back_clearance)
     return {
         "runner": runner,
+        "zone_start": zone_start,
+        "zone_height": zone_height,
         "cell_height": cell_height,
         "lower_gap": lower_gap,
         "upper_gap": upper_gap,
@@ -436,17 +457,22 @@ def drawer_panel_boxes(
     box_d = cell["box_depth"]
     box_h = cell["box_height"]
     box_back_y = structure.internal_y_start + cell["rear_clearance"]
-    bottom_size_y = box_d - back_t
+    box_front_y = box_back_y + box_d
+    # 前板可能有、可能没有；有前板时盒子 6 件，没有时抽面直接当盒体前墙。
+    front_board_t = board if spec.drawer_front_board else 0.0
+    # 前板、背板都夹在左右侧板之间，底面与底板底面齐平。
+    back_h = box_h - cell["bottom_raise"]
+    bottom_size_y = box_d - back_t - front_board_t
     if min(front_w, box_w, bottom_size_y, box_h) <= 0:
         raise ValueError("admitted drawer parameters leave non-positive geometry")
 
     boxes: list[PanelBox] = []
     for index in range(count):
-        front_z = structure.internal_z_start + index * band_h + (
+        front_z = cell["zone_start"] + index * band_h + (
             layer_gap if index > 0 else 0.0
         )
         front_h = band_h - layer_gap
-        cell_z = structure.internal_z_start + index * band_h
+        cell_z = cell["zone_start"] + index * band_h
         box_z = cell_z + cell["lower_gap"]
         bottom_z = box_z + cell["bottom_raise"]
         suffix = f"z{front_z:.0f}"
@@ -483,10 +509,11 @@ def drawer_panel_boxes(
                     panel_id=f"drawer_back_{suffix}",
                     size_x=box_w - 2 * board,
                     size_y=back_t,
-                    size_z=box_h,
+                    size_z=back_h,
                     pos_x=structure.internal_x_start + slide_gap + board,
                     pos_y=box_back_y,
-                    pos_z=box_z,
+                    # 与底板底面齐平（托底轨时随底板一起上抬）。
+                    pos_z=bottom_z,
                 ),
                 PanelBox(
                     panel_id=f"drawer_bottom_{suffix}",
@@ -499,7 +526,42 @@ def drawer_panel_boxes(
                 ),
             ]
         )
+        if spec.drawer_front_board:
+            boxes.append(
+                PanelBox(
+                    panel_id=f"drawer_box_front_{suffix}",
+                    size_x=box_w - 2 * board,
+                    size_y=front_board_t,
+                    size_z=back_h,
+                    pos_x=structure.internal_x_start + slide_gap + board,
+                    pos_y=box_front_y - front_board_t,
+                    pos_z=bottom_z,
+                )
+            )
     return boxes
+
+
+def shelf_bays(
+    spec: FurnitureSpec,
+    structure: CabinetStructure,
+) -> list[tuple[float, float]]:
+    """层板切出来的格，从上到下：每格 `(z 起点, 净高)`。
+
+    没有层板时整柜净空就是一格。净高是**上下板表面之间**的距离，不减板厚——
+    所以 `top_gap_mm` 与 `gap_below_mm` 原样就是格高。
+    """
+    if not spec.shelves:
+        return [(structure.internal_z_start, structure.internal_height)]
+    gaps = resolve_shelf_gaps(spec, structure.internal_height)
+    board = spec.board_thickness
+    # 第一块层板的顶面
+    top_z = structure.internal_z_end - spec.top_gap_mm
+    bays: list[tuple[float, float]] = [(top_z, spec.top_gap_mm)]
+    for gap in gaps:
+        bottom_z = top_z - board
+        bays.append((bottom_z - gap, gap))
+        top_z = bottom_z - gap
+    return bays
 
 
 def shelf_panel_boxes(
@@ -510,18 +572,21 @@ def shelf_panel_boxes(
 
     有中立板时每层按腔分段出件：中立板站在内部净空里，层板跨不过去。
     没有中立板时与老产出同名同几何（腔序号不写进 id）。
+
+    层板的 z 只从 `shelf_bays` 取：格链只有一条，抽屉算格高也读它。
     """
     if not spec.shelves:
         return []
-    gaps = resolve_shelf_gaps(spec, structure.internal_height)
+    bays = shelf_bays(spec, structure)
     board = spec.board_thickness
     depth = structure.internal_y_end - structure.internal_y_start
     dividers = divider_panel_boxes(spec, structure)
     cavities = _cavity_bounds(structure, dividers)
-    top_z = structure.internal_z_end - spec.top_gap_mm
     boxes: list[PanelBox] = []
-    for shelf, gap in zip(spec.shelves, gaps):
-        bottom_z = top_z - board
+    for index, shelf in enumerate(spec.shelves):
+        top_z = bays[index][0]
+        # 下一格的格顶就是这块层板的底面
+        bottom_z = bays[index + 1][0] + bays[index + 1][1]
         center_z = bottom_z + board / 2
         for index, (start, end) in enumerate(cavities, start=1):
             boxes.append(
@@ -542,7 +607,6 @@ def shelf_panel_boxes(
                     supports=_cavity_supports(structure, dividers, start, end),
                 )
             )
-        top_z = bottom_z - gap
     return boxes
 
 

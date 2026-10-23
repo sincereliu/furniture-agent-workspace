@@ -38,13 +38,13 @@ from furniture_panel_planning.panel_planning import plan_panels
 from furniture_panel_planning.panel_spec import FurnitureSpec, spec_payload
 from furniture_panel_planning.structure_planning import CabinetStructure
 from furniture_panel_planning.validation import validate_panels
-from panel_fixtures import furniture_spec
+from panel_fixtures import cabinet_envelope, furniture_spec, panel_parameters
 
 
 def drawer_cabinet(
     drawer_count: int = 3, runner: str = "side_mount", **overrides
 ) -> FurnitureSpec:
-    """整高抽屉区：抽屉占满内部净高，不要门也不要层板。
+    """抽屉区：默认占满内部净高，不要门也不要层板。
 
     后缝默认给 20（三节轨要求 > 0、托底轨 > 10）：这是提案值，不是代码默认。
     """
@@ -92,8 +92,49 @@ class DrawerRunnerAdmissionTests(unittest.TestCase):
             drawer_cabinet(runner="三节轨")
 
     def test_runner_without_drawers_is_rejected(self) -> None:
-        with self.assertRaisesRegex(ValueError, "requires drawer_count > 0"):
+        with self.assertRaisesRegex(ValueError, "require drawer_count > 0"):
             furniture_spec(drawer_runner="undermount")
+
+    def test_front_board_choice_is_serialized_only_when_off(self) -> None:
+        self.assertNotIn("drawer_front_board", spec_payload(drawer_cabinet()))
+        self.assertFalse(
+            spec_payload(drawer_cabinet(drawer_front_board=False))["drawer_front_board"]
+        )
+
+    def test_old_frozen_spec_reads_back_with_a_front_board(self) -> None:
+        payload = spec_payload(drawer_cabinet())
+        payload.pop("drawer_front_board", None)
+        self.assertTrue(FurnitureSpec.from_dict(payload).drawer_front_board)
+
+    def test_front_board_must_be_boolean(self) -> None:
+        with self.assertRaisesRegex(ValueError, "must be true or false"):
+            drawer_cabinet(drawer_front_board="false")
+
+
+class DrawerSideClearanceTests(unittest.TestCase):
+    """每侧间隙是滑轨系统的车间口径：省略按系统展开，显式值保持。"""
+
+    def _proposal(self, **overrides):
+        params = panel_parameters(
+            n_doors=0, drawer_count=2, drawer_back_clearance=20.0
+        )
+        params.pop("drawer_side_clearance", None)
+        params.update(overrides)
+        return params
+
+    def test_omitted_clearance_follows_the_runner(self) -> None:
+        flat = FurnitureSpec.from_envelope(cabinet_envelope(), self._proposal())
+        self.assertEqual(flat.drawer_side_clearance, 13.0)
+        under = FurnitureSpec.from_envelope(
+            cabinet_envelope(), self._proposal(drawer_runner="undermount")
+        )
+        self.assertEqual(under.drawer_side_clearance, 6.5)
+
+    def test_explicit_clearance_is_kept(self) -> None:
+        spec = FurnitureSpec.from_envelope(
+            cabinet_envelope(), {**self._proposal(), "drawer_side_clearance": 8.0}
+        )
+        self.assertEqual(spec.drawer_side_clearance, 8.0)
 
 
 class DrawerRearClearanceTests(unittest.TestCase):
@@ -144,6 +185,75 @@ class DrawerCellGapTests(unittest.TestCase):
         )
         # 托底轨没有格高上限
         self.assertEqual(cell_warnings("undermount", 900.0), [])
+
+
+class DrawerClearHeightTests(unittest.TestCase):
+    """抽屉区可以只占一段净高：给净高 + 贴底/贴顶。"""
+
+    def test_omitted_clear_height_still_fills_the_cavity(self) -> None:
+        spec = drawer_cabinet(3)
+        structure = CabinetStructure.from_spec(spec)
+        cell = drawer_cell_report(spec, structure)
+        self.assertAlmostEqual(cell["zone_height"], structure.internal_height, places=6)
+        self.assertAlmostEqual(cell["zone_start"], structure.internal_z_start, places=6)
+
+    def test_clear_height_at_the_bottom(self) -> None:
+        spec = drawer_cabinet(1, drawer_clear_height_mm=200.0)
+        structure = CabinetStructure.from_spec(spec)
+        cell = drawer_cell_report(spec, structure)
+        self.assertEqual(cell["zone_height"], 200.0)
+        self.assertEqual(cell["cell_height"], 200.0)
+        self.assertEqual(cell["box_height"], 170.0)  # 200 − 10 − 20
+        self.assertAlmostEqual(cell["zone_start"], structure.internal_z_start, places=6)
+        boxes = boxes_by_type(spec)
+        side = boxes["drawer_side_L"][0]
+        self.assertAlmostEqual(side.pos_z, structure.internal_z_start + 10.0, places=6)
+
+    def test_clear_height_at_the_top(self) -> None:
+        spec = drawer_cabinet(1, drawer_clear_height_mm=200.0, drawer_anchor="top")
+        structure = CabinetStructure.from_spec(spec)
+        cell = drawer_cell_report(spec, structure)
+        self.assertAlmostEqual(
+            cell["zone_start"], structure.internal_z_end - 200.0, places=6
+        )
+        boxes = boxes_by_type(spec)
+        side = boxes["drawer_side_L"][0]
+        self.assertAlmostEqual(
+            side.pos_z, structure.internal_z_end - 200.0 + 10.0, places=6
+        )
+        face = boxes["drawer_front"][0]
+        self.assertAlmostEqual(
+            face.pos_z, structure.internal_z_end - 200.0, places=6
+        )
+
+    def test_clear_height_splits_into_equal_cells(self) -> None:
+        spec = drawer_cabinet(2, drawer_clear_height_mm=400.0)
+        structure = CabinetStructure.from_spec(spec)
+        cell = drawer_cell_report(spec, structure)
+        self.assertEqual(cell["cell_height"], 200.0)
+        self.assertEqual(cell["box_height"], 170.0)
+
+    def test_clear_height_beyond_the_cavity_is_rejected(self) -> None:
+        spec = drawer_cabinet(1, drawer_clear_height_mm=2000.0)
+        structure = CabinetStructure.from_spec(spec)
+        with self.assertRaisesRegex(ValueError, "exceeds the internal height"):
+            plan_panels(spec, structure)
+
+    def test_anchor_without_clear_height_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "drawer_anchor requires"):
+            drawer_cabinet(1, drawer_anchor="top")
+
+    def test_clear_height_without_drawers_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "require drawer_count > 0"):
+            furniture_spec(drawer_clear_height_mm=200.0)
+
+    def test_clear_height_must_be_positive(self) -> None:
+        with self.assertRaisesRegex(ValueError, "must be a positive number"):
+            drawer_cabinet(1, drawer_clear_height_mm=0.0)
+
+    def test_unknown_anchor_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "drawer_anchor must be one of"):
+            drawer_cabinet(1, drawer_clear_height_mm=200.0, drawer_anchor="middle")
 
 
 class DrawerBoxChainTests(unittest.TestCase):

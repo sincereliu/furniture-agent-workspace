@@ -32,7 +32,7 @@
 | 子装配 | `assemblies` | 对象 | 柜内 `carcass`、可选 `base`、`fronts`、`drawers[]`。检查点事实源。 |
 | 底座工法 | `assemblies.base.construction` | 枚举 | 当前只允许 `integrated`（侧板落地，踢脚板挂在 `carcass`）。 |
 | 内空 | `interior.cavity` | 对象 | 可用内空：`width/height/depth` 与最小角点 `origin.{x,y,z}`。不是缝隙 `clearance`。 |
-| 内空分区 | `interior.zones[]` | 列表 | `kind` 为 `doors` 或 `full_height_drawers`；成员是门板 id 或抽屉装配 id。 |
+| 内空分区 | `interior.zones[]` | 列表 | `kind` 为 `doors` 或 `drawers`（旧名 `full_height_drawers` 只在读老冻结文件时出现）；成员是门板 id 或抽屉装配 id。 |
 | 板件柜内角色 | `role` | 字符串 | 柜内稳定角色名，如 `left_side_panel`。输出必须写出。 |
 | 板件所属柜体 | `parent_id` | 标识符 | 必须等于所属 `cabinets[].id`。输出必须写出。 |
 | 板件所属子装配 | `assembly_id` | 标识符 | 如 `cabinet_1__carcass`、`cabinet_1__drawer_1`。输出必须写出。 |

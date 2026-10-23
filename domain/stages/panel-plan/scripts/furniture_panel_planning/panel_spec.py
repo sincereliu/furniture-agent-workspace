@@ -9,9 +9,12 @@ from typing import Any, Mapping
 from .cabinet_envelope import CABINET_CATEGORIES, CabinetEnvelope
 from .drawer_variants import (
     DEFAULT_RUNNER,
+    DRAWER_ANCHOR_BOTTOM,
+    admit_anchor,
     admit_runner,
     min_rear_clearance,
     runner_label,
+    side_clearance,
 )
 from .panel_rules import default_toe_kick_support_count, even_shelf_gap
 
@@ -150,8 +153,9 @@ PANEL_REQUIRED_PARAMETER_FIELDS = frozenset(
         "toe_kick_height", "back_offset", "front_face_margin", "front_gap",
         "groove_depth", "groove_clearance", "toe_kick_reveal_front",
         "toe_kick_reveal_back", "toe_kick_support_count", "back_mount",
-        "back_rail_height", "drawer_count", "drawer_side_clearance",
-        "drawer_layer_gap", "drawer_back_clearance", "shelves", "top_gap_mm",
+        "back_rail_height", "drawer_count",
+        "drawer_layer_gap",
+        "drawer_back_clearance", "shelves", "top_gap_mm",
         "n_doors",
     }
 )
@@ -175,6 +179,11 @@ PANEL_OPTIONAL_PARAMETER_FIELDS = frozenset(
         "dividers",
         "door_hinges",
         "drawer_runner",
+        "drawer_front_board",
+        "drawer_side_clearance",
+        "drawer_clear_height_mm",
+        "drawer_anchor",
+        "drawer_bay_index",
     }
 )
 
@@ -190,6 +199,10 @@ _SERIALIZED_FIELDS = PANEL_PARAMETER_FIELDS | {
 #: 同一张表也是读旧冻结文件时的补值来源：老文件没这些键，读回来就是缺省。
 _DEFAULTED_SERIALIZED_FIELDS: dict[str, Any] = {
     "drawer_runner": DEFAULT_RUNNER,
+    "drawer_front_board": True,
+    "drawer_clear_height_mm": None,
+    "drawer_anchor": DRAWER_ANCHOR_BOTTOM,
+    "drawer_bay_index": None,
 }
 #: 不写也合法的字段：序列化输出为空时不落盘（老工程产出逐字节不变）。
 _OPTIONAL_SERIALIZED_FIELDS = PANEL_OPTIONAL_PARAMETER_FIELDS - frozenset(
@@ -250,6 +263,22 @@ class FurnitureSpec:
     #: 缺省 = 三节轨；口径与数值见 references/drawer-runner-rules.md。
     drawer_runner: str = DEFAULT_RUNNER
 
+    #: 抽屉盒有没有前板。有前板 = 6 块（前板 + 左右侧板 + 背板 + 底板 + 抽面）；
+    #: 没有前板 = 5 块，抽面直接当盒体前墙。前板与背板都夹在左右侧板之间，
+    #: 底面与底板底面齐平（见 references/drawer-runner-rules.md）。
+    drawer_front_board: bool = True
+
+    #: 抽屉区占的**净高**（上下两块板表面之间，不减板厚）。不写 = 整个柜内净高。
+    #: 写了就按它切格；贴底还是贴顶由 `drawer_anchor` 给。
+    drawer_clear_height_mm: float | None = None
+
+    #: 抽屉区贴哪一头：bottom（缺省）或 top。只在给了净高时有意义。
+    drawer_anchor: str = DRAWER_ANCHOR_BOTTOM
+
+    #: 抽屉区落在第几格：1 = 最上面一格（顶板与第 1 块层板之间），往下数。
+    #: 层板与抽屉共存时**必须**给：格高直接取该格的净高（不减板厚）。
+    drawer_bay_index: int | None = None
+
     def __post_init__(self) -> None:
         if self.furniture_category not in CABINET_CATEGORIES:
             raise ValueError(
@@ -279,6 +308,19 @@ class FurnitureSpec:
         self.dividers = _coerce_dividers(self.dividers)
         self.door_hinges = _coerce_door_hinges(self.door_hinges)
         self.drawer_runner = admit_runner(self.drawer_runner)
+        self.drawer_anchor = admit_anchor(self.drawer_anchor)
+        if not isinstance(self.drawer_front_board, bool):
+            raise ValueError("drawer_front_board must be true or false")
+        if self.drawer_clear_height_mm is not None:
+            clear = self.drawer_clear_height_mm
+            if (
+                isinstance(clear, bool)
+                or not isinstance(clear, (int, float))
+                or not isfinite(clear)
+                or clear <= 0
+            ):
+                raise ValueError("drawer_clear_height_mm must be a positive number")
+            self.drawer_clear_height_mm = float(clear)
         _validate_objective_invariants(self)
         _validate_sheet_stock(self)
 
@@ -290,9 +332,9 @@ class FurnitureSpec:
     ) -> "FurnitureSpec":
         """Admit a proposal against a cabinet envelope snapshot.
 
-        Omitted sheet stock, an omitted toe-kick support count, and a
-        fully omitted shelf-gap set are expanded here. Explicit numbers
-        are kept.
+        Omitted sheet stock, an omitted drawer side clearance, an omitted
+        toe-kick support count, and a fully omitted shelf-gap set are
+        expanded here. Explicit numbers are kept.
         """
         unit = CabinetEnvelope.from_mapping(envelope)
         if not isinstance(options, Mapping):
@@ -305,6 +347,7 @@ class FurnitureSpec:
         values = expand_omitted_panel_geometry(
             values, width=unit.width, height=unit.height,
         )
+        values = expand_drawer_side_clearance(values)
         missing = sorted(PANEL_REQUIRED_PARAMETER_FIELDS - set(values))
         if missing:
             raise ValueError(
@@ -376,6 +419,21 @@ def resolve_back_mount(requested: str) -> str:
             f"back_mount must be one of: {', '.join(sorted(VALID_BACK_MOUNTS))}"
         )
     return requested
+
+
+def expand_drawer_side_clearance(options: Mapping[str, Any]) -> dict[str, Any]:
+    """Fill an omitted drawer side clearance from the runner profile.
+
+    Structured protocol: 抽盒与柜体的每侧间隙是滑轨系统的车间口径（三节轨 13、
+    托底轨 6.5），省略时按系统展开；显式写出的值保持原值。序列化 spec 必须
+    已经带具体数，不经过这里。
+    """
+    values = dict(options)
+    if "drawer_side_clearance" not in values:
+        values["drawer_side_clearance"] = side_clearance(
+            admit_runner(values.get("drawer_runner"))
+        )
+    return values
 
 
 def expand_sheet_stock(options: Mapping[str, Any]) -> dict[str, Any]:
@@ -651,11 +709,17 @@ def _validate_objective_invariants(spec: FurnitureSpec) -> None:
         )
     if spec.toe_kick_height == 0 and spec.toe_kick_support_count != 0:
         raise ValueError("toe-kick supports require a positive toe_kick_height")
-    if spec.drawer_count and (spec.shelves or spec.n_doors):
-        raise ValueError("full-height drawers require no shelves and n_doors=0")
+    if spec.drawer_count and spec.n_doors:
+        # 门与抽屉共用一张正面开口要把缝/覆盖一起排，今天还没有。
+        raise ValueError("drawers and doors cannot share one cabinet yet")
+    if spec.drawer_count and spec.shelves and spec.drawer_bay_index is None:
+        # 层板与抽屉共存时，抽屉必须点名落在哪一格，不能默认占满净高（会跟层板打架）。
+        raise ValueError("drawers among shelves require drawer_bay_index")
+    if spec.drawer_bay_index is not None and not spec.drawer_count:
+        raise ValueError("drawer_bay_index requires drawer_count > 0")
     if spec.dividers and spec.drawer_count:
-        # 中立板站在内部净空里，整高抽屉区把这段净空占满了。
-        raise ValueError("a full-height drawer zone cannot take a divider")
+        # 抽屉跨整个内宽，中立板会从它中间穿过去；腔级抽屉还没做。
+        raise ValueError("a drawer zone cannot take a divider")
     if spec.dividers and spec.n_doors < 2:
         # 缝定锚：一扇门没有内缝，中立板无处可对。
         raise ValueError("a divider needs an inner seam, so at least 2 doors")
@@ -663,19 +727,41 @@ def _validate_objective_invariants(spec: FurnitureSpec) -> None:
         raise ValueError("at most one shelf gap may be null")
     if spec.door_hinges and len(spec.door_hinges) != spec.n_doors:
         raise ValueError("door_hinges must have exactly one entry per door")
-    _validate_drawer_runner(spec)
+    _validate_drawer_zone(spec)
 
 
-def _validate_drawer_runner(spec: FurnitureSpec) -> None:
-    """滑轨系统准入：后缝下限按系统给，写不到下限直接拒。
+def _validate_drawer_zone(spec: FurnitureSpec) -> None:
+    """抽屉区准入：滑轨系统的后缝下限 + 空间从哪来（整柜/净高/某一格）。
 
-    后缝是**抽屉背板外表面到柜背**的距离，三节轨必须 > 0、托底轨必须 > 10
-    （托底轨后部固定件要让位）。盒深取档后实际后缝只会更大，不会更小。
+    - 后缝是**抽屉背板外表面到柜背**的距离，三节轨必须 > 0、托底轨必须 > 10
+      （托底轨后部固定件要让位）；盒深取档后实际后缝只会更大，不会更小。
+    - 空间三选一：整柜净高（都别写）、`drawer_clear_height_mm`（配 `drawer_anchor`）、
+      `drawer_bay_index`（层板切出的第 k 格）。后两者互斥，且都要求有抽屉。
     """
     if spec.drawer_count <= 0:
-        if spec.drawer_runner != DEFAULT_RUNNER:
-            raise ValueError("drawer_runner requires drawer_count > 0")
+        if (
+            spec.drawer_runner != DEFAULT_RUNNER
+            or not spec.drawer_front_board
+            or spec.drawer_clear_height_mm is not None
+            or spec.drawer_anchor != DRAWER_ANCHOR_BOTTOM
+        ):
+            raise ValueError(
+                "drawer_runner / drawer_front_board / drawer_clear_height_mm "
+                "require drawer_count > 0"
+            )
         return
+    if spec.drawer_clear_height_mm is None and spec.drawer_anchor != DRAWER_ANCHOR_BOTTOM:
+        raise ValueError("drawer_anchor requires drawer_clear_height_mm")
+    if spec.drawer_bay_index is not None:
+        index = spec.drawer_bay_index
+        if isinstance(index, bool) or not isinstance(index, int) or index < 1:
+            raise ValueError("drawer_bay_index must be a positive integer")
+        if not spec.shelves:
+            raise ValueError("drawer_bay_index requires shelves")
+        if spec.drawer_clear_height_mm is not None:
+            raise ValueError(
+                "drawer_bay_index and drawer_clear_height_mm are exclusive"
+            )
     label = runner_label(spec.drawer_runner)
     limit = min_rear_clearance(spec.drawer_runner)
     if not spec.drawer_back_clearance > limit:

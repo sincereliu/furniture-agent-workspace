@@ -14,6 +14,7 @@ from .assembly_tree import (
     BASE_CONSTRUCTIONS,
     CABINET_OUTPUT_FIELDS,
     CAVITY_FIELDS,
+    DRAWER_ZONE_KINDS,
     INTERIOR_FIELDS,
     ZONE_KINDS,
     flatten_panels_for_handoff,
@@ -462,18 +463,19 @@ def _validate_zones(
         for item in cabinet.get("assemblies", {}).get("drawers", [])
         if isinstance(item, Mapping)
     }
-    expected_kind = ""
+    expected_kinds: frozenset[str] = frozenset()
     if spec.n_doors > 0:
-        expected_kind = "doors"
+        expected_kinds = frozenset({"doors"})
     elif spec.drawer_count > 0:
-        expected_kind = "full_height_drawers"
-    if expected_kind and len(zones) != 1:
+        # `full_height_drawers` 是老冻结文件里的名字，读得回来（见 assembly_tree）。
+        expected_kinds = DRAWER_ZONE_KINDS
+    if expected_kinds and len(zones) != 1:
         report.add_error(
             "ZONE_COUNT_MISMATCH",
             f"{cabinet_id} requires one front zone",
             "interior.zones",
         )
-    if not expected_kind and zones:
+    if not expected_kinds and zones:
         report.add_error(
             "UNEXPECTED_ZONE",
             f"{cabinet_id} has no front zone",
@@ -495,10 +497,11 @@ def _validate_zones(
                 "interior.zones",
             )
             continue
-        if expected_kind and kind != expected_kind:
+        if expected_kinds and kind not in expected_kinds:
             report.add_error(
                 "ZONE_KIND_MISMATCH",
-                f"{cabinet_id} front zone must be {expected_kind}",
+                f"{cabinet_id} front zone must be one of: "
+                + ", ".join(sorted(expected_kinds)),
                 "interior.zones",
             )
         members = zone.get("members")

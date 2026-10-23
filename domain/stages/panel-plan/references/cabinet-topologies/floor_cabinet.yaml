@@ -1,5 +1,5 @@
 # 落地柜板件拓扑 — 标准落地柜/储物柜的柜体骨架
-# 本文件只声明围合面、语义面、有无踢脚、整高抽屉区类型。
+# 本文件只声明围合面、语义面、有无踢脚、抽屉区类型。
 # 不包含坐标。门板等分、层板累加、抽屉尺寸链、三种背板几何由求解器执行。
 # 不能只加 YAML 就支持新柜型。
 
@@ -47,11 +47,9 @@ base:
 internals:
   # 层板由 spec.shelves 驱动（从上到下、固定/活动混排），不再用 count_field
   drawers:
-    type: full_height          # 整高抽屉区：抽屉占满内部净高与前开口
+    type: zone                 # 抽屉区：占满内部净高、显式净高或某一格（由 spec 决定）
     count_field: drawer_count
-    face_mode: none            # 无面板：前板即前脸
+    face_mode: board           # 有前板；spec.drawer_front_board=false 时抽面直接当盒体前墙
     # 净空、层缝和抽屉板厚均来自已准入的 FurnitureSpec；拓扑不持有方案默认值。
-    # front_overlap（前板对盒体侧板的覆盖）按抽屉位置派生：
-    #   顶/中间抽屉 0（顶板盖抽面、抽屉间无覆盖）；最底抽屉 = board_thickness（全盖底板）。
-    #   将来门+抽屉混合区按上方构造推导：共盖层板 0.5×board_thickness / 顶板盖 0。
+    # 抽面与盒体的关系（覆盖量）由格高与间隙算出，不再按抽屉位置写死。
   dividers: []

@@ -33,6 +33,7 @@ from .construction_geometry import (
     shelf_panel_boxes,
     toe_kick_support_boxes,
 )
+from .drawer_variants import drawer_panels_per_instance
 from .panel_models import PanelPlacement
 from .panel_spec import FurnitureSpec, resolve_back_mount, thickness_for_material_role
 from .panel_rules import (
@@ -41,10 +42,6 @@ from .panel_rules import (
     toe_kick_support_clear_spacing,
 )
 from .structure_planning import CabinetStructure
-
-
-#: 每抽五块（前/左右/后/底）。滑轨系统只改尺寸与基准，不改件数。
-DRAWER_PANELS_PER_INSTANCE = 5
 
 
 def validate_panels(
@@ -557,12 +554,10 @@ def _validate_drawer_panels(
             )
         return report
 
-    if any(item.panel_type == "door" for item in panels) or any(
-        item.panel_type in ("fixed_shelf", "movable_shelf") for item in panels
-    ):
+    if any(item.panel_type == "door" for item in panels):
         report.add_error(
-            "DRAWER_ZONE_MIXED_WITH_DOORS_OR_SHELVES",
-            "full-height drawer output must not contain doors or shelf panels",
+            "DRAWER_ZONE_MIXED_WITH_DOORS",
+            "drawers and doors cannot share one cabinet yet",
             "drawer_count",
         )
 
@@ -575,13 +570,14 @@ def _validate_drawer_panels(
     # 格高落在车间经验区间之外：只提示，不拦确认（口径见 drawer-runner-rules）。
     for warning in cell.get("warnings", ()):
         report.add_warning(warning["code"], warning["message"], "drawer_count")
-    # 每抽 5 块（前/左右/后/底）：滑轨系统只改尺寸，不改件数。
-    expected_count = DRAWER_PANELS_PER_INSTANCE * spec.drawer_count
+    # 每抽板件数由构造给：抽面 + 左右侧板 + 背板 + 底板（有前板时多一块）。
+    per_instance = drawer_panels_per_instance(spec.drawer_front_board)
+    expected_count = per_instance * spec.drawer_count
     if len(drawer_panels) != expected_count:
         report.add_error(
             "DRAWER_PANEL_COUNT_MISMATCH",
             "generated drawer panel count must match "
-            f"{DRAWER_PANELS_PER_INSTANCE} panels per drawer instance, "
+            f"{per_instance} panels per drawer instance, "
             f"got {len(drawer_panels)}",
             "drawer_count",
         )

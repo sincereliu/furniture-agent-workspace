@@ -102,7 +102,7 @@ def solve_panel_placements(
         placements.append(panel)
 
     # ── Doors ─────────────────────────────────────────────────────
-    # 整高抽屉区下前开口被抽屉占满，不生成门
+    # 抽屉与门暂时互斥：有抽屉就不生成门（正面开口的缝/覆盖还没一起排）。
     front_side = enclosure.get("front", {})
     if front_side.get("type") == "opening" and spec.drawer_count <= 0:
         for subtype in front_side.get("subtypes", []):
@@ -121,14 +121,13 @@ def solve_panel_placements(
 
     # ── Internal shelves / drawers ────────────────────────────────
     internals = topology.get("internals", {})
+    if spec.shelves:
+        placements.extend(_shelves_from_spec(spec, structure, frame))
     if spec.drawer_count > 0:
-        # 整高抽屉区：抽屉占满内部净高，不生成固定层板
+        # 抽屉区：占满净高、显式净高或某一格，由 spec 决定；与层板可以共存。
         drawers_def = internals.get("drawers", {})
-        if drawers_def.get("type") == "full_height":
+        if drawers_def.get("type") == "zone":
             placements.extend(_drawer_panels(spec, structure, drawers_def, frame))
-    else:
-        if spec.shelves:
-            placements.extend(_shelves_from_spec(spec, structure, frame))
 
     bind_panels_to_cabinet(placements, cabinet_id)
 
@@ -435,7 +434,10 @@ def _drawer_panels(
     """Materialize full-height drawer boxes from the shared dimension chain."""
     roles = {
         "drawer_front": (
-            "drawer_front", "抽屉前板", frame.back, frame.front,
+            "drawer_front", "抽面", frame.back, frame.front,
+        ),
+        "drawer_box_front": (
+            "drawer_box_front", "抽屉前板", frame.back, frame.front,
         ),
         "drawer_side_L": (
             "drawer_side", "抽屉左板", frame.right, frame.left,
@@ -465,7 +467,7 @@ def _drawer_panels(
             inner_face=inner, outer_face=outer,
             note=(
                 f"{label} {box.size_x:.0f}×{box.size_z:.0f}×{box.size_y:.0f}mm"
-                if panel_type == "drawer_front"
+                if panel_type in ("drawer_front", "drawer_box_front")
                 else f"{label} {box.size_y:.0f}×{box.size_z:.0f}×{box.size_x:.0f}mm"
             ),
         ))

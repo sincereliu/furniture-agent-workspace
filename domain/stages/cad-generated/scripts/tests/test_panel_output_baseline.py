@@ -38,7 +38,8 @@
 - 2026-10-24：**抽屉原先没有被基线覆盖**（四个用例都是门柜）。改盒高口径
   （盒高 = 格高 − 上下间隙，按 10 取整；盒深取抽芯档，后缝是结果）时补了一条
   三抽用例 `drawers_three`，因此 `_BASELINE` 多一项。**原有四份摘要逐字不变**——
-  抽屉与门柜互斥，抽屉改动不影响门柜产出。
+  抽屉与门柜互斥，抽屉改动不影响门柜产出。同日又改了一次该用例：背板改成坐在
+  底板上（底板通到盒背、背板从底板顶面起），摘要随板件位置变，仍只动这一项。
 """
 
 from __future__ import annotations
@@ -73,7 +74,13 @@ _BASELINE = {
     "wall_cabinet": "15a9008422c571b78b8526d96f4f666dc8d0bc05a0d6ad31a1f7aecee780e724",
     "two_cabinets": "68075a34b9f01e9c807d9be13a95111e9dc00b266582806acd6e524463c20a2e",
     # 2026-10-24 新增（不是重建）：抽屉原先没有基线用例，盒高改口径后补一条。
-    "drawers_three": "29797716068723a4a379862e7eea934f5c9008e38d79f2bd457afce0d69e0b0c",
+    # 同日再改三次，仍只动这一项：①背板坐到板上；②定稿成"前板/背板夹在侧板之间、
+    # 底面与底板底面齐平"，盒子 6 块（含前板）；③interior 分区的 kind 从
+    # full_height_drawers 正名为 drawers（抽屉区可以只占一段净高了，旧名仍在读侧兼容）。
+    "drawers_three": "543c2267a833814da3ab487996106c93855a369f30219fa0e6d2bef55c2d3286",
+    # 2026-10-24 新增（不是重建）：层板与抽屉共存是新的产出路径（层板在 carcass、
+    # 抽屉在自己的子装配、分区只有一个 drawers 区），原先没有任何工作流级用例盖到它。
+    "drawer_in_bay": "cf21fe7cc68a9d61b469b346933abc59faa86bcf78ce2a6c9f6ae87f2ac400b2",
 }
 
 
@@ -127,6 +134,23 @@ CASES: dict[str, dict] = {
             "top_gap_mm": 0.0,
             "drawer_count": 3,
             "drawer_back_clearance": 20.0,
+        },
+    },
+    # 层板之间加抽：3 层板切 4 格，抽屉落在第 4 格（最下面一格）。
+    "drawer_in_bay": {
+        "rooms": [_room([_item("bay_cab")])],
+        "parameters": "floor_cabinet",
+        "overrides": {
+            "n_doors": 0,
+            "drawer_count": 1,
+            "drawer_bay_index": 4,
+            "drawer_back_clearance": 20.0,
+            "shelves": [
+                {"shelf_type": "fixed", "gap_below_mm": 215.0},
+                {"shelf_type": "fixed", "gap_below_mm": 215.0},
+                {"shelf_type": "fixed", "gap_below_mm": 215.0},
+            ],
+            "top_gap_mm": 215.0,
         },
     },
 }

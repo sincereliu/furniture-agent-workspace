@@ -148,7 +148,7 @@ class DividerAdmissionTests(unittest.TestCase):
             furniture_spec(n_doors=1, dividers=[{"seam_index": 0}])
         self.assertIn("at least 2 doors", str(caught.exception))
 
-    def test_a_full_height_drawer_zone_cannot_take_a_divider(self):
+    def test_a_drawer_zone_cannot_take_a_divider(self):
         with self.assertRaises(ValueError) as caught:
             furniture_spec(
                 n_doors=0, drawer_count=1, shelves=[],
