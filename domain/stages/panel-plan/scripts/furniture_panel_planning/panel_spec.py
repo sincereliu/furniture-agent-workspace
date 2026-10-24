@@ -10,7 +10,9 @@ from .cabinet_envelope import CABINET_CATEGORIES, CabinetEnvelope
 from .drawer_variants import (
     DEFAULT_RUNNER,
     DRAWER_ANCHOR_BOTTOM,
+    DRAWER_AXIS_VERTICAL,
     admit_anchor,
+    admit_axis,
     admit_runner,
     min_rear_clearance,
     runner_label,
@@ -184,6 +186,7 @@ PANEL_OPTIONAL_PARAMETER_FIELDS = frozenset(
         "drawer_clear_height_mm",
         "drawer_anchor",
         "drawer_bay_index",
+        "drawer_axis",
     }
 )
 
@@ -203,6 +206,7 @@ _DEFAULTED_SERIALIZED_FIELDS: dict[str, Any] = {
     "drawer_clear_height_mm": None,
     "drawer_anchor": DRAWER_ANCHOR_BOTTOM,
     "drawer_bay_index": None,
+    "drawer_axis": DRAWER_AXIS_VERTICAL,
 }
 #: 不写也合法的字段：序列化输出为空时不落盘（老工程产出逐字节不变）。
 _OPTIONAL_SERIALIZED_FIELDS = PANEL_OPTIONAL_PARAMETER_FIELDS - frozenset(
@@ -279,6 +283,10 @@ class FurnitureSpec:
     #: 层板与抽屉共存时**必须**给：格高直接取该格的净高（不减板厚）。
     drawer_bay_index: int | None = None
 
+    #: 区内怎么分格：vertical（竖着摞，切高，缺省）或 horizontal（并排，切宽）。
+    #: 并排时按**抽面等宽**分槽，槽边界上派生 N−1 块竖撑，盒宽随格净宽走。
+    drawer_axis: str = DRAWER_AXIS_VERTICAL
+
     def __post_init__(self) -> None:
         if self.furniture_category not in CABINET_CATEGORIES:
             raise ValueError(
@@ -309,6 +317,7 @@ class FurnitureSpec:
         self.door_hinges = _coerce_door_hinges(self.door_hinges)
         self.drawer_runner = admit_runner(self.drawer_runner)
         self.drawer_anchor = admit_anchor(self.drawer_anchor)
+        self.drawer_axis = admit_axis(self.drawer_axis)
         if not isinstance(self.drawer_front_board, bool):
             raise ValueError("drawer_front_board must be true or false")
         if self.drawer_clear_height_mm is not None:
@@ -744,10 +753,11 @@ def _validate_drawer_zone(spec: FurnitureSpec) -> None:
             or not spec.drawer_front_board
             or spec.drawer_clear_height_mm is not None
             or spec.drawer_anchor != DRAWER_ANCHOR_BOTTOM
+            or spec.drawer_axis != DRAWER_AXIS_VERTICAL
         ):
             raise ValueError(
                 "drawer_runner / drawer_front_board / drawer_clear_height_mm "
-                "require drawer_count > 0"
+                "/ drawer_axis require drawer_count > 0"
             )
         return
     if spec.drawer_clear_height_mm is None and spec.drawer_anchor != DRAWER_ANCHOR_BOTTOM:

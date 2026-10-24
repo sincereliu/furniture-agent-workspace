@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import floor
 from typing import Any, Sequence
 
 from .drawer_variants import (
+    DRAWER_SLOT_STEP_MM,
     bottom_raise,
     cell_gaps,
     cell_warnings,
@@ -372,11 +374,16 @@ def drawer_cell_report(
     spec: FurnitureSpec,
     structure: CabinetStructure,
 ) -> dict[str, Any]:
-    """一格抽屉的空间账：格高、上下间隙、盒高（取整后）、盒深（档位）与后缝。
+    """抽屉区的空间账：区、格清单、上下间隙、盒高（取整后）、盒深（档位）与后缝。
 
     求解与校验都只读这里，避免第二套公式。口径见
     references/drawer-runner-rules.md：盒高 = 格高 − 上下间隙，按 10 取整，
     余量进上间隙；盒深取抽芯档，后缝是结果。
+
+    分格按 `drawer_axis`：
+    - `vertical`：切高，格宽 = 整个内宽；
+    - `horizontal`：切宽，格高 = 整个区高。槽位 = 内宽 ÷ 抽数、截断到 0.1，
+      零头进**右边距**（≤0.9mm）：这样支撑正好落在槽边界上，抽面等宽、缝等宽。
     """
     count = spec.drawer_count
     if count <= 0:
@@ -401,7 +408,42 @@ def drawer_cell_report(
     else:
         zone_height = structure.internal_height
         zone_start = structure.internal_z_start
-    cell_height = zone_height / count
+
+    x0, x1 = structure.internal_x_start, structure.internal_x_end
+    axis = spec.drawer_axis
+    slot = 0.0
+    if axis == "horizontal":
+        step = DRAWER_SLOT_STEP_MM
+        slot = floor((x1 - x0) / count / step) * step
+        cell_height = zone_height
+        cells = [
+            {
+                "x": x0 + index * slot,
+                "width": slot,
+                "z": zone_start,
+                "height": zone_height,
+            }
+            for index in range(count)
+        ]
+    else:
+        cell_height = zone_height / count
+        cells = [
+            {
+                "x": x0,
+                "width": x1 - x0,
+                "z": zone_start + index * cell_height,
+                "height": cell_height,
+            }
+            for index in range(count)
+        ]
+
+    if axis == "horizontal" and spec.board_thickness > 2 * spec.drawer_side_clearance:
+        raise ValueError(
+            "并排抽屉的竖撑厚 %gmm 超过两侧间隙之和 %gmm：盒体会顶到竖撑，"
+            "请加大每侧间隙或换薄板"
+            % (spec.board_thickness, 2 * spec.drawer_side_clearance)
+        )
+
     lower_gap, upper_gap = cell_gaps(runner, cell_height)
     box_height_raw = cell_height - lower_gap - upper_gap
     box_height = floor_to_step(box_height_raw)
@@ -419,8 +461,11 @@ def drawer_cell_report(
     box_depth = pick_box_depth(runner, available_depth, spec.drawer_back_clearance)
     return {
         "runner": runner,
+        "axis": axis,
         "zone_start": zone_start,
         "zone_height": zone_height,
+        "slot": slot,
+        "cells": cells,
         "cell_height": cell_height,
         "lower_gap": lower_gap,
         "upper_gap": upper_gap,
@@ -450,10 +495,6 @@ def drawer_panel_boxes(
     layer_gap = spec.drawer_layer_gap
     bottom_t = spec.drawer_bottom_thickness
     back_t = spec.drawer_back_thickness
-    iw = structure.internal_width
-    band_h = cell["cell_height"]
-    front_w = iw - 2 * spec.front_face_margin
-    box_w = iw - 2 * slide_gap
     box_d = cell["box_depth"]
     box_h = cell["box_height"]
     box_back_y = structure.internal_y_start + cell["rear_clearance"]
@@ -463,19 +504,32 @@ def drawer_panel_boxes(
     # 前板、背板都夹在左右侧板之间，底面与底板底面齐平。
     back_h = box_h - cell["bottom_raise"]
     bottom_size_y = box_d - back_t - front_board_t
-    if min(front_w, box_w, bottom_size_y, box_h) <= 0:
-        raise ValueError("admitted drawer parameters leave non-positive geometry")
+    horizontal = cell["axis"] == "horizontal"
 
     boxes: list[PanelBox] = []
-    for index in range(count):
-        front_z = cell["zone_start"] + index * band_h + (
-            layer_gap if index > 0 else 0.0
-        )
-        front_h = band_h - layer_gap
-        cell_z = cell["zone_start"] + index * band_h
+    for index, cell_geom in enumerate(cell["cells"], start=1):
+        cell_x = cell_geom["x"]
+        cell_z = cell_geom["z"]
+        box_w = cell_geom["width"] - 2 * slide_gap
+        box_x = cell_x + slide_gap
+        if horizontal:
+            # 并排：抽面宽由槽位给（等宽），高占满区高，缝在中缝上。
+            front_w = cell["slot"] - 2 * spec.front_face_margin
+            front_h = cell_geom["height"]
+            front_x = cell_x + spec.front_face_margin
+            front_z = cell_z
+            suffix = f"x{cell_x:.0f}"
+        else:
+            # 竖摞：抽面宽占满格宽，层缝落在相邻两扇之间。
+            front_w = cell_geom["width"] - 2 * spec.front_face_margin
+            front_h = cell_geom["height"] - layer_gap
+            front_x = cell_x + spec.front_face_margin
+            front_z = cell_z + (layer_gap if index > 1 else 0.0)
+            suffix = f"z{front_z:.0f}"
         box_z = cell_z + cell["lower_gap"]
         bottom_z = box_z + cell["bottom_raise"]
-        suffix = f"z{front_z:.0f}"
+        if min(front_w, box_w, bottom_size_y, box_h) <= 0:
+            raise ValueError("admitted drawer parameters leave non-positive geometry")
         boxes.extend(
             [
                 PanelBox(
@@ -483,7 +537,7 @@ def drawer_panel_boxes(
                     size_x=front_w,
                     size_y=board,
                     size_z=front_h,
-                    pos_x=structure.internal_x_start + spec.front_face_margin,
+                    pos_x=front_x,
                     pos_y=structure.carcass_y_end - board,
                     pos_z=front_z,
                 ),
@@ -492,7 +546,7 @@ def drawer_panel_boxes(
                     size_x=board,
                     size_y=box_d,
                     size_z=box_h,
-                    pos_x=structure.internal_x_start + slide_gap,
+                    pos_x=box_x,
                     pos_y=box_back_y,
                     pos_z=box_z,
                 ),
@@ -501,7 +555,7 @@ def drawer_panel_boxes(
                     size_x=board,
                     size_y=box_d,
                     size_z=box_h,
-                    pos_x=structure.internal_x_end - board - slide_gap,
+                    pos_x=box_x + box_w - board,
                     pos_y=box_back_y,
                     pos_z=box_z,
                 ),
@@ -510,7 +564,7 @@ def drawer_panel_boxes(
                     size_x=box_w - 2 * board,
                     size_y=back_t,
                     size_z=back_h,
-                    pos_x=structure.internal_x_start + slide_gap + board,
+                    pos_x=box_x + board,
                     pos_y=box_back_y,
                     # 与底板底面齐平（托底轨时随底板一起上抬）。
                     pos_z=bottom_z,
@@ -520,7 +574,7 @@ def drawer_panel_boxes(
                     size_x=box_w - 2 * board,
                     size_y=bottom_size_y,
                     size_z=bottom_t,
-                    pos_x=structure.internal_x_start + slide_gap + board,
+                    pos_x=box_x + board,
                     pos_y=box_back_y + back_t,
                     pos_z=bottom_z,
                 ),
@@ -533,11 +587,48 @@ def drawer_panel_boxes(
                     size_x=box_w - 2 * board,
                     size_y=front_board_t,
                     size_z=back_h,
-                    pos_x=structure.internal_x_start + slide_gap + board,
+                    pos_x=box_x + board,
                     pos_y=box_front_y - front_board_t,
                     pos_z=bottom_z,
                 )
             )
+    return boxes
+
+
+def bay_divider_boxes(
+    spec: FurnitureSpec,
+    structure: CabinetStructure,
+) -> list[PanelBox]:
+    """并排抽屉之间的竖撑：N 抽要 N−1 块，落在抽面槽边界上。
+
+    它是**柜体件**（`panel_type=divider`）：高度 = 抽屉区净高、深度到抽面背面，
+    两面各装一条滑轨。竖直摞的抽屉不需要它。
+    """
+    if spec.drawer_axis != "horizontal" or spec.drawer_count <= 1:
+        return []
+    cell = drawer_cell_report(spec, structure)
+    if not cell:
+        return []
+    board = spec.board_thickness
+    depth = (
+        structure.internal_y_end
+        - structure.internal_y_start
+        - spec.board_thickness
+    )
+    boxes: list[PanelBox] = []
+    for index in range(1, spec.drawer_count):
+        center = structure.internal_x_start + index * cell["slot"]
+        boxes.append(
+            PanelBox(
+                panel_id=f"bay_divider_{index}",
+                size_x=board,
+                size_y=depth,
+                size_z=cell["zone_height"],
+                pos_x=center - board / 2,
+                pos_y=structure.internal_y_start,
+                pos_z=cell["zone_start"],
+            )
+        )
     return boxes
 
 

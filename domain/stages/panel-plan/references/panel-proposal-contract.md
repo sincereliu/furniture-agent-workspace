@@ -27,7 +27,7 @@
 - 抽屉尺寸链输入：`drawer_side_clearance`、`drawer_layer_gap`、`drawer_back_clearance`（`drawer_side_clearance` 可以省略：省略时按滑轨系统展开，三节轨 13、托底轨 6.5；显式写出保持原值）
 - 抽屉滑轨系统（可选）：`drawer_runner`；取值 side_mount（三节轨，缺省）或 undermount（托底轨）。换轨只改这一个字段：档位、上下间隙、轨腔高度全部查表，见 [抽屉滑轨规则](drawer-runner-rules.md)。
 - 抽屉盒前板（可选）：`drawer_front_board`；true（缺省，盒子 6 块：抽面 + 左右侧板 + 背板 + 底板 + 前板）或 false（抽面直接当盒体前墙，盒子 5 块）。前板与背板都夹在左右侧板之间、底面与底板底面齐平。
-- 抽屉区的空间（可选）：`drawer_clear_height_mm`、`drawer_anchor`、`drawer_bay_index`；净高单位是 mm、是上下两块板**表面之间**的距离（不减板厚），贴哪一头取 bottom（缺省）或 top。**三项都不写 = 抽屉区占满柜内净高**（今天的行为）。层板与抽屉共存时必须给 `drawer_bay_index`（1 = 最上面一格，往下数），格高直接取该格净高。
+- 抽屉区的空间（可选）：`drawer_clear_height_mm`、`drawer_anchor`、`drawer_bay_index`、`drawer_axis`；净高单位是 mm、是上下两块板**表面之间**的距离（不减板厚），贴哪一头取 bottom（缺省）或 top。**三项空间都不写 = 抽屉区占满柜内净高**（今天的行为）。层板与抽屉共存时必须给 `drawer_bay_index`（1 = 最上面一格，往下数），格高直接取该格净高。`drawer_axis` 取 vertical（缺省，竖着摞）或 horizontal（并排，切宽）。
 - 可选料档：`board_thickness`、`back_thickness`、`door_thickness`、`drawer_bottom_thickness`、`drawer_back_thickness`、`sheet_width_mm`、`sheet_length_mm`；省略则按 [料档与工艺卡](sheet-stock-catalog.md) 展开。
 - 柜体身份（可选）：`cabinet_id`；这不是构造字段，运行时在准入前弹出，缺省 cabinet_1，不得包含 __。
 

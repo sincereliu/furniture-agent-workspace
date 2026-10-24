@@ -37,7 +37,7 @@ CAVITY_FIELDS = frozenset({"width", "height", "depth", "origin"})
 
 _DRAWER_ROLE = re.compile(
     r"^(drawer_front|drawer_box_front|drawer_side_L|drawer_side_R|drawer_back|drawer_bottom)"
-    r"_(z-?\d+)$"
+    r"_(z-?\d+|x-?\d+)$"
 )
 _CONTACT_KEY_FIELDS = ("bearing_id", "end_id", "face", "edge_axis", "edge_sign")
 
@@ -265,4 +265,5 @@ def _drawer_suffix(role: str) -> str | None:
 
 
 def _drawer_sort_key(suffix: str) -> int:
+    """实例后缀 `z{起点}` / `x{起点}` → 数值，用于给抽屉编号。"""
     return int(suffix[1:])

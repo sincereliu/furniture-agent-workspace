@@ -299,6 +299,83 @@ class DrawerZoneTests(unittest.TestCase):
                 1, shelf_count=3, drawer_bay_index=1, drawer_clear_height_mm=200.0
             )
 
+    def test_horizontal_drawers_split_by_face_slot(self) -> None:
+        """并排两抽：抽面等宽（槽位减缝），槽边界上多一块竖撑，盒宽随格走。"""
+        spec, placements = self._drawer_cabinet(
+            2, drawer_axis="horizontal", drawer_clear_height_mm=300.0
+        )
+        structure = CabinetStructure.from_spec(spec)
+        cell = drawer_cell_report(spec, structure)
+        self.assertEqual(cell["axis"], "horizontal")
+        self.assertAlmostEqual(cell["slot"], 382.0, places=6)
+        self.assertAlmostEqual(cell["cell_height"], 300.0, places=6)
+        self.assertEqual(cell["box_height"], 260.0)
+
+        faces = sorted(
+            (p for p in placements if p.panel_type == "drawer_front"),
+            key=lambda p: p.pos_x,
+        )
+        self.assertEqual(len(faces), 2)
+        self.assertAlmostEqual(faces[0].size_x, 379.0, places=6)
+        self.assertAlmostEqual(faces[1].size_x, 379.0, places=6)
+        self.assertAlmostEqual(
+            faces[1].pos_x - (faces[0].pos_x + faces[0].size_x), 3.0, places=6
+        )
+
+        dividers = [p for p in placements if p.panel_type == "divider"]
+        self.assertEqual(len(dividers), 1)
+        self.assertAlmostEqual(dividers[0].pos_x, 391.0, places=6)  # 槽边界 400 居中
+
+        sides = sorted(
+            (p for p in placements if p.panel_type == "drawer_side"),
+            key=lambda p: p.pos_x,
+        )
+        # 每个盒子都离槽边界 13（竖撑半厚 9 → 还剩 4mm 余量）
+        self.assertAlmostEqual(sides[1].pos_x + sides[1].size_x, 387.0, places=6)
+        self.assertAlmostEqual(sides[2].pos_x, 413.0, places=6)
+
+    def test_horizontal_three_drawers_keep_faces_equal(self) -> None:
+        spec, placements = self._drawer_cabinet(
+            3, drawer_axis="horizontal", drawer_clear_height_mm=300.0
+        )
+        structure = CabinetStructure.from_spec(spec)
+        cell = drawer_cell_report(spec, structure)
+        self.assertAlmostEqual(cell["slot"], 254.6, places=6)
+        faces = [p for p in placements if p.panel_type == "drawer_front"]
+        self.assertEqual(len(faces), 3)
+        widths = {round(p.size_x, 6) for p in faces}
+        self.assertEqual(widths, {round(cell["slot"] - 3.0, 6)})
+        dividers = [p for p in placements if p.panel_type == "divider"]
+        self.assertEqual(len(dividers), 2)
+        # 零头（0.2）进右边距：最后一扇右沿 + 边距 = 内空右边界
+        right_face = max(faces, key=lambda p: p.pos_x)
+        right_margin = structure.internal_x_end - (
+            right_face.pos_x + right_face.size_x
+        )
+        self.assertAlmostEqual(right_margin, 1.5 + 0.2, places=6)
+
+    def test_horizontal_needs_room_for_the_bay_support(self) -> None:
+        """托底轨每侧 6.5，竖撑 18 厚会顶到盒体：拦下来。"""
+        with self.assertRaisesRegex(ValueError, "超过两侧间隙之和"):
+            self._drawer_cabinet(
+                2,
+                drawer_runner="undermount",
+                drawer_side_clearance=6.5,
+                drawer_axis="horizontal",
+                drawer_clear_height_mm=300.0,
+            )
+
+    def test_horizontal_drawers_pass_validation(self) -> None:
+        spec, placements = self._drawer_cabinet(
+            2, drawer_axis="horizontal", drawer_clear_height_mm=300.0
+        )
+        structure = CabinetStructure.from_spec(spec)
+        report = validate_panels(spec, structure, placements)
+        self.assertTrue(report.passed, [issue.code for issue in report.issues])
+        self.assertIn(
+            "DRAWER_CELL_TOO_HIGH", {issue.code for issue in report.issues}
+        )
+
     def test_bay_index_without_shelves_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "requires shelves"):
             self._drawer_cabinet(1, drawer_bay_index=1)

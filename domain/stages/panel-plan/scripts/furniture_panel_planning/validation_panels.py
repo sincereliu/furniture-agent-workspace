@@ -26,6 +26,7 @@ from .construction_geometry import (
     back_groove_allowance,
     back_panel_boxes,
     back_rail_boxes,
+    bay_divider_boxes,
     divider_panel_boxes,
     door_panel_boxes,
     drawer_cell_report,
@@ -486,14 +487,18 @@ def _validate_divider_panels(
     report = ValidationReport(stage="panel_plan")
     dividers = [item for item in panels if item.panel_type == "divider"]
     try:
-        expected = divider_panel_boxes(spec, structure)
+        # 中立板有两路来源：提案的 `dividers` + 并排抽屉派生的竖撑。
+        expected = divider_panel_boxes(spec, structure) + bay_divider_boxes(
+            spec, structure
+        )
     except ValueError as exc:
         report.add_error("INVALID_DIVIDER_LAYOUT", str(exc), "dividers")
         return report
     if len(dividers) != len(expected):
         report.add_error(
             "DIVIDER_PANEL_COUNT_MISMATCH",
-            "generated divider count must match the admitted dividers list",
+            "generated divider count must match the admitted dividers list "
+            "plus the drawer bay supports",
             "dividers",
         )
     _mismatch_boxes(
@@ -511,8 +516,6 @@ def _validate_shelf_panels(
     panels: list[PanelPlacement],
 ) -> ValidationReport:
     report = ValidationReport(stage="panel_plan")
-    if spec.drawer_count > 0:
-        return report
     shelf_panels = [
         item
         for item in panels

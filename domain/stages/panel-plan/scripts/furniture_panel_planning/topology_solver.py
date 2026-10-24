@@ -22,6 +22,7 @@ from .cabinet_identity import DEFAULT_CABINET_ID, bind_panels_to_cabinet
 from .construction_geometry import (
     back_panel_boxes,
     back_rail_boxes,
+    bay_divider_boxes,
     cavity_flanks,
     divider_panel_boxes,
     door_panel_boxes,
@@ -128,6 +129,7 @@ def solve_panel_placements(
         drawers_def = internals.get("drawers", {})
         if drawers_def.get("type") == "zone":
             placements.extend(_drawer_panels(spec, structure, drawers_def, frame))
+            placements.extend(_bay_divider_panels(spec, structure, frame))
 
     bind_panels_to_cabinet(placements, cabinet_id)
 
@@ -389,6 +391,32 @@ def _divider_panels(
     return panels
 
 
+def _bay_divider_panels(
+    spec: FurnitureSpec,
+    structure: CabinetStructure,
+    frame: CabinetFrame,
+) -> list[PanelPlacement]:
+    """并排抽屉之间的竖撑：落在抽面槽边界上，两面各装一条滑轨。
+
+    它是柜体件（`panel_type=divider`），不是抽屉件——所以进 `carcass`，
+    也不参与"每抽几块板"的计数。
+    """
+    panels: list[PanelPlacement] = []
+    for index, box in enumerate(bay_divider_boxes(spec, structure), start=1):
+        panels.append(PanelPlacement(
+            id=box.panel_id,
+            name=f"抽间竖撑{index}",
+            panel_type="divider",
+            size_x=box.size_x, size_y=box.size_y, size_z=box.size_z,
+            pos_x=box.pos_x, pos_y=box.pos_y, pos_z=box.pos_z,
+            material_role="carcass",
+            inner_face=frame.right, outer_face=frame.left,
+            bearing_faces=[frame.left],
+            note=f"抽间竖撑，厚{box.size_x:.0f}mm，对齐抽面槽边界",
+        ))
+    return panels
+
+
 def _shelves_from_spec(
     spec: FurnitureSpec,
     structure: CabinetStructure,
@@ -454,12 +482,13 @@ def _drawer_panels(
     }
     panels: list[PanelPlacement] = []
     for box in drawer_panel_boxes(spec, structure):
-        role_key = box.panel_id.rsplit("_z", 1)[0]
+        # 实例后缀：竖摞是 `z{起点}`、并排是 `x{起点}`；角色名在前面。
+        role_key, _, instance = box.panel_id.rpartition("_")
         panel_type, label, inner, outer = roles[role_key]
-        z_label = box.panel_id.rsplit("_", 1)[-1][1:]
+        where = instance[1:]
         panels.append(PanelPlacement(
             id=box.panel_id,
-            name=f"{label}({z_label}mm)",
+            name=f"{label}({where}mm)",
             panel_type=panel_type,
             size_x=box.size_x, size_y=box.size_y, size_z=box.size_z,
             pos_x=box.pos_x, pos_y=box.pos_y, pos_z=box.pos_z,

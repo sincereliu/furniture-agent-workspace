@@ -21,6 +21,14 @@ DRAWER_ANCHOR_BOTTOM = "bottom"
 DRAWER_ANCHOR_TOP = "top"
 DRAWER_ANCHORS: tuple[str, ...] = (DRAWER_ANCHOR_BOTTOM, DRAWER_ANCHOR_TOP)
 
+#: 区内怎么分格：竖着摞（切高）还是并排（切宽）。
+DRAWER_AXIS_VERTICAL = "vertical"
+DRAWER_AXIS_HORIZONTAL = "horizontal"
+DRAWER_AXES: tuple[str, ...] = (DRAWER_AXIS_VERTICAL, DRAWER_AXIS_HORIZONTAL)
+
+#: 并排时抽面槽位的截断精度（与门宽等分同一档）。
+DRAWER_SLOT_STEP_MM = 0.1
+
 #: 盒高按 10 取整（车间口径）。
 BOX_HEIGHT_STEP_MM = 10.0
 
@@ -79,6 +87,14 @@ def admit_anchor(value: Any) -> str:
     text = str(value if value is not None else DRAWER_ANCHOR_BOTTOM).strip()
     if text not in DRAWER_ANCHORS:
         raise ValueError("drawer_anchor must be one of: " + ", ".join(DRAWER_ANCHORS))
+    return text
+
+
+def admit_axis(value: Any) -> str:
+    """规范分格方向。只认规范名，不做同义词。"""
+    text = str(value if value is not None else DRAWER_AXIS_VERTICAL).strip()
+    if text not in DRAWER_AXES:
+        raise ValueError("drawer_axis must be one of: " + ", ".join(DRAWER_AXES))
     return text
 
 

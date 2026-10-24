@@ -81,6 +81,9 @@ _BASELINE = {
     # 2026-10-24 新增（不是重建）：层板与抽屉共存是新的产出路径（层板在 carcass、
     # 抽屉在自己的子装配、分区只有一个 drawers 区），原先没有任何工作流级用例盖到它。
     "drawer_in_bay": "cf21fe7cc68a9d61b469b346933abc59faa86bcf78ce2a6c9f6ae87f2ac400b2",
+    # 2026-10-24 新增（不是重建）：并排抽屉是又一条新产出路径（x 后缀实例、
+    # 派生竖撑进 carcass），没有用例盖到它。
+    "drawer_horizontal": "0318ea1b7957f26c42384056ed263342f9028946376390982e8da40b8e7ecb93",
 }
 
 
@@ -151,6 +154,19 @@ CASES: dict[str, dict] = {
                 {"shelf_type": "fixed", "gap_below_mm": 215.0},
             ],
             "top_gap_mm": 215.0,
+        },
+    },
+    # 并排两抽：抽面按槽位等宽，槽边界上派生一块竖撑（柜体件，进 carcass）。
+    "drawer_horizontal": {
+        "rooms": [_room([_item("h_cab")])],
+        "parameters": "floor_cabinet",
+        "overrides": {
+            "n_doors": 0,
+            "drawer_count": 2,
+            "drawer_axis": "horizontal",
+            "drawer_clear_height_mm": 300.0,
+            "drawer_anchor": "bottom",
+            "drawer_back_clearance": 20.0,
         },
     },
 }
