@@ -1,12 +1,12 @@
 import { mountLayout } from "/layout-view/layout_scene.js";
 import { normalizeItems } from "/layout-view/layout_payload.js";
-import { createLayoutPersistence, LayoutWriteError, placementChanged } from "/layout-view/layout_persistence.js";
-import { groundDragDelta, wallSnap } from "/layout-view/layout_drag.js";
+import { createLayoutPersistence, LayoutWriteError } from "/layout-view/layout_persistence.js";
+import { createDragTransaction, poseOperation } from "/layout-view/layout_interaction.js";
 import {
   contactStop, detailValues, distancesOf, footprintCenter, heightProbe,
-  localFootprint, normalizeAngle, placementStop, resolveInteger,
-  setItemHeight, snapAngle, solveElevationDrag, solvePlanarDrag,
-  solveRotation, wallLabel, wallNormal,
+  normalizeAngle, placementStop, resolveInteger,
+  setItemHeight, solvePlanarDrag,
+  solveRotation, syncPlacementGeometry, wallLabel, wallNormal,
 } from "/layout-view/layout_solver.js";
 import {
   ELEVATION_MAX_PITCH, baseFit, fitDistance, horizontalAxis,
@@ -50,10 +50,19 @@ const uiStore={
   panelSignature:null,
   detailItemId:undefined,
   viewAnimation:0,
+  resizing:0,
 };
 
+function plansPanels(item){
+  return !!item && item.manufacture!==false
+    && (item.furniture_category==="floor_cabinet" || item.furniture_category==="wall_cabinet");
+}
+function loadCanvasItems(raw){
+  return normalizeItems(raw||[]);
+}
+
 const scene=JSON.parse(document.getElementById("scene-data").textContent);
-scene.items=normalizeItems(scene.items);
+scene.items=loadCanvasItems(scene.items);
 scene.obstacles=scene.obstacles||[];
 scene.openings=scene.openings||[];
 const canvas=document.getElementById("scene"),status=document.getElementById("status");
@@ -125,7 +134,7 @@ function render(){
     freeView:state.freeView?{...state.freeView}:null,
     pullFrom:pullStore.from,pullEnd:pullStore.end,pullNow:pullStore.now,
     animating:uiStore.viewAnimation!==0};
-  view.sync(scene,{selectedId:state.selectedId,dims:state.dims,readOnly:READ_ONLY,blockedId:state.blocked});
+  view.sync(displayScene(),{selectedId:state.selectedId,dims:state.dims,readOnly:READ_ONLY,blockedId:state.blocked});
   syncPanel();
 }
 
@@ -141,25 +150,9 @@ function isElevation(){return state.pitch<ELEVATION_MAX_PITCH}
 function applyLocalDrag(item,dx,dy,startOrigin){
   const origin=startOrigin||[item.placement.origin_x_mm||0,item.placement.origin_y_mm||0];
   const blocker=solvePlanarDrag(scene,item,origin,dx,dy);
-  if(item.placement.mode!=="wall"){
-    const snap=wallSnap({footprint:item.footprint,rotation:item.placement.rotation_z_deg||0,
-      room:{width_mm:room.width_mm,depth_mm:room.depth_mm}});
-    if(snap){
-      item.placement.mode="wall";item.placement.host_wall=snap.host_wall;
-    }
-  }
   return blocker;
 }
 
-function detachToFree(activeDrag){
-  const placement=activeDrag.item.placement;
-  placement.mode="free";placement.host_wall=null;
-  placement.origin_x_mm=Math.round(activeDrag.startOrigin[0]);
-  placement.origin_y_mm=Math.round(activeDrag.startOrigin[1]);
-  placement.rotation_z_deg=placement.rotation_z_deg||0;
-  activeDrag.item.footprint=localFootprint(activeDrag.item,placement.origin_x_mm,placement.origin_y_mm,placement.rotation_z_deg);
-  setStatus(`${activeDrag.item.label} 已离开墙面，改为自由摆放`,"warn");
-}
 function fillsWall(item){return !!(item&&item.placement&&item.placement.fill)}
 function selectHint(item){
   if(READ_ONLY)return `已选中 ${item.label}`;
@@ -172,14 +165,17 @@ function selectHint(item){
 /* ---------- 3. 右侧面板与数值微调 ---------- */
 const escapeHtml=value=>String(value).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
 function syncPanel(){
-  const signature=scene.items.map(item=>`${item.id}:${item.label}:${item.placement.mode}`).join("|")+"#"+state.selectedId;
+  const items=displayScene().items;
+  const signature=items.map(item=>`${item.id}:${item.label}:${item.placement.mode}`).join("|")+"#"+state.selectedId;
   const list=document.getElementById("item-list");
   if(list&&signature!==uiStore.panelSignature){
     uiStore.panelSignature=signature;
-    list.innerHTML=scene.items.map(item=>`<li><button type="button" class="item-row${item.id===state.selectedId?" active":""}" data-item="${escapeHtml(item.id)}">
+    list.innerHTML=items.map(item=>`<li><button type="button" class="item-row${item.id===state.selectedId?" active":""}" data-item="${escapeHtml(item.id)}">
       <span class="dot"></span><span class="name">${escapeHtml(item.label)}</span>
       <span class="mode">${item.placement.mode==="wall"?"靠墙":"自由"}</span></button></li>`).join("");
   }
+  const countEl=document.getElementById("item-count");
+  if(countEl)countEl.textContent=`${scene.items.length}`;
   syncDetail();
 }
 
@@ -188,7 +184,7 @@ function detailMarkup(item){
   const fills=fillsWall(item);
   const gapRow=(label,key)=>(READ_ONLY||fills)
     ? `<dt>${label}</dt><dd><span data-gap="${key}"></span> mm<span class="who" data-who="${key}"></span></dd>`
-    : `<dt>${label}</dt><dd><button type="button" class="step" data-gap-step="${key}" data-delta="-10" aria-label="${label}减 10">−</button><input class="num" type="number" step="1" data-gap="${key}" aria-label="${label}"><button type="button" class="step" data-gap-step="${key}" data-delta="10" aria-label="${label}加 10">＋</button><span class="who" data-who="${key}"></span></dd>`;
+    : `<dt>${label}</dt><dd class="gap-row"><button type="button" class="step" data-gap-step="${key}" data-delta="-10" aria-label="${label}减 10">−</button><input class="num" type="number" step="1" data-gap="${key}" aria-label="${label}"><button type="button" class="step" data-gap-step="${key}" data-delta="10" aria-label="${label}加 10">＋</button><span class="who" data-who="${key}"></span></dd>`;
   const rotationRow=(READ_ONLY||fills)
     ? `<span data-field="rotation"></span>°<span class="who" data-front></span>`
     : `<button type="button" class="step" data-rotation-step data-delta="-15" aria-label="逆时针 15°">−</button><input class="num" type="number" step="1" data-rotation data-field="rotation" aria-label="朝向角度"><button type="button" class="step" data-rotation-step data-delta="15" aria-label="顺时针 15°">＋</button><span class="who">°</span><span class="who" data-front></span>`;
@@ -208,29 +204,45 @@ function detailMarkup(item){
     : fills
       ? `<dt>尺寸</dt><dd>${round(item.width)}×${round(item.depth)}×${round(item.height)} · 沿墙铺满，宽度由墙算出</dd>`
       : `<dt>尺寸</dt><dd class="size-edit"><input class="num size" type="number" step="1" min="1" data-size="width" aria-label="宽"><span class="who">×</span><input class="num size" type="number" step="1" min="1" data-size="depth" aria-label="深"><span class="who">×</span><input class="num size" type="number" step="1" min="1" data-size="height" aria-label="高"><span class="who">mm</span></dd>`;
-  return `<dl class="detail">
-    <dt>名称</dt><dd>${escapeHtml(item.label)}</dd>
-    ${sizeRow}
-    <dt>摆放</dt><dd data-field="mode"></dd>
-    <dt>位置</dt><dd data-field="position"></dd>
-    <dt>坐标</dt><dd data-field="coord"></dd>
-    <dt>朝向</dt><dd>${rotationRow}</dd>
-    <dt>离地</dt><dd>${heightRow}</dd>
-    <dt>离顶</dt><dd><span data-field="ceiling"></span> mm</dd>
-    ${gapRow("西距","west")}${gapRow("东距","east")}${gapRow("北距","north")}${gapRow("南距","south")}
-  </dl>
-  ${panelPlanBlock(item)}
-  ${hint}`;
-}
-function plansPanels(item){
-  return !!item && item.manufacture!==false
-    && (item.furniture_category==="floor_cabinet" || item.furniture_category==="wall_cabinet");
+  return `<div class="detail-container">
+    <div class="selected-hero">
+      <div class="selected-hero-top">
+        <div class="selected-title-wrap">
+          <span class="selected-dot"></span>
+          <h3 class="selected-title">${escapeHtml(item.label)}</h3>
+        </div>
+        <div class="selected-badges">
+          <span class="badge-mode" data-field="mode"></span>
+          <span class="badge-front" data-front></span>
+        </div>
+      </div>
+    </div>
+    <dl class="detail">
+      <dt class="row-name">名称</dt><dd class="row-name">${escapeHtml(item.label)}</dd>
+      ${sizeRow}
+      <dt>摆放</dt><dd data-field="mode"></dd>
+      <dt>位置</dt><dd data-field="position"></dd>
+      <dt>坐标</dt><dd data-field="coord" class="coord-val"></dd>
+      <dt>朝向</dt><dd class="rotation-dd">${rotationRow}</dd>
+      <dt>离地</dt><dd class="height-dd">${heightRow}</dd>
+      <dt>离顶</dt><dd><span data-field="ceiling"></span> mm</dd>
+      ${gapRow("西距","west")}${gapRow("东距","east")}${gapRow("北距","north")}${gapRow("南距","south")}
+    </dl>
+    ${panelPlanBlock(item)}
+    <details class="hint-accordion" open>
+      <summary class="hint-summary">
+        <span class="hint-summary-title">💡 微调指南</span>
+        <span class="hint-chevron">›</span>
+      </summary>
+      <div class="hint-content">${hint}</div>
+    </details>
+  </div>`;
 }
 function panelPlanBlock(item){
   if(!PANEL_URL_BASE)return "";
   if(item.manufacture===false)return `<p class="hint-inline">这件只占位置</p>`;
   if(!plansPanels(item))return "";
-  return `<p class="panel-entry"><button type="button" data-panel-plan>板件规划</button></p><p class="hint-inline" data-panel-note hidden>先保存外形</p>`;
+  return `<p class="panel-entry"><button type="button" class="btn-panel-plan" data-panel-plan>板件规划</button></p><p class="panel-note" data-panel-note hidden>先保存外形</p>`;
 }
 function sizeInputsDirty(item){
   const detail=document.getElementById("detail");
@@ -267,9 +279,23 @@ function openPanelPlan(item){
 function syncDetail(force=false){
   const detail=document.getElementById("detail");
   if(!detail)return;
-  const item=scene.items.find(candidate=>candidate.id===state.selectedId);
+  const item=displayScene().items.find(candidate=>candidate.id===state.selectedId);
   if(!item){
-    if(uiStore.detailItemId!==null){uiStore.detailItemId=null;detail.innerHTML='<p class="empty">未选中任何家具</p>'}
+    if(uiStore.detailItemId!==null){
+      uiStore.detailItemId=null;
+      detail.innerHTML=`<div class="empty-state">
+        <div class="empty-icon-wrap">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+            <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+            <line x1="12" y1="22.08" x2="12" y2="12"/>
+          </svg>
+        </div>
+        <p class="empty-title">未选中任何家具</p>
+        <p class="empty-subtitle">点击画布中的家具或上方列表即可微调尺寸、朝向与四向净距</p>
+        <p class="empty" hidden>未选中任何家具</p>
+      </div>`;
+    }
     return;
   }
   if(uiStore.detailItemId!==item.id){
@@ -279,15 +305,15 @@ function syncDetail(force=false){
   applyDetailValues(detail,item,force);
 }
 function applyDetailValues(detail,item,force){
-  if(!detail.querySelector)return;
-  const values=detailValues(scene,item);
+  if(!detail.querySelectorAll)return;
+  const values=detailValues(displayScene(),item);
   const active=document.activeElement;
   const set=(selector,value)=>{
-    const element=detail.querySelector(selector);
-    if(!element)return;
-    if(element===active&&!force)return;
-    if(element.tagName==="INPUT")element.value=String(value);
-    else element.textContent=String(value);
+    for(const element of detail.querySelectorAll(selector)){
+      if(element===active&&!force)continue;
+      if(element.tagName==="INPUT")element.value=String(value);
+      else element.textContent=String(value);
+    }
   };
   set('[data-field="mode"]',values.mode);
   set('[data-field="position"]',values.position);
@@ -313,16 +339,18 @@ function selectItem(id){
   render();
 }
 function nudgeHeight(item,delta){
-  if(READ_ONLY)return;
+  if(drag||!canEditLayout())return;
+  const before=item;item=structuredClone(item);
   const base=Math.round(item.placement.origin_z_mm||0);
   const solved=resolveInteger(base,base+delta,heightProbe(scene,item,item.footprint));
   if(solved.value===base){setStatus(`离地高度已经是 ${base} mm，${delta>0?"再高":"再低"}${placementStop(solved.blocker)}`,"warn");return}
   setItemHeight(item,solved.value);
   render();
-  persist(item,"move").then(()=>{render()});
+  commitCandidate(item,before);
 }
 function setGap(item,direction,value){
-  if(READ_ONLY)return;
+  if(drag||!canEditLayout())return;
+  const before=item;item=structuredClone(item);
   if(fillsWall(item)){
     setStatus("沿墙铺满的位置由空段算出，这一页不改净距","warn");
     return;
@@ -342,10 +370,11 @@ function setGap(item,direction,value){
   if(blocker&&reached!==Math.round(value)){
     setStatus(`只挪到 ${reached} mm：${placementStop(blocker)}`,"warn");
   }
-  persist(item,"move").then(()=>{render()});
+  commitCandidate(item,before);
 }
 function setRotationValue(item,degrees){
-  if(READ_ONLY)return;
+  if(drag||!canEditLayout())return;
+  const before=item;item=structuredClone(item);
   if(fillsWall(item)){
     setStatus("沿墙铺满的朝向由这面墙决定，这一页不改","warn");
     return;
@@ -356,10 +385,11 @@ function setRotationValue(item,degrees){
     if(result.blocker)setStatus(`转不过去：${placementStop(result.blocker)}`,"warn");
     return;
   }
-  persist(item,"rotate").then(()=>{render()});
+  commitCandidate(item,before);
 }
 function setHeightValue(item,value){
-  if(READ_ONLY)return;
+  if(drag||!canEditLayout())return;
+  const before=item;item=structuredClone(item);
   const base=Math.round(item.placement.origin_z_mm||0),target=Math.round(value);
   const solved=resolveInteger(base,target,heightProbe(scene,item,item.footprint));
   setItemHeight(item,solved.value);
@@ -369,10 +399,10 @@ function setHeightValue(item,value){
     return;
   }
   if(solved.value!==target)setStatus(`只到 ${solved.value} mm：${placementStop(solved.blocker)}`,"warn");
-  persist(item,"move").then(()=>{render()});
+  commitCandidate(item,before);
 }
 function setSize(item,key,value){
-  if(READ_ONLY)return;
+  if(drag||!canEditLayout())return;
   if(fillsWall(item)){
     setStatus("沿墙铺满的宽度由这面墙剩下的空段算出，这一页不手改","warn");
     return;
@@ -384,142 +414,88 @@ function setSize(item,key,value){
   }
   if(Math.round(item[key])===next)return;
   const sizes={};sizes[key]=next;
+  uiStore.resizing+=1;
   persist(item,"resize",sizes).then(()=>{
     render();
     if(state.selectedId===item.id)syncDetail(true);
-  });
+  }).finally(()=>{uiStore.resizing-=1});
 }
 
 /* ---------- 4. 画布指针与键盘交互 ---------- */
 let drag=null;
+function displayScene(){return drag?drag.preview(scene):scene}
+async function commitCandidate(item,before,operation=poseOperation(item)){
+  syncPlacementGeometry(scene.room,item);
+  scene.items=scene.items.map(entry=>entry.id===item.id?item:entry);
+  render();
+  const saved=await persist(item,"move",null,operation);
+  if(!saved)scene.items=scene.items.map(entry=>entry===item?before:entry);
+  render();flushLayoutNotice();
+  return saved;
+}
+function canEditLayout(){
+  if(READ_ONLY)return false;
+  if(uiStore.resizing){setStatus("正在保存外形，完成后再调整位置","warn");return false}
+  if(PROJECT_EDIT_URL&&!leaseStore.token){
+    setStatus("这一页现在只能看：编辑权不在你手上","warn");
+    return false;
+  }
+  return true;
+}
+function projectedWallNormal(wall,item){
+  const normal=wallNormal(wall),project=projector(),center=footprintCenter(item);
+  if(!normal)return null;
+  const from=project([center[0],center[1],0]);
+  const to=project([center[0]+normal[0]*300,center[1]+normal[1]*300,0]);
+  const length=Math.hypot(to.x-from.x,to.y-from.y)||1;
+  return {x:(to.x-from.x)/length,y:(to.y-from.y)/length};
+}
+function cancelDrag(){
+  if(!drag)return;
+  const pointerId=drag.pointerId;
+  drag.cancel();drag=null;state.blocked=null;
+  view.setEnabled(true);
+  canvas.classList.remove("moving");
+  if(canvas.hasPointerCapture(pointerId))canvas.releasePointerCapture(pointerId);
+  render();flushLayoutNotice();
+}
 canvas.addEventListener("pointerdown",event=>{
-  const [sx,sy]=screenPoint(event);
   if(event.button===1||event.button===2)return;
+  if(drag){cancelDrag();return}
   const picked=view.pick(event.clientX,event.clientY);
-  const pickedItem=picked?scene.items.find(item=>item.id===picked.itemId):null;
-  if(READ_ONLY){
-    if(pickedItem){selectItem(pickedItem.id);return}
-    return;
-  }
-  if(picked&&picked.kind==="height"&&pickedItem){
-    view.setEnabled(false);
-    drag={kind:"height",item:pickedItem,startScreen:[sx,sy],moved:false,
-      startPlacement:{...pickedItem.placement},
-      startZ:pickedItem.placement.origin_z_mm||0};
-    canvas.classList.add("moving");
-    setStatus(`离地高度 ${Math.round(pickedItem.z_start)} mm`);
-    canvas.setPointerCapture(event.pointerId);
-    return;
-  }
-  if(picked&&(picked.kind==="rotate"||picked.kind==="ring")&&pickedItem){
-    if(fillsWall(pickedItem)){selectItem(pickedItem.id);return}
-    view.setEnabled(false);
-    const center=footprintCenter(pickedItem),height=(pickedItem.z_start+pickedItem.z_end)/2;
-    const origin=projector()([center[0],center[1],height]);
-    const startAngle=Math.atan2(sy-origin.y,sx-origin.x)*180/Math.PI;
-    drag={kind:"rotate",item:pickedItem,center,height,origin,startAngle,lastAngle:startAngle,
-      startPlacement:{...pickedItem.placement},
-      accumulated:0,moved:false,startScreen:[sx,sy],
-      startRotation:pickedItem.placement.rotation_z_deg||0,
-      sign:rotationSign(projector(),room.width_mm,center,height)};
-    canvas.classList.add("moving");
-    setStatus(`旋转 ${pickedItem.label}…`);
-    canvas.setPointerCapture(event.pointerId);
-    return;
-  }
-  const ground=unprojectToGround(sx,sy);
-  if(pickedItem&&picked.kind==="item"&&(ground||isElevation())){
-    if(fillsWall(pickedItem)){selectItem(pickedItem.id);return}
-    view.setEnabled(false);
-    const placement=pickedItem.placement;
-    state.selectedId=pickedItem.id;state.blocked=null;
-    drag={kind:"move",item:pickedItem,startScreen:[sx,sy],moved:false,
-      startPlacement:{...pickedItem.placement},
-      startOrigin:[placement.origin_x_mm||0,placement.origin_y_mm||0],
-      startZ:placement.origin_z_mm||0,
-      horizontal:horizontalAxis(camera()),elevation:isElevation(),
-      startFootprint:pickedItem.footprint.map(point=>[...point])};
-    if(placement.mode==="wall"&&!drag.elevation){
-      const normal=wallNormal(placement.host_wall),project=projector(),center=footprintCenter(pickedItem);
-      if(normal){
-        const from=project([center[0],center[1],0]);
-        const to=project([center[0]+normal[0]*300,center[1]+normal[1]*300,0]);
-        const length=Math.hypot(to.x-from.x,to.y-from.y)||1;
-        drag.perpScreen={x:(to.x-from.x)/length,y:(to.y-from.y)/length};
-      }
-    }
-    canvas.classList.add("moving");
-    setStatus(selectHint(pickedItem));
-    render();
-    canvas.setPointerCapture(event.pointerId);
-    return;
-  }
+  const item=picked?scene.items.find(entry=>entry.id===picked.itemId):null;
+  if(!item)return;
+  if(READ_ONLY){selectItem(item.id);return}
+  if(!canEditLayout())return;
+  const kind=picked.kind==="height"?"height"
+    :picked.kind==="rotate"||picked.kind==="ring"?"rotate"
+    :picked.kind==="item"?"move":null;
+  if(!kind)return;
+  if(fillsWall(item)&&kind!=="height"){selectItem(item.id);return}
+  const screen=screenPoint(event),basis=camera(),elevation=isElevation();
+  if(kind==="move"&&!unprojectToGround(...screen)&&!elevation)return;
+  state.selectedId=item.id;selectedIdSignal.set(item.id);state.blocked=null;
+  const center=footprintCenter(item),height=kind==="move"&&!elevation
+    ?item.z_start:(item.z_start+item.z_end)/2;
+  const origin=projector()([center[0],center[1],height]);
+  drag=createDragTransaction({scene,item,kind,screen,pointerId:event.pointerId,basis,
+    scale:verticalPlaneScale(canvas,basis,[...center,height]),
+    elevation,horizontal:horizontalAxis(basis),
+    wallScreenNormal:projectedWallNormal(item.placement.host_wall,item),
+    projectWallNormal:projectedWallNormal,rotationOrigin:origin,
+    rotationSign:rotationSign(projector(),room.width_mm,center,height),
+    threshold:px(4),detachThreshold:px(26)});
+  view.setEnabled(false);canvas.classList.add("moving");
+  canvas.setPointerCapture(event.pointerId);
+  setStatus(selectHint(item));render();
 },true);
-
 canvas.addEventListener("pointermove",event=>{
-  if(drag){
-    const [sx,sy]=screenPoint(event);
-    if(!drag.moved){
-      if(Math.hypot(sx-drag.startScreen[0],sy-drag.startScreen[1])<px(4))return;
-      drag.moved=true;
-    }
-    const cam=camera();
-    if(drag.kind==="height"){
-      const scale=verticalPlaneScale(canvas,cam,[...footprintCenter(drag.item),(drag.item.z_start+drag.item.z_end)/2]);
-      const wanted=Math.round(-(sy-drag.startScreen[1])*scale/(cam.up[2]||1));
-      const base=Math.round(drag.startZ);
-      const solved=resolveInteger(base,base+wanted,heightProbe(scene,drag.item,drag.item.footprint));
-      setItemHeight(drag.item,solved.value);
-      setStatus(solved.blocker&&solved.value!==base
-        ?`离地高度 ${solved.value} mm（已抵住 ${solved.blocker.label}）`
-        :`离地高度 ${solved.value} mm`);
-      render();
-      return;
-    }
-    if(drag.kind==="rotate"){
-      const angle=Math.atan2(sy-drag.origin.y,sx-drag.origin.x)*180/Math.PI;
-      let delta=angle-drag.lastAngle;
-      if(delta>180)delta-=360;
-      if(delta<-180)delta+=360;
-      drag.accumulated+=delta;drag.lastAngle=angle;
-      const next=snapAngle(drag.startRotation+drag.sign*drag.accumulated,event.shiftKey?1:15);
-      const result=solveRotation(scene,drag.item,drag.center,next);
-      if(result.applied){
-        state.blocked=null;
-        setStatus(`旋转 ${drag.item.label}：${Math.round(normalizeAngle(drag.item.placement.rotation_z_deg))}°${event.shiftKey?"（精细 1°）":""}`);
-      }else if(result.blocker){
-        state.blocked=result.blocker.id;
-        setStatus(`转不过去：${placementStop(result.blocker)}`,"warn");
-      }
-      render();
-      return;
-    }
-    if(drag.elevation){
-      const scale=verticalPlaneScale(canvas,cam,[...footprintCenter(drag.item),(drag.item.z_start+drag.item.z_end)/2]);
-      const blocker=solveElevationDrag(scene,drag.item,drag.startOrigin,drag.startZ,drag.horizontal,(sx-drag.startScreen[0])*scale,-(sy-drag.startScreen[1])*scale);
-      state.blocked=blocker?blocker.id:null;
-      setStatus(blocker
-        ?contactStop(blocker)
-        :`${drag.item.label}：离地 ${Math.round(drag.item.z_start)} mm`);
-      render();
-      return;
-    }
-    if(drag.item.placement.mode==="wall"&&drag.perpScreen){
-      const away=(sx-drag.startScreen[0])*drag.perpScreen.x+(sy-drag.startScreen[1])*drag.perpScreen.y;
-      if(away>px(26))detachToFree(drag);
-    }
-    const scale=verticalPlaneScale(canvas,cam,[...footprintCenter(drag.item),drag.item.z_start||0]);
-    const delta=groundDragDelta({dx:sx-drag.startScreen[0],dy:sy-drag.startScreen[1],scale,
-      right:cam.right,forward:cam.forward});
-    const modeBefore=drag.item.placement.mode;
-    const blocker=applyLocalDrag(drag.item,delta[0],delta[1],drag.startOrigin);
-    if(modeBefore==="free"&&drag.item.placement.mode==="wall")drag.startScreen=[sx,sy];
-    state.blocked=blocker?blocker.id:null;
-    if(blocker)setStatus(contactStop(blocker),"warn");
-    else setStatus(`拖动 ${drag.item.label}… 位移 ${Math.round(Math.hypot(delta[0],delta[1]))} mm`);
-    render();
-    return;
-  }
+  if(!drag||event.pointerId!==drag.pointerId)return;
+  const result=drag.update(screenPoint(event),{fine:event.shiftKey});
+  if(!result.moved)return;
+  state.blocked=result.blocker?result.blocker.id:null;
+  setStatus(result.blocker?contactStop(result.blocker):`调整 ${drag.item.label}…`,result.blocker?"warn":"");
+  render();
 });
 
 /* ---------- 5. 落盘保存与房间文档同步 ---------- */
@@ -531,7 +507,7 @@ function applyDocumentMetadata(payload){
 }
 function showDocument(payload){
   if(!payload.rooms){
-    scene.items=normalizeItems(payload.items||[]);
+    scene.items=loadCanvasItems(payload.items);
     render();
     return;
   }
@@ -541,32 +517,15 @@ function showDocument(payload){
   if(index<0)index=0;
   showRoom(index,true);
 }
-async function persist(item,kind,sizes){
+async function persist(item,kind,sizes,operation){
   if(READ_ONLY)return false;
   if(PROJECT_EDIT_URL&&!leaseStore.token){
     setStatus("这一页现在只能看：编辑权不在你手上（点「收回编辑权」或等助手做完）","warn");
     return false;
   }
-  let op;
-  if(fillsWall(item)){
-    if(kind!=="move"&&kind!=="height"){
-      setStatus("沿墙铺满不改沿墙位置和朝向","warn");
-      return false;
-    }
-    op={op:"move",item_id:item.id,origin_z_mm:Math.round(item.placement.origin_z_mm||0)};
-  }else if(kind==="resize"){
-    op={op:"resize",item_id:item.id};
-    if(sizes)Object.assign(op,sizes);
-  }else{
-    const placement=item.placement;
-    op={op:kind==="rotate"?"rotate":"move",item_id:item.id};
-    if(kind==="rotate")op.rotation_z_deg=Math.round(normalizeAngle(placement.rotation_z_deg)*10)/10;
-    if(placement.mode==="wall"){
-      op.mode="wall";op.host_wall=placement.host_wall;
-    }else{
-      op.mode="free";op.origin_x_mm=Math.round(placement.origin_x_mm);op.origin_y_mm=Math.round(placement.origin_y_mm);
-    }
-    if(kind!=="rotate")op.origin_z_mm=Math.round(placement.origin_z_mm||0);
+  let op=operation;
+  if(!op){
+    op=kind==="resize"?{op:"resize",item_id:item.id,...sizes}:poseOperation(item);
   }
   try{
     const next=await layoutPersistence.write(op);
@@ -610,27 +569,21 @@ function reportWriteFailure(status,detail,expectedVersion){
   setStatus(`改动被拒绝，已回到原位：${message}`,"error");
 }
 
-function dragChanged(activeDrag){
-  return placementChanged(activeDrag.startPlacement,activeDrag.item.placement);
-}
-
 canvas.addEventListener("pointerup",event=>{
   if(state.panning){
     state.panning=false;canvas.classList.remove("panning");
-    canvas.releasePointerCapture(event.pointerId);
+    if(canvas.hasPointerCapture(event.pointerId))canvas.releasePointerCapture(event.pointerId);
     return;
   }
-  if(drag){
-    const item=drag.item,moved=drag.moved,kind=drag.kind;
-    const unchanged=!dragChanged(drag);
-    drag=null;state.blocked=null;canvas.classList.remove("moving");
-    view.setEnabled(true);
-    canvas.releasePointerCapture(event.pointerId);
-    if(moved&&!unchanged){persist(item,kind).then(()=>{render();flushLayoutNotice()})}
-    else{setStatus(selectHint(item));render();flushLayoutNotice()}
-    return;
-  }
-  view.setEnabled(true);
+  if(!drag||event.pointerId!==drag.pointerId)return;
+  const transaction=drag;
+  if(!canEditLayout()){cancelDrag();return}
+  const result=transaction.finish();
+  drag=null;state.blocked=null;
+  view.setEnabled(true);canvas.classList.remove("moving");
+  if(canvas.hasPointerCapture(event.pointerId))canvas.releasePointerCapture(event.pointerId);
+  if(result.changed)commitCandidate(result.item,result.before,result.operation);
+  else{setStatus(selectHint(result.item));render();flushLayoutNotice()}
 });
 
 function updateCoordReadout(event){
@@ -651,15 +604,20 @@ canvas.addEventListener("pointerleave",()=>{
   const box=document.getElementById("coord");
   if(box)box.hidden=true;
 });
-canvas.addEventListener("pointercancel",()=>{
-  drag=null;state.blocked=null;state.orbiting=false;state.panning=false;
-  canvas.classList.remove("moving","orbiting","panning");
-  flushLayoutNotice();
+canvas.addEventListener("pointercancel",event=>{
+  if(drag&&event.pointerId===drag.pointerId)cancelDrag();
+  state.orbiting=false;state.panning=false;
+  canvas.classList.remove("orbiting","panning");
+  view.setEnabled(true);flushLayoutNotice();
+});
+canvas.addEventListener("lostpointercapture",event=>{
+  if(drag&&event.pointerId===drag.pointerId)cancelDrag();
 });
 canvas.addEventListener("contextmenu",event=>event.preventDefault());
 window.addEventListener("keydown",event=>{
   if(event.key==="Shift")view.setShiftPan(true);
-  if(event.key==="Escape")selectItem(null);
+  if(event.key==="Escape"){cancelDrag();selectItem(null);return}
+  if(drag)return;
   const item=scene.items.find(candidate=>candidate.id===state.selectedId);
   if(!item)return;
   if(event.key==="PageUp"){event.preventDefault();nudgeHeight(item,50)}
@@ -668,6 +626,7 @@ window.addEventListener("keydown",event=>{
 window.addEventListener("keyup",event=>{if(event.key==="Shift")view.setShiftPan(false)});
 
 function handleViewportResize(){
+  cancelDrag();
   fitCanvas();
   if(!uiStore.viewAnimation)state.distance=fitDistance(canvas,diagonal,view,state.active);
   render();
@@ -816,7 +775,7 @@ if(detailBox&&detailBox.addEventListener){
     else if(button.dataset.rotationStep!==undefined)setRotationValue(item,
       Math.round(normalizeAngle(item.placement.rotation_z_deg||0))+Number(button.dataset.delta));
     else return;
-    applyDetailValues(detailBox,item,true);
+    applyDetailValues(detailBox,displayScene().items.find(candidate=>candidate.id===item.id)||item,true);
   });
   detailBox.addEventListener("change",event=>{
     const input=event.target;
@@ -830,7 +789,7 @@ if(detailBox&&detailBox.addEventListener){
     else if(input.dataset.heightInput!==undefined)setHeightValue(item,value);
     else if(input.dataset.size)setSize(item,input.dataset.size,value);
     else return;
-    applyDetailValues(detailBox,item,true);
+    applyDetailValues(detailBox,displayScene().items.find(candidate=>candidate.id===item.id)||item,true);
   });
   detailBox.addEventListener("input",event=>{
     const input=event.target;
@@ -942,7 +901,7 @@ function showRoom(index,keepCamera){
   roomIndexSignal.set(index);
   const next=rooms[index].scene;
   scene.room=next.room;
-  scene.items=normalizeItems(next.items||[]);
+  scene.items=loadCanvasItems(next.items);
   scene.obstacles=next.obstacles||[];
   scene.openings=next.openings||[];
   bindRoom();
@@ -997,12 +956,8 @@ function localTime(iso){
 }
 function describeOp(op,itemId){
   const entry=op||{};
-  if(entry.op==="move"&&entry.host_wall)return `靠${wallLabel(entry.host_wall)}墙`;
-  if(entry.op==="move"&&entry.origin_z_mm!==undefined)return `离地 ${round1(entry.origin_z_mm)} mm`;
-  if(entry.op==="move"&&entry.origin_x_mm!==undefined)
-    return `挪到 X ${round1(entry.origin_x_mm)} · Y ${round1(entry.origin_y_mm)} mm`;
+  if(entry.op==="set_pose")return `X ${round1(entry.origin_x_mm)} · Y ${round1(entry.origin_y_mm)} · 离地 ${round1(entry.origin_z_mm)} mm · 朝向 ${round1(entry.rotation_z_deg)}°`;
   if(entry.op==="resize")return "改了外形尺寸";
-  if(entry.op==="rotate")return `转到 ${round1(entry.rotation_z_deg||0)}°`;
   if(entry.op==="undo")return "撤销一步";
   return `${entry.op||"改动"} ${itemId||""}`.trim();
 }

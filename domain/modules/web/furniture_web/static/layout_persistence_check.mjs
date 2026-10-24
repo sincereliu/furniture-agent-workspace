@@ -11,7 +11,8 @@ const item = (id, x, y) => ({
 const document = (version, cabinetX, chairY) => ({
   version, rooms: [{ id: "study", scene: { room: { id: "study" }, items: [item("cabinet", cabinetX, 0), item("chair", 1500, chairY)] } }],
 });
-const move = source => ({ op: "move", item_id: source.id, ...source.placement });
+const setPose = (id,x,y=0) => ({ op: "set_pose", item_id: id, mode: "free", origin_x_mm:x, origin_y_mm:y, origin_z_mm:0, rotation_z_deg:0 });
+const move = source => setPose(source.id,source.placement.origin_x_mm,source.placement.origin_y_mm);
 function harness({ versioned = true } = {}) {
   const calls = [];
   const shown = [];
@@ -72,8 +73,8 @@ function harness({ versioned = true } = {}) {
 // Rapid releases are serialized and capture each submitted operation by value.
 {
   const { h, controller: c, calls } = harness();
-  const first = c.write({ op: "move", item_id: "cabinet", mode: "free", origin_x_mm: 900, origin_y_mm: 0 });
-  const op = { op: "move", item_id: "chair", mode: "free", origin_x_mm: 1500, origin_y_mm: 800 };
+  const first = c.write(setPose("cabinet",900));
+  const op = setPose("chair",1500,800);
   const second = c.write(op);
   op.origin_y_mm = 99;
   await turn();
@@ -96,7 +97,7 @@ function harness({ versioned = true } = {}) {
 {
   const { h, controller: c, calls } = harness();
   const oldRead = c.refresh();
-  const saved = c.write({ op: "move", item_id: "cabinet", origin_x_mm: 900 });
+  const saved = c.write(setPose("cabinet",900));
   await turn();
   calls[1].reply(document("v1", 900, 200));
   await saved;
@@ -176,7 +177,7 @@ for (const status of [409, 422, 403, 423]) {
   await rejected;
   assert.equal(h.scene.items[0].placement.origin_x_mm, 100);
   assert.equal(c.busy, false);
-  const next = c.write({ op: "move", item_id: "chair", origin_y_mm: 800 });
+  const next = c.write(setPose("chair",1500,800));
   await turn();
   calls[2].reply(document("v1", 100, 800));
   await next;
@@ -186,7 +187,7 @@ for (const status of [409, 422, 403, 423]) {
 // A lost response may hide a committed write. Recovery must adopt its real server version.
 {
   const { h, controller: c, calls } = harness();
-  const failed = assert.rejects(c.write({ op: "move", item_id: "cabinet", origin_x_mm: 900 }), /connection lost/);
+  const failed = assert.rejects(c.write(setPose("cabinet",900)), /connection lost/);
   await turn();
   calls[0].reject(new Error("connection lost"));
   await turn();
@@ -199,7 +200,7 @@ for (const status of [409, 422, 403, 423]) {
 // Decision updates share the write queue and version, without replacing scene geometry.
 {
   const { controller: c, calls, shown } = harness();
-  const save = c.write({ op: "move", item_id: "cabinet", origin_x_mm: 900 });
+  const save = c.write(setPose("cabinet",900));
   const decision = c.write({ action: "confirm", target: "d1" }, "/decisions");
   await turn();
   assert.equal(calls.length, 1);
@@ -217,7 +218,7 @@ for (const status of [409, 422, 403, 423]) {
 // Standalone rooms use the same ordering without adding project version fields.
 {
   const { controller: c, calls, shown } = harness({ versioned: false });
-  const save = c.write({ op: "move", item_id: "cabinet", origin_x_mm: 900 });
+  const save = c.write(setPose("cabinet",900));
   await turn();
   assert.equal("expected_version" in calls[0].op, false);
   calls[0].reply({ items: [item("cabinet", 900, 0)] });

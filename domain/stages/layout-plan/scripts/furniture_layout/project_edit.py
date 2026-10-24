@@ -1,11 +1,6 @@
-"""项目布局的编辑：对已摆放的包络应用**一次** op。
+"""项目编辑复用布局阶段的严格 set_pose / resize 协议和几何准入。
 
-和房间场景编辑（`scene_edit.py`）是同一套 op 词表、同一个应用器——项目布局的每一间房
-本来就是一份 `RoomScene`（房间 + 已摆放包络），把它的 items 还原成"场景源"即可复用，
-不需要第二套字段白名单。
-
-这里只管几何：应用 op → 重新摆放并准入校验 → 交出新的 `ProjectLayout`。
-版本、Revision、落盘、权限都不在这一层（见 `furniture_workflow/project_layout_edit.py`）。
+这里只替换目标房间并清除确认；版本、Revision、权限和落盘归工作流。
 """
 
 from __future__ import annotations
@@ -13,21 +8,12 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any, Mapping
 
-from .scene_planning import plan_scene
 from .project_layout import ProjectLayout
-from .scene import RoomScene
-from .scene_edit import apply_edit
-
-
-def room_scene_source(scene: RoomScene) -> dict[str, Any]:
-    """把一间已摆放的房间还原成场景源（房间定义 + 每件的摆放请求）。
-
-    只保留输入字段；footprint、净距重算，已保存的墙摆位置由编辑上下文保留。
-    """
-    return {
-        "room": scene.room.to_dict(),
-        "items": [item.to_source() for item in scene.items],
-    }
+from .placement import build_placed_item
+from .scene import ItemSpec, ResolvedPlacement
+from .scene_edit import apply_scene_edit
+from .scene_planning import plan_scene
+from .validation import raise_unless_admitted
 
 
 def _target_index(layout: ProjectLayout, item_id: str) -> int:
@@ -52,10 +38,36 @@ def apply_layout_edit(
         raise ValueError("edit requires item_id")
     index = _target_index(layout, item_id)
     scene = layout.rooms[index]
-    edited = apply_edit(room_scene_source(scene), op)
-    replanned = plan_scene(
-        edited["room"], edited["items"], existing_items=scene.items,
-    )
+    replanned = apply_scene_edit(scene, op)
     rooms = list(layout.rooms)
     rooms[index] = replanned
+    return replace(layout, rooms=tuple(rooms), confirmed=False)
+
+
+def restore_layout_item(
+    layout: ProjectLayout, item_id: str, snapshot: Mapping[str, Any],
+) -> ProjectLayout:
+    """Restore pose and dimensions together, including dependent against/fill geometry.
+
+    Intermediate poses with the current dimensions are never admitted or published.
+    The working log stores the target's previous state; deterministic dependencies
+    are rebuilt from that state with ordinary wall positions kept as seeds.
+    """
+    index = _target_index(layout, item_id)
+    scene = layout.rooms[index]
+    previous = next(item for item in scene.items if item.id == item_id)
+    spec = ItemSpec.from_dict({**previous.to_source(),
+                              **{key: snapshot[key] for key in ("width", "depth", "height")}})
+    restored = build_placed_item(spec, scene.room,
+                                ResolvedPlacement.from_dict(snapshot["placement"]),
+                                width=snapshot["width"])
+    seeds = tuple(restored if item.id == item_id else item for item in scene.items)
+    result = plan_scene(scene.room.to_dict(), [item.to_source() for item in seeds],
+                        existing_items=seeds)
+    # Keep the saved transform exact, including admitted fractional coordinates.
+    # Admission checks it against the rebuilt dependencies with the domain tolerance.
+    result = replace(result, items=tuple(restored if item.id == item_id else item for item in result.items))
+    raise_unless_admitted(result)
+    rooms = list(layout.rooms)
+    rooms[index] = result
     return replace(layout, rooms=tuple(rooms), confirmed=False)

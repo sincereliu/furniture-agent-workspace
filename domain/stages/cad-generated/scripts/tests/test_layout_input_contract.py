@@ -24,11 +24,12 @@ from pydantic import ValidationError
 from fake_request_support import local_request
 from furniture_layout import room_http
 from furniture_layout.layout_entry import plan_project_layout, plan_room_scene
-from furniture_layout.project_edit import apply_layout_edit, room_scene_source
+from furniture_layout.project_edit import apply_layout_edit
+from layout_edit_test_support import pose, planning_source
 from furniture_layout.project_layout import ProjectLayout
 from furniture_web.room_page import render_viewer
 from furniture_layout.scene import RoomScene
-from furniture_layout.scene_edit import apply_edit
+from furniture_layout.scene_edit import apply_scene_edit
 from furniture_layout.scene_planning import plan_scene
 
 
@@ -139,7 +140,7 @@ class LayoutInputContractTests(unittest.TestCase):
 
     def test_edit_source_contains_no_derived_geometry(self) -> None:
         layout = ProjectLayout.from_source({"rooms": [{**ROOM, "items": [ITEM]}]})
-        source = room_scene_source(layout.rooms[0])
+        source = planning_source(layout.rooms[0])
         self.assertEqual(source["items"][0]["placement"], {
             "mode": "wall", "host_wall": "north",
             "origin_z_mm": 0, "fill": False,
@@ -149,7 +150,7 @@ class LayoutInputContractTests(unittest.TestCase):
         self.assertEqual(plan_scene(source["room"], source["items"]), layout.rooms[0])
         self.assertEqual(layout.rooms[0].items[0].footprint[0], (0, 0))
         edited = apply_layout_edit(
-            layout, {"op": "move", "item_id": "cabinet", "host_wall": "east"}
+            layout, pose(layout,"cabinet",mode="wall",host_wall="east",origin_x_mm=4000,origin_y_mm=0,rotation_z_deg=90)
         )
         self.assertEqual(edited.rooms[0].items[0].footprint[0], (4000, 0))
         self.assertEqual(layout.rooms[0].items[0].footprint[0], (0, 0))
@@ -209,7 +210,7 @@ class LayoutHttpContractTests(unittest.TestCase):
         request = room_http.RoomSceneSaveRequest(room=ROOM, items=[item])
         with (
             mock.patch.object(room_http, "may_edit", return_value=True),
-            mock.patch.object(room_http, "save_scene_source") as save,
+            mock.patch.object(room_http, "save_scene") as save,
         ):
             with self.assertRaises(HTTPException) as rejected:
                 asyncio.run(room_http.save_room_scene(request, local_request()))
@@ -310,58 +311,15 @@ class FillSpanEditTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, key):
                     plan_scene(NORTH, [_fill(**{key: value})])
 
-    def test_fill_edit_accepts_only_origin_z_on_both_paths(self) -> None:
-        """吊柜铺满整面北墙。离地从 1400 改到 1600，宽度仍是 4000。
-
-        项目编辑和房间编辑都拒绝改沿墙起点、朝向和宽度。
-        """
-        layout = ProjectLayout.from_source(
-            {"rooms": [{**NORTH, "items": [_fill(height=700, origin_z_mm=1400)]}]}
-        )
-        run = _named(layout, "run")
-        self.assertEqual(run.width, 4000)
-        self.assertNotIn("offset_mm", run.to_source()["placement"])
-        self.assertNotIn("offset_given", run.to_source()["placement"])
-
-        raised = apply_layout_edit(
-            layout, {"op": "move", "item_id": "run", "origin_z_mm": 1600}
-        )
-        run = _named(raised, "run")
-        self.assertEqual(run.placement.origin_z_mm, 1600)
-        self.assertEqual(run.width, 4000)
-        self.assertNotIn("offset_mm", run.to_source()["placement"])
-        self.assertNotIn("offset_given", run.to_source()["placement"])
-
-        source = room_scene_source(layout.rooms[0])
-        edited = apply_edit(
-            source, {"op": "move", "item_id": "run", "origin_z_mm": 1600}
-        )
-        self.assertNotIn("offset_mm", edited["items"][0]["placement"])
-        replanned = plan_scene(edited["room"], edited["items"])
-        run = replanned.items[0]
-        self.assertEqual((run.placement.origin_z_mm, run.width), (1600, 4000))
-        self.assertNotIn("offset_mm", run.to_source()["placement"])
-        self.assertNotIn("offset_given", run.to_source()["placement"])
-
-        refused = (
-            {"op": "move", "item_id": "run", "offset_mm": 200},
-            {
-                "op": "rotate",
-                "item_id": "run",
-                "rotation_z_deg": 15,
-                "mode": "free",
-                "origin_x_mm": 100,
-                "origin_y_mm": 100,
-            },
-            {"op": "resize", "item_id": "run", "width": 1000},
-        )
-        for op in refused:
-            with self.subTest(path="room", op=op["op"]):
-                with self.assertRaisesRegex(ValueError, "only origin_z_mm can change"):
-                    apply_edit(source, op)
-            with self.subTest(path="project", op=op["op"]):
-                with self.assertRaisesRegex(ValueError, "only origin_z_mm can change"):
-                    apply_layout_edit(layout, op)
+    def test_fill_edit_accepts_only_height_in_the_complete_pose(self):
+        layout=ProjectLayout.from_source({'rooms':[{**NORTH,'items':[_fill(height=700,origin_z_mm=1400)]}]})
+        op=pose(layout,'run',origin_z_mm=1600)
+        raised=apply_layout_edit(layout,op)
+        self.assertEqual((_named(raised,'run').placement.origin_z_mm,_named(raised,'run').width),(1600,4000))
+        for invalid in (pose(layout,'run',origin_x_mm=200),pose(layout,'run',rotation_z_deg=15),
+                        {'op':'resize','item_id':'run','width':1000}):
+            with self.subTest(op=invalid),self.assertRaises(ValueError):
+                apply_layout_edit(layout,invalid)
 
     def test_saved_scenes_load_without_an_along_wall_offset(self) -> None:
         """铺满、靠墙和自由摆放的结果都不带沿墙偏移，照样能打开。"""
@@ -754,7 +712,7 @@ class AgainstEndTests(unittest.TestCase):
         saved = scene.to_dict()
         restored = RoomScene.from_dict(saved)
         self.assertEqual(restored.to_dict(), saved)
-        source = room_scene_source(restored)
+        source = planning_source(restored)
         self.assertEqual(
             source["items"][0]["placement"]["against"],
             {"west": {"kind": "item", "id": "wall"}},
@@ -762,7 +720,7 @@ class AgainstEndTests(unittest.TestCase):
         self.assertEqual(plan_scene(source["room"], source["items"]).to_dict(), saved)
 
     def test_string_targets_are_rejected_by_direct_http_and_edit_inputs(self) -> None:
-        source = room_scene_source(plan_scene(ROOM, [ITEM]))
+        source = planning_source(plan_scene(ROOM, [ITEM]))
         for target in ("wall", "cabinet_b"):
             with self.subTest(target=target):
                 against = {"west": target}
@@ -771,12 +729,9 @@ class AgainstEndTests(unittest.TestCase):
                     plan_scene(ROOM, [{**ITEM, "placement": placement}])
                 with self.assertRaises(ValidationError):
                     room_http.ItemPlacementRequest.model_validate(placement)
-                edited = apply_edit(source, {
-                    "op": "move", "item_id": ITEM["id"],
-                    "origin_z_mm": 100, "against": against,
-                })
+                scene=plan_scene(ROOM,[ITEM])
                 with self.assertRaisesRegex(ValueError, "placement.against.west must be"):
-                    plan_scene(edited["room"], edited["items"])
+                    apply_scene_edit(scene,pose(scene,ITEM['id'],origin_z_mm=100,against=against))
 
     def test_wall_target_is_distinct_from_an_item_with_the_same_name(self) -> None:
         scene = plan_scene(ROOM, [
@@ -856,31 +811,14 @@ class AgainstEndTests(unittest.TestCase):
                 _cabinet("wall", host_wall="north", width=None, fill=True),
             ])
 
-    def test_edit_keeps_against_until_the_cabinet_leaves_that_wall(self) -> None:
-        scene = plan_scene(ROOM, [
-            _cabinet("south_cab", host_wall="south", against={"east": {"kind": "wall"}}),
-        ])
-        source = room_scene_source(scene)
-        raised = apply_edit(source, {"op": "move", "item_id": "south_cab", "origin_z_mm": 100})
-        self.assertEqual(raised["items"][0]["placement"]["against"], {"east": {"kind": "wall"}})
-        replanned = plan_scene(raised["room"], raised["items"])
-        self.assertEqual(replanned.items[0].placement.origin_x_mm, 4000)
-
-        freed = apply_edit(source, {
-            "op": "move",
-            "item_id": "south_cab",
-            "mode": "free",
-            "origin_x_mm": 500,
-            "origin_y_mm": 500,
-        })
-        self.assertNotIn("against", freed["items"][0]["placement"])
-
-        moved = apply_edit(source, {
-            "op": "move",
-            "item_id": "south_cab",
-            "host_wall": "north",
-        })
-        self.assertNotIn("against", moved["items"][0]["placement"])
+    def test_edit_keeps_against_until_the_cabinet_leaves_that_wall(self):
+        scene=plan_scene(ROOM,[_cabinet('south_cab',host_wall='south',against={'east':{'kind':'wall'}})])
+        raised=apply_scene_edit(scene,pose(scene,'south_cab',origin_z_mm=100))
+        self.assertEqual(raised.items[0].placement.against,scene.items[0].placement.against)
+        for op in (pose(scene,'south_cab',mode='free',origin_x_mm=1000,origin_y_mm=1000),
+                   pose(scene,'south_cab',host_wall='north',origin_x_mm=0,origin_y_mm=0,rotation_z_deg=0)):
+            moved=apply_scene_edit(scene,op)
+            self.assertFalse(moved.items[0].placement.against)
 
     def test_http_placement_accepts_against_ends(self) -> None:
         placement = room_http.ItemPlacementRequest.model_validate({

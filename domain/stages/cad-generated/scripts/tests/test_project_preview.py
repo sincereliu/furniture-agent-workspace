@@ -810,29 +810,13 @@ class OpenProjectPreviewTests(unittest.TestCase):
         server.app.state.preview_server = None
         self.assertFalse(server.stop_preview_server())
 
-    def test_room_page_drag_follows_the_item_and_sends_its_mode(self) -> None:
-        """拖动换算按**家具脚下**的比例，而且摆放模式一律显式发。
-
-        旧算法用"光标射线的地面交点"：抓在家具上半身时那条射线打到地面已在很远处，
-        几个像素就能换出好几米（实测一次拖动把 2.4m 的柜子从北墙甩到 y=2777）。
-        换算本身在 static/layout_drag.js 里由 drag_check.mjs 断言，这里盯的是页面用没用它、
-        以及 mode 有没有显式发——不显式发，服务端会按它那边的旧模式解释这次 op。
-        """
-        script = (
-            WORKSPACE_ROOT
-            / "domain"
-            / "modules"
-            / "web"
-            / "furniture_web"
-            / "templates"
-            / "room_page.js"
-        ).read_text(encoding="utf-8")
-        self.assertIn('from "/layout-view/layout_drag.js"', script)
-        self.assertIn("groundDragDelta(", script)
-        # 贴回墙边要认回"靠墙"，否则离开过墙面的件只能顶在墙上不动。
-        self.assertIn("wallSnap(", script)
-        self.assertIn('op.mode="wall"', script)
-        self.assertIn('op.mode="free"', script)
+    def test_room_page_loads_the_drag_transaction_module(self) -> None:
+        script = (WORKSPACE_ROOT / "domain/modules/web/furniture_web/templates/room_page.js").read_text(encoding="utf-8")
+        self.assertIn('from "/layout-view/layout_interaction.js"', script)
+        from furniture_web.integration import layout_view
+        asset, stat = layout_view.lookup_path("layout_interaction.js")
+        self.assertIsNotNone(stat)
+        self.assertTrue(Path(asset).is_file())
 
     def test_room_page_shows_the_ledger_and_the_change_log(self) -> None:
         """页面上要看得见"哪几条是助手替你定的"，也要看得见"谁改的、改了什么"。"""

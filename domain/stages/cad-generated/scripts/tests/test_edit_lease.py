@@ -31,6 +31,7 @@ from runtime_paths import bootstrap_runtime_paths
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 import server
+from layout_edit_test_support import pose
 from fake_request_support import lease_request, local_request, remote_request
 from furniture_layout.project_layout import ProjectLayout
 from furniture_workflow.agent_tools import FurnitureToolSession, project_snapshot
@@ -289,9 +290,7 @@ class LeaseGuardsTheWriteTests(unittest.TestCase):
 
     def _edit(self, request, **overrides):
         payload = {
-            "op": "move",
-            "item_id": "wardrobe",
-            "origin_x_mm": 600,
+            **pose(self.store.load(self.project.id).latest.layout,"wardrobe",origin_x_mm=600),
             "expected_version": self._version(),
         }
         payload.update(overrides)
@@ -309,7 +308,7 @@ class LeaseGuardsTheWriteTests(unittest.TestCase):
         with self.assertRaises(LeaseHeld):
             edit_project_layout(
                 self.store.load(self.project.id),
-                {"op": "move", "item_id": "wardrobe", "origin_x_mm": 600},
+                pose(self.store.load(self.project.id).latest.layout,"wardrobe",origin_x_mm=600),
                 expected_version=self._version(),
                 workspace_root=WORKSPACE_ROOT,
                 store_root=self.root,
