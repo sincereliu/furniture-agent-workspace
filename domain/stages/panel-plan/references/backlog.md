@@ -73,7 +73,7 @@
 
 **影响面**：`topology_solver._door_panels`、`validation_panels._validate_doors`、`panel_review`。铰链侧已经不是障碍：它由板件阶段给，多扇也能落到每块门板（见 [门板铰链侧](door-hinge-side.md)）。
 
-> **多扇与铰链侧都已落地**：`panel_plan` 能出 3 扇以上（`door_1…door_n`），门板带 `door_hinge_side`；`manufacture_plan` 读门板上的值，只在老冻结文件上回退到按门序派生（≤2 扇）。所以多门柜可以一路走到制造。
+> **多扇与铰链侧都已落地**：`panel_plan` 能出 3 扇以上（`door_1…door_n`），门板带 `door_hinge_side`；`manufacture_plan` 只读门板上的值，缺了就点名拒绝。所以多门柜可以一路走到制造。
 
 **验收**：一体 2400 高衣柜、上排 400 高两扇门 + 下排两扇 2000 高门 → 四块门件、各自位置与缝；两排的边距/缝可以不同。
 

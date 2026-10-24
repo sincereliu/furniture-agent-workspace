@@ -4,7 +4,7 @@
 
 - **对开腔**由几何决定（左 left、右 right），写反直接拒；
 - **单开腔**必须由提案给，不给就留空——留空的门不能开门、也排不了铰链孔；
-- 制造**不再按门序推导**：门板带什么就用什么，只有老冻结文件没带时才回退。
+- 制造**不再按门序推导**：门板带什么就用什么；没带就点名拒绝。制造输入也不能补这个值。
 """
 
 from __future__ import annotations
@@ -188,38 +188,12 @@ class ManufactureReadsHingeSideTests(unittest.TestCase):
             plan_manufacturing(spec, panels)
         self.assertIn("door hinge side is not decided yet", str(caught.exception))
 
-    def test_legacy_panels_without_the_field_still_derive(self):
+    def test_panels_without_the_field_are_refused(self):
         spec = furniture_spec(n_doors=2, shelves=[], top_gap_mm=0.0)
         placements = plan_panels(spec, CabinetStructure.from_spec(spec))
-        legacy = []
+        stripped = []
         for item in placements:
-            payload = {
-                "id": item.id,
-                "name": item.name,
-                "panel_type": item.panel_type,
-                "size_x": item.size_x,
-                "size_y": item.size_y,
-                "size_z": item.size_z,
-                "pos_x": item.pos_x,
-                "pos_y": item.pos_y,
-                "pos_z": item.pos_z,
-                "material_role": item.material_role,
-                "role": item.role,
-                "parent_id": item.parent_id,
-                "depends_on": list(item.depends_on),
-                "joints": [],
-            }
-            legacy.append(payload)
-        bom = plan_manufacturing(spec, legacy)
-        doors = {item.role: item.door_hinge_side for item in bom.panels if item.panel_type == "door"}
-        self.assertEqual(doors, {"left_door": "left", "right_door": "right"})
-
-    def test_legacy_single_door_still_needs_the_option(self):
-        spec = furniture_spec(n_doors=1, shelves=[], top_gap_mm=0.0)
-        placements = plan_panels(spec, CabinetStructure.from_spec(spec))
-        legacy = []
-        for item in placements:
-            legacy.append({
+            stripped.append({
                 "id": item.id,
                 "name": item.name,
                 "panel_type": item.panel_type,
@@ -236,8 +210,20 @@ class ManufactureReadsHingeSideTests(unittest.TestCase):
                 "joints": [],
             })
         with self.assertRaises(ValueError) as caught:
-            plan_manufacturing(spec, legacy)
-        self.assertIn("single door", str(caught.exception))
+            plan_manufacturing(spec, stripped)
+        self.assertIn("door hinge side is not decided yet", str(caught.exception))
+
+    def test_manufacturing_input_cannot_fill_a_missing_hinge_side(self):
+        spec = furniture_spec(n_doors=1, shelves=[], top_gap_mm=0.0)
+        placements = plan_panels(spec, CabinetStructure.from_spec(spec))
+        with self.assertRaises(ValueError) as caught:
+            plan_manufacturing(
+                spec,
+                placements,
+                requested_options={"door_hinge_side": "right"},
+            )
+        self.assertIn("door_hinge_side", str(caught.exception))
+        self.assertIn("does not support", str(caught.exception))
 
 
 class HingeChoiceTests(unittest.TestCase):

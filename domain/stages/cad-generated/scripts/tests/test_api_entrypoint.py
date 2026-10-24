@@ -98,7 +98,7 @@ class ApiEntrypointTests(unittest.TestCase):
         for view in (b"top", b"bottom", b"front", b"back", b"left", b"right"):
             self.assertIn(b'<option value="' + view + b'"', viewer_response.body)
         self.assertIn(b'data-view="default_view"', viewer_response.body)
-        self.assertIn(b"mountLayout", viewer_response.body)
+        self.assertIn(b"mountRoomPage", viewer_response.body)
         self.assertIn(b'id="coord"', viewer_response.body)
         self.assertNotIn(b'getContext("2d")', viewer_response.body)
         self.assertNotIn(b"function drawAxis()", viewer_response.body)
@@ -108,7 +108,7 @@ class ApiEntrypointTests(unittest.TestCase):
             / "modules"
             / "web"
             / "furniture_web"
-            / "static"
+            / "static" / "render" / "room"
             / "layout_scene.js"
         )
         scene = scene_path.read_text(encoding="utf-8")

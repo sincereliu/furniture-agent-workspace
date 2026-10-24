@@ -61,7 +61,7 @@
 - 推导与核对：`construction_geometry.door_hinge_sides()`——对开腔自动推、单开腔读提案、写反就拒。
 - 校验：`validation_panels._validate_doors()` 的 `DOOR_HINGE_SIDE_MISMATCH` / `DOOR_HINGE_SIDE_UNKNOWN`（后者是**警告**）。
 - 页面改：`POST /api/project/{id}/cabinets/{id}/panels` —— `project_layout_edit.save_cabinet_panel_edits()` 同时更新 `spec.door_hinges` 与每块门板的 `door_hinge_side`，再用 `door_hinge_sides()` 复核；对开腔被单独改会被拒。
-- 制造：`manufacturing_bom._resolve_door_hinge_sides()` **优先读门板上的值**；只有老冻结文件没带时才回退到按门序推导（`_legacy_door_hinge_sides`，仍限 ≤2 扇）。铰链孔位规则仍在制造（`connectors/hinge.py`），不搬。
+- 制造：`manufacturing_bom._resolve_door_hinge_sides()` 只读门板上的值。缺了就点名拒绝，不按门序补，也不接受制造输入里的 `door_hinge_side`。铰链孔位规则仍在制造（`connectors/hinge.py`），不搬。
 - 页面：板件页的「开门」按这个值绕门的一条竖边旋转——`left` 绕门左边转开；空值的门不动，详情里写"还没定"。
 
 ## 边界

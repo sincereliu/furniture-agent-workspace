@@ -49,10 +49,9 @@ panel-plan 失效、从面板重跑——面板其实没变，白跑且修订语
 - ✅ `connection`（连不连 on/off）：**已迁出板件类型**。接触几何留在 panel-plan，
   接触记录不含 `connection`。制造只抄几何字段，按面板类型重解析
   （`default_joint_connection`），写在自己的 `Contact.connection` 上。已保存的制造接触必须带这个字段。
-- ⚠️ `door_hinge_side`（铰链侧）：**已改回板件阶段**。它是设计决定（门往哪边开），
-  现在由 `panel-plan` 的 `door_hinges` 给、写在门板上（`door_hinge_side`），制造只读。
-  只有老冻结文件没带这个值时才回退到制造派生（单门读 `requested_options`，双门按门板
-  X 位置推，最多两扇）。详见 `panel-plan/references/door-hinge-side.md`。
+- ✅ `door_hinge_side`（铰链侧）：**在板件阶段**。它是设计决定（门往哪边开），
+  由 `panel-plan` 的 `door_hinges` 写入门板，制造只读。没写的门点名拒绝。
+  详见 `panel-plan/references/door-hinge-side.md`。
 - `back_mount`（groove/insert/cover）**留在** panel-plan：它改变背板尺寸与柜体深度
   （结构决策），改它本就该重跑面板。
 - 固定柜体三合一当前硬编码在制造 `Connector`（只有一种可选）；将来多选时按

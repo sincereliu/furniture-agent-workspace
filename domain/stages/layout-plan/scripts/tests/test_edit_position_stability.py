@@ -17,7 +17,10 @@ from runtime_paths import bootstrap_runtime_paths
 
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
-from furniture_layout.project_edit import apply_layout_edit, room_scene_source
+sys.path.insert(0, str(WORKSPACE_ROOT / "domain/stages/cad-generated/scripts/tests"))
+
+from furniture_layout.project_edit import apply_layout_edit
+from layout_edit_test_support import pose, planning_source
 from furniture_layout.project_layout import ProjectLayout
 from furniture_layout.scene_planning import plan_scene
 from furniture_layout.validation import admit_scene
@@ -47,42 +50,31 @@ class EditPositionStabilityTests(unittest.TestCase):
         ):
             with self.subTest(wall=wall):
                 source = study_layout()
-                request = room_scene_source(source.rooms[0])
+                request = planning_source(source.rooms[0])
                 request["items"][0]["placement"].update(
                     origin_x_mm=origin[0], origin_y_mm=origin[1],
                 )
                 request["items"][1]["placement"]["host_wall"] = wall
                 before = replace(source, rooms=(plan_scene(request["room"], request["items"]),))
-                edited = apply_layout_edit(before, {
-                    "op": "move", "item_id": "chair",
-                    "origin_x_mm": 1500, "origin_y_mm": 1500,
-                })
+                edited = apply_layout_edit(before, pose(before, "chair", origin_x_mm=1500, origin_y_mm=1500))
                 self.assertEqual(edited.rooms[0].items[1], before.rooms[0].items[1])
 
     def test_moving_chair_preserves_bookcase_through_reload_and_confirmation(self):
         before = study_layout()
         cabinet = before.rooms[0].items[1]
         self.assertEqual(cabinet.placement.origin_y_mm, 2500)
-        edited = apply_layout_edit(before, {
-            "op": "move", "item_id": "chair",
-            "origin_x_mm": 1000, "origin_y_mm": 1500,
-        })
+        edited = apply_layout_edit(before, pose(before, "chair", origin_x_mm=1000, origin_y_mm=1500))
         self.assertEqual(edited.rooms[0].items[1], cabinet)
         self.assertEqual(before.rooms[0].items[0].placement.origin_x_mm, 0)
         reloaded = ProjectLayout.from_dict(edited.to_dict())
         self.assertTrue(admit_scene(reloaded.rooms[0]).passed)
         self.assertEqual(reloaded.confirm().rooms[0].items[1], cabinet)
-        again = apply_layout_edit(reloaded, {
-            "op": "move", "item_id": "chair", "origin_x_mm": 1100,
-        })
+        again = apply_layout_edit(reloaded, pose(reloaded, "chair", origin_x_mm=1100))
         self.assertEqual(again.rooms[0].items[1], cabinet)
 
     def test_collision_with_saved_bookcase_is_rejected_without_repacking(self):
         with self.assertRaises(ValueError):
-            apply_layout_edit(study_layout(), {
-                "op": "move", "item_id": "chair",
-                "origin_x_mm": 0, "origin_y_mm": 1500,
-            })
+            apply_layout_edit(study_layout(), pose(study_layout(), "chair", origin_x_mm=0, origin_y_mm=1500))
 
     def test_preserving_along_wall_position_does_not_accept_invalid_wall_geometry(self):
         scene = study_layout().rooms[0]
@@ -97,13 +89,10 @@ class EditPositionStabilityTests(unittest.TestCase):
     def test_resize_and_height_edit_preserve_wall_start(self):
         before = study_layout()
         placement = before.rooms[0].items[1].placement
-        moved = apply_layout_edit(before, {
-            "op": "move", "item_id": "chair",
-            "origin_x_mm": 1000, "origin_y_mm": 1500,
-        })
+        moved = apply_layout_edit(before, pose(before, "chair", origin_x_mm=1000, origin_y_mm=1500))
         for operation in (
             {"op": "resize", "width": 2100},
-            {"op": "move", "origin_z_mm": 100},
+            pose(moved,"bookcase",origin_z_mm=100),
         ):
             with self.subTest(operation=operation):
                 edited = apply_layout_edit(moved, {"item_id": "bookcase", **operation})
@@ -131,8 +120,7 @@ class EditPositionStabilityTests(unittest.TestCase):
             after = asyncio.run(server.edit_project_layout_endpoint(
                 project.id,
                 server.ProjectLayoutEditRequest(
-                    op="move", item_id="chair", origin_x_mm=1000,
-                    origin_y_mm=1500, expected_version=before["version"],
+                    **pose(study_layout(),"chair",origin_x_mm=1000,origin_y_mm=1500), expected_version=before["version"],
                 ),
                 request,
             ))

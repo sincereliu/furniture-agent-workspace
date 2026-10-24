@@ -53,6 +53,12 @@ ITEMS = [
 ]
 
 
+def room_script(name: str) -> str:
+    """Follow source checks into the actual page controllers."""
+    directory = WORKSPACE_ROOT / "domain/modules/web/furniture_web/static/pages/room"
+    return (directory / name).read_text(encoding="utf-8")
+
+
 def _scene() -> RoomScene:
     planned = plan_room_scene(ROOM, ITEMS)
     return RoomScene.from_dict(
@@ -66,7 +72,7 @@ class RoomSceneEditorTests(unittest.TestCase):
         self.assertEqual(result["media_type"], "text/html")
         html = str(result["html"])
         self.assertIn("<canvas", html)
-        self.assertIn("const SCENE_ID=\"demo\"", html)
+        self.assertIn('"scene_id":"demo"', html)
         self.assertIn('"id":"wardrobe"', html)
         self.assertIn('"mode":"wall"', html)
         self.assertIn('"host_wall":"north"', html)
@@ -77,7 +83,7 @@ class RoomSceneEditorTests(unittest.TestCase):
 
     def test_editor_leaves_no_placeholders(self) -> None:
         html = str(render_draft_page("demo", _scene())["html"])
-        self.assertIn("const READ_ONLY=false", html)
+        self.assertIn('"read_only":false', html)
         for placeholder in (
             "__SCENE_ID__",
             "__SCENE_JSON__",
@@ -99,14 +105,14 @@ class RoomSceneEditorTests(unittest.TestCase):
         self.assertNotIn('id="shutdown-preview"', html)
         self.assertNotIn('fetch("/api/preview/presence"', html)
         self.assertNotIn("POLL_URL", html)
-        self.assertIn('const LAYOUT_URL=""', html)
+        self.assertIn('"layout_url":""', html)
 
     def test_editor_also_carries_room_axes_and_coordinate_readout(self) -> None:
         """坐标层长在共用画布上，可编辑页同样要有。"""
         html = str(render_draft_page("demo", _scene())["html"])
         self.assertIn('id="coord"', html)
-        self.assertIn("mountLayout", html)
-        self.assertIn('data-field="coord"', html)
+        self.assertIn("mountRoomPage", html)
+        self.assertIn('data-field="coord"', room_script("details.js"))
 
     def test_editor_carries_the_draft_badge_and_no_room_band(self) -> None:
         """草稿页只有一间房：挂身份牌，房间带留空（JS 见不到第二间就保持 hidden）。"""
@@ -115,16 +121,16 @@ class RoomSceneEditorTests(unittest.TestCase):
             '<p class="mode-badge" id="mode-badge">草稿 · 不影响项目</p>', html
         )
         self.assertIn('<nav class="room-band" id="room-band" aria-label="房间切换" hidden></nav>', html)
-        self.assertIn("let rooms=[]", html)
+        self.assertIn('"rooms":[]', html)
 
     def test_editable_panel_arm_keeps_the_input_controls(self) -> None:
         """去掉只读页的控件时别误伤可编辑页：可编辑那支的输入框与 −/＋ 必须还在。"""
         html = str(render_draft_page("demo", _scene())["html"])
-        self.assertIn("const READ_ONLY=false", html)
-        self.assertIn('data-gap-step="${key}"', html)
-        self.assertIn("data-rotation-step", html)
-        self.assertIn("data-height-input", html)
-        self.assertIn("可以直接输入任意毫米值", html)
+        self.assertIn('"read_only":false', html)
+        self.assertIn('data-gap-step="${key}"', room_script("details.js"))
+        self.assertIn("data-rotation-step", room_script("details.js"))
+        self.assertIn("data-height-input", room_script("details.js"))
+        self.assertIn("可以直接输入任意毫米值", room_script("details.js"))
 
     def test_editor_declares_move_and_rotate_controls(self) -> None:
         result = render_draft_page("demo", _scene())
@@ -154,21 +160,21 @@ class RoomSceneEditorTests(unittest.TestCase):
         self.assertIn('data-view="default_view" aria-pressed="true">复位</button>', html)
         self.assertNotIn('data-view="reset"', html)
         # 默认视角：正南偏东 15°，斜上方看整座底座。
-        self.assertIn("const DEFAULT_YAW=Math.PI*5/12,DEFAULT_PITCH=.72", html)
+        self.assertIn("const DEFAULT_YAW=Math.PI*5/12,DEFAULT_PITCH=.72", room_script("camera.js"))
         # 立面视图必须落在 pitch 0，编辑器据此切换成竖直平面拖动；俯视/仰视对称。
-        self.assertIn("front:{yaw:Math.PI/2,pitch:0}", html)
-        self.assertIn("left:{yaw:Math.PI,pitch:0}", html)
-        self.assertIn("bottom:{yaw:Math.PI/2,pitch:-1.48}", html)
+        self.assertIn("front:{yaw:Math.PI/2,pitch:0}", room_script("camera.js"))
+        self.assertIn("left:{yaw:Math.PI,pitch:0}", room_script("camera.js"))
+        self.assertIn("bottom:{yaw:Math.PI/2,pitch:-1.48}", room_script("camera.js"))
 
     def test_editor_snaps_orthographic_view_on_double_click(self) -> None:
         result = render_draft_page("demo", _scene())
         html = str(result["html"])
-        self.assertIn('canvas.addEventListener("dblclick"', html)
-        self.assertIn("function nearestOrthoView()", html)
-        self.assertIn("state.freeView={yaw:state.yaw", html)
-        self.assertIn("syncViewControls()", html)
+        self.assertIn('canvas.addEventListener("dblclick"', room_script("camera.js"))
+        self.assertIn("function nearestOrthoView()", room_script("camera.js"))
+        self.assertIn("state.freeView={yaw:state.yaw", room_script("camera.js"))
+        self.assertIn("syncViewControls()", room_script("camera.js"))
         # 转过视角之后标识要变成「自由视角」，不能还挂着上一个正视图。
-        self.assertIn('state.active="free"', html)
+        self.assertIn('state.active="free"', room_script("camera.js"))
         self.assertIn("orthographic_view_select", result["controls"])
         self.assertIn("double_click_snap", result["controls"])
 
@@ -222,7 +228,7 @@ class RoomSceneEditorApiTests(unittest.TestCase):
         response = asyncio.run(server.room_scene_editor("demo"))
         self.assertEqual(response.media_type, "text/html")
         self.assertIn(b"<canvas", response.body)
-        self.assertIn(b"const SCENE_ID=\"demo\"", response.body)
+        self.assertIn(b'"scene_id":"demo"', response.body)
 
     def test_editor_missing_scene_returns_404(self) -> None:
         with self.assertRaises(HTTPException) as ctx:

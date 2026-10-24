@@ -121,6 +121,11 @@ def project_list_url() -> str:
     return f"http://127.0.0.1:{PREVIEW_PORT}/projects"
 
 
+def home_url() -> str:
+    """工作台总览与控制台主页地址。"""
+    return f"http://127.0.0.1:{PREVIEW_PORT}/"
+
+
 def preview_url(project_id: str, *, mode: str | None = None) -> str:
     """一个项目的布局页地址。`mode="view"` 只改页面样子，不改写权限。"""
     base = f"http://127.0.0.1:{PREVIEW_PORT}/api/project/{project_id}/preview"
@@ -217,7 +222,11 @@ def ensure_preview_server(workspace_root: Path) -> bool:
         / "open_projects.py"
     )
     _start_preview_process(
-        [str(_python_executable(workspace_root)), str(server)],
+        [
+            str(_python_executable(workspace_root)),
+            str(server),
+            "--no-browser",
+        ],
         str(workspace_root),
     )
     deadline = time.monotonic() + _SERVER_READY_SECONDS
@@ -226,6 +235,19 @@ def ensure_preview_server(workspace_root: Path) -> bool:
             return True
         time.sleep(0.25)
     return False
+
+
+def open_home_preview(
+    *,
+    workspace_root: str | Path,
+) -> dict[str, Any]:
+    """打开工作台首页控制台。已经在跑的服务不会再拉一次。"""
+    url = home_url()
+    if not _preview_browser_enabled():
+        return {"url": url, "opened": False}
+    ready = ensure_preview_server(Path(workspace_root))
+    opened = bool(ready and webbrowser.open(url, new=2))
+    return {"url": url, "opened": opened}
 
 
 def open_project_preview(

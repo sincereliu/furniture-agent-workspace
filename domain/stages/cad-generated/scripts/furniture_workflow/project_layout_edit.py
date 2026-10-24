@@ -28,7 +28,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
-from furniture_layout.project_edit import apply_layout_edit
+from furniture_layout.project_edit import apply_layout_edit, restore_layout_item
 from furniture_panel_planning.grain_rules import normalize_grain_axis
 
 from furniture_layout.open_preview import layout_version, panel_version, preview_page_data
@@ -414,8 +414,7 @@ def undo_layout_edit(
 
     layout = revision.layout
     for entry in reversed(revision.working_ops[-steps:]):
-        for restore_op in _restore_ops(entry):
-            layout = apply_layout_edit(layout, restore_op)
+        layout = restore_layout_item(layout, entry["item_id"], entry["before"])
     undone = revision.working_ops[-steps:]
     _edit_in_place(revision, layout, {"op": "undo", "item_id": ""}, None, None)
     del revision.working_ops[len(revision.working_ops) - steps:]
@@ -543,67 +542,6 @@ def _item_snapshot(revision: Revision, item_id: str) -> dict[str, Any] | None:
                     "height": item.height,
                 }
     return None
-
-
-def _restore_ops(entry: Mapping[str, Any]) -> list[dict[str, Any]]:
-    """把一条日志还原成能喂给 `apply_layout_edit` 的 op（最多三条：摆放 + 朝向 + 尺寸）。"""
-    item_id = str(entry.get("item_id") or "")
-    before = dict(entry.get("before") or {})
-    placement = dict(before.get("placement") or {})
-    ops: list[dict[str, Any]] = []
-    if placement:
-        if placement.get("mode") == "wall":
-            # 沿墙位置由包络重贴。普通靠墙柜恢复哪面墙和离地高度。
-            # 铺满件的编辑只收离地高度，多写墙面会被拒绝。
-            if placement.get("fill"):
-                ops.append(
-                    {
-                        "op": "move",
-                        "item_id": item_id,
-                        "origin_z_mm": placement.get("origin_z_mm") or 0,
-                    }
-                )
-            else:
-                ops.append(
-                    {
-                        "op": "move",
-                        "item_id": item_id,
-                        "mode": "wall",
-                        "host_wall": placement.get("host_wall"),
-                        "origin_z_mm": placement.get("origin_z_mm") or 0,
-                        # 换墙或转成自由摆放会丢掉 against。撤销按改之前的那一份写回。
-                        "against": placement.get("against"),
-                    }
-                )
-        else:
-            ops.append(
-                {
-                    "op": "move",
-                    "item_id": item_id,
-                    "mode": "free",
-                    "origin_x_mm": placement.get("origin_x_mm"),
-                    "origin_y_mm": placement.get("origin_y_mm"),
-                    "origin_z_mm": placement.get("origin_z_mm") or 0,
-                }
-            )
-            ops.append(
-                {
-                    "op": "rotate",
-                    "item_id": item_id,
-                    "mode": "free",
-                    "origin_x_mm": placement.get("origin_x_mm"),
-                    "origin_y_mm": placement.get("origin_y_mm"),
-                    "rotation_z_deg": placement.get("rotation_z_deg") or 0,
-                }
-            )
-    sizes = {
-        key: before[key]
-        for key in ("width", "depth", "height")
-        if before.get(key) is not None
-    }
-    if sizes and not placement.get("fill"):
-        ops.append({"op": "resize", "item_id": item_id, **sizes})
-    return ops
 
 
 def _changed_room_ids(before_layout, after_layout) -> list[str]:

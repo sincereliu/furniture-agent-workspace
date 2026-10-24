@@ -84,16 +84,123 @@ export function blockerAt(scene, footprint, zStart, zEnd, ignoreId) {
   return null;
 }
 
+const WALL_ENDS = { north: ["west", "east"], east: ["north", "south"],
+  south: ["east", "west"], west: ["south", "north"] };
+const close = (a, b) => Math.abs(a - b) <= EPSILON_MM;
+const itemTargets = item => Object.values(item.placement.against || {})
+  .filter(target => target.kind === "item").map(target => target.id);
+
+function freeWallSpans(scene, item, placed) {
+  const wall = item.placement.host_wall;
+  const length = ["north", "south"].includes(wall) ? scene.room.width_mm : scene.room.depth_mm;
+  const occupied = [];
+  for (const opening of scene.openings || []) {
+    if (opening.wall === wall && rangesOverlap(item.z_start, item.z_end,
+      opening.sill_height_mm, opening.sill_height_mm + opening.height_mm)) {
+      occupied.push([opening.offset_mm, opening.offset_mm + opening.width_mm]);
+    }
+  }
+  for (const other of [...(scene.obstacles || []), ...placed]) {
+    if (!rangesOverlap(item.z_start, item.z_end, other.z_start, other.z_end)) continue;
+    const span = spanOnWall(scene.room, wall, other.footprint);
+    if (span) occupied.push(span);
+  }
+  occupied.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const free = [];
+  let cursor = 0;
+  for (const [start, end] of occupied) {
+    if (end <= start + EPSILON_MM) continue;
+    if (start > cursor + EPSILON_MM) free.push([cursor, Math.min(start, length)]);
+    cursor = Math.max(cursor, Math.min(end, length));
+  }
+  if (length > cursor + EPSILON_MM) free.push([cursor, length]);
+  return free;
+}
+
+/** Match placement.py admission without moving any neighbour in a pose preview. */
+function constraintBlocker(scene, candidate) {
+  const original = scene.items.find(item => item.id === candidate.id);
+  const p = { ...candidate.placement };
+  // The set_pose encoder omits against: retain it only when the planar pose is unchanged.
+  if (!p.fill && ["mode", "host_wall", "origin_x_mm", "origin_y_mm", "rotation_z_deg"]
+    .some(key => p[key] !== original.placement[key])) delete p.against;
+  const items = scene.items.map(item => item.id === candidate.id ? { ...candidate, placement: p } : item);
+  const byId = new Map(items.map(item => [item.id, item]));
+  const blocked = item => ({ label: item.label || item.id, id: item.id, reason: "placement_constraint" });
+  for (const item of items) {
+    const pose = item.placement, ends = WALL_ENDS[pose.host_wall];
+    const against = Object.entries(pose.against || {});
+    if (!against.length) continue;
+    const span = spanOnWall(scene.room, pose.host_wall, item.footprint);
+    if (!ends || !span || pose.mode !== "wall") return blocked(item);
+    const length = ["north", "south"].includes(pose.host_wall) ? scene.room.width_mm : scene.room.depth_mm;
+    for (const [direction, target] of against) {
+      const end = ends.indexOf(direction);
+      let contact = end === 0 ? 0 : length;
+      if (target.kind === "item") {
+        const other = byId.get(target.id);
+        if (!other || !rangesOverlap(item.z_start, item.z_end, other.z_start, other.z_end)) return blocked(item);
+        const targetSpan = spanOnWall(scene.room, pose.host_wall, other.footprint);
+        if (!targetSpan) return blocked(item);
+        contact = targetSpan[1 - end];
+      }
+      if (end < 0 || !close(span[end], contact)) return blocked(item);
+    }
+  }
+  // Fixed items are placed before fill items; mirror _place_group's dependency order.
+  const placed = items.filter(item => !item.placement.fill);
+  let pending = items.filter(item => item.placement.fill);
+  while (pending.length) {
+    const ids = new Set(placed.map(item => item.id));
+    const ready = item => itemTargets(item).every(id => ids.has(id));
+    let group = pending.filter(item => Object.keys(item.placement.against || {}).length && ready(item));
+    if (!group.length) {
+      const targets = new Set(pending.flatMap(itemTargets));
+      group = pending.filter(item => targets.has(item.id) && ready(item));
+    }
+    if (!group.length) group = pending.filter(ready);
+    if (!group.length) return blocked(pending[0]);
+    for (const item of group) {
+      const free = freeWallSpans(scene, item, placed);
+      const span = spanOnWall(scene.room, item.placement.host_wall, item.footprint);
+      if (!span) return blocked(item);
+      const against = item.placement.against || {};
+      const ends = WALL_ENDS[item.placement.host_wall];
+      let expected;
+      if (Object.keys(against).length) {
+        expected = free.find(([start, end]) => against[ends[0]] ? close(start, span[0]) : close(end, span[1]));
+      } else {
+        expected = free.reduce((best, next) => !best || next[1] - next[0] > best[1] - best[0] ? next : best, null);
+      }
+      if (!expected || !close(span[0], expected[0]) || !close(span[1], expected[1])) return blocked(item);
+      placed.push(item);
+    }
+    pending = pending.filter(item => !group.includes(item));
+  }
+  return null;
+}
+
+/** Every gesture and numeric pose edit uses the same spatial and relation checks. */
+export function poseBlocker(scene, item, footprint, zStart, zEnd, changes = {}) {
+  return blockerAt(scene, footprint, zStart, zEnd, item.id) || constraintBlocker(scene, {
+    ...item, footprint, z_start: zStart, z_end: zEnd,
+    placement: { ...item.placement, ...changes, origin_x_mm: footprint[0][0],
+      origin_y_mm: footprint[0][1], origin_z_mm: zStart },
+  });
+}
+
 export function placementStop(blocker) {
   if (!blocker) return "超出可放范围";
   if (blocker.reason === "outside_room") return "会越出房间";
   if (blocker.reason === "blocked_opening") return "会遮挡门窗洞口";
+  if (blocker.reason === "placement_constraint") return `会破坏 ${blocker.label} 的贴合或铺满约束`;
   return `会与 ${blocker.label} 干涉`;
 }
 
 export function contactStop(blocker) {
   if (blocker.reason === "outside_room") return "已停在房间边界";
   if (blocker.reason === "blocked_opening") return "再过去会遮挡门窗洞口";
+  if (blocker.reason === "placement_constraint") return `已停住：保持 ${blocker.label} 的贴合或铺满约束`;
   return `已与 ${blocker.label} 贴到接触，再过去会干涉`;
 }
 
@@ -206,6 +313,19 @@ export function localFootprint(item, originX, originY, rotationDeg) {
   );
 }
 
+/** Keep the canvas checkpoint derived from the same pose that will be saved. */
+export function syncPlacementGeometry(room, item) {
+  const p = item.placement;
+  item.footprint = localFootprint(item, p.origin_x_mm, p.origin_y_mm, p.rotation_z_deg);
+  item.z_start = p.origin_z_mm;
+  item.z_end = p.origin_z_mm + item.height;
+  const box = boxOf(item.footprint);
+  item.clearances_mm = { west: box.x0, east: room.width_mm - box.x1,
+    north: box.y0, south: room.depth_mm - box.y1,
+    floor: item.z_start, ceiling: room.height_mm - item.z_end };
+  return item;
+}
+
 export function snapAngle(deg, step) {
   return Math.round(deg / step) * step;
 }
@@ -234,7 +354,7 @@ export function heightProbe(scene, item, footprint) {
   const room = scene.room;
   return (z) => (z < 0 || z + item.height > room.height_mm + EPSILON_MM)
     ? { label: "层高", id: null, reason: "outside_room" }
-    : blockerAt(scene, footprint, z, z + item.height, item.id);
+    : poseBlocker(scene, item, footprint, z, z + item.height);
 }
 
 export function setItemHeight(item, z) {
@@ -248,7 +368,7 @@ export function solvePlanarDrag(scene, item, startOrigin, dx, dy) {
   if (placement.mode === "wall") return null;
   const rotation = placement.rotation_z_deg || 0;
   const at = (x, y) => localFootprint(item, x, y, rotation);
-  const probe = (x, y) => blockerAt(scene, at(x, y), item.z_start, item.z_end, item.id);
+  const probe = (x, y) => poseBlocker(scene, item, at(x, y), item.z_start, item.z_end);
   const anchor = anchorFreeCell(Math.round(startOrigin[0]), Math.round(startOrigin[1]), probe);
   if (!anchor) return { label: "无处可移", id: null };
   const solvedX = resolveInteger(anchor[0], anchor[0] + Math.round(dx), (x) => probe(x, anchor[1]));
@@ -310,10 +430,12 @@ export function solveRotation(scene, item, center, rotationDeg) {
     originY += shiftY > 0 ? Math.ceil(shiftY) : Math.floor(shiftY);
     footprint = localFootprint(item, originX, originY, target);
   }
-  const blocker = blockerAt(scene, footprint, item.z_start, item.z_end, item.id);
+  const blocker = poseBlocker(scene, item, footprint, item.z_start, item.z_end,
+    { mode: "free", host_wall: null, rotation_z_deg: target });
   if (blocker) return { applied: false, blocker };
   current.mode = "free";
   current.host_wall = null;
+  delete current.against;
   current.origin_x_mm = originX;
   current.origin_y_mm = originY;
   current.rotation_z_deg = target;

@@ -75,10 +75,11 @@ _PANEL_VIEW_HINT = (
 _MANUFACTURING_STAGE_INPUT_HINT = (
     "For manufacture_plan, stage_input is {parameters: {...}, appearance?: {...}} "
     "or a flat parameters object (appearance may sit beside the flat keys). "
-    "Known parameter keys: door_hinge_side "
-    "(left|right, required for a single door), movable_shelf_connector "
+    "Known parameter keys: movable_shelf_connector "
     "(two_in_one|shelf_pin, required when movable shelves exist), "
     "edge_banding ({material, thickness} from edge_banding_catalog.yaml). "
+    "Hinge side is panel_plan door_hinges, written on each door as "
+    "door_hinge_side; it is not a manufacturing parameter. "
     "appearance selects material per role: {carcass|door|back: "
     "{substrate, surface}} with keys from materials_catalog.yaml."
 )

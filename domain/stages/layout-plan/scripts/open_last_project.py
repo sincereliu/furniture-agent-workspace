@@ -4,7 +4,7 @@
 
     .venv/Scripts/python.exe domain/stages/layout-plan/scripts/open_last_project.py
 
-仓库根目录的 `open_last_project.bat` 跑的就是这一条。已经在跑的预览不会再拉一次。
+如果要启动工作台控制台首页，双击根目录的 `start.bat` 或运行 `open_workbench.py`。已经在跑的预览不会再拉一次。
 """
 
 from __future__ import annotations
@@ -23,15 +23,19 @@ from runtime_paths import bootstrap_runtime_paths  # noqa: E402
 
 bootstrap_runtime_paths(_WORKSPACE_ROOT)
 
-from furniture_layout.open_preview import open_project_preview  # noqa: E402
+from furniture_layout.open_preview import (  # noqa: E402
+    open_home_preview,
+    open_project_preview,
+)
 from furniture_workflow.workflow_store import JsonProjectStore  # noqa: E402
 
 
 def main() -> int:
     ready = JsonProjectStore(_WORKSPACE_ROOT / "store").list_projects()
     if not ready:
-        print("没有可打开的项目")
-        return 1
+        print("没有可打开的历史项目，正在打开工作台控制台...")
+        result = open_home_preview(workspace_root=_WORKSPACE_ROOT)
+        return 0 if result.get("opened") else 1
     project = ready[0]
     result = open_project_preview(project["id"], workspace_root=_WORKSPACE_ROOT)
     print(project["name"])

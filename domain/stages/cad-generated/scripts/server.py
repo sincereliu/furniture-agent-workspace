@@ -186,27 +186,9 @@ edit_room_scene = room_http.edit_room_scene
 room_scene_editor = room_http.room_scene_editor
 
 
-class ProjectLayoutEditRequest(BaseModel):
-    """页面上改项目布局：改一件（`move` / `rotate` / `resize`）。
-
-    `expected_version` 必填：它是页面最近一次从 `/layout` 看到的 `version`。
-    对不上就拒绝——页面上的画面已经过期，不能拿它去覆盖。
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
+class ProjectLayoutEditRequest(RoomSceneEditRequest):
+    """The shared placed-scene edit protocol plus the project's required version."""
     expected_version: str = Field(..., min_length=1, description="页面最近看到的 version")
-    op: Literal["move", "rotate", "resize"]
-    item_id: str = Field(..., min_length=1)
-    mode: Literal["wall", "free"] | None = None
-    host_wall: Literal["south", "east", "north", "west"] | None = None
-    origin_x_mm: float | None = None
-    origin_y_mm: float | None = None
-    origin_z_mm: float | None = Field(default=None, ge=0)
-    rotation_z_deg: float | None = None
-    width: float | None = Field(default=None, gt=0)
-    depth: float | None = Field(default=None, gt=0)
-    height: float | None = Field(default=None, gt=0)
 
 
 class ProjectLayoutUndoRequest(BaseModel):

@@ -1,28 +1,10 @@
-"""浏览器里打开的房间页。可拖、只读预览、分享都是这一页。
+"""房间页：独立草稿、项目编辑和只读预览共用模板。
 
-点选一件家具后拖动：靠墙件不沿墙滑动，沿墙位置由包络贴合算出；往房间内拖过
-阈值就改成自由摆放。自由件平面移动（发 `origin_x_mm`/`origin_y_mm`）。
-选中后，高度正中有两小段贴平的黄色圆弧箭头，绕着这件的外廓，拖它改朝向（发
-`rotation_z_deg`）；柜顶中央的蓝色小圆点改离地高度（发 `origin_z_mm`）。墙摆的旋转由 `host_wall` 派生，所以旋转墙摆会
-在同一个 op 里改成自由摆放。
-
-画面、转视角、缩放和点选由 three.js 负责。房间坐标仍是 X 东、Y 南、Z 上。
-相机接近水平（pitch 很小）时地面射线求交会退化，所以那种视角下拖动改成在「水平轴 +
-高度」这个竖直平面里走，上下拖就是改高度。
-
-选中件的四向净距（到最近的家具/障碍物/墙）直接画在图上：先找同一高度带、垂直
-方向有重叠的最近邻，找不到才退到墙。
-
-拖动与旋转**本地就按服务端的摆放检查求解**（见布局阶段 `placement_check.py`，前端在该阶段 `static/layout_solver.js`，由本模块 `templates/room_page.js` 调用：底面正面积
-重叠且高度重叠才算干涉，贴边接触放行；另查越界和遮挡门窗洞口）。过不去就停在
-接触处，不会先穿过再回弹。求解在**整数毫米**上进行，
-和服务端落盘取整口径一致，预览即落盘值。
-
-拖动期间只做本地预览，松手才发**一个** edit op，由后端重算并校验——失败会显示
-原因，不回退本地已画的形状。右侧宽、深、高回车后另发一次 `resize`。靠墙件的
-沿墙位置由包络贴合算出，这一页不改它。沿墙铺满的宽度和朝向也由空段算出，只改离地高度。
-
-项目预览复用同一块画布，但是只读：不发 edit op，按版本号换上新的包络。
+三维风格与渲染归本模块；拖动事务、整数毫米求解和位置操作编码归布局阶段。
+手势持有私有候选，画布和属性栏读取候选；松手提交完整位置，取消则丢弃候选。
+服务端准入通过后按该位置保存；拒绝或网络失败后恢复确认结果。
+页面只转换指针、相机和输入框事件，不修改加载文档的摆放模式。
+沿墙铺满件只提供高度编辑；宽度与沿墙位置仍由规划约束决定。
 """
 
 from __future__ import annotations
@@ -52,10 +34,10 @@ EDITOR_WIDTH_PX = 960
 EDITOR_HEIGHT_PX = 600
 
 
-def _layout_scene_src() -> str:
-    """画面脚本带文件时间，避免浏览器一直用旧的旋转箭头。"""
-    script = Path(__file__).resolve().parent / "static" / "layout_scene.js"
-    return f"/layout-view/layout_scene.js?v={int(script.stat().st_mtime)}"
+def _room_page_src() -> str:
+    """页面入口带文件时间；静态响应的 no-store 同时覆盖所有依赖。"""
+    script = Path(__file__).resolve().parent / "static" / "pages" / "room" / "index.js"
+    return f"/layout-view/pages/room/index.js?v={int(script.stat().st_mtime)}"
 
 
 def _json_for_script(payload: object) -> str:
@@ -159,23 +141,13 @@ def _render_canvas_html(
     tokens = {
         "__PAGE_CONFIG_JSON__": _json_for_script(page_config),
         "__SCENE_JSON__": _json_for_script(scene_payload),
-        "__SCENE_ID__": escape(scene_id, quote=True),
         "__HEADING__": escape(heading, quote=True),
-        "__HEADING_SUFFIX__": _json_for_script(heading_suffix),
         "__MODE_BADGE__": escape(mode_badge, quote=True),
-        "__READ_ONLY__": "true" if read_only else "false",
-        "__SHARE_FORM__": "true" if share_form else "false",
-        "__LAYOUT_URL__": _json_for_script(layout_url),
-        "__EDIT_URL__": _json_for_script(edit_url),
-        "__UNDO_URL__": _json_for_script(undo_url),
-        "__PANEL_URL_BASE__": _json_for_script(panel_url_base),
-        "__ROOMS_JSON__": _json_for_script(rooms),
-        "__VERSION_JSON__": _json_for_script(version),
         "__BODY_CLASS__": body_class,
         "__APP_LABEL__": escape(app_label, quote=True),
         "__TIPS__": tips,
         "__SHUTDOWN_BUTTON__": shutdown_button,
-        "/layout-view/layout_scene.js": _layout_scene_src(),
+        "/layout-view/pages/room/index.js": _room_page_src(),
         "__PAGE_EXTENSION_STYLES__": extension.styles,
         "__PAGE_EXTENSION_TOOLBAR__": extension.toolbar,
         "__PAGE_EXTENSION_PANEL__": extension.panel,

@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -19,6 +20,9 @@ _SERVER_ROOT = (
     / "scripts"
 )
 sys.path.insert(0, str(_SERVER_ROOT))
+
+if "--no-browser" in sys.argv:
+    os.environ["FURNITURE_PREVIEW_BROWSER"] = "0"
 
 from server import main  # noqa: E402
 

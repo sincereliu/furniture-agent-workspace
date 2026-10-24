@@ -110,7 +110,6 @@ def cabinet_data(furniture_category: str = "floor_cabinet", **overrides: Any) ->
             origin_z_mm=2000 if wall else 0,
         ),
         "movable_shelf_connector": "two_in_one",
-        "door_hinge_side": None,
         **panel_parameters(furniture_category),
     }
     values.update(overrides)

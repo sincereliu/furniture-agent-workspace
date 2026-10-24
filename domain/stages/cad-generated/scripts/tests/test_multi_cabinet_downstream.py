@@ -83,7 +83,6 @@ def two_cabinet_spec() -> dict:
     return {
         "rooms": two_cabinet_rooms(),
         "movable_shelf_connector": "two_in_one",
-        "door_hinge_side": None,
         **panel_parameters("floor_cabinet"),
     }
 
@@ -280,9 +279,6 @@ class PerCabinetParametersTests(unittest.TestCase):
         # 单门必须明确铰链方向——这是**板件**提案的字段，逐柜覆盖。共享一份表达不了。
         spec["panel_cabinets"] = {
             "cabinet_2": {"n_doors": 1, "door_hinges": ["left"]}
-        }
-        spec["manufacturing_cabinets"] = {
-            "cabinet_2": {"parameters": {"door_hinge_side": "left"}}
         }
         result = confirm_through(
             self.orchestrator,

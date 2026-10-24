@@ -19,7 +19,9 @@ from fastapi import HTTPException
 
 import server
 from fake_request_support import local_request, remote_request
-from furniture_layout.scene_edit import apply_edit
+from furniture_layout.scene_edit import apply_scene_edit
+from furniture_layout.scene_planning import plan_scene
+from layout_edit_test_support import pose
 
 
 def _source() -> dict:
@@ -63,192 +65,43 @@ def _source() -> dict:
 
 
 class SceneEditTests(unittest.TestCase):
-    def test_resize_changes_multiple_fields(self) -> None:
-        edited = apply_edit(
-            _source(),
-            {"op": "resize", "item_id": "wardrobe", "width": 900, "depth": 650},
-        )
-        item = edited["items"][0]
-        self.assertEqual(item["width"], 900)
-        self.assertEqual(item["depth"], 650)
-        self.assertEqual(item["height"], 2200)
+    def scene(self):
+        source=_source()
+        source['items'][1]['placement']['origin_y_mm']=900
+        return plan_scene(source['room'],source['items'])
 
-    def test_resize_requires_a_field(self) -> None:
+    def test_resize_rebuilds_geometry_without_mutating_the_input(self):
+        before=self.scene()
+        edited=apply_scene_edit(before,{'op':'resize','item_id':'wardrobe','width':900,'depth':650})
+        self.assertEqual((edited.items[0].width,edited.items[0].depth),(900,650))
+        self.assertEqual(before.items[0].width,1800)
+        self.assertEqual(edited.items[1],before.items[1])
+
+    def test_set_pose_updates_the_exact_transform(self):
+        before=self.scene()
+        op=pose(before,'desk',origin_x_mm=1000,origin_y_mm=1200,origin_z_mm=100,rotation_z_deg=90)
+        edited=apply_scene_edit(before,op)
+        self.assertEqual(edited.items[1].placement.origin_x_mm,1000)
+        self.assertEqual(edited.items[1].placement.rotation_z_deg,90)
+        self.assertEqual(edited.items[1].clearances_mm['floor'],100)
+        self.assertEqual(edited.items[0],before.items[0])
+
+    def test_old_operations_and_incomplete_new_operations_are_rejected(self):
+        scene=self.scene()
+        for op in ({'op':'move','item_id':'desk','origin_x_mm':1000},
+                   {'op':'rotate','item_id':'desk','rotation_z_deg':90},
+                   {'op':'set_pose','item_id':'desk','origin_x_mm':1000},
+                   {'op':'resize','item_id':'desk'},
+                   {'op':'resize','item_id':'desk','origin_x_mm':1000},
+                   {**pose(scene,'desk'),'width':900}):
+            with self.subTest(op=op),self.assertRaises(ValueError):
+                apply_scene_edit(scene,op)
+
+    def test_collision_is_rejected_atomically(self):
+        scene=self.scene();before=scene.to_dict()
         with self.assertRaises(ValueError):
-            apply_edit(_source(), {"op": "resize", "item_id": "wardrobe"})
-
-    def test_resize_rejects_foreign_field(self) -> None:
-        with self.assertRaises(ValueError):
-            apply_edit(
-                _source(),
-                {"op": "resize", "item_id": "wardrobe", "origin_x_mm": 1},
-            )
-
-    def test_move_wall_uses_host_wall(self) -> None:
-        edited = apply_edit(
-            _source(), {"op": "move", "item_id": "wardrobe", "host_wall": "east"}
-        )
-        self.assertEqual(edited["items"][0]["placement"]["host_wall"], "east")
-        self.assertNotIn("offset_mm", edited["items"][0]["placement"])
-
-    def test_move_wall_rejects_free_coordinates(self) -> None:
-        with self.assertRaises(ValueError):
-            apply_edit(
-                _source(),
-                {"op": "move", "item_id": "wardrobe", "origin_x_mm": 500},
-            )
-
-    def test_move_cannot_mix_modes(self) -> None:
-        with self.assertRaises(ValueError):
-            apply_edit(
-                _source(),
-                {
-                    "op": "move",
-                    "item_id": "wardrobe",
-                    "host_wall": "east",
-                    "origin_x_mm": 100,
-                },
-            )
-
-    def test_move_switch_mode_requires_target_coordinates(self) -> None:
-        with self.assertRaises(ValueError):
-            apply_edit(_source(), {"op": "move", "item_id": "wardrobe", "mode": "free"})
-        edited = apply_edit(
-            _source(),
-            {
-                "op": "move",
-                "item_id": "wardrobe",
-                "mode": "free",
-                "origin_x_mm": 300,
-                "origin_y_mm": 400,
-            },
-        )
-        placement = edited["items"][0]["placement"]
-        self.assertEqual(placement["mode"], "free")
-        self.assertNotIn("host_wall", placement)
-        self.assertEqual(placement["origin_x_mm"], 300)
-
-    def test_move_back_to_wall_drops_the_free_rotation(self) -> None:
-        """自由摆放的转角留在源上。改回靠墙时把它拿掉，朝向改由这面墙决定。"""
-        source = _source()
-        source["items"][0]["placement"] = {
-            "mode": "free",
-            "origin_x_mm": 100,
-            "origin_y_mm": 100,
-            "rotation_z_deg": 15,
-        }
-        edited = apply_edit(
-            source,
-            {
-                "op": "move",
-                "item_id": "wardrobe",
-                "mode": "wall",
-                "host_wall": "north",
-            },
-        )
-        placement = edited["items"][0]["placement"]
-        self.assertEqual(placement["mode"], "wall")
-        self.assertEqual(placement["host_wall"], "north")
-        self.assertNotIn("offset_mm", placement)
-        self.assertNotIn("rotation_z_deg", placement)
-        self.assertNotIn("origin_x_mm", placement)
-
-    def test_move_origin_z_only(self) -> None:
-        edited = apply_edit(
-            _source(), {"op": "move", "item_id": "desk", "origin_z_mm": 100}
-        )
-        self.assertEqual(edited["items"][1]["placement"]["origin_z_mm"], 100)
-
-    def test_rotate(self) -> None:
-        edited = apply_edit(
-            _source(),
-            {"op": "rotate", "item_id": "desk", "rotation_z_deg": 90},
-        )
-        self.assertEqual(edited["items"][1]["placement"]["rotation_z_deg"], 90)
-
-    def test_rotate_rejects_foreign_field(self) -> None:
-        with self.assertRaises(ValueError):
-            apply_edit(
-                _source(),
-                {"op": "rotate", "item_id": "desk", "width": 900},
-            )
-
-    def test_rotate_reanchors_wall_item_to_free(self) -> None:
-        edited = apply_edit(
-            _source(),
-            {
-                "op": "rotate",
-                "item_id": "wardrobe",
-                "rotation_z_deg": 270,
-                "mode": "free",
-                "origin_x_mm": 800,
-                "origin_y_mm": 1200,
-            },
-        )
-        placement = edited["items"][0]["placement"]
-        self.assertEqual(placement["mode"], "free")
-        self.assertEqual(placement["rotation_z_deg"], 270)
-        self.assertEqual(placement["origin_x_mm"], 800)
-        self.assertNotIn("host_wall", placement)
-        self.assertNotIn("offset_mm", placement)
-
-    def test_rotate_switch_to_free_requires_free_coordinates(self) -> None:
-        with self.assertRaises(ValueError):
-            apply_edit(
-                _source(),
-                {
-                    "op": "rotate",
-                    "item_id": "wardrobe",
-                    "rotation_z_deg": 90,
-                    "mode": "free",
-                },
-            )
-
-    def test_rotate_rejects_wall_position_fields(self) -> None:
-        # 墙摆的旋转由 host_wall 派生，rotate 不接受墙摆坐标——否则 rotation_z_deg=0
-        # 会伪装成一次沿墙移动。
-        with self.assertRaises(ValueError):
-            apply_edit(
-                _source(),
-                {
-                    "op": "rotate",
-                    "item_id": "wardrobe",
-                    "rotation_z_deg": 0,
-                    "host_wall": "east",
-                },
-            )
-
-    def test_rotate_keeps_free_placement_and_reanchors(self) -> None:
-        edited = apply_edit(
-            _source(),
-            {
-                "op": "rotate",
-                "item_id": "desk",
-                "rotation_z_deg": 45,
-                "origin_x_mm": 200.0,
-                "origin_y_mm": 300.0,
-            },
-        )
-        placement = edited["items"][1]["placement"]
-        self.assertEqual(placement["mode"], "free")
-        self.assertEqual(placement["rotation_z_deg"], 45)
-        self.assertEqual(placement["origin_x_mm"], 200)
-
-    def test_unknown_item_is_rejected(self) -> None:
-        with self.assertRaises(ValueError):
-            apply_edit(
-                _source(),
-                {"op": "rotate", "item_id": "absent", "rotation_z_deg": 90},
-            )
-
-    def test_unsupported_op_is_rejected(self) -> None:
-        with self.assertRaises(ValueError):
-            apply_edit(_source(), {"op": "delete", "item_id": "desk"})
-
-    def test_apply_does_not_mutate_input(self) -> None:
-        source = _source()
-        apply_edit(source, {"op": "resize", "item_id": "wardrobe", "width": 900})
-        self.assertEqual(source["items"][0]["width"], 1800)
+            apply_scene_edit(scene,pose(scene,'desk',origin_y_mm=0))
+        self.assertEqual(scene.to_dict(),before)
 
 
 class RoomSceneEditApiTests(unittest.TestCase):
@@ -317,7 +170,7 @@ class RoomSceneEditApiTests(unittest.TestCase):
                 server.edit_room_scene(
                     "demo",
                     server.RoomSceneEditRequest(
-                        op="move", item_id="wardrobe", origin_x_mm=100
+                        op="set_pose", item_id="wardrobe", origin_x_mm=100
                     ),
                     local_request(),
                 )
@@ -385,9 +238,9 @@ class RoomSceneEditApiTests(unittest.TestCase):
             server.edit_room_scene(
                 "demo",
                 server.RoomSceneEditRequest(
-                    op="rotate",
+                    op="set_pose",
                     item_id="wardrobe",
-                    rotation_z_deg=270,
+                    rotation_z_deg=270, origin_z_mm=0,
                     mode="free",
                     origin_x_mm=800,
                     origin_y_mm=1800,
@@ -417,13 +270,12 @@ class RoomSceneEditApiTests(unittest.TestCase):
                 server.edit_room_scene(
                     "demo",
                     server.RoomSceneEditRequest(
-                        op="rotate", item_id="wardrobe", rotation_z_deg=45
+                        op="set_pose", item_id="wardrobe", rotation_z_deg=45
                     ),
                     local_request(),
                 )
             )
         self.assertEqual(ctx.exception.status_code, 422)
-        self.assertIn("derived", str(ctx.exception.detail))
         reloaded = asyncio.run(server.load_room_scene("demo"))
         self.assertEqual(reloaded.items[0]["placement"]["mode"], "wall")
         self.assertEqual(reloaded.items[0]["placement"]["host_wall"], "north")

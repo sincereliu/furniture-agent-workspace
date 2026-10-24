@@ -30,7 +30,8 @@ bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 import server
 from fake_request_support import local_request, remote_request
-from furniture_layout.project_edit import apply_layout_edit, room_scene_source
+from furniture_layout.project_edit import apply_layout_edit, restore_layout_item
+from layout_edit_test_support import pose, planning_source
 from furniture_layout.project_layout import ProjectLayout
 from furniture_workflow import project_layout_edit as layout_edit
 from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
@@ -171,15 +172,7 @@ class ProjectLayoutEditTests(unittest.TestCase):
         project = self._project()
         before = self._document(project.id)
 
-        after = self._edit(
-            project.id,
-            local_request(),
-            op="move",
-            item_id="wardrobe",
-            origin_x_mm=600,
-            origin_y_mm=400,
-            expected_version=before["version"],
-        )
+        after = self._edit(project.id, local_request(), **pose(self.store.load(project.id).latest.layout, "wardrobe", origin_x_mm=600, origin_y_mm=400), expected_version=before["version"])
 
         self.assertEqual(after["revision_number"], 1)  # 版号不动
         self.assertNotEqual(after["version"], before["version"])  # 内容摘要动
@@ -214,15 +207,7 @@ class ProjectLayoutEditTests(unittest.TestCase):
         closed = self._document(project.id)
         self.assertFalse(closed["working"]["open"])
 
-        after = self._edit(
-            project.id,
-            local_request(),
-            op="move",
-            item_id="wardrobe",
-            origin_x_mm=600,
-            origin_y_mm=400,
-            expected_version=closed["version"],
-        )
+        after = self._edit(project.id, local_request(), **pose(self.store.load(project.id).latest.layout, "wardrobe", origin_x_mm=600, origin_y_mm=400), expected_version=closed["version"])
         self.assertEqual(after["revision_number"], 2)
         self.assertTrue(after["working"]["open"])  # 新一版从空日志开始
         self.assertEqual(after["working"]["ops"], 1)
@@ -261,17 +246,7 @@ class ProjectLayoutEditTests(unittest.TestCase):
         """墙摆的朝向由墙派生，转不动；一次 op 里改成自由摆放并给出坐标即可。"""
         project = self._project()
         before = self._document(project.id)
-        after = self._edit(
-            project.id,
-            local_request(),
-            op="rotate",
-            item_id="desk",
-            rotation_z_deg=90,
-            mode="free",
-            origin_x_mm=2400,
-            origin_y_mm=1000,
-            expected_version=before["version"],
-        )
+        after = self._edit(project.id, local_request(), **pose(self.store.load(project.id).latest.layout, "desk", rotation_z_deg=90, mode="free", origin_x_mm=2400, origin_y_mm=1000), expected_version=before["version"])
         placement = self._item(after, "bedroom", "desk")["placement"]
         self.assertEqual(placement["rotation_z_deg"], 90)
 
@@ -281,14 +256,7 @@ class ProjectLayoutEditTests(unittest.TestCase):
         project = self._project()
         before = self._document(project.id)
         with self.assertRaises(HTTPException) as ctx:
-            self._edit(
-                project.id,
-                local_request(),
-                op="move",
-                item_id="wardrobe",
-                origin_x_mm=600,
-                expected_version="0" * 64 + ":0",
-            )
+            self._edit(project.id, local_request(), **pose(self.store.load(project.id).latest.layout, "wardrobe", origin_x_mm=600), expected_version="0" * 64 + ":0")
         self.assertEqual(ctx.exception.status_code, 409)
         self.assertEqual(ctx.exception.detail["current_version"], before["version"])
         self.assertEqual(self._document(project.id)["revision_number"], 1)
@@ -297,14 +265,7 @@ class ProjectLayoutEditTests(unittest.TestCase):
         project = self._project()
         before = self._document(project.id)
         with self.assertRaises(HTTPException) as ctx:
-            self._edit(
-                project.id,
-                local_request(),
-                op="move",
-                item_id="wardrobe",
-                origin_x_mm=3900,  # 1800 宽的柜子放到 x=3900：出房间
-                expected_version=before["version"],
-            )
+            self._edit(project.id, local_request(), **pose(self.store.load(project.id).latest.layout, "wardrobe", origin_x_mm=3900), expected_version=before["version"])
         self.assertEqual(ctx.exception.status_code, 422)
         self.assertIn("inside the room", str(ctx.exception.detail))
         self.assertEqual(self._document(project.id)["revision_number"], 1)
@@ -313,14 +274,7 @@ class ProjectLayoutEditTests(unittest.TestCase):
         project = self._project()
         before = self._document(project.id)
         with self.assertRaises(HTTPException) as ctx:
-            self._edit(
-                project.id,
-                local_request(),
-                op="move",
-                item_id="sofa",
-                origin_x_mm=100,
-                expected_version=before["version"],
-            )
+            self._edit(project.id, local_request(), **{**pose(self.store.load(project.id).latest.layout,"wardrobe",origin_x_mm=100),"item_id":"sofa"}, expected_version=before["version"])
         self.assertEqual(ctx.exception.status_code, 422)
         self.assertIn("unknown item", str(ctx.exception.detail))
 
@@ -329,17 +283,9 @@ class ProjectLayoutEditTests(unittest.TestCase):
         project = self._project()
         before = self._document(project.id)
         with self.assertRaises(HTTPException) as ctx:
-            self._edit(
-                project.id,
-                local_request(),
-                op="move",
-                item_id="wardrobe",
-                origin_x_mm=600,
-                rotation_z_deg=90,
-                expected_version=before["version"],
-            )
+            self._edit(project.id, local_request(), **pose(self.store.load(project.id).latest.layout, "wardrobe", origin_x_mm=600), width=800, expected_version=before["version"])
         self.assertEqual(ctx.exception.status_code, 422)
-        self.assertIn("move does not support: rotation_z_deg", str(ctx.exception.detail))
+        self.assertEqual(self._document(project.id)["version"], before["version"])
 
     def test_a_full_north_wall_is_one_envelope(self) -> None:
         """北墙铺满：4000 的墙是一台，宽度就是这段墙。"""
@@ -360,14 +306,7 @@ class ProjectLayoutEditTests(unittest.TestCase):
         project = self._project()
         before = self._document(project.id)
         with self.assertRaises(HTTPException) as ctx:
-            self._edit(
-                project.id,
-                remote_request(),
-                op="move",
-                item_id="wardrobe",
-                origin_x_mm=600,
-                expected_version=before["version"],
-            )
+            self._edit(project.id, remote_request(), **pose(self.store.load(project.id).latest.layout, "wardrobe", origin_x_mm=600), expected_version=before["version"])
         self.assertEqual(ctx.exception.status_code, 403)
         self.assertEqual(self._document(project.id)["revision_number"], 1)
 
@@ -376,14 +315,7 @@ class ProjectLayoutEditTests(unittest.TestCase):
         before = self._document(project.id)
         with mock.patch.dict(os.environ, {layout_edit.LAYOUT_EDIT_ENV: ""}):
             with self.assertRaises(HTTPException) as ctx:
-                self._edit(
-                    project.id,
-                    local_request(),
-                    op="move",
-                    item_id="wardrobe",
-                    origin_x_mm=600,
-                    expected_version=before["version"],
-                )
+                self._edit(project.id, local_request(), **pose(self.store.load(project.id).latest.layout, "wardrobe", origin_x_mm=600), expected_version=before["version"])
         self.assertEqual(ctx.exception.status_code, 403)
         self.assertIn(layout_edit.LAYOUT_EDIT_ENV, str(ctx.exception.detail))
         self.assertEqual(self._document(project.id)["revision_number"], 1)
@@ -400,7 +332,7 @@ class ProjectLayoutEditTests(unittest.TestCase):
     def test_apply_layout_edit_does_not_touch_the_input_layout(self) -> None:
         layout = ProjectLayout.from_source(layout_source())
         edited = apply_layout_edit(
-            layout, {"op": "move", "item_id": "wardrobe", "origin_x_mm": 900}
+            layout, pose(layout, "wardrobe", origin_x_mm=900)
         )
         self.assertIsNot(edited, layout)
         original = layout.rooms[0].items[0].placement
@@ -412,7 +344,7 @@ class ProjectLayoutEditTests(unittest.TestCase):
         """改完重算：footprint 与净距必须跟着走，不能留下上一版的派生值。"""
         layout = ProjectLayout.from_source(layout_source())
         edited = apply_layout_edit(
-            layout, {"op": "move", "item_id": "wardrobe", "origin_x_mm": 900}
+            layout, pose(layout, "wardrobe", origin_x_mm=900)
         )
         item = next(
             item for item in edited.rooms[0].items if item.id == "wardrobe"
@@ -446,17 +378,7 @@ class ProjectLayoutEditTests(unittest.TestCase):
         })
         project = self.orchestrator.create_project("墙柜", layout)
         before = self._document(project.id)
-        rotated = self._edit(
-            project.id,
-            local_request(),
-            op="rotate",
-            item_id="cabinet",
-            rotation_z_deg=15,
-            mode="free",
-            origin_x_mm=1000,
-            origin_y_mm=1000,
-            expected_version=before["version"],
-        )
+        rotated = self._edit(project.id, local_request(), **pose(self.store.load(project.id).latest.layout, "cabinet", rotation_z_deg=15, mode="free", origin_x_mm=1000, origin_y_mm=1000), expected_version=before["version"])
         self.assertEqual(
             self._item(rotated, "bedroom", "cabinet")["placement"]["mode"], "free"
         )
@@ -513,15 +435,8 @@ class ProjectLayoutEditTests(unittest.TestCase):
             },
         }
         for op in (
-            {"op": "move", "item_id": "south_cab", "host_wall": "north"},
-            {
-                "op": "rotate",
-                "item_id": "south_cab",
-                "rotation_z_deg": 15,
-                "mode": "free",
-                "origin_x_mm": 1000,
-                "origin_y_mm": 1000,
-            },
+            pose(layout,"south_cab",host_wall="north",origin_x_mm=0,origin_y_mm=0,rotation_z_deg=0),
+            pose(layout,"south_cab",mode="free",origin_x_mm=1000,origin_y_mm=1000,rotation_z_deg=15),
         ):
             with self.subTest(op=op["op"]):
                 edited = apply_layout_edit(layout, op)
@@ -529,9 +444,7 @@ class ProjectLayoutEditTests(unittest.TestCase):
                     item for item in edited.rooms[0].items if item.id == "south_cab"
                 )
                 self.assertNotIn("against", edited_item.to_source()["placement"])
-                restored = edited
-                for restore_op in layout_edit._restore_ops(entry):
-                    restored = apply_layout_edit(restored, restore_op)
+                restored = restore_layout_item(edited, entry["item_id"], entry["before"])
                 back = next(
                     item for item in restored.rooms[0].items if item.id == "south_cab"
                 )
@@ -562,12 +475,8 @@ class ProjectLayoutEditTests(unittest.TestCase):
             "placement": original.placement.to_dict(),
             "width": original.width, "depth": original.depth, "height": original.height,
         }}
-        restored = apply_layout_edit(layout, {
-            "op": "move", "item_id": "b", "mode": "free",
-            "origin_x_mm": 2000, "origin_y_mm": 1200,
-        })
-        for op in layout_edit._restore_ops(entry):
-            restored = apply_layout_edit(restored, op)
+        restored = apply_layout_edit(layout, pose(layout, "b", mode="free", origin_x_mm=2000, origin_y_mm=1200))
+        restored = restore_layout_item(restored, entry["item_id"], entry["before"])
         # 经过完整项目序列化再重读，撤销后的家具引用仍保持原义。
         restored = ProjectLayout.from_dict(restored.to_dict())
         back = next(item for item in restored.rooms[0].items if item.id == "b")
@@ -605,14 +514,7 @@ class ProjectLayoutEditTests(unittest.TestCase):
         self.assertNotIn(
             "offset_mm", self._item(before, "bedroom", "upper")["placement"]
         )
-        raised = self._edit(
-            project.id,
-            local_request(),
-            op="move",
-            item_id="upper",
-            origin_z_mm=1600,
-            expected_version=before["version"],
-        )
+        raised = self._edit(project.id, local_request(), **pose(self.store.load(project.id).latest.layout, "upper", origin_z_mm=1600), expected_version=before["version"])
         self.assertEqual(
             self._item(raised, "bedroom", "upper")["placement"]["origin_z_mm"], 1600
         )
@@ -626,18 +528,94 @@ class ProjectLayoutEditTests(unittest.TestCase):
                 local_request(),
             )
         )
-        self.assertEqual(
-            layout_edit._restore_ops(undone["undone"][0]),
-            [{"op": "move", "item_id": "upper", "origin_z_mm": 1400}],
-        )
         item = self._item(undone, "bedroom", "upper")
         self.assertEqual(item["placement"]["origin_z_mm"], 1400)
         self.assertEqual(item["width"], 4000)
         self.assertNotIn("offset_given", item["placement"])
         stored = self.store.load(project.id)
-        source = room_scene_source(stored.latest.layout.rooms[0])["items"][0]
+        source = planning_source(stored.latest.layout.rooms[0])["items"][0]
         self.assertNotIn("offset_mm", source["placement"])
         self.assertNotIn("offset_given", source["placement"])
+
+    def test_resize_undo_restores_pose_and_size_atomically_on_every_wall(self) -> None:
+        for wall, ends in {"north": ("west", "east"), "east": ("north", "south"),
+                           "south": ("east", "west"), "west": ("south", "north")}.items():
+            for end in ends:
+                for width in (600, 1500):
+                    with self.subTest(wall=wall, end=end, width=width):
+                        layout = ProjectLayout.from_source({"rooms": [{
+                            "id": "bedroom", "width_mm": 5000, "depth_mm": 4000, "height_mm": 2800,
+                            "items": [{"id": "cab", "category": "cabinet", "width": 1000,
+                                       "depth": 400, "height": 900, "placement": {
+                                           "mode": "wall", "host_wall": wall,
+                                           "against": {end: {"kind": "wall"}}}}],
+                        }]})
+                        project = self.orchestrator.create_project("undo resize", layout)
+                        before = self._document(project.id)
+                        resized = self._edit(project.id, local_request(), op="resize", item_id="cab",
+                                             width=width, expected_version=before["version"])
+                        undone = asyncio.run(server.undo_project_layout_edit(project.id,
+                            server.ProjectLayoutUndoRequest(expected_version=resized["version"], steps=1),
+                            local_request()))
+                        self.assertEqual(self._item(undone, "bedroom", "cab"),
+                                         self._item(before, "bedroom", "cab"))
+                        self.assertEqual(self.store.load(project.id).latest.layout.rooms, layout.rooms)
+                        self.assertEqual(undone["working"]["ops"], 0)
+
+    def test_resize_undo_restores_dependent_items_and_fill_after_reload(self) -> None:
+        layout = ProjectLayout.from_source({"rooms": [{
+            "id": "bedroom", "width_mm": 5000, "depth_mm": 3000, "height_mm": 2800,
+            "items": [
+                {"id": "cab", "category": "cabinet", "width": 900, "depth": 400, "height": 1000,
+                 "placement": {"mode": "wall", "host_wall": "north"}},
+                {"id": "shelf", "category": "shelf", "width": 400, "depth": 400, "height": 1000,
+                 "placement": {"mode": "wall", "host_wall": "north",
+                               "against": {"west": {"kind": "item", "id": "cab"}}}},
+                {"id": "fill", "category": "shelf", "depth": 400, "height": 1000,
+                 "placement": {"mode": "wall", "host_wall": "north", "fill": True}},
+            ],
+        }]})
+        project = self.orchestrator.create_project("dependent resize", layout)
+        before = self._document(project.id)
+        changed = self._edit(project.id, local_request(), op="resize", item_id="cab", width=1200,
+                             expected_version=before["version"])
+        self.assertEqual(self._item(changed, "bedroom", "shelf")["placement"]["origin_x_mm"], 1200)
+        self.assertEqual(self._item(changed, "bedroom", "fill")["width"], 3400)
+        # A second edit and multi-step undo exercise the saved working log, not an in-memory snapshot.
+        changed = self._edit(project.id, local_request(), op="resize", item_id="cab", width=1400,
+                             expected_version=changed["version"])
+        asyncio.run(server.undo_project_layout_edit(project.id,
+            server.ProjectLayoutUndoRequest(expected_version=changed["version"], steps=2), local_request()))
+        self.assertEqual(self.store.load(project.id).latest.layout.rooms, layout.rooms)
+        self.assertEqual(self._document(project.id)["working"]["ops"], 0)
+
+    def test_invalid_restore_does_not_publish_a_partial_undo(self) -> None:
+        project = self._project()
+        before = self._document(project.id)
+        changed = self._edit(project.id, local_request(), **pose(project.latest.layout, "wardrobe",
+                             origin_x_mm=600), expected_version=before["version"])
+        stored = self.store.load(project.id)
+        stored.latest.working_ops[0]["before"]["placement"]["origin_x_mm"] = 9000
+        self.store.save(stored)
+        snapshot = self.store.load(project.id).to_dict()
+        with self.assertRaises(ValueError):
+            layout_edit.undo_layout_edit(stored, expected_version=changed["version"],
+                                         workspace_root=WORKSPACE_ROOT, store_root=self.root)
+        self.assertEqual(stored.to_dict(), snapshot)
+        self.assertEqual(self.store.load(project.id).to_dict(), snapshot)
+
+    def test_resize_undo_preserves_admitted_fractional_coordinates(self) -> None:
+        project = self._project()
+        before = self._document(project.id)
+        placed = self._edit(project.id, local_request(), **pose(project.latest.layout, "wardrobe",
+                            origin_x_mm=200.12345678, origin_y_mm=300.98765432),
+                            expected_version=before["version"])
+        resized = self._edit(project.id, local_request(), op="resize", item_id="wardrobe", width=1600,
+                             expected_version=placed["version"])
+        undone = asyncio.run(server.undo_project_layout_edit(project.id,
+            server.ProjectLayoutUndoRequest(expected_version=resized["version"], steps=1), local_request()))
+        self.assertEqual(self._item(undone, "bedroom", "wardrobe"),
+                         self._item(placed, "bedroom", "wardrobe"))
 
 
 def stored_layout_digest(path: Path) -> str:

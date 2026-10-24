@@ -291,11 +291,11 @@ class DecisionLogTests(unittest.TestCase):
         )
         # 页面得有一块牌子挂它，并且真的读 payload.decisions.pending。
         page = (LAYOUT_PAGE / "templates" / "room_page.html").read_text(encoding="utf-8")
-        script = (LAYOUT_PAGE / "templates" / "room_page.js").read_text(encoding="utf-8")
+        script = (LAYOUT_PAGE / "static/pages/room/activity.js").read_text(encoding="utf-8")
         self.assertIn('id="basis-badge"', page)
         self.assertIn("function applyDecisions(payload)", script)
         self.assertIn("payload.decisions.pending", script)
-        self.assertIn("applyDecisions(payload)", script)
+        self.assertIn("activity.applyDecisions(payload)", (LAYOUT_PAGE / "static/pages/room/index.js").read_text(encoding="utf-8"))
         self.assertEqual(document["working"]["ops"], 0)
 
     def test_rendered_page_carries_the_assumption_badge(self) -> None:
@@ -307,9 +307,11 @@ class DecisionLogTests(unittest.TestCase):
         document = preview_page_data(project, store_root=self.store.root)
         html = room_page.render_project_page(project_id, document, read_only=False)
         self.assertIn('id="basis-badge"', html)
-        self.assertIn("function applyDecisions(payload)", html)
-        self.assertIn("助手假设 ", html)
-        self.assertIn("待确认", html)
+        self.assertIn("mountRoomPage", html)
+        script = (LAYOUT_PAGE / "static/pages/room/activity.js").read_text(encoding="utf-8")
+        self.assertIn("助手假设 ", script)
+        self.assertIn('data-basis="confirm"', script)
+        self.assertIn('data-basis="withdraw"', script)
 
     def test_other_tools_do_not_accept_decisions(self) -> None:
         project_id = self._create()["project"]["id"]
@@ -570,7 +572,7 @@ class PageDecisionTests(unittest.TestCase):
         # 台账表态不是布局改动，所以 recent 只反映拖动这类 op；字段本身必须在。
         self.assertEqual(document["decisions"]["total"], 2)
         page = (LAYOUT_PAGE / "templates" / "room_page.html").read_text(encoding="utf-8")
-        script = (LAYOUT_PAGE / "templates" / "room_page.js").read_text(encoding="utf-8")
+        script = (LAYOUT_PAGE / "static/pages/room/activity.js").read_text(encoding="utf-8")
         self.assertIn('id="basis-panel"', page)
         self.assertIn('data-basis="confirm"', script)
         self.assertIn('data-basis="withdraw"', script)

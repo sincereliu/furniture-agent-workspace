@@ -95,13 +95,13 @@ store/<project-id>/
   "toe_kick_support_count": 1, "back_mount": "groove", "back_rail_height": 70,
   "drawer_count": 0, "drawer_side_clearance": 13, "drawer_layer_gap": 1.5,
   "drawer_bottom_thickness": 18, "drawer_back_thickness": 18,
-  "drawer_back_clearance": 0, "shelves": [{"shelf_type": "fixed", "gap_below_mm": 200}], "top_gap_mm": 200, "n_doors": 2, "door_hinge_side": null
+  "drawer_back_clearance": 0, "shelves": [{"shelf_type": "fixed", "gap_below_mm": 200}], "top_gap_mm": 200, "n_doors": 2
 }
 ```
 
 `rooms[]` 必须非空，房间的 `width_mm/depth_mm/height_mm` 和家具的 `width/depth/height` 必须在布局确认前明确提供（沿墙 `fill` 件的宽度由空段计算）；不再用类别预设替代客户确认的外形尺寸。板件必填字段必须完整提交；料档字段（`board_thickness` / `back_thickness` / `door_thickness` / `drawer_bottom_thickness` / `drawer_back_thickness`）可省略，由车间工艺卡展开（柜体板 18、9 厘背板 9、门与抽屉盒同柜体板）；板幅 `sheet_width_mm` / `sheet_length_mm` 也可省略（展开成 1220×2440，另一档是 1220×2745，两个一起给或一起省略），它是判"板件进不进得去料"的依据，超尺报 `PANEL_EXCEEDS_SHEET` 拦确认。`toe_kick_support_count` 可省略，由外形宽展开。层板净高整组省略时按内部净高均分。写出的支撑数和净高保持原值。代码不按柜型静默补其他默认方案。完整值经确定性准入后才写入 `panel_plan.cabinets[].spec`。
 
-项目布局只接受明确的 `rooms[]`，由 `ProjectLayout.from_source` 规划。上述 JSON 展示布局和后续阶段的数据归属：创建项目只提交 `name` 和 `rooms`；板件与制造参数分别经 `furniture_run_next` 的 `stage_input` 提交。`stage_inputs_from_spec` 可将同一份结构化数据的板件规范字段路由到 `stage_inputs.panels`，将制造选项（含 `door_hinge_side`、`movable_shelf_connector`、`edge_banding`）和外观路由到 `stage_inputs.manufacturing`。吊柜离地写在 `rooms[].items[].placement.origin_z_mm`；贴顶位置由 LLM 根据明确的房间净高与柜高提出，再由运行时检查。可选 `constraints` 必须有阶段映射；未分类约束在协议路由时拒绝。示例里的 `door_hinge_side` 是制造选项。
+项目布局只接受明确的 `rooms[]`，由 `ProjectLayout.from_source` 规划。上述 JSON 展示布局和后续阶段的数据归属：创建项目只提交 `name` 和 `rooms`；板件与制造参数分别经 `furniture_run_next` 的 `stage_input` 提交。`stage_inputs_from_spec` 可将同一份结构化数据的板件规范字段路由到 `stage_inputs.panels`，将制造选项（`movable_shelf_connector`、`edge_banding`）和外观路由到 `stage_inputs.manufacturing`。铰链侧用板件提案 `door_hinges`，写在门板的 `door_hinge_side` 上，不是制造选项。吊柜离地写在 `rooms[].items[].placement.origin_z_mm`；贴顶位置由 LLM 根据明确的房间净高与柜高提出，再由运行时检查。可选 `constraints` 必须有阶段映射；未分类约束在协议路由时拒绝。
 
 `back_mount` 接受 `groove/insert/cover`，但不进入布局输出。板件阶段不从板厚推断模式；`back_rail_height/groove_depth/groove_clearance` 仅对 `groove` 生效，`back_rail_height=0` 关闭背拉条。
 
@@ -160,7 +160,7 @@ AI 模型与聊天端点由独立模块 `domain/modules/ai/` 的可选 `furnitur
 
 项目预览读 `store/<project-id>/project.json` 的最新 Revision，不写 `stage_outputs`，也不写 `generated/room-scenes/`。`layout` 返回 `revision_id`、`revision_number`、`layout_confirmed`、`version` 和每间房的已摆放包络，不含预览 HTML。`version` 是**内容版本**，不是修订号：它是 `layout_sha256:确认位`（如 `5d28c9b6…:0`），同一份布局换个修订号不会让它变，页面刷新靠它判断"要不要重画"。别把它当成给人看的版本号（给人看的是 `revision_number`），也别把 `revision_id` 编进去——那会让每次重读都像变了。`preview` 打开时带上当前第一间房，并订阅 `GET /api/project/{project_id}/layout/events`。服务端看见 `project.json` 或 `edit-lease.json` 变了才推一笔通知（含 `version` 与 `lease`，不含每件家具）。`version` 变了且没有正在转视角或平移，页面再读一次 `layout`，换上新包络并保持相机角度。版本没变就不重画。多间房在页上按**药丸按钮**切换（只有一间房时整条藏掉），默认第一间；当前那间写进地址栏 `?room=<id>`，切房间时用 `history.replaceState` 跟着改，所以链接能分享、能复现。页眉挂一块**身份牌**（预览页「只读预览 · 由对话更新」，草稿页「草稿 · 不影响项目」）——一眼说清这一页能不能改、改了算不算数。预览页带 `?mode=view` 时出**分享形态**：牌子换「只读分享 · 链接可转发」（琥珀色），提示语改成"只看不改"，且**不生成「退出」按钮**（那按钮能停掉本机预览服务，不该给拿到链接的人）；写链接用 `open_preview.preview_url(id, mode="view")` 或 `open_project_preview(id, share=True)`。这一页不把拖动写回项目。页上的「退出」向 `POST /api/preview/shutdown` 发本机请求，服务发完响应后结束进程。项目列表、板件页和布局页都用一条开着的连接表示还在，不再按钟点打卡。最后一页关掉约 5 分钟后预览服务自己退出。点「退出」则马上停。项目文件仍留在 `store/`。非本机来源返回 403。
 
-页面写项目（`POST /api/project/{project_id}/layout/edit`）：改**一件**家具的摆放，一次请求只改一处。body = `{op, item_id, expected_version, …op 字段}`；op 词表与字段白名单**复用房间场景编辑**（`scene_edit.apply_edit`，只有 `move` / `rotate` / `resize`），这里不另写一份判断。三道门按顺序，任何一道不过都**不落盘**：① 本机来源（`may_edit`）→ 403；② 灰度开关 `FURNITURE_PROJECT_LAYOUT_EDIT=1`（不设就是关，`true` / `yes` / 空一律当关）→ 403，理由里点名变量；③ `expected_version` 必须等于页面最近一次看到的 `version` → 不符回 409，detail 里带 `current_version`，页面刷新后重试。
+页面写项目（`POST /api/project/{project_id}/layout/edit`）：改**一件**家具的摆放，一次请求只改一处。body = `{op, item_id, expected_version, …op 字段}`；op 词表与字段白名单**复用房间场景编辑**（`scene_edit.apply_scene_edit`，只有 `set_pose` / `resize`），这里不另写一份判断。三道门按顺序，任何一道不过都**不落盘**：① 本机来源（`may_edit`）→ 403；② 灰度开关 `FURNITURE_PROJECT_LAYOUT_EDIT=1`（不设就是关，`true` / `yes` / 空一律当关）→ 403，理由里点名变量；③ `expected_version` 必须等于页面最近一次看到的 `version` → 不符回 409，detail 里带 `current_version`，页面刷新后重试。
 
 成功之后落在哪里，取决于**这一版还没有下游产物**（工作副本，方案 H）：
 
@@ -170,7 +170,7 @@ AI 模型与聊天端点由独立模块 `domain/modules/ai/` 的可选 `furnitur
 
 撤销（`POST /api/project/{project_id}/layout/undo`，body `{expected_version, steps}`）：只在工作副本还开着时可用，**逐条恢复旧值**（失败整体拒绝），并留一条 `undo N step(s)` 事件——撤销会让"已经跟人说过"的内容变样，必须看得出来。窗口的边界是**下游产物**，不是时间：没有下游产物时随时可以撤，有了就不能（再往回走是"修订"的事：明确、留痕、下游跟着作废）。
 
-响应就是 `GET /layout` 那份文档（含 `working: {open, ops, can_undo}`），页面可直接换上新包络。几何校验不过（越界、与别的件或障碍物干涉、遮挡门窗洞口）回 422，**什么都不改**。靠墙件的沿墙位置由包络贴合算出，请求不写沿墙偏移。`fill` 件的宽是最长空段，编辑只接受 `origin_z_mm`；改沿墙位置、朝向或宽度会拒绝。判断、取舍与尚未做的部分见 [页面写项目设计](project-layout-edit-design.md)。
+响应就是 `GET /layout` 那份文档（含 `working: {open, ops, can_undo}`），页面可直接换上新包络。几何校验不过（越界、与别的件或障碍物干涉、遮挡门窗洞口）回 422，**什么都不改**。手工 `set_pose` 保留完整原点和朝向，不重新分配沿墙位置。`fill` 只允许完整位置中的离地高度变化，其他位置和尺寸保持不变。判断、取舍与尚未做的部分见 [页面写项目设计](project-layout-edit-design.md)。
 
 **决策台账（谁说的）**：`store/<project-id>/project.json` → `decisions[]`，记"这句话是谁说的、我们把它落成了什么、他点头了没有"。只追加：改主意是加一条并用 `targets` 指回被改的那几条，旧条目一个字不动。缺省 `speaker=agent`、`status=assumption`——**不冒充客户、不冒充已确认**；只有 `customer` / `relay` 能写 `confirmed`，助手不能自己点头。条目由 `furniture_workflow/workflow_decisions.py` 一条路准入并派生当前状态（后续条目的确认/撤回说了算）。`source` 记它从哪来：`tool`（对话里说的，客户条目必须有原话）或 `page`（页面上按的按钮，措辞由服务端写死、没有原话）；`actor` 由运行时从编辑租约写（谁记的/谁按的，读不出就 `unknown`）。
 
@@ -182,13 +182,14 @@ AI 模型与聊天端点由独立模块 `domain/modules/ai/` 的可选 `furnitur
 
 页面能不能编辑由**服务端按权限渲染**：本机来源（`may_edit`）给可编辑页，其余给只读页；`?mode=view`（分享形态）在本机也强制只读。可编辑页还要自己拿到**编辑租约**才算真的能写（申请 / 事件连接打开时钉住、连接结束归还 / 闲置 5 分钟自动让出 / 离开页面归还）。
 
-`/api/room-scene/save`、`/api/room-scene/{scene_id}`、`/api/room-scenes`、`/api/room-scene/{scene_id}/edit`、`/api/room-scene/{scene_id}/editor` 组成场景状态（供交互编辑）：只存源（房间定义 + 多件包络及其摆放请求），**不存派生结果**——摆放坐标、footprint、净距、预览都在读取时重算；存储独立于家具主流程，不写 `stage_outputs`。
+`/api/room-scene/save`、`/api/room-scene/{scene_id}`、`/api/room-scenes`、`/api/room-scene/{scene_id}/edit`、`/api/room-scene/{scene_id}/editor` 组成独立房间状态接口。创建请求提供规划源，服务端先规划并准入，再保存唯一已摆放格式 `{schema_version: 1, scene_id, room, items}`；items 包含完整 placement、footprint 和净距，不另存规划源或 placed_items。读取只验证该格式和几何，重建 SVG/Viewer，不重新规划。旧格式直接拒绝，不提供转换或兼容回退。
 
-编辑是**单 op、原子**：`move`（按当前 `mode` 二选一——`wall` 收 `host_wall`，`free` 收 `origin_x_mm`/`origin_y_mm`；**混给即拒**，换模式必须显式给 `mode` 并给出目标模式的坐标）、`rotate`（`rotation_z_deg`）、`resize`（`width`/`depth`/`height` 任意子集，至少一个）。可编辑项目页的右侧用输入框提交 `resize`，一次改宽、深或高里的一项。沿墙铺满的件不显示这三个输入，宽度由墙的空段算出。靠墙件的沿墙位置由包络贴合算出，这一页不改它；离地高度可以改。每个 op 只接受自己的字段，白名单外即拒；**重算与校验通过才落盘**，失败整体拒绝，不留半成品。批量 op 留待多选拖动或场景级操作出现时再加。
+编辑只接受两个明确操作：`set_pose` 必须提供 `item_id`、`mode`、`origin_x_mm/origin_y_mm/origin_z_mm`、`rotation_z_deg`，墙摆另带 `host_wall`；可显式给 against。移动、旋转及离地调整都提交完整变换，缺字段或其他操作名直接拒绝。`resize` 收 `item_id` 和 width/depth/height 至少一项，复用规划器处理尺寸变化带来的 fill/against 关系。项目请求复用同一份请求定义，只增加 expected_version。两种操作均先校验再保存，失败整体拒绝。
 
-`rotate` 只对 `free` 摆放有定义：`wall` 的原点与 `rotation_z_deg` 都由 `host_wall` 和包络贴合派生（见 `placement.py`），直接转会被拒。所以 rotate 可以带 `mode: "free"` + `origin_x_mm`/`origin_y_mm`，在**同一个 op 里**把墙摆改成自由摆放并给出绕中心旋转后的原点；带 `host_wall` 的 rotate 一律拒绝（否则 `rotation_z_deg: 0` 会伪装成一次换墙）。
+set_pose 按完整位置重建目标的派生几何并验证现有房间，不重新排布邻居。墙摆必须真实贴墙并使用该墙朝向；旋转或离墙时明确提交 free 和完整坐标。fill 的 set_pose 只允许高度变化，resize 被拒。前端位置求解同时检查 against 接触与 fill 空段，约束不满足则提前停住。撤销从旧快照同时恢复目标位置与尺寸，并重建依赖它的 against/fill；只准入最终状态，整个 N 步撤销成功后才发布和落盘，不拆成 set_pose/resize 中间操作。
 
-可编辑视图：`GET /api/room-scene/{scene_id}/editor` 返回自包含 HTML。**点包络任意位置**都能选中（命中判定用凸盒 6 个面投影的并集，外加 5px 容差，免得点描边穿透去转视角）。选中后在这件高度的正中画两小段贴平的黄色圆弧箭头，相对而放，都顺着同一个转向，绕在外廓外面。拖箭头或这一圈（角度绕包络中心算，默认吸附 15°、按住 Shift 精细到 1°，`wall` 家具会在同一次 op 里转成 `free`），柜顶中央的**蓝色小圆点**拖了改**离地高度**（发 `origin_z_mm`，范围 0 到「层高 − 自身高」，同样按摆放检查求解）。这一圈仍是可抓区域，拖动时就地显示当前角度。拖动改位置：靠墙件不沿墙滑动，往房间内拖过 26px 阈值就转成自由摆放；自由件平面移动。**换算按家具脚下那一点的比例**（`static/layout_drag.js`：横向走相机右向量、纵向走相机前方向并除以 sin(俯仰)），**不是**光标射线的地面交点——抓在家具上半身时那条射线打到地面已经在很远处，几个像素就能换出好几米。反向也要走得回来：自由件拖到**轴对齐且背面正好落在墙上**时重新认成墙摆（`wallSnap()` 只认墙，容差 0.5mm，斜着放的不吸附），沿墙位置由服务端按包络重贴。落盘时 `mode` / `host_wall` / `origin_x_mm` / `origin_y_mm` **一律显式发**：模式互转时不显式说，服务端会按它那边的旧模式解释这次 op。靠墙移动不发沿墙偏移。**只读的项目预览页不画这两个手柄，也不画旋转环**（保留"正面朝哪"的绿箭头与「前」）：只读时它们拖不动，画出来只会让人以为能拖。**4px 死区**——纯点击只选中、不发 op。空白处拖拽转视角，Esc 取消选中，PageUp/PageDown 按 50mm 调离地高度。
+
+可编辑视图：`GET /api/room-scene/{scene_id}/editor` 返回自包含 HTML。**点包络任意位置**都能选中（命中判定用凸盒 6 个面投影的并集，外加 5px 容差，免得点描边穿透去转视角）。选中后在这件高度的正中画两小段贴平的黄色圆弧箭头，相对而放，都顺着同一个转向，绕在外廓外面。拖箭头或这一圈（角度绕包络中心算，默认吸附 15°、按住 Shift 精细到 1°，`wall` 家具会在同一次 op 里转成 `free`），柜顶中央的**蓝色小圆点**拖了改**离地高度**（发 `origin_z_mm`，范围 0 到「层高 − 自身高」，同样按摆放检查求解）。这一圈仍是可抓区域，拖动时就地显示当前角度。拖动改位置：靠墙件不沿墙滑动，往房间内拖过 26px 阈值就转成自由摆放；自由件平面移动。**换算按家具脚下那一点的比例**（`static/layout_drag.js`：横向走相机右向量、纵向走相机前方向并除以 sin(俯仰)），**不是**光标射线的地面交点——抓在家具上半身时那条射线打到地面已经在很远处，几个像素就能换出好几米。反向也要走得回来：自由件拖到**轴对齐且背面正好落在墙上**时重新认成墙摆（`wallSnap()` 只认墙，容差 0.5mm，斜着放的不吸附），事务同时更新鼠标和房间坐标基准，保存保留沿墙位置。落盘时 `mode` / `host_wall` / `origin_x_mm` / `origin_y_mm` **一律显式发**：模式互转时不显式说，服务端会按它那边的旧模式解释这次 op。靠墙移动不发沿墙偏移。**只读的项目预览页不画这两个手柄，也不画旋转环**（保留"正面朝哪"的绿箭头与「前」）：只读时它们拖不动，画出来只会让人以为能拖。**4px 死区**——纯点击只选中、不发 op。空白处拖拽转视角，Esc 取消选中，PageUp/PageDown 按 50mm 调离地高度。
 
 视角：工具栏一个**正视图下拉**（俯视 / 仰视 / 前视 / 后视 / 左视 / 右视）加一个**「复位」按钮**（回默认视角，同时把平移和缩放复位；内部预设名 `default_view`——视角名与动作名分开，别把 reset 焊进预设名）。默认视角是**正南偏东 15°**（`yaw=5π/12`，北墙几乎正对、仍留一点纵深）、俯仰 `pitch=0.72`（≈41°，从斜上方看整座夜景底座）。再低到接近 `ELEVATION_MAX_PITCH=0.12` 会变成平视/立面。复位位的俯仰高于 0.35，所以在复位位双击会进俯视。独立房间 Viewer（`/api/plan-room/viewer`）用同一套控件与预设、同一组键名，也带同一套原点三轴（总宽/总深/总高）与光标坐标读数，只是它的取景距离按对角线固定倍数算、没有标注开关。仰视 `pitch=-1.48`，与俯视对称；俯视按平面图习惯**北在上、东在右**；四个立面 `pitch=0`，前视=站在南边往北看，东在右手边。相机不在任何正视图上时下拉显示**「自由视角」**（转过视角之后标识就变成它，不会还挂着上一个正视图）；平移和缩放不算离开正视图，只有绕竖轴的转动算。**双击画面**：自由/复位位时吸到最近的正视图（`|pitch| > 0.35` 取俯视/仰视，否则按方位角取最近的立面）；已经站在正视图上时，回到进它之前那一眼的自由视角。画面左右与真实方位一致：房间坐标系是 X 东 / Y 南 / Z 上，相机右向量取 `cross(up, forward)`；取反会让整幅画面左右镜像，转视角的符号也必须跟着翻。空白处拖拽转视角是**跟手**的：往右拖，画面里靠近你的那一侧就往右走（相机绕竖轴朝反方向转）；往下拖，近端往下走（相机抬高、更俯视）。相机接近水平（pitch < 0.12）时地面射线求交会退化，所以那种角度下拖动**在竖直平面里走**：横向 = 该视图的水平轴（由相机右向量决定正负号），纵向 = 高度。也就是在前/后视里上下拖就是改高度。**视图可以平移**：右键 / 中键拖动，或空白处 Shift+左键拖动（普通左键仍是转视角）。平移只改视图中心（相机的一切都相对它算），沿相机的右/上方向按屏幕像素换算成毫米，所以任何视角下都是「往哪拖、画面往哪走」且 1:1 跟手；它**不改** yaw/pitch/distance，也不发任何 op。切换视角时中心会一起动画回房间中心——取景也必须按房间中心算（`withHomeCentre`），否则平移过之后会把房间框到画外。整个切换带 500ms 插值过渡——只插值 `yaw`/`pitch`/`distance` 和视图中心，跑完即停，不留常驻动画循环，所以只有切换那一瞬间在重画；系统开了 `prefers-reduced-motion` 就直接跳到位。深链 `#view=front&item=desk` 可以直接打开某个视角并选中某件；`?room=<id>`（写成 `#room=<id>` 也认）直接打开某间房；三者叠在一条链接里也认，先落房间、再定视角、最后选中件。只改 `#` 后面的部分浏览器不重载页面，于是深链不会重新生效——要发深链就用整条新地址。
 

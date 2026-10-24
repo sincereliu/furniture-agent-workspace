@@ -46,6 +46,13 @@ from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from furniture_workflow.workflow_store import JsonProjectStore
 
 
+
+def room_scripts() -> str:
+    """Source checks follow the actual room controllers after module extraction."""
+    directory = WORKSPACE_ROOT / "domain/modules/web/furniture_web/static/pages/room"
+    return "\n".join(path.read_text(encoding="utf-8") for path in sorted(directory.glob("*.js")))
+
+
 def home_layout(*, bed_origin_z_mm: float) -> ProjectLayout:
     return ProjectLayout.from_source(
         {
@@ -153,29 +160,29 @@ class ProjectPreviewTests(unittest.TestCase):
         )
         html = response.body.decode("utf-8")
         self.assertEqual(response.media_type, "text/html")
-        self.assertIn("<canvas", html)
-        self.assertIn('"id":"bed"', html)
-        self.assertIn('"origin_z_mm":200', html)
-        self.assertIn("卧室", html)
-        self.assertIn("客厅", html)
+        self.assertIn("<canvas", html + room_scripts())
+        self.assertIn('"id":"bed"', html + room_scripts())
+        self.assertIn('"origin_z_mm":200', html + room_scripts())
+        self.assertIn("卧室", html + room_scripts())
+        self.assertIn("客厅", html + room_scripts())
         # 非本机来源 → 只读页（能不能编辑由服务端按权限渲染，不看 URL 参数）。
-        self.assertIn("const READ_ONLY=true", html)
-        self.assertIn(f'/api/project/{project.id}/layout', html)
-        self.assertIn('id="shutdown-preview"', html)
-        self.assertIn('fetch("/api/preview/shutdown"', html)
-        self.assertIn('cache:"no-store"', html)
-        self.assertIn('new EventSource(LAYOUT_URL+"/events"+query)', html)
-        self.assertNotIn("POLL_URL", html)
-        self.assertNotIn("setInterval(pollLayout,1000)", html)
-        self.assertNotIn("typeof EventSource", html)
-        self.assertNotIn('fetch("/api/preview/presence"', html)
-        self.assertIn('from "/layout-view/layout_persistence.js"', html)
-        self.assertIn("drag||state.orbiting||state.panning", html)
-        self.assertIn("if(READ_ONLY)return false", html)
-        self.assertNotIn("__SCENE_JSON__", html)
-        self.assertNotIn("__POLL_URL__", html)
-        self.assertNotIn("__PRESENCE__", html)
-        self.assertNotIn("__LAYOUT_URL__", html)
+        self.assertIn('"read_only":true', html + room_scripts())
+        self.assertIn(f'/api/project/{project.id}/layout', html + room_scripts())
+        self.assertIn('id="shutdown-preview"', html + room_scripts())
+        self.assertIn('fetch("/api/preview/shutdown"', html + room_scripts())
+        self.assertIn('cache:"no-store"', html + room_scripts())
+        self.assertIn('new EventSource(LAYOUT_URL+"/events"+query)', html + room_scripts())
+        self.assertNotIn("POLL_URL", html + room_scripts())
+        self.assertNotIn("setInterval(pollLayout,1000)", html + room_scripts())
+        self.assertNotIn("typeof EventSource", html + room_scripts())
+        self.assertNotIn('fetch("/api/preview/presence"', html + room_scripts())
+        self.assertIn('from "./layout_persistence.js"', html + room_scripts())
+        self.assertIn("input.isDragging()||state.orbiting||state.panning", html + room_scripts())
+        self.assertIn("if(READ_ONLY)return false", html + room_scripts())
+        self.assertNotIn("__SCENE_JSON__", html + room_scripts())
+        self.assertNotIn("__POLL_URL__", html + room_scripts())
+        self.assertNotIn("__PRESENCE__", html + room_scripts())
+        self.assertNotIn("__LAYOUT_URL__", html + room_scripts())
 
     def test_layout_events_push_when_a_watched_file_changes(self) -> None:
         project = self.orchestrator.create_project("家", home_layout(bed_origin_z_mm=200))
@@ -311,34 +318,34 @@ class ProjectPreviewTests(unittest.TestCase):
         html = asyncio.run(
             server.project_preview(project.id, local_request())
         ).body.decode("utf-8")
-        self.assertIn("const READ_ONLY=false", html)
-        self.assertIn(f'"/api/project/{project.id}/layout/edit"', html)
-        self.assertIn(f'"/api/project/{project.id}/layout/undo"', html)
-        self.assertIn('<p class="mode-badge" id="mode-badge">可直接拖动', html)
-        self.assertIn("function applyWorking(payload)", html)
-        self.assertIn("第 ${payload.revision_number} 版", html)
-        self.assertIn("layoutPersistence.write(op)", html)
-        self.assertIn("const IDLE_YIELD_SECONDS=300", html)
-        self.assertIn("function armIdle()", html)
-        self.assertIn("?lease_id=", html)
-        self.assertNotIn("heartbeatLease", html)
-        self.assertNotIn("setInterval(", html)
+        self.assertIn('"read_only":false', html + room_scripts())
+        self.assertIn(f'"/api/project/{project.id}/layout/edit"', html + room_scripts())
+        self.assertIn(f'"/api/project/{project.id}/layout/undo"', html + room_scripts())
+        self.assertIn('<p class="mode-badge" id="mode-badge">可直接拖动', html + room_scripts())
+        self.assertIn("function applyWorking(payload)", html + room_scripts())
+        self.assertIn("第 ${payload.revision_number} 版", html + room_scripts())
+        self.assertIn("layoutPersistence.write(op)", html + room_scripts())
+        self.assertIn("const IDLE_YIELD_SECONDS=300", html + room_scripts())
+        self.assertIn("function armIdle()", html + room_scripts())
+        self.assertIn("?lease_id=", html + room_scripts())
+        self.assertNotIn("heartbeatLease", html + room_scripts())
+        self.assertNotIn("setInterval(", html + room_scripts())
 
     def test_preview_shows_room_axes_and_cursor_coordinates(self) -> None:
         """房间坐标要看得见：原点三轴（带总宽/总深/总高）+ 光标读数 + 右栏坐标行。"""
         project = self.orchestrator.create_project("家", home_layout(bed_origin_z_mm=200))
         html = asyncio.run(server.project_preview(project.id, local_request())).body.decode("utf-8")
-        self.assertIn('id="coord"', html)
-        self.assertIn("mountLayout", html)
-        self.assertIn('data-field="coord"', html)
-        self.assertIn("unprojectToGround(sx,sy)", html)
+        self.assertIn('id="coord"', html + room_scripts())
+        self.assertIn("mountLayout", html + room_scripts())
+        self.assertIn('data-field="coord"', html + room_scripts())
+        self.assertIn("unprojectToGround(sx,sy)", html + room_scripts())
         scene_path = (
             WORKSPACE_ROOT
             / "domain"
             / "modules"
             / "web"
             / "furniture_web"
-            / "static"
+            / "static" / "render" / "room"
             / "layout_scene.js"
         )
         scene_js = scene_path.read_text(encoding="utf-8")
@@ -350,19 +357,19 @@ class ProjectPreviewTests(unittest.TestCase):
         """房间切换是药丸不是下拉；切房间要写进地址栏 ?room=，链接能分享、能复现。"""
         project = self.orchestrator.create_project("家", home_layout(bed_origin_z_mm=200))
         html = asyncio.run(server.project_preview(project.id, local_request())).body.decode("utf-8")
-        self.assertIn('<nav class="room-band" id="room-band" aria-label="房间切换" hidden></nav>', html)
-        self.assertIn("function syncRoomBand()", html)
-        self.assertIn('data-room-index="${index}"', html)
-        self.assertIn("aria-pressed", html)
+        self.assertIn('<nav class="room-band" id="room-band" aria-label="房间切换" hidden></nav>', html + room_scripts())
+        self.assertIn("function syncRoomBand()", html + room_scripts())
+        self.assertIn('data-room-index="${index}"', html + room_scripts())
+        self.assertIn("aria-pressed", html + room_scripts())
         # 还没审过的房间在药丸上带记号：改一间只审一间，要看得见还差哪间。
-        self.assertIn('data-pending="true"', html)
-        self.assertIn("· 待审", html)
+        self.assertIn('data-pending="true"', html + room_scripts())
+        self.assertIn("· 待审", html + room_scripts())
         # 只有一间房时整条房间带藏掉，不留一个点了没反应的控件。
-        self.assertIn("if(!rooms||rooms.length<2){band.hidden=true;return}", html)
-        self.assertIn('deepLink.get("room")', html)
-        self.assertIn('url.searchParams.set("room",entry.id)', html)
-        self.assertIn("history.replaceState", html)
-        self.assertNotIn("room-switch", html)
+        self.assertIn("if(!rooms||rooms.length<2){band.hidden=true;return}", html + room_scripts())
+        self.assertIn('deepLink.get("room")', html + room_scripts())
+        self.assertIn('url.searchParams.set("room",entry.id)', html + room_scripts())
+        self.assertIn("history.replaceState", html + room_scripts())
+        self.assertNotIn("room-switch", html + room_scripts())
 
     def test_both_pages_carry_a_mode_badge(self) -> None:
         """每页自报身份：可编辑=可直接拖动，只读（非本机）=只读预览，草稿=草稿·不影响项目。"""
@@ -370,8 +377,8 @@ class ProjectPreviewTests(unittest.TestCase):
         editable = asyncio.run(
             server.project_preview(project.id, local_request())
         ).body.decode("utf-8")
-        self.assertIn('<p class="mode-badge" id="mode-badge">可直接拖动', editable)
-        self.assertNotIn("__MODE_BADGE__", editable)
+        self.assertIn('<p class="mode-badge" id="mode-badge">可直接拖动', editable + room_scripts())
+        self.assertNotIn("__MODE_BADGE__", editable + room_scripts())
         readonly = asyncio.run(
             server.project_preview(project.id, remote_request())
         ).body.decode("utf-8")
@@ -389,23 +396,23 @@ class ProjectPreviewTests(unittest.TestCase):
         share = asyncio.run(
             server.project_preview(project.id, local_request(), mode="view")
         ).body.decode("utf-8")
-        self.assertIn('<p class="mode-badge" id="mode-badge">只读分享 · 链接可转发</p>', share)
-        self.assertNotIn('id="shutdown-preview"', share)
-        self.assertIn('const SHARE_FORM=true', share)
-        self.assertIn("const READ_ONLY=true", share)  # 本机 + ?mode=view 也是只读
-        self.assertIn("只读分享：这一页只能看，位置由房主那边更新。", share)
+        self.assertIn('<p class="mode-badge" id="mode-badge">只读分享 · 链接可转发</p>', share + room_scripts())
+        self.assertNotIn('id="shutdown-preview"', share + room_scripts())
+        self.assertIn('"share_form":true', share + room_scripts())
+        self.assertIn('"read_only":true', share + room_scripts())  # 本机 + ?mode=view 也是只读
+        self.assertIn("只读分享：这一页只能看，位置由房主那边更新。", share + room_scripts())
         self._assert_body_class(share, "readonly share")
         # 不带参数、本机来源：可编辑页，退出按钮在。
         normal = asyncio.run(
             server.project_preview(project.id, local_request())
         ).body.decode("utf-8")
-        self.assertIn('id="shutdown-preview"', normal)
-        self.assertIn('const SHARE_FORM=false', normal)
-        self.assertIn("const READ_ONLY=false", normal)
+        self.assertIn('id="shutdown-preview"', normal + room_scripts())
+        self.assertIn('"share_form":false', normal + room_scripts())
+        self.assertIn('"read_only":false', normal + room_scripts())
         self._assert_body_class(normal, "")
 
     def _assert_body_class(self, html: str, expected: str) -> None:
-        self.assertIn(f'<body class="{expected}">', html)
+        self.assertIn(f'<body class="{expected}">', html + room_scripts())
 
     def test_share_link_is_a_plain_expression_not_a_permission(self) -> None:
         """分享链接只是地址栏表达：它没有任何办法绕过服务端的写权限。"""
@@ -432,22 +439,22 @@ class ProjectPreviewTests(unittest.TestCase):
         html = asyncio.run(
             server.project_preview(project.id, remote_request())
         ).body.decode("utf-8")
-        self.assertIn("const READ_ONLY=true", html)
+        self.assertIn('"read_only":true', html + room_scripts())
         readonly_gap = '<dt>${label}</dt><dd><span data-gap="${key}"></span> mm<span class="who" data-who="${key}"></span></dd>'
-        self.assertIn(readonly_gap, html)
+        self.assertIn(readonly_gap, html + room_scripts())
         self.assertNotIn("input", readonly_gap)
         self.assertNotIn("button", readonly_gap)
         # 朝向 / 离地 / 提示语也都是纯文字
-        self.assertIn('<span data-field="rotation"></span>°<span class="who" data-front></span>', html)
-        self.assertIn('<span data-field="height"></span> mm', html)
-        self.assertIn("只读预览：位置由对话更新；要自己拖，用草稿页。", html)
+        self.assertIn('<span data-field="rotation"></span>°<span class="who" data-front></span>', html + room_scripts())
+        self.assertIn('<span data-field="height"></span> mm', html + room_scripts())
+        self.assertIn("只读预览：位置由对话更新；要自己拖，用草稿页。", html + room_scripts())
         scene_js = (
             WORKSPACE_ROOT
             / "domain"
             / "modules"
             / "web"
             / "furniture_web"
-            / "static"
+            / "static" / "render" / "room"
             / "layout_scene.js"
         ).read_text(encoding="utf-8")
         handle_block = scene_js.split("if (!readOnly)", 1)[1]
@@ -488,8 +495,8 @@ class ProjectPreviewTests(unittest.TestCase):
             800,
         )
         html = asyncio.run(server.project_preview(project.id, local_request())).body.decode("utf-8")
-        self.assertIn('"origin_z_mm":800', html)
-        self.assertNotIn('"origin_z_mm":200', html)
+        self.assertIn('"origin_z_mm":800', html + room_scripts())
+        self.assertNotIn('"origin_z_mm":200', html + room_scripts())
 
         self.orchestrator.confirm_stage(project, "layout_plan")
         confirmed = asyncio.run(server.project_layout(project.id))
@@ -601,14 +608,14 @@ class ProjectPreviewTests(unittest.TestCase):
         html = asyncio.run(
             server.project_preview(project.id, local_request())
         ).body.decode("utf-8")
-        self.assertIn('data-size="width"', html)
-        self.assertIn('data-size="depth"', html)
-        self.assertIn('data-size="height"', html)
-        self.assertIn("沿墙铺满，宽度由墙算出", html)
-        self.assertIn("这一版布局给板件用", html)
-        self.assertIn('href="/projects"', html)
-        self.assertIn("function setSize(", html)
-        self.assertNotIn('fetch("/api/preview/presence"', html)
+        self.assertIn('data-size="width"', html + room_scripts())
+        self.assertIn('data-size="depth"', html + room_scripts())
+        self.assertIn('data-size="height"', html + room_scripts())
+        self.assertIn("沿墙铺满，宽度由墙算出", html + room_scripts())
+        self.assertIn("这一版布局给板件用", html + room_scripts())
+        self.assertIn('href="/projects"', html + room_scripts())
+        self.assertIn("function setSize(", html + room_scripts())
+        self.assertNotIn('fetch("/api/preview/presence"', html + room_scripts())
 
     def test_closed_preview_page_is_what_stops_the_server(self) -> None:
         grace = server.PRESENCE_GRACE_SECONDS
@@ -749,7 +756,25 @@ class OpenProjectPreviewTests(unittest.TestCase):
         start.assert_called_once()
         command = start.call_args.args[0]
         self.assertTrue(str(command[1]).endswith("open_projects.py"))
+        self.assertIn("--no-browser", command)
         opener.assert_called_once()
+        self.assertTrue(result["opened"])
+
+    def test_home_url(self) -> None:
+        self.assertEqual(open_preview.home_url(), "http://127.0.0.1:8000/")
+
+    def test_open_home_preview(self) -> None:
+        with mock.patch.dict(os.environ, {"FURNITURE_PREVIEW_BROWSER": "1"}):
+            with mock.patch.object(
+                open_preview, "preview_server_is_up", return_value=True
+            ):
+                with mock.patch.object(
+                    open_preview.webbrowser, "open", return_value=True
+                ) as opener:
+                    result = open_preview.open_home_preview(
+                        workspace_root=WORKSPACE_ROOT,
+                    )
+        opener.assert_called_once_with("http://127.0.0.1:8000/", new=2)
         self.assertTrue(result["opened"])
 
     def test_windows_preview_spawn_is_created_by_wmi(self) -> None:
@@ -792,29 +817,13 @@ class OpenProjectPreviewTests(unittest.TestCase):
         server.app.state.preview_server = None
         self.assertFalse(server.stop_preview_server())
 
-    def test_room_page_drag_follows_the_item_and_sends_its_mode(self) -> None:
-        """拖动换算按**家具脚下**的比例，而且摆放模式一律显式发。
-
-        旧算法用"光标射线的地面交点"：抓在家具上半身时那条射线打到地面已在很远处，
-        几个像素就能换出好几米（实测一次拖动把 2.4m 的柜子从北墙甩到 y=2777）。
-        换算本身在 static/layout_drag.js 里由 drag_check.mjs 断言，这里盯的是页面用没用它、
-        以及 mode 有没有显式发——不显式发，服务端会按它那边的旧模式解释这次 op。
-        """
-        script = (
-            WORKSPACE_ROOT
-            / "domain"
-            / "modules"
-            / "web"
-            / "furniture_web"
-            / "templates"
-            / "room_page.js"
-        ).read_text(encoding="utf-8")
-        self.assertIn('from "/layout-view/layout_drag.js"', script)
-        self.assertIn("groundDragDelta(", script)
-        # 贴回墙边要认回"靠墙"，否则离开过墙面的件只能顶在墙上不动。
-        self.assertIn("wallSnap(", script)
-        self.assertIn('op.mode="wall"', script)
-        self.assertIn('op.mode="free"', script)
+    def test_room_page_loads_the_drag_transaction_module(self) -> None:
+        script = room_scripts()
+        self.assertIn('from "/layout-view/layout_interaction.js"', script)
+        from furniture_web.integration import layout_view
+        asset, stat = layout_view.lookup_path("layout_interaction.js")
+        self.assertIsNotNone(stat)
+        self.assertTrue(Path(asset).is_file())
 
     def test_room_page_shows_the_ledger_and_the_change_log(self) -> None:
         """页面上要看得见"哪几条是助手替你定的"，也要看得见"谁改的、改了什么"。"""
@@ -827,15 +836,7 @@ class OpenProjectPreviewTests(unittest.TestCase):
             / "templates"
             / "room_page.html"
         ).read_text(encoding="utf-8")
-        script = (
-            WORKSPACE_ROOT
-            / "domain"
-            / "modules"
-            / "web"
-            / "furniture_web"
-            / "templates"
-            / "room_page.js"
-        ).read_text(encoding="utf-8")
+        script = room_scripts()
         self.assertIn('id="basis-badge"', page)
         self.assertIn('id="working-panel"', page)
         # `hidden` 必须真的能藏住：牌子自己设了 display，会盖掉浏览器默认的
@@ -891,7 +892,7 @@ class LayoutViewStaticTests(unittest.TestCase):
     def test_layout_view_serves_the_scene_and_the_layout_solver(self) -> None:
         from furniture_web.integration import layout_view
 
-        scene, scene_stat = layout_view.lookup_path("layout_scene.js")
+        scene, scene_stat = layout_view.lookup_path("render/room/layout_scene.js")
         solver, solver_stat = layout_view.lookup_path("layout_solver.js")
         drag, drag_stat = layout_view.lookup_path("layout_drag.js")
         _missing, missing_stat = layout_view.lookup_path("does-not-exist.js")
@@ -902,6 +903,9 @@ class LayoutViewStaticTests(unittest.TestCase):
         self.assertIn("layout-plan", drag.replace("\\", "/"))
         self.assertIsNotNone(drag_stat)
         self.assertIsNone(missing_stat)
+        for check_path in ("cartoon_outline_browser_check.html", "wall_contact_check.mjs",
+                           "../../tests/browser/cartoon_outline_browser_check.html"):
+            self.assertIsNone(layout_view.lookup_path(check_path)[1])
 
 
 if __name__ == "__main__":

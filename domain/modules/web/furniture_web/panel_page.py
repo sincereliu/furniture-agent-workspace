@@ -226,7 +226,7 @@ def _render_structure_page(
 {{"imports":{{"three":"/vendor/three/0.186.0/three.module.js"}}}}
 </script>
 <script type="module">
-import {{ mountCabinetStructure }} from "/layout-view/cabinet_structure.js";
+import {{ mountCabinetStructure }} from "/layout-view/pages/panels/index.js";
 // 挂到 window 上，方便在控制台核对：`page.__test`。
 const page = mountCabinetStructure({{
   canvas: document.getElementById("scene"),

@@ -182,7 +182,6 @@ def panel_digest(case: dict) -> str:
         spec = {
             "rooms": json.loads(json.dumps(case["rooms"])),
             "movable_shelf_connector": "two_in_one",
-            "door_hinge_side": None,
             **panel_parameters(case["parameters"], **case.get("overrides", {})),
         }
         result = confirm_through(

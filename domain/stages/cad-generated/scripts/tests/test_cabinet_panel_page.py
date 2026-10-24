@@ -29,6 +29,7 @@ from runtime_paths import bootstrap_runtime_paths
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 import server
+
 from furniture_layout.open_preview import layout_version, panel_version
 from furniture_layout.project_layout import ProjectLayout
 from furniture_web.room_page import render_draft_page
@@ -50,6 +51,14 @@ from furniture_workflow.workflow_orchestrator import FurnitureOrchestrator
 from furniture_workflow.workflow_store import JsonProjectStore
 from panel_fixtures import cabinet_data, cabinet_envelope, panel_parameters
 from furniture_orchestrator_test_support import layout_proposal
+
+
+def panel_viewer_source() -> str:
+    """Follow both the page controllers and their three-dimensional renderer."""
+    static = WORKSPACE_ROOT / "domain/modules/web/furniture_web/static"
+    paths = [*sorted((static / "pages/panels").glob("*.js")),
+             *sorted((static / "render/panels").glob("*.js"))]
+    return "\n".join(path.read_text(encoding="utf-8") for path in paths)
 
 def _fixture_cabinet() -> dict:
     """独立的 800×600×900 双门柜样例，不依赖开发机的 Project Store。"""
@@ -152,13 +161,14 @@ class CabinetPanelPageTests(unittest.TestCase):
         self.assertFalse(self.store.load(project.id).latest.layout.confirmed)
 
         preview = asyncio.run(server.project_preview(project.id, _local())).body.decode("utf-8")
+        preview += (WORKSPACE_ROOT / "domain/modules/web/furniture_web/static/pages/room/details.js").read_text(encoding="utf-8")
         self.assertIn(f'/api/project/{project.id}/cabinets', preview)
         self.assertIn("板件规划", preview)
         self.assertIn("这件只占位置", preview)
         self.assertIn("先保存外形", preview)
 
         draft = render_draft_page("draft", project.latest.layout.rooms[0])["html"]
-        self.assertIn('const PANEL_URL_BASE="";', draft)
+        self.assertIn('"panel_url_base":""', draft)
 
         with self.assertRaises(HTTPException) as kept:
             asyncio.run(server.project_cabinet_panels(project.id, "bookcase", _local()))
@@ -217,7 +227,7 @@ class CabinetStructurePageTests(unittest.TestCase):
 
         page = self.page()
         self.assertIn("cabinet_1 · 柜体结构", page)
-        self.assertIn("/layout-view/cabinet_structure.js", page)
+        self.assertIn("/layout-view/pages/panels/index.js", page)
         self.assertIn('id="cabinet-structure"', page)
         # 结构页不再退回外形盒子：盒视图那两句只属于未确认状态。
         self.assertNotIn("绿面是柜门这一面", page)
@@ -285,10 +295,7 @@ class CabinetStructurePageTests(unittest.TestCase):
             "grainControls:",
         ):
             self.assertNotIn(marker, page)
-        source = (
-            WORKSPACE_ROOT
-            / "domain/modules/web/furniture_web/static/cabinet_structure.js"
-        ).read_text(encoding="utf-8")
+        source = panel_viewer_source()
         for gone in ("GRAIN_PRESETS", "function setGrain", "normalizeGrain", "grainControls"):
             self.assertNotIn(gone, source)
 
@@ -399,11 +406,11 @@ class StructureViewerDirectionTests(unittest.TestCase):
 
     MODULE = (
         WORKSPACE_ROOT
-        / "domain/modules/web/furniture_web/static/cabinet_structure.js"
+        / "domain/modules/web/furniture_web/static/pages/panels/index.js"
     )
 
     def views(self) -> dict[str, list[float]]:
-        source = self.MODULE.read_text(encoding="utf-8")
+        source = panel_viewer_source()
         block = source.split("const VIEWS = {", 1)[1].split("};", 1)[0]
         views: dict[str, list[float]] = {}
         for line in block.splitlines():
@@ -433,19 +440,19 @@ class StructureViewerDirectionTests(unittest.TestCase):
 
     def test_panel_x_is_mirrored_so_low_x_lands_on_the_screen_left(self) -> None:
         """低 X 是数据里的「左」，必须落在屏幕左侧——否则门会开反。"""
-        source = self.MODULE.read_text(encoding="utf-8")
+        source = panel_viewer_source()
         self.assertIn("width - (px + sx / 2)", source)
         self.assertIn("new THREE.Vector3(width - x, z, -y)", source)
 
     def test_panels_do_not_flicker(self) -> None:
         """板件接缝面是共面的：双面渲染 + 描边线贴面 + 近平面太近，都会转起来闪。"""
-        source = self.MODULE.read_text(encoding="utf-8")
+        source = panel_viewer_source()
         self.assertNotIn("THREE.DoubleSide", source)
         self.assertIn("polygonOffset", source)
         self.assertIn("camera.near = Math.max(1, distance / 1000)", source)
 
     def test_camera_distance_is_computed_from_the_frame_not_a_constant(self) -> None:
-        source = self.MODULE.read_text(encoding="utf-8")
+        source = panel_viewer_source()
         self.assertIn("fitDistanceFor(direction, canvasAspect)", source)
         self.assertIn("Math.max(aspect, MIN_ASPECT)", source)
 
@@ -461,7 +468,7 @@ class StructureViewerFieldTests(unittest.TestCase):
     MODULE = StructureViewerDirectionTests.MODULE
 
     def source(self) -> str:
-        return self.MODULE.read_text(encoding="utf-8")
+        return panel_viewer_source()
 
     def test_viewer_does_not_read_a_group_field(self) -> None:
         source = self.source()
@@ -592,7 +599,7 @@ class StructureViewerFieldTests(unittest.TestCase):
         source = self.source()
         detail = source.split("function renderDetail(panel)", 1)[1].split("\n  }", 1)[0]
         self.assertIn("grainrow", detail)
-        self.assertIn("button.addEventListener(\"click\", () => toggleGrainDirection(panel.id));", detail)
+        self.assertIn("button.addEventListener(\"click\", () => editor.toggleGrainDirection(panel.id));", detail)
         # 只读分享那一页（没有编辑入口）不给点。
         self.assertIn("if (panelSave.editor && direction) {", detail)
 
