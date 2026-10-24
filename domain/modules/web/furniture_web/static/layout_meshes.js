@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { roomToThree } from "./layout_frame.js";
 import { openingSolids, wallSolids } from "./wall_solid.js";
 import { wallSurfacePositions } from "./wall_surface.js";
-import { createOpeningMarker } from "./opening_markers.js";
+import { createOpeningModel } from "./opening_models.js";
 import { chairParts } from "./chair_solid.js";
 import { coffeeTableParts } from "./coffee_table_solid.js";
 import { deskParts } from "./desk_solid.js";
@@ -86,33 +86,6 @@ export function lineSegments(values, color, opacity = 1) {
     transparent: opacity < 1,
     opacity,
   }));
-}
-
-export function addRoomBox(parent, box, material) {
-  const [x0, y0, z0, x1, y1, z1] = box;
-  const mesh = new THREE.Mesh(
-    new THREE.BoxGeometry(x1 - x0, z1 - z0, y1 - y0),
-    material,
-  );
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  mesh.position.set(...roomToThree((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2));
-  parent.add(mesh);
-  return mesh;
-}
-
-export function insetOpening(wall, box) {
-  const gap = 1;
-  const shrink = (a, b) => (b - a > gap * 2 + 1 ? [a + gap, b - gap] : [a, b]);
-  const [x0, y0, z0, x1, y1, z1] = box;
-  if (wall === "north" || wall === "south") {
-    const [xa, xb] = shrink(x0, x1);
-    const [za, zb] = shrink(z0, z1);
-    return [xa, y0, za, xb, y1, zb];
-  }
-  const [ya, yb] = shrink(y0, y1);
-  const [za, zb] = shrink(z0, z1);
-  return [x0, ya, za, x1, yb, zb];
 }
 
 export function addMesh(parent, mesh, pickables) {
@@ -338,21 +311,10 @@ export function buildRoomStage(content, width, depth, height, openings, obstacle
 
   for (const [index, opening] of openingSolids(width, depth, openings).entries()) {
     const wall = shells.find((shell) => shell.userData.wallId === opening.wall);
-    const windowGlow = opening.kind === "window";
-    const mesh = addRoomBox(
-      wall,
-      insetOpening(opening.wall, opening.box),
-      new THREE.MeshBasicMaterial({
-        color: windowGlow ? 0xc8e6f5 : 0xd7be9e,
-        transparent: true,
-        opacity: windowGlow ? 0.76 : 0.90,
-        side: THREE.DoubleSide,
-      }),
-    );
-    mesh.userData.baseOpacity = mesh.material.opacity;
-    mesh.userData.marker = createOpeningMarker(opening, openings[index]);
-    content.add(mesh.userData.marker);
-    wall.userData.openings.push(mesh);
+    const model = createOpeningModel(opening, openings[index]);
+    wall.add(model);
+    content.add(model.userData.marker);
+    wall.userData.openings.push(model);
   }
 
   for (const obstacle of obstacles) {

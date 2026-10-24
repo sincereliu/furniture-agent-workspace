@@ -1,0 +1,34 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>门窗模型预览</title>
+<script type="importmap">{"imports":{"three":"/vendor/three/0.186.0/three.module.js"}}</script>
+<style>
+  body{margin:0;background:#f2efe9;color:#49473f;font:14px system-ui}
+  nav{padding:14px 20px;display:flex;gap:8px;align-items:center}
+  strong{margin-right:auto}button{border:1px solid #c9c3b8;border-radius:6px;background:#fffaf2;padding:8px 14px;color:inherit;cursor:pointer}
+  .scene{position:relative}canvas{display:block;width:100%;height:calc(100vh - 75px)}
+</style>
+<nav><strong>门窗实体 · 卡通手办风</strong><button data-view="normal">房间全景</button><button data-view="reverse">反向视角</button><button data-view="detail">门窗近景</button><button data-view="far">远景</button></nav>
+<div class="scene"><canvas></canvas></div>
+<script type="module">
+import { mountLayout } from "./layout_scene.js";
+const view = mountLayout(document.querySelector("canvas"));
+const data = {room:{width_mm:3600,depth_mm:3000,height_mm:2800},obstacles:[],items:[],openings:[
+  {id:"north-door",kind:"door",wall:"north",offset_mm:280,width_mm:900,height_mm:2180},
+  {id:"north-window",kind:"window",wall:"north",offset_mm:1600,width_mm:1550,height_mm:1350,sill_height_mm:900},
+  {id:"east-window",kind:"window",wall:"east",offset_mm:900,width_mm:1400,height_mm:1300,sill_height_mm:900},
+  {id:"south-door",kind:"door",wall:"south",offset_mm:480,width_mm:850,height_mm:2100},
+  {id:"west-window",kind:"window",wall:"west",offset_mm:900,width_mm:1200,height_mm:1400,sill_height_mm:850},
+]};
+view.sync(data,{dims:false,readOnly:true});
+function show(mode="normal") {
+  view.setFovForZoom(mode === "detail" ? 1.75 : 1);
+  view.setView(mode === "reverse" ? 3.9 : mode === "detail" ? 1.48 : 0.85,
+    mode === "detail" ? 0.14 : 0.5, mode === "far" ? 14500 : 7600,
+    mode === "detail" ? [1750,0,1250] : [1800,1500,1000]);
+  view.draw();
+}
+document.querySelectorAll("button").forEach(button=>button.onclick=()=>show(button.dataset.view));
+window.openingDemo = { view, data, show };
+show();
+</script>

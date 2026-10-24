@@ -131,38 +131,47 @@ export function furnitureColor(item, selected, blocked) {
   return 0xe8dfd1;
 }
 
-export function addSky() {
+let nightSkyTexturePromise = null;
+
+function nightSkyTexture() {
+  if (!nightSkyTexturePromise) nightSkyTexturePromise = (async () => {
+    const response = await fetch(new URL("./images/milky-way-eso0932a.jpg", import.meta.url));
+    if (!response.ok) throw new Error(`Night sky texture: HTTP ${response.status}`);
+    // Decode a same-origin fetch rather than an <img>, respecting the page's connect-src CSP.
+    const bitmap = await createImageBitmap(await response.blob(), { imageOrientation: "flipY" });
+    const texture = new THREE.Texture(bitmap);
+    texture.flipY = false;
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.needsUpdate = true;
+    return texture;
+  })();
+  return nightSkyTexturePromise;
+}
+
+export function addSky(onReady) {
   const sky = new THREE.Mesh(
-    new THREE.SphereGeometry(180000, 28, 18),
-    new THREE.ShaderMaterial({
-      side: THREE.BackSide,
-      depthWrite: false,
-      vertexShader: `
-        varying vec3 vDir;
-        void main() {
-          vDir = normalize(position);
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        varying vec3 vDir;
-        void main() {
-          vec3 n = normalize(vDir);
-          float h = clamp(n.y * 0.5 + 0.5, 0.0, 1.0);
-          vec3 zenith = vec3(0.84, 0.89, 0.94);
-          vec3 mid = vec3(0.92, 0.94, 0.96);
-          vec3 horizon = vec3(0.96, 0.95, 0.93);
-          vec3 col = mix(horizon, mid, smoothstep(0.04, 0.48, h));
-          col = mix(col, zenith, smoothstep(0.42, 0.92, h));
-          vec3 sun = normalize(vec3(-0.38, 0.82, -0.32));
-          col += vec3(0.04, 0.035, 0.025) * smoothstep(0.92, 0.998, dot(n, sun));
-          gl_FragColor = vec4(col, 1.0);
-        }
-      `,
+    new THREE.SphereGeometry(180000, 96, 48),
+    new THREE.MeshBasicMaterial({
+      color: 0x080f21, side: THREE.BackSide, depthWrite: false, toneMapped: false,
     }),
   );
+  sky.name = "milky-way-sky";
+  // Place the galactic centre just above the default room view; keep a diagonal band.
+  sky.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), new THREE.Vector3(-0.64, -0.25, -0.73).normalize());
+  sky.rotateX(0.55);
   sky.frustumCulled = false;
   sky.renderOrder = -2;
+  sky.raycast = () => {};
+  sky.userData.ready = nightSkyTexture().then(texture => {
+    sky.material.map = texture;
+    sky.material.color.setHex(0xb8c9ee);
+    sky.material.needsUpdate = true;
+    onReady?.();
+  }).catch(error => {
+    sky.userData.loadError = String(error);
+    console.error(error);
+  });
   return sky;
 }
 

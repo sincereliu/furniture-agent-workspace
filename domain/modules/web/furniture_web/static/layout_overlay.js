@@ -62,7 +62,25 @@ function makeAxisGizmo() {
 
 /** DOM 标注层（屏幕字号恒定）与右下角方位指示器。 */
 export function createLabelOverlay(canvas, camera) {
-  let labelLayer = null;
+  let labelLayer = ensureLabelLayer(canvas);
+  if (labelLayer && !labelLayer.querySelector(".scene-sky-credit")) {
+    const credit = document.createElement("div");
+    credit.className = "scene-sky-credit";
+    credit.style.cssText = "position:absolute;left:10px;top:10px;max-width:calc(100% - 20px);padding:4px 7px;border-radius:5px;background:rgba(8,15,33,.78);color:#c7d4ec;font:11px/1.4 system-ui;pointer-events:auto";
+    const source = document.createElement("a");
+    source.href = "https://www.eso.org/public/images/eso0932a/";
+    source.textContent = "夜空：ESO/S. Brunier";
+    const license = document.createElement("a");
+    license.href = "https://creativecommons.org/licenses/by/4.0/";
+    license.textContent = "CC BY 4.0";
+    for (const link of [source, license]) {
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.style.color = "inherit";
+    }
+    credit.append(source, " · ", license, " · 色调调整");
+    labelLayer.appendChild(credit);
+  }
   let labelLeaders = null;
   let labelEntries = [];
   let axisGizmo = null;

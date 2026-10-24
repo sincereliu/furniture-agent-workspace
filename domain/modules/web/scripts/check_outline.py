@@ -81,6 +81,7 @@ def browser_checks(output: Path) -> dict:
             for viewport, prefix in ((1000, "room"), (560, "small-room")):
                 page.set_viewport_size({"width": viewport, "height": 800})
                 page.reload()
+                page.evaluate("__diag.scene.getObjectByName('milky-way-sky').userData.ready")
                 for label, name in (("常规", "normal"), ("缩远", "far"), ("另一视角", "reverse"),
                                     ("选中书柜", "selected"), ("碰撞书柜", "blocked")):
                     page.get_by_role("button", name=label, exact=True).click()

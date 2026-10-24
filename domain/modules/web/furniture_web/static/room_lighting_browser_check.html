@@ -1,0 +1,140 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'">
+<title>室内窗光与顶灯检查</title>
+<script type="importmap">{"imports":{"three":"/vendor/three/0.186.0/three.module.js"}}</script>
+<style>
+body{margin:0;background:#f2efe9;color:#49473f;font:14px system-ui}nav{padding:12px 20px;display:flex;gap:8px;align-items:center}
+strong{margin-right:auto}button{border:1px solid #c9c3b8;border-radius:6px;background:#fffaf2;padding:8px 12px;color:inherit;cursor:pointer}
+.scene{position:relative}canvas{display:block;width:100%;height:calc(100vh - 70px)}pre{white-space:pre-wrap}
+</style>
+<nav><strong>室内照明 · 隐藏房顶保留遮光</strong><button data-mode="both">窗光与顶灯</button><button data-mode="ceiling">仅顶灯</button><button data-mode="window">仅窗光</button><button data-mode="reverse">反向视角</button></nav>
+<div class="scene"><canvas></canvas></div>
+<script type="module">
+import * as THREE from "three";
+import { mountLayout } from "./layout_scene.js";
+import { openingSolids } from "./wall_solid.js";
+const view = mountLayout(document.querySelector("canvas"));
+const item = (id, category, x, y, width, depth, height) => ({
+  id,category,manufacture:category === "bookcase",width,depth,height,z_start:0,z_end:height,
+  footprint:[[x,y],[x+width,y],[x+width,y+depth],[x,y+depth]],
+});
+const data={room:{width_mm:3600,depth_mm:3000,height_mm:2800},obstacles:[],openings:[
+  {id:"north-window",kind:"window",wall:"north",offset_mm:1700,width_mm:1500,height_mm:1350,sill_height_mm:900},
+  {id:"west-window",kind:"window",wall:"west",offset_mm:1000,width_mm:1400,height_mm:1300,sill_height_mm:900},
+  {id:"south-door",kind:"door",wall:"south",offset_mm:400,width_mm:900,height_mm:2100},
+],items:[
+  item("cabinet","bookcase",200,150,900,400,1800),
+  item("desk","desk",1900,100,1200,600,750),
+  item("chair","chair",2200,850,500,500,850),
+  item("sofa","sofa",230,1850,1400,850,850),
+]};
+const options={dims:false,readOnly:true};
+view.sync(data,options);
+let strengths=new Map();
+function show(mode="both") {
+  const lighting=__diag.roomLighting;
+  for(const light of lighting.lights){
+    if(!strengths.has(light))strengths.set(light,light.intensity);
+    light.intensity=mode === "both" || mode === "reverse" || mode === light.userData.source ? strengths.get(light) : 0;
+  }
+  view.setView(mode === "reverse" ? 3.9 : 0.85,0.55,7600,[1800,1500,1000]);
+  view.draw();
+}
+document.querySelectorAll("button").forEach(b=>b.onclick=()=>show(b.dataset.mode));
+show();
+
+function checks() {
+  const {renderer,scene,stageGroup,itemsGroup,roomLighting:lighting}=__diag;
+  const camera=new THREE.OrthographicCamera(-1800,1800,1500,-1500,10,18000);
+  camera.position.set(1800,10000,1500);camera.up.set(0,0,-1);camera.lookAt(1800,0,1500);
+  camera.layers.enable(1);camera.updateMatrixWorld(true);
+  const results=[];
+  const check=(pass,name,detail)=>results.push({pass:!!pass,name,detail});
+  const sky=scene.getObjectByName("milky-way-sky");
+  check(sky?.material.map?.image.width===4000&&sky.material.map.image.height===2000&&!sky.userData.loadError,
+    "local Milky Way panorama decodes under the production content security policy");
+  check(document.querySelector(".scene-sky-credit a")?.getBoundingClientRect().width>0,
+    "sky photograph attribution remains visible with an active source link");
+  const capture=()=>{
+    __diag.roomLighting.invalidate();renderer.render(scene,camera);
+    const gl=renderer.getContext(), w=gl.drawingBufferWidth,h=gl.drawingBufferHeight;
+    const pixels=new Uint8Array(w*h*4);gl.readPixels(0,0,w,h,gl.RGBA,gl.UNSIGNED_BYTE,pixels);
+    // Sample floor points between the furniture and walls, independent of screenshot framing.
+    const values=[];
+    for(let y=500;y<2800;y+=80)for(let x=1100;x<3400;x+=80){
+      const p=new THREE.Vector3(x,4,y).project(camera);
+      const offset=(Math.floor((p.y*.5+.5)*h)*w+Math.floor((p.x*.5+.5)*w))*4;
+      values.push((pixels[offset]+pixels[offset+1]+pixels[offset+2])/3);
+    }
+    return values;
+  };
+  const difference=(a,b)=>a.reduce((sum,value,i)=>sum+Math.abs(value-b[i]),0)/a.length;
+  const mean=a=>a.reduce((sum,value)=>sum+value,0)/a.length;
+  const setSources=source=>lighting.lights.forEach(l=>l.intensity=source === "both" || source === l.userData.source ? strengths.get(l) : 0);
+  try{
+    setSources("none");const ambient=capture();
+    setSources("ceiling");const ceiling=capture();
+    setSources("window");const window=capture();
+    setSources("both");const both=capture();
+    check(mean(ceiling)>mean(ambient)+3,"ceiling source lights the room floor",{ambient:mean(ambient),ceiling:mean(ceiling)});
+    check(mean(window)>mean(ambient)+0.3,"actual windows admit measurable night fill",{ambient:mean(ambient),window:mean(window)});
+    check(mean(both)>mean(ceiling)+0.2,"night window fill contributes alongside the dominant ceiling light",{ceiling:mean(ceiling),both:mean(both)});
+    setSources("window");
+    const plugs=openingSolids(3600,3000,data.openings).filter(o=>o.kind==="window").map(o=>{
+      const [x0,y0,z0,x1,y1,z1]=o.box;
+      const plug=new THREE.Mesh(new THREE.BoxGeometry(x1-x0,z1-z0,y1-y0),lighting.roof.material);
+      plug.position.set((x0+x1)/2,(z0+z1)/2,(y0+y1)/2);plug.layers.set(1);plug.castShadow=true;
+      plug.customDepthMaterial=lighting.roof.customDepthMaterial;lighting.blockers.add(plug);return plug;
+    });
+    const coveredWindows=capture();
+    plugs.forEach(plug=>{lighting.blockers.remove(plug);plug.geometry.dispose();});
+    check(mean(window)>mean(coveredWindows)+0.3&&Math.abs(mean(coveredWindows)-mean(ambient))<1,
+      "covering window apertures stops night fill instead of leaking through walls",{open:mean(window),covered:mean(coveredWindows)});
+    setSources("both");
+    const walls=stageGroup.children.filter(w=>w.userData.wallId);
+    const visibility=walls.map(w=>w.visible);walls.forEach(w=>w.visible=false);
+    const cutaway=capture();walls.forEach((w,i)=>w.visible=visibility[i]);
+    check(difference(both,cutaway)<1.5,"cutaway walls keep their physical shadows",{difference:difference(both,cutaway)});
+    // Test a sun above the ceiling: only disabling the invisible roof may admit it.
+    setSources("none");
+    const sun=new THREE.DirectionalLight(0xffffff,2);sun.position.set(1800,10000,1500);
+    sun.target.position.set(1800,0,1500);sun.layers.set(1);sun.castShadow=true;
+    Object.assign(sun.shadow.camera,{left:-2400,right:2400,top:2400,bottom:-2400,near:1,far:15000});
+    sun.shadow.camera.updateProjectionMatrix();sun.shadow.mapSize.set(1024,1024);
+    scene.add(sun,sun.target);
+    const roofClosed=capture();lighting.roof.castShadow=false;const roofOpen=capture();lighting.roof.castShadow=true;
+    scene.remove(sun,sun.target);sun.shadow.dispose();
+    check(mean(roofOpen)>mean(roofClosed)+20,"invisible ceiling blocks exterior overhead light",{closed:mean(roofClosed),open:mean(roofOpen)});
+    setSources("ceiling");const withShadows=capture();
+    const casters=[];itemsGroup.traverse(n=>{if(n.isMesh&&n.castShadow){casters.push(n);n.castShadow=false;}});
+    const noShadows=capture();casters.forEach(n=>n.castShadow=true);
+    const affected=withShadows.filter((v,i)=>noShadows[i]-v>5).length;
+    check(affected>5,"furniture casts real shadows from the indoor ceiling source",{affected,difference:difference(withShadows,noShadows)});
+    check(!lighting.roof.material.colorWrite&&!lighting.roof.material.depthWrite,"ceiling never hides furniture in the camera view");
+    const before=lighting.lights.map(l=>l.position.toArray());
+    view.setView(3.9,0.5,7600,[1800,1500,1000]);
+    check(JSON.stringify(before)===JSON.stringify(lighting.lights.map(l=>l.position.toArray())),"camera rotation keeps light positions fixed");
+    // Prove resource ownership/rebuilding and window removal on the actual layout entry.
+    let releasedGeometry=0,releasedMaps=0;
+    lighting.blockers.traverse(n=>n.geometry?.addEventListener("dispose",()=>releasedGeometry++));
+    lighting.lights.forEach(l=>l.shadow.map?.addEventListener("dispose",()=>releasedMaps++));
+    const next=structuredClone(data);next.openings=next.openings.filter(o=>o.kind!=="window");
+    view.sync(next,options);
+    check(__diag.roomLighting.lights.length===1&&__diag.roomLighting.lights[0].userData.source==="ceiling",
+      "rooms without windows use the ceiling source only");
+    check(releasedGeometry>10&&releasedMaps===lighting.lights.length,"rebuild frees shadow meshes and GPU maps",{releasedGeometry,releasedMaps});
+    const moved=structuredClone(next);moved.items[2].footprint=moved.items[2].footprint.map(([x,y])=>[x+250,y+200]);
+    let shadowDraws=0;
+    itemsGroup.traverse(n=>{if(n.isMesh&&n.castShadow)n.onBeforeShadow=()=>shadowDraws++;});
+    const current=__diag.roomLighting;
+    view.sync(moved,options);
+    check(current===__diag.roomLighting&&shadowDraws>0,
+      "moving furniture reuses lighting and actually redraws furniture into shadow maps",{shadowDraws});
+  }finally{
+    view.sync(data,options);strengths=new Map();show();
+  }
+  return results;
+}
+window.lightingDemo={view,data,show,checks};
+</script>

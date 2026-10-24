@@ -13,6 +13,8 @@ import { createCartoonOutline } from "./cartoon_outline.js";
 import { addDiorama, addSky, celMaterial, furnitureColor } from "./layout_diorama.js";
 import { createLabelOverlay } from "./layout_overlay.js";
 import { pickOpeningMarker, updateOpeningMarker } from "./opening_markers.js";
+import { updateOpeningModel } from "./opening_models.js";
+import { createRoomLighting } from "./room_lighting.js";
 import {
   ROOM_LAYER,
   addChair,
@@ -42,28 +44,21 @@ export function mountLayout(canvas) {
   });
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.setClearColor(0xf2efe9, 1);
+  renderer.setClearColor(0x080f21, 1);
   const furnitureOutline = createCartoonOutline(renderer);
   const camera = new THREE.PerspectiveCamera(48, 1, 10, 500000);
   camera.up.set(0, 1, 0);
   const LENS_BASE = 48;
   const ELEVATION_PULL = 8;
   const scene = new THREE.Scene();
-  const sky = addSky();
+  const sky = addSky(() => draw());
   scene.add(sky);
-  const nightFill = new THREE.HemisphereLight(0xffffff, 0xe2ddd5, 0.92);
+  const nightFill = new THREE.HemisphereLight(0xc4d5f3, 0x898797, 0.65);
   nightFill.layers.set(0);
-  const moon = new THREE.DirectionalLight(0xfffcf5, 0.48);
+  const moon = new THREE.DirectionalLight(0xc0d4ff, 0.32);
   moon.layers.set(0);
-  const roomFill = new THREE.HemisphereLight(0xfffdfa, 0xdcd5c9, 0.76);
-  roomFill.layers.set(ROOM_LAYER);
-  const roomKey = new THREE.DirectionalLight(0xfffaf0, 0.95);
-  roomKey.layers.set(ROOM_LAYER);
-  roomKey.castShadow = true;
-  roomKey.shadow.mapSize.set(2048, 2048);
-  roomKey.shadow.bias = -0.0004;
-  roomKey.shadow.normalBias = 3.5;
-  scene.add(nightFill, moon, roomFill, roomKey);
+  scene.add(nightFill, moon);
+  let roomLighting = null;
 
   // 分层缓存：房间舞台（围墙/地板/城市底座/坐标轴）、家具网格池（按 id 增量更新）、动态标注与手柄
   const content = new THREE.Group();
@@ -163,9 +158,7 @@ export function mountLayout(canvas) {
       wall.userData.material.depthWrite = opacity >= 0.999;
       wall.userData.material.color.setHex(state.color === null ? wall.userData.baseColor : state.color);
       for (const opening of wall.userData.openings) {
-        opening.material.opacity = opening.userData.baseOpacity * opacity;
-        opening.material.depthWrite = opacity >= 0.999;
-        updateOpeningMarker(opening.userData.marker, 1 - opacity);
+        updateOpeningModel(opening, opacity);
       }
       for (const ink of wall.userData.inks) {
         ink.visible = wall.visible;
@@ -327,6 +320,7 @@ export function mountLayout(canvas) {
       return;
     }
     stageKey = nextStageKey;
+    roomLighting?.dispose();
     disposeObject(stageGroup);
     stageGroup.clear();
     stageAxisLabels = [];
@@ -339,17 +333,6 @@ export function mountLayout(canvas) {
     const width = room.width_mm;
     const depth = room.depth_mm;
     const height = room.height_mm;
-    roomKey.position.set(...roomToThree(width * 0.25, depth * 1.35, height * 2.8));
-    roomKey.target.position.set(...roomToThree(width / 2, depth / 2, 0));
-    if (!roomKey.target.parent) scene.add(roomKey.target);
-    const d = Math.max(width, depth) * 0.95;
-    roomKey.shadow.camera.left = -d;
-    roomKey.shadow.camera.right = d;
-    roomKey.shadow.camera.top = d;
-    roomKey.shadow.camera.bottom = -d;
-    roomKey.shadow.camera.near = 100;
-    roomKey.shadow.camera.far = height * 7;
-    roomKey.shadow.camera.updateProjectionMatrix();
     moon.position.set(...roomToThree(-width, -depth * 0.4, height * 4));
     addDiorama(stageGroup, width, depth, addStageInk);
     stageGroup.userData.outline = {
@@ -361,6 +344,7 @@ export function mountLayout(canvas) {
       data.openings || [], data.obstacles || [],
       addStageInk,
     );
+    roomLighting = createRoomLighting(scene, room, data.openings || [], wallShells);
     buildOutline(stageGroup);
     buildAxes(stageGroup, (spec) => {
       stageAxisLabels.push(spec);
@@ -473,6 +457,7 @@ export function mountLayout(canvas) {
     refreshWalls();
     applyRoomLimits();
     overlay.refresh();
+    roomLighting.invalidate([stageGroup, itemsGroup]);
     draw();
   }
 
@@ -520,6 +505,7 @@ export function mountLayout(canvas) {
   window.__diag = {
     scene, camera, controls, content, stageGroup, itemsGroup, annotationsGroup,
     itemCache, renderer, syncCached,
+    get roomLighting() { return roomLighting; },
   };
   return {
     controls, resize, setView, readView, basis, project, ground, pick, sync: syncCached, draw, setEnabled, setShiftPan,
