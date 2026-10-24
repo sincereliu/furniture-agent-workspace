@@ -5,18 +5,18 @@
 ## 总原则
 
 - `panel_plan` 的唯一事实来源是 `cabinets[]` 里每台柜的 `spec`、`interior`、`back_mount_resolution` 和 `assemblies`。
-- 旁路分析只读取已确认冻结板件（有 Store 时按 `confirmed_panel_sha256` 读 `store/<project-id>/panels/<sha256>.json`），写入 `stage_analyses.panel_plan`。未确认或无 Store 时读内存中的阶段输出。
+- 本技能在板件已确认后运行旁路分析：有 Store 时按 `confirmed_panel_sha256` 读 `store/<project-id>/panels/<sha256>.json`，冻结文件缺失则停止；无 Store 时读取内存中已确认的阶段输出。结果写入 `stage_analyses.panel_plan`。底层读取函数在未冻结时可返回内存候选，不代表本技能允许跳过板件确认。
 - 旁路分析不能静默修改板件事实输出，不能替代结构化准入，也不能直接变成制造或 CAD 输入。
 
 ## 单位与不确定度审计
 
-- 用户要求尺寸链、单位或公差审计时，先读 `../../external/scientific-agent-skills/skills/uncertainty-and-units/SKILL.md`。
+- 用户要求尺寸链、单位或公差审计时，先读 [单位与不确定度](../../../../external/scientific-agent-skills/skills/uncertainty-and-units/SKILL.md)。
 - 再用 `scripts/furniture_panel_planning/quantitative_audit.py` 生成 `panel_unit_audit`。
 - 审计只报告量纲一致性、派生净空测量模型和可选不确定度传播，不据此静默改板件。
 
 ## 多目标候选分析
 
-- 用户要求在材料用量、内部空间和复杂度间比较候选时，先读 `../../external/scientific-agent-skills/skills/pymoo/SKILL.md`。
+- 用户要求在材料用量、内部空间和复杂度间比较候选时，先读 [多目标优化](../../../../external/scientific-agent-skills/skills/pymoo/SKILL.md)。
 - 由 LLM 明确目标、变量、约束和引擎（`exact` 或 `pymoo`），再用 `scripts/furniture_panel_planning/design_optimization.py` 生成 `panel_optimization`。引擎必须显式给出，不接受 `auto`。
 - 结果是候选集与 Pareto 摘要，不是新的板件事实输出。
 - 只有用户明确选中候选后，才可通过 `revise_stage_output()` 物化新的 `panel_plan` 结果。

@@ -22,7 +22,7 @@
 
 交接函数从 `spec` 派生运行时 `CabinetStructure`，再由 `flatten_panels_for_handoff()` 得到板件列表（接触按装配收口后回贴到相关板上，供制造使用）。柜上必须有 `interior` 和 `assemblies`。顶层不得再写 `spec/structure/panels/cabinet_id`。工具快照 `current_view` 对 `panel_plan` 是 `panel_review.py` 从这棵树派生的确认审查清单，不是冻结文件本身。分析记录属于旁路证据，不并入板件事实。
 
-确认后的板件冻成 `store/<project-id>/panels/<sha256>.json`，Revision 记下 `confirmed_panel_sha256`。有 Project Store 时，制造、板件旁路分析、CAD 板件快照和交付哈希按该哈希读冻结文件，文件缺失则失败；尚未记录冻结哈希、或没有 Store 时仍读内存中的 `stage_outputs.panel_plan`。不重跑 `plan_panel_stage()`。
+确认后的板件冻成 `store/<project-id>/panels/<sha256>.json`，Revision 记下 `confirmed_panel_sha256`。有 Project Store 时，制造、板件旁路分析、CAD 板件快照和交付哈希按该哈希读冻结文件，文件缺失则失败。底层 `_confirmed_panel_output()` 在尚无冻结哈希或没有 Store 时返回内存中的 `stage_outputs.panel_plan`；这只是读取行为，不代替调用方的阶段确认检查。本技能要求板件确认后再做旁路分析，制造仍须满足布局与板件均已确认的前置条件。不重跑 `plan_panel_stage()`。
 
 **看结构（只读）**：预览里的一台柜子结构页在板件已确认时读同一份冻结文件（`confirmed_panel_sha256` 指向的那份），已生成候选但尚未确认时读当前 `stage_outputs.panel_plan` 供三维审查（不开放顺纹保存），还没有生成过板件时只画布局里已保存的外形（怎么挂路由见 [布局预览维护](../../layout-plan/references/preview-ops.md)）。这条链只读：不写 `stage_outputs`、不改确认状态、不喂下游。
 

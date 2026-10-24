@@ -7,7 +7,7 @@ description: 用于 panel_plan 阶段。当用户说“几扇门”“几层板�
 
 阶段：`panel_plan`
 
-**这一阶段只回答一件事：已确认的柜体外形尺寸里面，门、层板、中立板、抽屉、背板、踢脚和料厚怎么落成板。** 交出去的是一版还没确认的板件。房间怎么摆、材料五金、柜体模型都不在这里做。
+**这一阶段只回答一件事：已确认的柜体外形尺寸里面，门、层板、中立板、抽屉、背板、踢脚和料厚怎么落成板。** 交出去的是一版还没确认的板件。房间怎么摆、材质选型与五金、柜体模型都不在这里做。
 
 ## 人要交什么
 
@@ -32,8 +32,8 @@ description: 用于 panel_plan 阶段。当用户说“几扇门”“几层板�
 3. **写入参数并调用 `furniture_run_next`。** 编排层从已确认布局读取柜体包络；`FurnitureSpec.from_envelope()` 校验提案字段完整、类型及客观结构冲突，按工艺卡展开省略的料档，并展开省略的层板均分净高和踢脚支撑数，首次物化完整规范。
 4. **代码生成柜体。** 依据 [背板结构规则](references/back-construction-rules.md)、[板件定义规则](references/panel-definition-rules.md)、[抽屉尺寸链](references/drawer-dimension-chain.md) 和 `references/cabinet-topologies/` 生成柜体实例及其 `spec` / `interior` / `back_mount_resolution` / `assemblies`。中立板按评估器给的缝与区间物化（通高、站在内部净空里、两张朝柜内的大面都接端面）；有中立板时层板按腔分段出件。背板模式需要背拉条时，同一阶段把背拉条物化并纳入校验。运行时统一校验柜体身份、子装配归属、结构规格、精确净空、板件标识、尺寸、位置、依赖和背板几何。
 5. **展示审查清单。** 准入成功后展示工具快照 `current_view`：柜体、背板安装、内部净空、板件一行一条、接触去重。不展开完整 `cabinets` 树。已省略的料厚、层板净高和踢脚支撑数不再单独询问。清单由运行时从检查点派生，见 [运行时映射](references/runtime-map.md)。每次规划是一次 attempt。
-6. **客户要另一版。** 调用 `retry_stage("panel_plan")`，可带新的 `stage_inputs.panels`。保持已冻结布局；失败只记录该次 attempt。客户选定某次通过的尝试后，用 `select_stage_attempt()` 选用，再确认。
-7. **客户认这版板件，再确认。** 客户已经接受时，`confirm_stage(panel_plan)` 把当前候选冻成 `store/<project-id>/panels/<sha256>.json`。制造只读这份冻结文件，重试制造不会重跑板件。客户还没接受时不确认，也不进入制造。直接改已经生成的板件结果用 `revise_stage_output()`。
+6. **客户要另一版。** 调用 `furniture_retry_stage(project_id, stage="panel_plan", stage_input=...)`，传入新的板件方案。保持已冻结布局；失败只记录该次 attempt。客户选定某次通过的尝试后，用 `furniture_select_stage_attempt` 选用，再确认。
+7. **客户认这版板件，再确认。** 客户已经接受时，`furniture_confirm_stage(project_id, stage="panel_plan")` 把当前候选冻成 `store/<project-id>/panels/<sha256>.json`。制造只读这份冻结文件，重试制造不会重跑板件。客户还没接受时不确认，也不进入制造。直接改已经生成的板件结果使用 Python API `revise_stage_output()`；它不在宿主注册工具中。
 
 按当前任务读对应 reference，不要一次加载全部规则。
 
@@ -42,7 +42,7 @@ description: 用于 panel_plan 阶段。当用户说“几扇门”“几层板�
 ## 本阶段不做什么
 
 - 房间、摆放、门窗洞口的决定：布局阶段。认出台子时可以读已有摆放，但不写入板件参数。
-- 材料、封边、五金、孔，以及「连不连」：制造阶段。这里只产出尺寸、位置和大面–端面接触。口径见 [术语规范表](references/terminology-glossary.md)。
+- 材质选型、封边、五金、孔，以及「连不连」：制造阶段。料档、料厚、门缝、铰链侧与结构净空归本阶段，制造只读冻结值。这里只产出尺寸、位置和大面–端面接触。口径见 [术语规范表](references/terminology-glossary.md)。
 - 特征树和柜体模型：后面的阶段。
 - 代码按自然语言、柜型或内置 profile 选方案。料档、省略的层板净高和省略的踢脚支撑数只按工艺卡和尺寸公式展开。
 

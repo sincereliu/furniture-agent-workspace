@@ -22,7 +22,7 @@ description: 用于 manufacture_plan 阶段。当用户说"用什么五金""三�
 - 连接：螺钉、木榫、偏心件（三合一/二合一）、槽、胶合。接触默认连不连见 [连接与接触默认规则](references/connection-contact-defaults.md)。
 - 活动层板连接：`movable_shelf_connector`（`two_in_one` 二合一 / `shelf_pin` 层板托）。有活动层板时必须显式选择，经 `requested_options` 传入并盖章到 `PanelRecord`。没提供时运行时拒绝，不静默补齐。
 - 五金：铰链、滑轨、拉手、层板托、固定、防倾倒及荷载。**铰链侧由板件阶段写在门板上**（`door_hinge_side`），制造只读。没写的门点名拒绝，不按位置补，也不从制造输入补。
-- 公差和净空：门缝、安装/设备缝隙、地墙不平、安全余量。
+- 加工配合公差采用五金目录与加工规则。料厚、门缝、铰链侧、结构净空及背板槽参数来自冻结板件；需要改变这些值时回到板件阶段，不在制造另定。房间摆放与安装包络归布局阶段。
 
 口径见 [制造规则](references/manufacturing-rules.md)。同义说法由 LLM 对到目录里的变体；脚本不做关键词识别、同义词映射或开放方案排序。五金变体与打孔参数以 `scripts/furniture_manufacturing/hardware_catalog.yaml`、`hardware_rules.yaml` 为准：LLM 只选变体，孔的数值用目录里该变体的数，不另写一套坐标。目录没有的数值不要猜进工具参数，标在结果旁待确认。
 
@@ -30,10 +30,10 @@ description: 用于 manufacture_plan 阶段。当用户说"用什么五金""三�
 
 1. **确认板件文件还在。** 两段前置都已确认。有 Store 时，冻结板件文件缺失就停，不要改读内存。
 2. **把制造需求收成整份策略。** 用客户已经说的选择、[连接与接触默认规则](references/connection-contact-defaults.md) 和已点名的默认值（封边未另选时为 ABS 1.0mm）。有活动层板而客户没选 `movable_shelf_connector` 时，先问这一项再调用工具；运行时不补这个值。其余已有默认的项不单独设问。
-3. **调用 `FurnitureOrchestrator.run_next()`。** 代码生成孔位、封边、槽和 BOM，并由运行时校验。
-4. **展示结果。** 把整套制造方案给客户看。`readiness` 保持 `preliminary`，直到客户接受整份方案。它表示整份方案和 BOM 的接受程度，不是每条五金或封边各自审批。客户这次已经明确接受时，按下一步升到 `accepted`，不要再问一次。
-5. **客户明确接受，才升 `accepted`。** 工厂确认之后才升 `factory_ready`。
-6. **同一批已确认板件上再试。** 调用 `retry_stage("manufacture_plan")`。冻结板件文件保持不变。直接改已有制造结果用 `revise_stage_output()`，本阶段及下游失效。
+3. **调用 `furniture_run_next(project_id, stage_input=...)`。** 代码生成孔位、封边、槽和 BOM，并由运行时校验。
+4. **展示结果。** 把整套制造方案给客户看。自动规划的各柜 BOM 都从 `readiness=preliminary` 开始。`readiness` 是制造接受程度，阶段确认是允许流程继续的检查点，两者分别记录；`furniture_confirm_stage` 不会改写 BOM 的 `readiness`。
+5. **客户接受后确认当前检查点。** 使用 `furniture_confirm_stage`，不重复询问已接受的内容。需要记录更高制造接受程度时，只有客户明确接受后才能把相应柜体 `bom.readiness` 记为 `accepted`，只有工厂确认后才能记为 `factory_ready`；当前宿主没有提升该字段的注册工具。可用 Python API 时，经 `revise_stage_output()` 修订逐柜制造输出，再确认新候选；仅调用阶段确认时照实报告现存 `readiness`，不声称已提升。
+6. **同一批已确认板件上再试。** 调用 `furniture_retry_stage(project_id, stage="manufacture_plan", stage_input=...)`。冻结板件文件保持不变。直接改已有制造结果使用 Python API `revise_stage_output()`，本阶段及下游失效；它不在宿主注册工具中。阶段确认统一使用 [交互工具面](../cad-generated/references/agent-tool-contract.md) 的 `furniture_confirm_stage`。
 
 ## 守住这些口径
 
@@ -48,9 +48,9 @@ description: 用于 manufacture_plan 阶段。当用户说"用什么五金""三�
 |---------|----------|
 | 对照外部五金/加工类目、打孔 | `references/hardware-machining-reference.md` |
 | 六面钻、机床加工、导 XML | `references/six-side-drill-export.md` |
-| 样件、承重、连接件或涂装对比试验 | `../../external/scientific-agent-skills/skills/experimental-design/SKILL.md` + `prototype_experiment.py` |
-| 分析已采集试验数据 | `../../external/scientific-agent-skills/skills/statistical-analysis/SKILL.md` + `test_statistics.py` |
-| 板件加工路线、共享设备、齐套装配、工位排队、交期 | `../../external/scientific-agent-skills/skills/simpy/SKILL.md` + `production_simulation.py` |
+| 样件、承重、连接件或涂装对比试验 | [试验设计](../../../external/scientific-agent-skills/skills/experimental-design/SKILL.md) + `scripts/furniture_manufacturing/prototype_experiment.py` |
+| 分析已采集试验数据 | [统计分析](../../../external/scientific-agent-skills/skills/statistical-analysis/SKILL.md) + `scripts/furniture_manufacturing/test_statistics.py` |
+| 板件加工路线、共享设备、齐套装配、工位排队、交期 | [生产仿真](../../../external/scientific-agent-skills/skills/simpy/SKILL.md) + `scripts/furniture_manufacturing/production_simulation.py` |
 
 试验、统计和生产仿真写入 `stage_analyses.manufacture_plan`，只提供证据或候选。它们不自动提升 `readiness`，不直接修改 BOM，也不构成现实工厂因果结论。
 

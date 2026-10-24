@@ -18,10 +18,10 @@ description: 用于 delivery_validated 阶段。当用户说"检查一下产物"
 ## 一步一步做什么
 
 1. **确认 CAD 已经确认，且产物属于当前 Revision。**
-2. **调用 `FurnitureOrchestrator.run_next()`。** 它走到 `scripts/furniture_delivery_validation/validation.py`。前五个串联阶段都要在当前 Revision 里有输出、已确认，并且最近一次验证通过。然后再查必需产物是否存在、非空、大小、SHA-256、是否 stale，以及 Revision 谱系。
-3. **核对制造接受程度。** `manufacture_plan.readiness` 必须与 manufacture-plan 的 BOM 清单元数据一致。仍为 `preliminary` 时报告警告。交付完整不等于可以直接投产。
+2. **调用 `furniture_run_next(project_id)`。** 它走到 `scripts/furniture_delivery_validation/validation.py`。前五个串联阶段都要在当前 Revision 里有输出、已确认，并且最近一次验证通过。然后再查必需产物是否存在、非空、大小、SHA-256、是否 stale，以及 Revision 谱系。
+3. **核对制造接受程度。** 逐柜 BOM 产物的元数据须与对应 `manufacture_plan.cabinets[].bom.readiness` 一致，工程汇总元数据取各柜最弱状态；制造输出顶层没有 `readiness` 字段。汇总仍为 `preliminary` 时报告警告。交付完整不等于可以直接投产。
 4. **若这一版有 `stage_analyses`，逐条核对。** 每条记录要带上 Revision、来源阶段和 `source_sha256`。`unavailable` / `descriptive_only` 只作警告。旁路分析不是必需交付物。
-5. **展示验证结果。** 把 `stage_outputs.delivery_validated` 给客户看。没有实际跑过的 STEP 几何测量、快照或 Viewer 人工审查，写成未验证。客户已经要求确认这一版时再确认。未跑过的几何审查不能写成已验证。
+5. **展示验证结果。** 把 `stage_outputs.delivery_validated` 给客户看。没有实际跑过的 STEP 几何测量、快照或 Viewer 人工审查，写成未验证。客户已经要求确认这一版时，按 [交互工具面](../cad-generated/references/agent-tool-contract.md) 调用 `furniture_confirm_stage`。未跑过的几何审查不能写成已验证。
 
 ## 本阶段不做什么
 

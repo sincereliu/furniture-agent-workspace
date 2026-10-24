@@ -8,12 +8,12 @@
 2. Manifest 与每个 Artifact 的 `source_revision_id` 必须等于当前 Revision；任何 `stale` 产物均失败。
 3. 必需产物种类齐全，文件存在、非空，实时大小与 SHA-256 和 Manifest 一致；
    孔位 JSON/GLB/STEP、STEP Viewer 侧车和逐板六面钻 XML 均须登记。
-4. `manufacturing_plan` 与 `bom` 的 Manifest `readiness` 必须等于 `manufacture_plan.readiness`。
+4. 逐柜 `bom` 的 Manifest `readiness` 必须等于该柜的 `manufacture_plan.cabinets[].bom.readiness`；不带柜体归属的工程汇总 `manufacturing_plan` / `bom` 元数据取各柜最弱状态，不读取制造输出顶层的 `readiness`。
 5. `readiness=preliminary` 只产生警告：文件可以完整交付，但不得称为工厂已确认或可直接投产。
 6. 六面钻 XML 的 Manifest 记录携带板件标识和制造 `readiness`；哈希完整只
    证明文件未被篡改，不证明机床坐标已经过工厂首件确认。
 7. **逐柜齐全（2026-10-02 起是硬关卡）**：制造与特征树是逐柜产物（`{"cabinets": [...]}`），
-   CAD 与清单也逐柜——**每台规划过的柜都必须有自己的 `step`、`drilled_holes`、`six_side_drill_xml`
+   CAD 与清单也逐柜——**每台进入冻结板件与制造输出的柜都必须有自己的 `step`、`drilled_holes`、`six_side_drill_xml`
    记录**（manifest 柜级记录带 `cabinet_id`），少一台就 `MISSING_CABINET_ARTIFACT`。
    在这之前，"规划了三台、只有一台有文件"照样通过——实测过。
 
@@ -21,7 +21,7 @@
 
 - 房间布局、可执行柜类和外形尺寸归 `layout_plan` 验证。
 - 精确净空、背板模式、区域边界、板件标识、尺寸、位置、依赖和背板几何归 `panel_plan` 验证。
-- BOM、封边、解析后的 `back_mount`、`groove` 四条槽以及“背板五金数量与主孔、配合孔数量一致”归 `manufacture_plan` 验证。
+- BOM、封边、冻结 `back_mount` 的加工映射、背板槽（包括适用的中立板槽）以及“背板五金数量与主孔、配合孔数量一致”归 `manufacture_plan` 验证。槽数量以制造输出为准，交付不另设固定条数。
 - Feature Tree 标识、依赖、目标和切削包络归 `feature_tree_planned` 验证。
 - STEP 与 Viewer 拓扑是否由 CAD Bridge 成功生成归 `cad_generated` 验证。
 

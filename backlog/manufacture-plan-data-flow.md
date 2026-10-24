@@ -1,5 +1,7 @@
 # 制造层数据流梳理（工作稿）
 
+本文归档于待办；现行制造契约见 [制造阶段](../domain/stages/manufacture-plan/SKILL.md)。
+
 > ⚠️ **本文是初步分析，不是运行时规格，不得据此实现或引用。**
 > 字段结论已标注，但实现决策未定；未决前提与缺口登记在 `backlog/manufacture-plan.md`。
 

@@ -58,7 +58,7 @@
 
 ## 背板槽机制
 
-- `groove` 为左右侧板、顶/底板生成 4 条目标明确的 `cut_box`；槽宽 = `back_thickness + groove_clearance`，槽深 = `groove_depth`。
+- `groove` 为左右侧板、顶/底板生成目标明确的 `cut_box`；有中立板时还包含对应的立板槽，数量与包络以 [背板槽加工契约](manufacturing-rules.md#背板槽加工契约) 为准。槽宽 = `back_thickness + groove_clearance`，槽深 = `groove_depth`；这些参数来自冻结板件。
 - `insert` 输出四边三合一成对孔；cover 外盖螺钉与 groove 背拉条螺钉属组装现场工艺，不生成孔位与五金。
 
 ## 校验职责

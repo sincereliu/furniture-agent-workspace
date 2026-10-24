@@ -1,5 +1,13 @@
 # 仓库约定
 
+## 指令文件分工
+
+- 本文件维护全仓库的读取范围、归属、修改协作和验收要求。
+- `.agents/skills/furniture-agent/SKILL.md` 是发现各阶段的薄路由；阶段业务规则维护在所属 `domain/stages/<stage>/SKILL.md`，CAD 执行入口为 `cad-generated/TOOL.md`。
+- 各入口的 `references/` 按任务加载，维护本阶段详细契约与规则；其他阶段引用所有者的文件，不复制一套规则。未完成设计留在 `backlog/`。
+- `agents/openai.yaml` 只维护 Skill 的显示信息和调用提示，不是独立子智能体，也不另定义阶段顺序、默认值或确认规则。行为变更写回所属 Skill/契约，调用提示保持简短。
+- 共享实现和测试虽存放在 `cad-generated/scripts/`，也按下表区分职责；不能因目录位置把它们都当作 CAD 业务。
+
 ## 按需读取
 
 - 做家具或查找阶段入口，先读 [家具智能体](.agents/skills/furniture-agent/SKILL.md)；改代码再按对应阶段 Skill/TOOL 的导航读具体文件。
@@ -15,16 +23,22 @@
 | 改什么 | 所属路径或入口 |
 | --- | --- |
 | 布局、房间门窗 `openings[]` | `layout-plan/` |
-| 门、层板、抽屉、背板、踢脚、料厚 | `panel-plan/` |
-| 材料、封边、连接、五金、BOM、孔 | `manufacture-plan/` |
+| 门、层板、抽屉、背板、踢脚、料厚、门缝、铰链侧及结构净空 | `panel-plan/` |
+| 材质选型、封边、连接、五金、BOM、孔 | `manufacture-plan/` |
 | 特征树 | `feature-tree/` |
 | 确认、重试、冻结、状态机、交互工具 | `cad-generated/scripts/furniture_workflow/`、`cad-generated/references/agent-tool-contract.md` |
 | CAD/STEP | `cad-generated/TOOL.md`、`cad-generated/scripts/furniture_cad/` |
 | 交付 | `delivery-validated/` |
+| 阶段无关校验类型、规范内容哈希 | `cad-generated/scripts/furniture_contracts/` |
+| 宿主接入、路径加载、整库回归与跨阶段测试 | `cad-generated/scripts/` 中的入口脚本、`tests/`；详见 [模块导航](domain/stages/cad-generated/references/module-map.md) |
 
 独立应用模块：AI 模型接入、网页助手、设置与登录归 `domain/modules/ai/`；页面展示归 `domain/modules/web/`，各自拥有代码、界面、测试和维护文档。摆放求解、拖动换算、板件结构投影仍归对应阶段。
 
 维护阶段 Skill 只改本阶段目录（含 Skill/TOOL、references、scripts、agents）。必须跨阶段时，先列出阶段、文件和原因，等开发者看过再改。用户已点名文件或明确要求跨阶段调整指令、说明时，可按该范围直接改文档；不包含其他阶段的 `scripts/`。
+
+单阶段修改先区分「本阶段规则」和「阶段间契约」：只改本阶段计算或说明、交接字段与语义不变时，下游继续消费原契约，不顺手改下游。需要改变交接字段、含义、确认/冻结或失效行为时，把生产者、消费者及共享工作流/测试列入跨阶段范围。发现其他阶段的问题先报告，不在本阶段补默认值或绕过校验。
+
+多个任务同时修改不同阶段时，先核对工作区现有差异；共享工作流、公共契约、入口和整库测试不属于任意阶段的独占文件，须明确由哪个任务修改，其他任务避免同时编辑。阶段分目录不能消除共享文件的冲突，也不能覆盖已有未提交改动。
 
 ## 实现与验收
 

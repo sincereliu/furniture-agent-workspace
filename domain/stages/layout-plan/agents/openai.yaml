@@ -1,4 +1,4 @@
 interface:
   display_name: "房间场景布局"
   short_description: "按房间摆外形尺寸并做摆放检查，确认后交出柜体宽、深、高"
-  default_prompt: "家具项目从 $layout-plan 开始。把客户的家整理成 rooms[]（每间房含家具包络）。要做的柜写 furniture_category=floor_cabinet 或 wall_cabinet。只有客户点名某一件不制造时才写 manufacture=false，包络仍参与摆放。调用运行时规划，越界、干涉或遮挡门窗洞口则改提案。确认布局后再进 panel-plan 做柜体结构。"
+  default_prompt: "使用 $layout-plan，整理房间、家具外形尺寸与摆放，生成可确认的布局方案。"

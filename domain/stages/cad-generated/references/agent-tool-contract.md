@@ -34,15 +34,17 @@ result = session.call(name, arguments)  # arguments 为对象或 JSON 字符串
 | `furniture_retry_stage` | 对同一冻结上游再试 `panel_plan` / `manufacture_plan` / `feature_tree_planned` |
 | `furniture_select_stage_attempt` | 选用某次通过的 attempt，再确认 |
 | `furniture_revise_layout` | 新 Revision，从 `layout_plan` 重来 |
-| `furniture_record_decision` | 只把客户说的话记进**决策台账**（追加）：不动布局、不动阶段，`progressed=false`。客户后来说了一句、但还不用改布局时用它 |
+| `furniture_record_decision` | 向**决策台账**追加客户陈述或明确标注的助手假设：不动布局、不动阶段，`progressed=false`。只需补记依据、还不用改布局时用它 |
 | `furniture_evaluate_interior` | 计算一门柜的门宽、缝、中立板区间、腔净空和分段长度。只收设计选择，不收算好的毫米。不写项目、不推进阶段，`progressed=false`。布局已确认，或当前在 `panel_plan` 时，出现在 `allowed_tools` 里 |
 
 不提供：`CadBridge`、特征树发射器、一次性自动确认、压扁检查点的入口。房间编辑器仍可走 `layout-plan` HTTP，真源是 Project 的 `layout_plan`。
 
-## 调用规则（代码强制）
+## 协议限制与宿主调用规则
+
+参数与状态限制由代码校验；展示结果、核实客户接受和选择下一步由宿主执行。
 
 - 未确认当前阶段时，`furniture_run_next` 返回 `STAGE_NOT_CONFIRMED`。
-- 下一阶段已有 attempt 时，必须 `furniture_retry_stage`，否则 `USE_RETRY_STAGE`。
+- 下一阶段是可重试规划阶段且已有 attempt 时，必须 `furniture_retry_stage`，否则 `USE_RETRY_STAGE`。
 - 进入 `cad_generated` 必须 `generate_cad=true`；省略 `output_root` 时使用工作区约定路径 `generated`。
 - 未知字段、历史别名（`furniture_type` / `type` / `overall_size` / `mounting_height` / `mounting_height_mm` / `hanging_height` / `mount_mode`）返回 `UNKNOWN_ARGUMENT`。
 - **决策台账**：`furniture_create_project` / `furniture_revise_layout` 可带 `decisions`（可选，只这两个工具收），
@@ -53,7 +55,7 @@ result = session.call(name, arguments)  # arguments 为对象或 JSON 字符串
   `speaker=customer`，只有客户认了才写 `status=confirmed`（且只有 `customer`/`relay` 能确认，助手不能自己点头）**。
   只追加：改主意是加一条并用 `targets` 指回被改的那几条，绝不改写旧条目。校验在动项目之前完成，
   不合法整批拒绝、不留半成品。口径见 [决策台账设计](decision-log-design.md)。
-- 失败 Revision 只能 `furniture_revise_layout`。
+- 失败 Revision 要恢复生成，使用 `furniture_revise_layout`；读取快照与补记台账仍可用，不能直接确认、生成或重试。
 - 每次成功调用后展示 `project.current_view`。下一步只从 `allowed_tools` 里选，并优先 `required_tool`。客户还没接受当前结果时，不要代为 `furniture_confirm_stage`，也不要连跳到后面的阶段。客户已经接受，或这次明确要求做下一阶段时，展示当前结果后可以继续调用，不必再问一次。`panel_plan` 展示审查清单的 `markdown` 或板件/接触表，不要把冻结 `cabinets[]` 树当确认界面。
 
 ## 调用结果
@@ -74,10 +76,10 @@ result = session.call(name, arguments)  # arguments 为对象或 JSON 字符串
 - `inherited`（哪些阶段沿用了更早那一版的内容，附 `sha256` 与 `from_revision`）与 `inherited_stages`。摆动摆放或改房间后板件内容没变时，系统会**承认**上一版的确认而不是让人再点一次头——快照必须把它显示出来，别让"少做了一步"变得看不见（见 [修订继承设计](revision-inheritance-design.md)）
 - `allowed_tools`、`required_tool`、`cad_generation_required`
 - `attempts`（编号、是否通过、错误；不含整份输出）
-- `current_view`（当前阶段给人看的内容；`include_view=false` 可省略）。`panel_plan` 是确认审查清单（净空、板件一行一条、接触去重、`markdown`），不是冻结 `cabinets[]` 树；冻结板件仍在 Store。`manufacture_plan` 与 `feature_tree_planned` 是**逐柜**产物（`{"cabinets": [{"id", "bom"|"tree"}]}`，与板件 `cabinets[]` 一一对应），所以视图会随柜数变长——只关心一台时读 `cabinets[0]`。其他阶段一般就是该阶段结果本身。
+- `current_view`（当前阶段给人看的内容；`include_view=false` 可省略）。`panel_plan` 是确认审查清单（净空、板件一行一条、接触去重、`markdown`），不是冻结 `cabinets[]` 树；冻结板件仍在 Store。`manufacture_plan` 与 `feature_tree_planned` 是**逐柜**产物（`{"cabinets": [{"id", "bom"|"tree"}]}`，与板件 `cabinets[]` 一一对应）。只关心一台时按客户指定的 `id` 查找，不能默认取第一台。其他阶段一般就是该阶段结果本身。
 - `layout` 与冻结哈希
 
-`allowed_tools` 是当前合法的 `furniture_*` 工具名，不是方案推荐。`required_tool` 是下一步必须调用的那个工具。
+`allowed_tools` 是当前合法的 `furniture_*` 工具名，不是方案推荐。`required_tool` 指继续推进流程时必须先调用的工具，不要求立即调用，也不代替客户接受当前结果。客户要修改时按 `allowed_tools` 选择修订或重试；客户还没接受时不代为确认。
 
 ## 布局与阶段输入
 
