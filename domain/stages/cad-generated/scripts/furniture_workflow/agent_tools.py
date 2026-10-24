@@ -510,6 +510,10 @@ def project_snapshot(
             from furniture_panel_planning.panel_review import panel_review_from_output
 
             current_view = panel_review_from_output(output)
+        elif output is not None and serial == WorkflowStage.LAYOUT_PLAN:
+            from furniture_layout.layout_figures import project_layout_dict
+
+            current_view = project_layout_dict(revision.layout)
         elif output is not None:
             current_view = deepcopy(output)
     validation = _latest_validation(revision, serial)

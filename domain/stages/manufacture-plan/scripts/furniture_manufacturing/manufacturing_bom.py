@@ -26,6 +26,7 @@ from .features import (
     from_edge_banding,
     from_hole_spec,
     from_machining_operation,
+    feature_from_dict,
 )
 from .manufacturing_models import HardwareRecord, MachiningOperation, MaterialRecord, PanelRecord
 from .materials_catalog import substrate_keys, surface_keys, substrate_name, surface_name
@@ -85,6 +86,32 @@ class BOMReport:
     # 本源：每一处加工（孔/槽/封边）与配对孔打包的连接点。BOM/校验/导出由它们派生。
     features: list[Feature] = field(default_factory=list)
     connection_points: list[ConnectionPoint] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, output: Mapping[str, Any]) -> "BOMReport":
+        """Restore manufacturing records at their owning stage boundary."""
+        return cls(
+            furniture_name=str(output["furniture_name"]),
+            dimensions=str(output["dimensions"]),
+            panels=[PanelRecord.from_dict(item) for item in output.get("panels", [])],
+            hardware=[HardwareRecord(**item) for item in output.get("hardware", [])],
+            operations=[MachiningOperation(**item) for item in output.get("operations", [])],
+            materials=[MaterialRecord(**item) for item in output.get("materials", [])],
+            furniture_category=str(output.get("furniture_category", "")),
+            width=float(output.get("width", 0.0)),
+            depth=float(output.get("depth", 0.0)),
+            height=float(output.get("height", 0.0)),
+            board_thickness=float(output.get("board_thickness", 0.0)),
+            total_area_m2=float(output.get("total_area_m2", 0.0)),
+            readiness=str(output.get("readiness", "preliminary")),
+            requested_options=dict(output.get("requested_options", {})),
+            appearance=dict(output.get("appearance", {})),
+            features=[feature_from_dict(item) for item in output.get("features", [])],
+            connection_points=[
+                ConnectionPoint.from_dict(item)
+                for item in output.get("connection_points", [])
+            ],
+        )
 
     @property
     def panel_count(self) -> int:
@@ -339,9 +366,6 @@ def plan_manufacturing(
     features, connection_points = _derive_features_and_points(panels, operations)
 
     dimensions = f"{spec.width:.0f}×{spec.height:.0f}×{spec.depth:.0f}mm"
-    connector_options = options.get("options", {})
-    if not isinstance(connector_options, Mapping):
-        connector_options = {}
     return BOMReport(
         furniture_name=FURNITURE_NAMES.get(
             spec.furniture_category, spec.furniture_category
@@ -350,7 +374,7 @@ def plan_manufacturing(
         panels=panels,
         hardware=estimate_hardware(
             panels,
-            options=connector_options,
+            options=options.get("options", {}),
             connection_points=connection_points,
             features=features,
         ),
@@ -601,6 +625,9 @@ def estimate_hardware(
     features/connection_points 由 plan_manufacturing 生成一次（Feature/ConnectionPoint
     本源）；缺省时各连接件自行重推导，保持独立调用可用。
     """
+    # Preserve the planner's existing treatment of absent/non-object brand options.
+    if not isinstance(options, Mapping):
+        options = {}
     hardware: List[HardwareRecord] = []
     for connector_cls in ALL_CONNECTORS:
         connector = connector_cls()

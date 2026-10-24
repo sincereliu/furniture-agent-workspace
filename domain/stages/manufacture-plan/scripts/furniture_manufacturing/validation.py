@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from typing import Any, Sequence
 
 from furniture_contracts.validation import ValidationReport
@@ -20,6 +21,7 @@ from .manufacturing_bom import (
     VALID_MANUFACTURING_READINESS,
     collect_features,
     emit_drilled_holes,
+    estimate_hardware,
 )
 from .panel_ids import panel_role
 
@@ -77,6 +79,18 @@ def validate_manufacturing(
             "manufacturing records must preserve every confirmed panel id",
         )
     features = collect_features(bom)
+    expected_hardware = estimate_hardware(
+        bom.panels,
+        options=bom.requested_options.get("options", {}),
+        features=features,
+        connection_points=bom.connection_points,
+    )
+    if [asdict(item) for item in bom.hardware] != [asdict(item) for item in expected_hardware]:
+        report.add_error(
+            "HARDWARE_SNAPSHOT_MISMATCH",
+            "hardware BOM must match the current panels and machining features",
+            "hardware",
+        )
     grooves = [
         feature for feature in features if isinstance(feature, GrooveFeature)
     ]

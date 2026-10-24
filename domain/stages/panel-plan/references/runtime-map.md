@@ -34,6 +34,12 @@
 
 ## 模块
 
+### 板件属性编辑的入口约束
+
+`panel_edit.edit_cabinet_panels()` 只接收整份板件输出、明确的柜体 id，以及 `axes` / `hinges` 两组规范属性修改。它先检查整批目标和值，深拷贝后只修改该柜的顺纹或铰链字段；铰链同时更新 `spec.door_hinges` 与门板 `door_hinge_side`。它不得改尺寸、位置、接触、其他柜体，也不得修改传入对象。
+
+该函数返回的是编辑结果，不代表阶段已经确认或冻结。`project_layout_edit.save_cabinet_panel_edits()` 负责开关、版本和租约准入，再调用工作流修订、阶段校验及重新确认。板件计算函数不得直接依赖 Project Store 或工作流状态；工作流不得复制门序、铰链几何和装配遍历。只读投影与编辑入口分开，打开或刷新板件页不能触发这一写路径。
+
 | 模块 | 职责 | 边界理由 |
 | --- | --- | --- |
 | `cabinet_envelope.py` | 板件阶段拥有的柜体外形尺寸；忽略 CAD 单元上的布局专用字段 | schema / structured_protocol |
@@ -47,6 +53,7 @@
 | `joint_topology.py` | 大面–端面接触几何；不解析连不连 | calculation |
 | `panel_review.py` | 确认审查清单：净空、板件一行一条、接触去重；不含连不连 | calculation / structured_protocol |
 | `grain_rules.py` | 顺纹方向这个板件属性的默认值、允许取值与规整（进冻结文件） | schema / calculation |
+| `panel_edit.py` | 纯板件属性编辑：整批准入顺纹与铰链选择，使用 `assembly_tree.iter_assembly_panels` 遍历；返回新检查点，不写文件或确认阶段。工作流负责租约、版本、修订和冻结 | validation / calculation |
 | `cabinet_panel_page.py` | 一台柜子的板件结构投影。`panel_structure_view()` 把结构收成页面能画的尺寸、位置、装配、材料，以及把板件带的 `grain_axis` 换算成每个面怎么摆贴图（`_grain_uv()`）。页面 HTML 在网页模块 `furniture_web/panel_page.py`：给了投影就画结构，没有只画布局里已保存的外形。不确认布局，不生成门和层板 | structured_protocol |
 | `validation.py` | 检查点入口；柜体/装配在 `validation_cabinet.py`，板件角色在 `validation_panels.py` | validation |
 | `quantitative_audit.py` / `design_optimization.py` | 旁路分析 | 只写 `stage_analyses` |

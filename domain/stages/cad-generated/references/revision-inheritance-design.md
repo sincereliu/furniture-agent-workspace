@@ -1,89 +1,43 @@
-# 修订继承：内容没变的下游产物不必重做
+# 修订继承：相同内容沿用已有确认
 
-日常做家具、改某一阶段规则不必读本文。改编排、Revision 生命周期、产物写入或交付校验时读。
+日常做家具、改某一阶段规则不必读本文。改编排、Revision 生命周期、产物写入或交付校验时读。本文只描述现行行为；CAD 内容寻址、逐柜产物复用等未完成方案见 [CAD 待办](../../../../backlog/cad-generated.md) 的 `content-addressed-reuse`，不属于当前交接能力。
 
-问题陈述、实测证据与候选方向的登记在 `backlog/cad-generated.md`（`content-addressed-reuse`）。本文只写**机制**：判据、承认语义、必重算清单、边界与测试要求。
+## 领域依赖与说明性判据
 
-## 1. 依赖面只有五个字段
+布局交给板件的是有序柜体包络：每台只有 `id`、`furniture_category`、`width`、`depth`、`height`。房间、摆放、原点、朝向和离地不作为板件构造参数，入口投影由 `input_adapter.panel_envelopes_from_layout()` 完成。
 
-契约原文在 `furniture_panel_planning/cabinet_envelope.py` 开头：布局交给板件的只有柜 `id`、`furniture_category` 与 `width` / `depth` / `height`；**房间、摆放、原点、旋转不属于这个契约**（`input_adapter.panel_envelopes_from_layout()` 就是照这个投影的）。
+隔离不变量的前提必须完整：有序柜体集合、阶段提案、制造选项和目录内容都不变时，仅改变房间或摆放不应改变板件、制造和特征树的内容。改柜类、尺寸、id、柜体集合或提案时不能援用这一不变量；调整顺序也可能改变整份阶段输出的摘要。
 
-推论：摆放变化与房间变化**在数学上不可能**影响柜体内容；柜的尺寸或类别一变，内容必变。判据可以写死，不需要模型判断，也不该有"大概没变"这种档位。
+`workflow_inheritance.envelope_set()` / `envelope_diff()` 以 id 建映射，说明新增、删除、尺寸或类别变化；它们的比较与顺序无关，不能替代交接时的有序覆盖检查，也不能证明其余阶段输入和目录未变。因此 `same=True` 只用于解释，不是免执行、免校验或自动确认的凭证。
 
-## 2. 判据：`envelope_set`
+`layout_sha256` 包含完整布局数据与确认位，并非下游依赖字段的摘要。不能因为它变化就断言柜体必变，也不能把它相等当作已校验后续提案的证据。展示字段不进入布局摘要，口径见 [运行时契约](runtime-contract.md)。
 
-```
-envelope_set(layout) = { unit.id: (unit.furniture_category, unit.width, unit.depth, unit.height)
-                         for unit in layout.executable_units() }
-```
+`fill` 件必须先按当前房间与约束重新求解宽度，再比较实际包络。房间变化可能改变宽度，宽度变了就按柜体尺寸变化处理；不能仅凭 `fill` 标记认定永远变化，也不能仅凭“只改房间”认定可沿用。
 
-- **按 id 建映射**（id 在项目内唯一），比较时与顺序无关；同时给出差异分类：`same / added / removed / resized / recategorized`，用于"这次只重做了哪几件"的说明。
-- **不要**直接比 `layout_sha256`：它含房间、摆放、原点、旋转，那些变了也应允许复用。
-- **数值先归一**：比较前按落盘精度取整（避免 `599.9999` 与 `600` 被当成不同）。
-- `executable_units()` 已经过滤掉 `manufacture: false` 与无柜类的包络，判据直接用它的结果（即"不制造的件不参与下游"，与现状一致）。
+## 当前确认继承条件
 
-判据命中 = **所有下游阶段都可继承**；未命中 = 按柜粒度决定谁必须重算（见第 5 节）。
+`workflow_stage_runner._inherit_settled_stage()` 只在板件、制造或特征树的本次输出已经生成并通过阶段验收后运行。它不跳过任何规划和校验，也不从历史版本拷贝一部分柜子来拼当前阶段输出。
 
-## 3. 承认语义（三条规则）
+继承须同时满足：
 
-**R1 承认，而不是重做。** 新 Revision 的某阶段，若其输出内容与**已有的内容寻址文件**同名，则直接**承认**该内容：
+1. 本次阶段输出经 `furniture_contracts.digest.stable_digest()` 得到内容摘要。
+2. `inheritance_source()` 找到更早 Revision 的同一阶段：该阶段存在于 `approved_stages`，并且 `approved_digests` 记录的确认摘要与本次相同。
+3. 命中后把本次阶段记为已确认，在 `inherited[stage]` 写入 `sha256`、`from_revision`、`from_stage`，并记工作流事件；板件阶段同时设置 `confirmed_panel_sha256`。
 
-| 阶段 | 判据 | 命中对象 |
-| --- | --- | --- |
-| `panel_plan` | `envelope_set` 未变（或变化的柜都被重算） | `store/<id>/panels/<panel_sha256>.json`（现成，按内容命名） |
-| `manufacture_plan` / `feature_tree_planned` | 上游冻结哈希 + `requested_options` / `appearance` 未变 | 无内容寻址文件；**仍重算**（纯 Python、毫秒级），只是**免掉再确认** |
-| `cad_generated` | 特征树 + 板件摘要未变 | `generated/...` 目前按 `revision-<n>` 命名，**不命中**；要免掉 build123d 重跑需内容寻址（见第 6 节，另行评估） |
+任一条件不满足就不继承确认。不得以相似几何、容差、相同提案、相同上游摘要或磁盘上恰好有同名文件来替代历史确认依据。`approved_stages` 表示这份内容已经被确认，不能解释为人在当前 Revision 又确认了一遍。
 
-要点：**"重算"和"重新确认"是两件事**。板件/制造重算的代价是毫秒，真正的代价是让人再点一次头 + 重放那 18 个构造字段。R1 先免掉后者。
+工具快照与页面元数据展示实际的 `inherited` 记录；展示不得自行猜测继承，也不得直接修改确认列表或冻结哈希。
 
-**R2 承认要留痕，且区分"内容"与"人"。** 建议在 Revision 上记：
+## 修订、房间确认与执行范围
 
-```json
-"inherited": {
-  "panel_plan": {"sha256": "7929fd22…", "from_revision": "rev_…", "from_stage": "panel_plan"}
-}
-```
+- `revise()` 保留父版 `stage_inputs`，避免改摆放顺带丢失构造提案。保留不代表提案仍适用于新外形，所属阶段照常准入。
+- 房间确认与上述阶段继承是两条独立路径。`Project.add_revision()` 比较每个房间的已摆放几何，仅继承父版已审过且内容不变的房间，并记录 `inherited_rooms`；全部房间已审过时布局检查点可以成立。新几何仍须经过布局准入。
+- 已有下游产物后修改布局会创建新 Revision；无下游产物的工作副本编辑在当前版撤回受影响房间的确认。完整影响范围见 [运行时契约](runtime-contract.md)。
+- 板件、制造和特征树先重算，再按整份阶段输出决定是否继承确认。当前没有柜级内容拼接或混合来源复用。
+- CAD 和交付不走本次确认继承入口，仍按当前 Revision 执行；相同特征树不等于可跳过 build123d。manifest 的修订谱系和旧产物 stale 标记由工作流管理，不得以复用为由改旧文件。
 
-并在 `workflow.history` 追一条事件。`approved_stages` 的语义明确为**「这份内容已被确认过」**，不是"人在这一版又点了一次头"；审计时靠 `inherited.from_revision` 回指到真正点头的那一版。这条必须写进契约，否则"内容等同是否等于确认"会一直含糊（对方 backlog 已点到这个取舍）。
+## 审查与回归
 
-**R3 让人看得见。** 工具面/页面快照里标出沿用与重算（如 `panel_plan.inherited_from = rev-2`），确认提示改成"沿用 rev-2 的板件（内容相同），是否继续"，不要让"系统悄悄少做了一步"。
+`tests/test_revision_inheritance.py` 检查包络差异、摆放与房间变化时的板件内容不变、尺寸/类别/柜数变化，以及同内容确认继承。`tests/test_stage_boundary_regressions.py` 检查展示与领域摘要隔离、逐柜有序覆盖、制造修订快照和保存重读。测试通过仍不能替代依赖审查。
 
-## 4. 必重算清单（钉进测试）
-
-| 变了什么 | 柜体（板件 / 五金 / BOM / 特征树 / 柜体 STEP） | 房间 CAD / 摆放 / 净距 / 预览 | 交付清单与 manifest |
-| --- | --- | --- | --- |
-| 房间宽深高 | 可继承 | 必重算 | 重算（引用要更新） |
-| 摆放（位置 / 朝向 / 离地） | 可继承 | 必重算 | 重算 |
-| 柜的宽 / 深 / 高 | **该柜必重算** | 必重算 | 重算 |
-| 柜的类别（落地 ↔ 吊柜） | **该柜必重算** | 必重算 | 重算 |
-| 柜的增删或 id 变化 | 变化者必重算 | 必重算 | 重算 |
-| 门窗 / 障碍物 | 可继承 | 必重算（可能影响放得下 / 被遮挡） | 重算 |
-| `manufacture: false` 的件 | 不参与（不入单元） | 必重算（包络仍在房间里挡人） | 重算 |
-
-**`fill` 例外（必须写清）**：`fill: true` 的件宽度**由该墙净长派生**（扣门窗、贴墙障碍、已摆家具）。所以**改房间会改它的 `width`**，判据自然判为"变了"，那件必须重算。这不是判据失灵，而是它正确工作的证据；反过来说也提醒：不要用"房间变了 ⇒ 柜体一定可继承"这种粗略规则。
-
-## 5. 部分复用（进阶，逐柜）
-
-多柜项目里可以做到"卧室柜沿用、客厅柜重算"：板件/制造产物本来就按柜组织（`panel_plan.cabinets[]`、`plan_panel_cabinets()`），逐柜比对 `envelope_set` 即可。
-
-代价是要给产物加**柜级来源**标注（哪个柜来自哪一版），并让交付校验与 manifest 接受**混合来源**。建议先做整版（R1–R3），逐柜留到真实的"多柜 + 频繁改一间"需求出现时再上。
-
-## 6. 前置条件与边界
-
-- **前置 1**：`revise()` 必须保留 `stage_inputs`（对方 backlog「已知缺口」第 1 条：现状会清空，导致"只改摆放"的重放直接缺 18 个字段而失败）。不修这条，继承机制没有输入可比。
-- **前置 2**：新版布局必须先通过规划准入（越界 / 干涉 / 遮挡）。"房间变小后柜子还放得下吗"是 layout 阶段的事，继承机制不兜这个底。
-- **边界 1**：只在内容**逐字节相同**时继承；哈希不同就重算。不做"近似复用"，也不做容差比较。
-- **边界 2（最大风险）**：**隐藏依赖**。若某阶段其实偷读了布局的其它字段（不只是那五个），判据会误判成"没变"。防法不是看代码，而是**用测试锁死**：
-  - 改摆放 / 改房间 → 板件与制造的输出哈希**必须逐字节不变**；
-  - 改柜宽 / 柜类 / 柜数 → 哈希**必变**；
-  - 改房间 → `fill` 件的 `width` **必变**。
-- **边界 3**：`generated/<project-id>/revision-<n>/` 的目录命名与"内容寻址"是两件事。R1 免掉的是"重新确认"；要让 CAD **不重跑**（build123d 那一步）必须改成按内容寻址输出，那会动血缘（`delivery_validated` 的谱系校验、manifest 的 stale 标记），按对方 backlog 的方向 3 单独评估。
-
-## 7. 落地顺序
-
-1. ✅ **判据 + 测试**：`workflow_inheritance.py::envelope_set()/envelope_diff()`（投影直接建在 `panel_envelopes_from_layout()` 上，判据与板件读的字段不可能分家），差异分类 `same / added / removed / resized / recategorized`。逐字节不变式钉在 `tests/test_revision_inheritance.py`（改摆放/改房间 → 板件输出哈希不变；改宽/类/数 → 必变；改房间 → `fill` 件宽度必变）。
-2. ✅ **`revise()` 保留 `stage_inputs`**：做页面写项目（P3）时一并修掉。
-3. ✅ **R1 承认**：`workflow_stage_runner._inherit_settled_stage()`——阶段产出落定后，若更早的 Revision 上该阶段已确认且内容摘要逐字节相同，就地把本阶段记为已确认（板件同时写 `confirmed_panel_sha256`）。**不跳过重算**：重算毫秒级，短路会把隐藏依赖的风险引进来。
-4. ✅ **R2 留痕 + 契约措辞**：`Revision.approved_digests`（人当年点的哪份内容，`confirm_stage()` 写入）、`Revision.inherited`（`{sha256, from_revision, from_stage}`）、`workflow` 事件；契约在 [运行时契约](runtime-contract.md)「继承不变式」段，明确 `approved_stages` = "这份内容已被确认过"。
-5. ✅ **R3 让人看得见（工具面 + 页面）**：`project_snapshot()` 出 `inherited` / `inherited_stages`，`preview_page_data()` 也带 `inherited`；确认提示里说"沿用 rev-2 的板件（内容相同）"是下一步文案工作。
-6. ⬜ 制造 / 特征树接上同一条路（机制已经通用了，缺的是"这类内容值得免确认"的确认）；CAD 的内容寻址与逐柜复用另议（边界 3）。
+新增消费者或字段时必须核对：实际读取了哪些数据、字段由谁物化、变化是否应使输出改变，以及确认继承是否仍以实际输出为依据。发现另一阶段偷读布局摆放、界面状态或历史产物时，报告并修正依赖，不能通过放宽摘要比较、补默认或跳过重算掩盖。

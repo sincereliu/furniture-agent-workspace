@@ -7,17 +7,9 @@ from typing import Any, Mapping
 
 from furniture_cad.cad_bridge import BridgeResult
 from furniture_contracts.validation import ValidationReport
-from furniture_manufacturing.connection_points import ConnectionPoint
-from furniture_manufacturing.features import feature_from_dict
 from furniture_manufacturing.manufacturing_bom import BOMReport
 from furniture_manufacturing.manufacturing_handoff import (
     cabinets_from_manufacturing,
-)
-from furniture_manufacturing.manufacturing_models import (
-    HardwareRecord,
-    MachiningOperation,
-    MaterialRecord,
-    PanelRecord,
 )
 from furniture_panel_planning.cabinet_identity import handoffs_from_output
 
@@ -153,34 +145,7 @@ class ReconstructionMixin:
 
     @staticmethod
     def _bom_from_dict(output: Mapping[str, Any]) -> BOMReport:
-        return BOMReport(
-            furniture_name=str(output["furniture_name"]),
-            dimensions=str(output["dimensions"]),
-            panels=[PanelRecord.from_dict(item) for item in output.get("panels", [])],
-            hardware=[HardwareRecord(**item) for item in output.get("hardware", [])],
-            operations=[
-                MachiningOperation(**item) for item in output.get("operations", [])
-            ],
-            materials=[
-                MaterialRecord(**item) for item in output.get("materials", [])
-            ],
-            furniture_category=str(output.get("furniture_category", "")),
-            width=float(output.get("width", 0.0)),
-            depth=float(output.get("depth", 0.0)),
-            height=float(output.get("height", 0.0)),
-            board_thickness=float(output.get("board_thickness", 0.0)),
-            total_area_m2=float(output.get("total_area_m2", 0.0)),
-            readiness=str(output.get("readiness", "preliminary")),
-            requested_options=dict(output.get("requested_options", {})),
-            appearance=dict(output.get("appearance", {})),
-            features=[
-                feature_from_dict(item) for item in output.get("features", [])
-            ],
-            connection_points=[
-                ConnectionPoint.from_dict(item)
-                for item in output.get("connection_points", [])
-            ],
-        )
+        return BOMReport.from_dict(output)
 
     @staticmethod
     def _bridges_from_revision(revision: Revision) -> tuple[BridgeResult, ...]:

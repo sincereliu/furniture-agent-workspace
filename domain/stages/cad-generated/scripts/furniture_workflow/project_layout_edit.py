@@ -29,12 +29,9 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from furniture_layout.project_edit import apply_layout_edit, restore_layout_item
-from furniture_panel_planning.grain_rules import normalize_grain_axis
+from furniture_panel_planning.panel_edit import edit_cabinet_panels
 
 from furniture_layout.open_preview import layout_version, panel_version, preview_page_data
-from furniture_panel_planning.construction_geometry import door_hinge_sides
-from furniture_panel_planning.panel_spec import FurnitureSpec
-from furniture_panel_planning.structure_planning import CabinetStructure
 from .workflow_decisions import (
     admit_decisions,
     append_decisions,
@@ -215,9 +212,8 @@ def save_cabinet_panel_edits(
     Revision、按规矩作废下游产出与确认——然后立刻重新确认板件阶段，把新内容冻成新的一份
     冻结文件。制造 / BOM / CAD 读的就是这一份。
 
-    铰链侧比顺纹多一步：它有两个来源（对开腔由几何定、单开腔由本改动人定），所以
-    改的时候要**同时**更新 `spec.door_hinges` 和每块门板的 `door_hinge_side`，
-    再用 `door_hinge_sides()` 复核一遍——对开腔那两扇不接受单独改。
+    板件阶段的 `edit_cabinet_panels()` 负责整批准入顺纹与铰链侧，返回新检查点；
+    这里不遍历装配或计算铰链几何，只处理版本、租约、修订与重新冻结。
 
     抛：`LayoutEditDisabled`、`LeaseHeld`、`VersionConflict`、`ValueError`（柜子或板件找不到、
     值不合法、对开腔被单独改、还有门没定铰链侧）。
@@ -232,154 +228,29 @@ def save_cabinet_panel_edits(
     if expected_version != current:
         raise VersionConflict(current)
 
-    output = revision.stage_outputs.get(WorkflowStage.PANELS_PLANNED.value)
-    if not isinstance(output, Mapping):
-        raise ValueError("this project has no panel plan to change")
-
-    # 先把要改的都对一遍，再动任何东西——校验不过整体拒绝，不留半改状态。
-    cabinets = output.get("cabinets")
-    if not isinstance(cabinets, list):
-        raise ValueError("panel plan has no cabinets")
-    target = next(
-        (item for item in cabinets if str(item.get("id") or "") == cabinet_id), None
+    edit = edit_cabinet_panels(
+        revision.stage_outputs.get(WorkflowStage.PANELS_PLANNED.value),
+        cabinet_id,
+        axes=axes,
+        hinges=hinges,
     )
-    if target is None:
-        raise ValueError(f"no such cabinet in the panel plan: {cabinet_id}")
-
-    by_id = {str(panel.get("id") or ""): panel for panel in _iter_panel_dicts(target)}
-    wanted: dict[str, str] = {}
-    for panel_id, axis in (axes or {}).items():
-        if panel_id not in by_id:
-            raise ValueError(f"no such panel in {cabinet_id}: {panel_id}")
-        wanted[panel_id] = normalize_grain_axis(axis, str(by_id[panel_id].get("panel_type") or ""))
-    sides: dict[str, str] = {}
-    spec_hinges: list[str] = []
-    if hinges:
-        resolved = _resolve_door_hinges(cabinet_id, target, hinges)
-        sides = resolved["sides"]
-        spec_hinges = resolved["door_hinges"]
-    if not wanted and not sides:
-        raise ValueError("nothing to change")
-
-    changed = deepcopy(dict(output))
-    for cabinet in changed["cabinets"]:
-        if str(cabinet.get("id") or "") != cabinet_id:
-            continue
-        if spec_hinges:
-            spec = cabinet.get("spec")
-            if not isinstance(spec, dict):
-                raise ValueError(f"{cabinet_id} has no spec to carry door_hinges")
-            spec["door_hinges"] = list(spec_hinges)
-        for panel in _iter_panel_dicts(cabinet):
-            panel_id = str(panel.get("id") or "")
-            if panel_id in wanted:
-                panel["grain_axis"] = wanted[panel_id]
-            if panel_id in sides:
-                panel["door_hinge_side"] = sides[panel_id]
 
     orchestrator = FurnitureOrchestrator(
         workspace_root=workspace_root,
         project_store=JsonProjectStore(store_root),
     )
     revised = orchestrator.revise_stage_output(
-        project, WorkflowStage.PANELS_PLANNED, changed
+        project, WorkflowStage.PANELS_PLANNED, edit.output
     )
     # 改完立刻重新确认：这一步会把新内容冻成新的 `<sha256>.json`。
     orchestrator.confirm_stage(project, WorkflowStage.PANELS_PLANNED)
     JsonProjectStore(store_root).save(project)
     return {
         "revision": revised.number,
-        "panels": sorted(set(wanted) | set(sides)),
-        "door_hinges": {key: sides[key] for key in sorted(sides)},
+        "panels": list(edit.panels),
+        "door_hinges": edit.door_hinges,
         "confirmed_panel_sha256": project.latest.confirmed_panel_sha256,
     }
-
-
-def _resolve_door_hinges(
-    cabinet_id: str,
-    cabinet: Mapping[str, Any],
-    wanted: Mapping[str, str],
-) -> dict[str, Any]:
-    """把「这几扇门改成左开/右开」算成一整排值，并复核几何。
-
-    铰链侧有两个来源：对开腔那两扇被几何逼死（左 left、右 right），单开腔由人给。
-    所以这里不是"改一个字段"，而是：**先把整排值拼出来**（没点到的沿用原值），
-    再用 `door_hinge_sides()` 复核——对开腔被单独改会在这里被拒，而不是等到冻结时才炸。
-
-    返回 `{"door_hinges": 整排, "sides": {板件 id: 值}}`。
-    """
-    spec = cabinet.get("spec")
-    if not isinstance(spec, Mapping):
-        raise ValueError(f"{cabinet_id} has no spec")
-    doors = [
-        panel
-        for panel in _iter_panel_dicts(cabinet)
-        if str(panel.get("panel_type") or "") == "door"
-    ]
-    if not doors:
-        raise ValueError(f"{cabinet_id} has no doors")
-    ordered = sorted(
-        doors,
-        key=lambda item: (float(item.get("pos_x") or 0.0), str(item.get("id") or "")),
-    )
-    known = {str(item.get("id") or "") for item in ordered}
-    index_by_id = {str(item.get("id") or ""): index for index, item in enumerate(ordered)}
-    values = [str(item.get("door_hinge_side") or "") for item in ordered]
-    for panel_id, side in wanted.items():
-        if panel_id not in known:
-            raise ValueError(f"no such door in {cabinet_id}: {panel_id}")
-        text = str(side or "").strip().lower()
-        if text not in {"left", "right"}:
-            raise ValueError("door hinge side must be 'left' or 'right'")
-        values[index_by_id[panel_id]] = text
-
-    payload = dict(spec)
-    # `door_hinges` 不接受空串：还没定的那几扇要**先**点名，别让它变成一句
-    # "door hinge must be one of: left, right" —— 页面只点了一扇时最需要人话。
-    missing = [
-        str(item.get("id") or "") for item, value in zip(ordered, values) if not value
-    ]
-    if missing:
-        raise ValueError("these doors still have no hinge side: " + ", ".join(missing))
-    payload["door_hinges"] = values
-    admitted = FurnitureSpec.from_dict(payload)
-    structure = CabinetStructure.from_spec(admitted)
-    try:
-        resolved = door_hinge_sides(admitted, structure)
-    except ValueError as exc:
-        # 对开腔那两扇不能单独改：几何逼死左 left、右 right。
-        raise ValueError(f"these hinge sides cannot be changed: {exc}") from exc
-    missing = [
-        str(item.get("id") or "")
-        for item, side in zip(ordered, resolved)
-        if not side
-    ]
-    if missing:
-        raise ValueError("these doors still have no hinge side: " + ", ".join(missing))
-    return {
-        "door_hinges": list(resolved),
-        "sides": {
-            str(item.get("id") or ""): side for item, side in zip(ordered, resolved)
-        },
-    }
-
-
-def _iter_panel_dicts(cabinet: Mapping[str, Any]):
-    """走一台柜子的所有板件（柜体 / 底座 / 门板 / 抽屉盒）。"""
-    assemblies = cabinet.get("assemblies")
-    if not isinstance(assemblies, Mapping):
-        return
-    for name, unit in assemblies.items():
-        if name == "drawers":
-            if not isinstance(unit, list):
-                continue
-            for drawer in unit:
-                box = drawer.get("box") if isinstance(drawer, Mapping) else None
-                if isinstance(box, Mapping):
-                    yield from box.get("panels") or []
-            continue
-        if isinstance(unit, Mapping):
-            yield from unit.get("panels") or []
 
 
 def undo_layout_edit(

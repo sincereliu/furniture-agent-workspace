@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from math import isfinite
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from furniture_contracts.validation import ValidationReport
 
@@ -25,11 +26,28 @@ from .scene import (
     WALLS,
 )
 
+if TYPE_CHECKING:
+    from .project_layout import ProjectLayout
+
+
+def validate_project_layout(layout: ProjectLayout) -> ValidationReport:
+    """Validate canonical layout facts without rendering or loading web resources."""
+    report = ValidationReport(stage="layout_plan")
+    for message in layout.validate():
+        report.add_error("INVALID_PROJECT_LAYOUT", message, "rooms")
+    for index, scene in enumerate(layout.rooms):
+        for issue in admit_scene(scene).issues:
+            report.issues.append(replace(
+                issue,
+                path=f"rooms[{index}]" + (f".{issue.path}" if issue.path else ""),
+            ))
+    return report
+
 
 def admit_scene(scene: RoomScene) -> ValidationReport:
     """Admit placed geometry: schema, derived footprint, and placement checks.
 
-    预览是否由当前几何重建，在冻结时由 layout_figures.check_room_figures 核对。
+    展示入口另用 layout_figures.check_room_figures 核对预览，不参与领域摘要。
     """
     report = ValidationReport(stage="layout_plan")
     _validate_room(scene.room, report)

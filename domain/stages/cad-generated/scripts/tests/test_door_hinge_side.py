@@ -23,7 +23,7 @@ from runtime_paths import bootstrap_runtime_paths
 bootstrap_runtime_paths(WORKSPACE_ROOT)
 
 from furniture_manufacturing.manufacturing_bom import plan_manufacturing
-from furniture_workflow.project_layout_edit import _resolve_door_hinges
+from furniture_panel_planning.panel_edit import _resolve_door_hinges
 from furniture_panel_planning.assembly_tree import flatten_panels_for_handoff
 from furniture_panel_planning.construction_geometry import (
     door_hinge_sides,

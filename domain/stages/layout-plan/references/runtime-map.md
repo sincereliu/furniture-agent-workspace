@@ -15,9 +15,11 @@
 
 **靠墙包络**：写了 `placement.against` 的固定柜子先占声明的那一头（`{kind: wall}` 贴到侧面的墙，`{kind: item, id: ...}` 贴着指定家具）。输入与输出只使用显式对象，内部使用 `AgainstTarget`。其余固定宽度的按顺序贴上最早放得下的空段。`placement.fill` 没写 `against` 时占最长空段，写了就占贴着那一头的空段；id 不变，不按门宽拆开。请求不写沿墙位置。`to_source()` 不把这次算出的起点写进下一次请求，但留下 `against`。口径见[空间布局规则](spatial-layout-rules.md)。
 
-板件实际只依赖 `LayoutUnit` 的五个字段：`id`、`furniture_category`、`width`、`depth`、`height`。这五个不变，板件与制造的内容就不变，可以跨 Revision 继承（见编排层 [修订继承设计](../../cad-generated/references/revision-inheritance-design.md)）。沿墙铺满那件的 `width` 由该墙空段算出，改房间就会改它，所以这种件永远算变了，必须重算。
+板件实际只依赖 `LayoutUnit` 的五个字段：`id`、`furniture_category`、`width`、`depth`、`height`。在有序柜体集合、板件/制造输入及目录版本不变的前提下，仅改房间或摆放不应改变柜体产物。继承确认仍须重算并比较实际阶段输出，不由这五个字段直接判定（见编排层 [修订继承设计](../../cad-generated/references/revision-inheritance-design.md)）。沿墙铺满件的 `width` 必须按修改后的空段重新求解；实际宽度变了就按柜体尺寸变化处理，不能仅凭 `fill` 标记判定内容必变或必定可继承。
 
-确认时 `layout_figures.check_layout_figures` / `check_room_figures` 再核每个房间的图是不是由当前几何画出的。建项目前的 `validation.admit_scene` 不画 SVG。
+确认时 `validation.validate_project_layout` 核对房间和已摆放几何，不加载网页或生成图。`ProjectLayout.to_dict()`、保存文件及 `layout_sha256` 只含布局数据，不含 SVG、HTML 或前端文件时间。展示入口通过 `layout_figures.project_layout_dict` / `room_scene_dict` 生成当前预览，并用 `check_layout_figures` / `check_room_figures` 核对展示投影。
+
+布局核心序列化不得调用展示投影；展示字段也不得回填到 `ProjectLayout.to_dict()` 或作为下游构造输入。页面、缓存参数、前端时间及 SVG/HTML 样式的变化不能改变同一布局的领域摘要。布局几何变化仍必须通过本阶段准入并交给工作流处理修订与确认，不能因为从页面进入就绕过校验。
 
 ## 各文件干什么
 
@@ -32,7 +34,7 @@
 | 检查盒子出不出房间、互相干涉不干涉、挡不挡门窗 | `placement_check.py` | calculation |
 | 上面几项有一项不过，就不建项目。不核对配进去的那张 SVG | `validation.py` | validation |
 | 一整套房子的摆放。确认后冻出给板件的盒子：宽、深、高和柜类。这里不画房间页，也不写房间外壳 | `project_layout.py` | schema |
-| 给这套摆放配上每个房间的图，确认时核对图是不是刚算出来的 | `layout_figures.py` | calculation |
+| 从布局生成展示用 SVG 与只读页面，核对展示投影；不参与项目保存与摘要 | `layout_figures.py` | calculation |
 | 配进去的那张 SVG | `room_svg.py` | calculation |
 | 房间页要画的字典：房间、家具、障碍和门窗。不拼 HTML | `room_page.py` 的 `room_page_payload` | schema |
 | 把预览页打开，并准备这一页要读的数据 | `open_preview.py` | side_effect |
@@ -60,7 +62,7 @@
 
 编辑只接受明确的 `set_pose` 或 `resize`，不按字段存在与否选择协议。`set_pose` 必须提供 `mode`、三轴原点和 `rotation_z_deg`，墙摆另带 `host_wall`；不重排目标或邻居。`resize` 修改尺寸并复用规划器处理 fill/against。源字段编辑入口和旧 move/rotate 操作已删除。完整链路检查为 `test_drag_transaction_roundtrip.py` 与网页模块 `scripts/check_drag.py`；朝向和位置稳定性另由本阶段 scripts/tests/ 覆盖。
 
-独立房间只有 `{schema_version: 1, scene_id, room, items}` 的已摆放文件。新建时先规划、编辑后直接保存已准入结果；读取只校验，旧格式直接拒绝，不提供转换、补源或兼容回退。项目检查点格式保持原契约。撤销由 `project_edit.restore_layout_item` 一次恢复目标旧位置和尺寸，再重建受影响的 against/fill；不将恢复拆成多个编辑操作，不校验或发布中间状态。
+独立房间只有 `{schema_version: 1, scene_id, room, items}` 的已摆放文件。新建时先规划、编辑后直接保存已准入结果；读取只校验，旧格式直接拒绝，不提供转换、补源或兼容回退。项目检查点保存纯布局数据，SVG 和 Viewer 只在展示入口生成。撤销由 `project_edit.restore_layout_item` 一次恢复目标旧位置和尺寸，再重建受影响的 against/fill；不将恢复拆成多个编辑操作，不校验或发布中间状态。
 
 
 预览几何与标签锚点统一使用房间坐标 `[x, y, z]`（宽、深、高，毫米）。进入 Three.js 时调用 `layout_frame.roomToThree()`，相机回读与拾取返回时调用 `threeToRoom()`；不在调用方手写换序。屏幕像素坐标与 Three.js 原生网格旋转仍由渲染层计算。固定轴和边线随场景内容构建，相机移动时只更新投影与墙面显示。

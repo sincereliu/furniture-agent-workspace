@@ -1,4 +1,4 @@
-"""给这套摆放配上每个房间的图，确认时核对图是不是刚算出来的。
+"""生成并核对布局的展示投影；不参与项目保存、摘要或阶段确认。
 
 房间外壳不在这里。
 """
@@ -13,33 +13,26 @@ from .room_svg import render_preview
 from .project_layout import ProjectLayout
 from .scene import RoomScene
 from .validation import admit_scene
-from furniture_web.room_page import render_viewer
 
 
 def room_scene_dict(scene: RoomScene) -> dict[str, Any]:
-    """Canonical room checkpoint with figures rebuilt from its placed geometry."""
+    """Presentation projection; never used as project persistence or hash input."""
     payload = scene.to_dict()
     if scene.items:
+        from furniture_web.room_page import render_viewer
+
         payload["preview"] = render_preview(scene)
         payload["viewer"] = render_viewer(scene)
     return payload
 
 
 def project_layout_dict(layout: ProjectLayout) -> dict[str, Any]:
-    """检查点字典：几何，加上由它重建的预览和只读视图。
-
-    项目文件和 `layout_sha256` 用的就是这个形状。
-    """
-    return {
-        "schema_version": layout.schema_version,
-        "confirmed": layout.confirmed,
-        "rooms": [room_scene_dict(scene) for scene in layout.rooms],
-        "cad": {"units": [unit.to_dict() for unit in layout.executable_units()]},
-    }
+    """Display-only layout projection with current SVG and read-only pages."""
+    return {**layout.to_dict(), "rooms": [room_scene_dict(scene) for scene in layout.rooms]}
 
 
 def check_room_figures(output: Mapping[str, Any]) -> ValidationReport:
-    """确认用：先再做一遍摆放准入，再核对 SVG 和只读页是不是当前几何画出的。"""
+    """展示准入：核对摆放，以及 SVG 和只读页是否来自当前几何。"""
     report = ValidationReport(stage="layout_plan")
     try:
         scene = RoomScene.from_dict(output)
@@ -50,6 +43,8 @@ def check_room_figures(output: Mapping[str, Any]) -> ValidationReport:
     report = admit_scene(scene)
     if not scene.items:
         return report
+
+    from furniture_web.room_page import render_viewer
 
     raw_preview = output.get("preview")
     if not isinstance(raw_preview, Mapping):
@@ -73,7 +68,7 @@ def check_room_figures(output: Mapping[str, Any]) -> ValidationReport:
 
 
 def check_layout_figures(output: Mapping[str, Any]) -> ValidationReport:
-    """确认用：整套房子的每一间都走 `check_room_figures`。"""
+    """核对整套布局的展示投影，每间都走 `check_room_figures`。"""
     report = ValidationReport(stage="layout_plan")
     try:
         layout = ProjectLayout.from_dict(output)

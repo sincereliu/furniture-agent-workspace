@@ -1,7 +1,7 @@
 """Validate stage outputs without owning lifecycle or persistence.
 
-Only manufacturing needs frozen-panel access; the caller supplies that reader
-so validators never depend on the application orchestrator.
+The caller supplies frozen-panel and BOM readers, so validators never depend
+on the application orchestrator.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from furniture_contracts.validation import (
     ValidationReport,
     ValidationSeverity,
 )
-from furniture_layout.layout_figures import check_layout_figures
+from furniture_layout.validation import validate_project_layout
 from furniture_feature_tree.validation import validate_feature_tree
 from furniture_manufacturing.manufacturing_handoff import (
     cabinets_from_manufacturing,
@@ -39,6 +39,12 @@ def _validate_every_cabinet(
     一台不合格就整阶段不合格——不许"主柜过了就算过"。问题里点名是哪一台。
     """
     report = ValidationReport(stage=stage.value)
+    if not _check_cabinet_coverage(
+        report,
+        [cabinet_id for cabinet_id, _, _ in handoffs],
+        [cabinet_id for cabinet_id, _ in boms],
+    ):
+        return report
     handoffs_by_id = {
         cabinet_id: (spec, placements)
         for cabinet_id, spec, placements in handoffs
@@ -50,18 +56,40 @@ def _validate_every_cabinet(
         )
     return report
 
+
 def _validate_every_tree(
     stage: WorkflowStage, revision: Revision
 ) -> ValidationReport:
     """**逐柜**验收特征树，与制造产物一一对应；问题里点名是哪一台。"""
     report = ValidationReport(stage=stage.value)
-    for entry in cabinets_from_feature_trees(
-        revision.stage_outputs[stage.value]
+    entries = cabinets_from_feature_trees(revision.stage_outputs[stage.value])
+    upstream = cabinets_from_manufacturing(
+        revision.stage_outputs[WorkflowStage.MANUFACTURING_PLANNED.value]
+    )
+    if not _check_cabinet_coverage(
+        report, [entry["id"] for entry in upstream], [entry["id"] for entry in entries]
     ):
+        return report
+    for entry in entries:
         _merge_issues(
             report, entry["id"], validate_feature_tree(entry["tree"])
         )
     return report
+
+
+def _check_cabinet_coverage(
+    report: ValidationReport, expected: list[str], actual: list[str]
+) -> bool:
+    """The handoff preserves every cabinet exactly once and in upstream order."""
+    if actual == expected and len(actual) == len(set(actual)):
+        return True
+    report.add_error(
+        "CABINET_COVERAGE_MISMATCH",
+        f"cabinet ids must match upstream order exactly; expected {expected}, got {actual}",
+        "cabinets",
+    )
+    return False
+
 
 def _merge_issues(
     report: ValidationReport,
@@ -74,6 +102,7 @@ def _merge_issues(
             report.add_warning(issue.code, message, issue.path)
         else:
             report.add_error(issue.code, message, issue.path)
+
 
 def _validate_every_bridge(
     stage: WorkflowStage, revision: Revision
@@ -98,6 +127,7 @@ def _validate_every_bridge(
                 "MISSING_CABINET_CAD",
                 f"{cabinet_id}: no CAD result for a planned cabinet",
             )
+    _check_cabinet_coverage(report, planned, produced)
     for entry in entries:
         _merge_issues(
             report,
@@ -105,6 +135,7 @@ def _validate_every_bridge(
             validate_cad(BridgeResult(**entry["bridge"])),
         )
     return report
+
 
 def validate_stage_output(
     revision: Revision,
@@ -115,7 +146,7 @@ def validate_stage_output(
 ) -> ValidationReport:
     try:
         if stage == WorkflowStage.LAYOUT_PLAN:
-            return check_layout_figures(revision.layout.to_dict())
+            return validate_project_layout(revision.layout)
         if stage == WorkflowStage.PANELS_PLANNED:
             return validate_panel_output(
                 panel_envelopes_from_layout(revision.layout),

@@ -45,7 +45,9 @@ class LayoutInputContractTests(unittest.TestCase):
     def test_canonical_room_and_project_plan_the_same_geometry(self) -> None:
         room = plan_room_scene(ROOM, [ITEM])
         project = plan_project_layout([{**ROOM, "items": [ITEM]}])
-        self.assertEqual(project["rooms"][0], room)
+        self.assertEqual(project["rooms"][0], RoomScene.from_dict(room).to_dict())
+        self.assertIn("viewer", room)
+        self.assertNotIn("viewer", project["rooms"][0])
         self.assertEqual(ProjectLayout.from_dict(project).to_dict(), project)
 
     def test_room_aliases_are_rejected_even_with_canonical_fields(self) -> None:

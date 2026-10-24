@@ -16,6 +16,24 @@ HTTP / function calling / AI 对话
 
 六阶段各自拥有领域计算；工作流拥有确认、重试、继承、版本与持久化。公共校验类型与内容哈希归 `furniture_contracts`，各阶段不为使用这些类型而依赖交付或工作流。旁路分析只写 `stage_analyses`。UI、AI 接入与 HTTP 不另建生成流程。
 
+## 依赖与变更约束
+
+下表是开发与审查约束，不是一个已覆盖所有导入和字段写入的自动门禁。执行时的确认、冻结、摘要与失效范围由 [运行时契约](runtime-contract.md) 维护；领域字段与准入规则由下文各阶段入口维护。
+
+| 调用方 | 可以依赖什么 | 不得承担什么 |
+| --- | --- | --- |
+| 布局领域模型、序列化及几何校验 | 本阶段数据与计算、公共校验类型 | 不导入网页、AI 或工作流来生成 `to_dict()`、摘要或完成几何确认；展示适配入口不属于这一纯计算层 |
+| 板件规划与属性编辑 | 布局交来的规范柜体包络、本阶段结构规则 | 不读取房间摆放来补构造；不决定制造连接；`panel_edit` 不操作 Project、租约、确认或文件 |
+| 制造规划与修订 | 已确认板件的字典交接、本阶段材料与加工规则 | 不导入板件 Python 类型、不重跑板件、不修改冻结板件；制造类型恢复及 BOM 派生留在制造包 |
+| 特征树转换 | 已确认制造记录的规范字段、本阶段树规则 | 不重新选择材料、连接、孔位、背板模式或槽参数，不回写制造结果 |
+| 工作流、存储与 HTTP 门面 | 阶段公开入口及交接读取函数；阶段路由、逐柜组装和状态管理 | 不复制门序、铰链、料厚或加工公式；不在恢复类型时另列一份制造字段；不以展示内容作为领域事实 |
+| Web 与可选助手 | 展示投影、规范编辑操作、宿主提供的应用入口 | 不直接改冻结文件或确认列表，不复制阶段默认值；助手只提案，写入仍经过原有阶段和工作流入口 |
+| `furniture_contracts` | 标准库、阶段无关的数据类型与确定性计算 | 不导入任何阶段、工作流、网页或 AI 实现 |
+
+按调用职责区分层次，不按目录名一刀切：`layout_figures`、`room_http`、`open_preview` 等适配入口可以连接展示或宿主，但不得因此让布局核心序列化反向依赖它们。跨阶段使用规范交接和所属阶段的入口，不通过私有计算函数补做另一阶段业务。
+
+维护同一字段时，只在所有者处定义选择、默认、物化和校验口径。消费者可按自身交接需要复制规范值、验证类型与加工不变量，不得借适配器重新决定该值；缺少受支持的输入时，按所属阶段契约报错或追问。更改交接语义时同时列出生产者、消费者及工作流/测试，不能只改一端再靠默认值补齐另一端。
+
 ## 六阶段归属
 
 所有下列 Python 包位于对应阶段的 `scripts/` 下。
@@ -29,7 +47,7 @@ HTTP / function calling / AI 对话
 | [CAD](../TOOL.md) | `furniture_cad` | `cad_bridge` 调外部 CAD 进程；`validation` 校验桥接结果。逐柜生成 STEP 与 Viewer 包 |
 | [交付](../../delivery-validated/SKILL.md) | `furniture_delivery_validation` | `validation` 核对阶段检查点、逐柜覆盖、文件、大小、摘要及谱系；不重算制造，也不解析 STEP 几何 |
 
-布局计算在 `furniture_layout`：`room_page.room_page_payload` 给出页面要画的字典；`room_svg` 配确认用的图；`open_preview` 准备预览数据并打开页面；`scene_edit` / `project_edit` 管几何编辑；`scene_store` 管独立场景；`layout_events` 管变更通知；`room_http` 暴露独立房间接口；`room_shell` 只导出房间外壳。房间页、项目名单和三维画面在 [网页展示模块](../../../modules/web/README.md)。三维脚本的分工见 [布局运行时映射](../../layout-plan/references/runtime-map.md)。
+布局计算在 `furniture_layout`：`room_page.room_page_payload` 给出页面要画的字典；`room_svg` 配展示用的图；`open_preview` 准备预览数据并打开页面；`scene_edit` / `project_edit` 管几何编辑；`scene_store` 管独立场景；`layout_events` 管变更通知；`room_http` 暴露独立房间接口；`room_shell` 只导出房间外壳。房间页、项目名单和三维画面在 [网页展示模块](../../../modules/web/README.md)。三维脚本的分工见 [布局运行时映射](../../layout-plan/references/runtime-map.md)。
 
 板件结构投影在 `cabinet_panel_page.panel_structure_view`，顺纹规则在 `grain_rules`。板件页 HTML 在网页模块。`panel_review` 是确认审查。身份与交接在 `cabinet_identity` / `panel_models`。板件审计、优化与制造试验、统计、仿真是旁路分析。制造的 `drilled_holes_glb` / `export_six_side_drill` 负责文件格式转换，实际生成目录与 manifest 由工作流写入。具体规则见 [板件映射](../../panel-plan/references/runtime-map.md)、[制造映射](../../manufacture-plan/references/runtime-map.md)。
 
@@ -41,13 +59,13 @@ HTTP / function calling / AI 对话
 | --- | --- |
 | `workflow_orchestrator` | 应用入口，装配服务、创建项目、委托校验与持久化 |
 | `workflow_stage_runner` | 执行一个阶段，登记 attempt、推进状态、应用内容相同的确认继承 |
-| `workflow_stage_planning` | 无状态的逐柜制造及特征树转换；校验逐柜覆盖，不接管确认和落盘 |
-| `workflow_stage_validation` | 统一调度各阶段校验、汇总逐柜问题；通过传入的读取函数访问冻结板件与 BOM，不依赖 Orchestrator |
+| `workflow_stage_planning` | 无状态的逐柜制造及特征树转换，不接管确认和落盘 |
+| `workflow_stage_validation` | 统一调度各阶段校验，核对逐柜身份、完整覆盖及顺序，汇总逐柜问题；通过传入的读取函数访问冻结板件与 BOM，不依赖 Orchestrator |
 | `workflow_revision_ops` | 确认、冻结、重试、选 attempt、修订及下游失效 |
 | `workflow_state` / `workflow_constants` | 阶段顺序、规范枚举、状态转换、结果类型与阶段归属表 |
 | `workflow_project` | Project、Revision、StageAttempt 及保存格式 |
 | `workflow_store` | 项目与冻结内容的持久化；不决定家具构造 |
-| `workflow_reconstruction` | 从现有输出与冻结文件恢复类型和结果视图；不重新规划 |
+| `workflow_reconstruction` | 从现有输出与冻结文件恢复结果视图；制造类型委托 `BOMReport.from_dict` 恢复，不重新规划 |
 | `workflow_digest` / `workflow_inheritance` | 公共内容哈希的兼容入口与跨修订确认继承 |
 | `input_adapter` | 明确的结构化阶段输入路由；不理解自然语言 |
 | `workflow_cabinets` / `cabinet_pipeline` | 逐柜输出读取与只读结果容器 |
@@ -77,7 +95,7 @@ HTTP / function calling / AI 对话
 
 上表的 `furniture_ai`、`furniture_chat` 及其专属测试和维护文档位于 [独立 AI 模块](../../../modules/ai/README.md)，不属于 `cad-generated`。CAD 目录中的服务器只负责条件接入。房间页、项目名单和板件页画面位于 [网页展示模块](../../../modules/web/README.md)，服务器负责挂载。
 
-公共包位于 `cad-generated/scripts/furniture_contracts/`，沿用现有 `runtime_paths` 加载，无需增加启动步骤。它只定义阶段无关的数据契约和确定性计算，不导入阶段实现或工作流。新增调用使用 `furniture_contracts.validation` 的 `ValidationReport` / `ValidationIssue` / `ValidationSeverity` 及 `furniture_contracts.digest.stable_digest`；旧的交付类型导入和 `workflow_digest` 导入保持兼容。保存的 JSON 字段、错误等级与哈希算法不变。
+公共包位于 `cad-generated/scripts/furniture_contracts/`，沿用现有 `runtime_paths` 加载，无需增加启动步骤。它只定义阶段无关的数据契约和确定性计算，不导入阶段实现或工作流。新增调用使用 `furniture_contracts.validation` 的 `ValidationReport` / `ValidationIssue` / `ValidationSeverity` 及 `furniture_contracts.digest.stable_digest`；旧的交付类型导入和 `workflow_digest` 导入保持兼容。公共校验报告的 JSON 字段、错误等级与哈希算法不变；布局摘要只取领域数据，具体范围由运行时契约维护。
 
 ## 修改与验证
 

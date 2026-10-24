@@ -54,7 +54,27 @@ result = orchestrator.run_next(
 - 选用某次通过的尝试：`select_stage_attempt(project, stage, number)`，再 `confirm_stage()`。
 - 布局变化：`revise(project, new_layout)`，从 `layout_plan` 开始，下游尝试作废。
 - 直接改已有规划结果：`revise_stage_output(project, stage, edited_output)`。
-- 新 Revision 仅复制修改点前的已确认输出；修改阶段和下游重做。旧产物标为 stale，不手改 STEP、GLB、BOM 或源码。
+- 布局保存和 `layout_sha256` 只包含房间、已摆放家具、可执行单元与确认位；SVG、HTML 以及前端文件时间属于展示投影，不进入冻结内容。`current_view` 在读取时生成当前图，布局确认只校验几何。旧文件中已有的展示字段不是领域事实，既有冻结文件不原地修改。
+- 制造直接修订由制造阶段重算特征、连接点、五金、材料与面积。制造、特征树及 CAD 在阶段验收时核对柜体列表与上游身份及顺序完全一致，拒绝遗漏、重复、未知柜体和换序。
+- 直接修订产生的新 Revision 保留修改点之前的输出及原有确认记录；修改阶段的输出作为新候选，本阶段及下游确认不沿用，下游结果重新生成。旧产物标为 stale，不手改 STEP、GLB、BOM 或源码。
+
+### 修改后的影响范围
+
+下表约束既有入口的调用方式；不新增绕过阶段确认的写路径。领域计算入口返回数据，不拥有 `approved_stages`、冻结哈希或持久化；这些状态只由工作流管理。
+
+| 修改入口或对象 | 必须保持的上游事实 | 工作流处理与下游影响 |
+| --- | --- | --- |
+| 页面模板、SVG/HTML 样式与前端缓存参数 | 全部布局和家具领域数据 | 只重新展示，不改领域摘要、确认或制造结果 |
+| 布局工作副本编辑 | 没改动的房间几何；父版保存的阶段提案 | 尚无下游产物时原地编辑并撤回受影响房间确认；已有下游产物时追加 Revision。布局准入仍执行，后续规划不能跳过确认 |
+| `revise(project, layout)` | 父版 `stage_inputs` 作为提案保留，不承诺仍适合新尺寸 | 新版从布局开始；同内容房间可继承其确认，下游重算后另按实际内容决定是否继承确认 |
+| `revise_stage_output(panel_plan)` | 布局外形与摆放 | 新候选待审；制造、特征树、CAD、交付结果不沿用。板件页面的保存门面另外调用确认并写出新冻结内容 |
+| `revise_stage_output(manufacture_plan)` | 布局与已冻结板件 | 制造阶段统一重算派生快照；制造候选重新验收，特征树、CAD、交付重做；不重跑或改写板件 |
+| `revise_stage_output(feature_tree_planned)` | 布局、板件与制造输出 | 只修订树候选，CAD 与交付重做；不反向改材料、加工或几何来源 |
+| `retry_stage` / `select_stage_attempt` | 已确认前置阶段及其冻结内容 | 操作同一 Revision 的候选；目标已确认或已有更下游状态时，撤回目标及下游输出/确认。失败尝试保留为 attempt，不能当已确认输出 |
+
+“同一柜”必须使用上游 id，不凭顺序猜身份，也不默认取第一台。制造与冻结板件、特征树与制造、CAD 与制造逐层核对有序柜体列表；数量相等也不能替代身份与顺序检查。该检查由 `workflow_stage_validation` 执行，失败以 `CABINET_COVERAGE_MISMATCH` 报告，不能通过补空 BOM、复制另一柜或排序来掩盖。
+
+确认继承以 [修订继承说明](revision-inheritance-design.md) 为准：领域输入未变只是隔离不变量的前提，实际阶段输出仍须重新生成、验收并与历史确认摘要相同。不能用 `envelope_set` 的判断直接跳过执行，也不能把确认继承解释成 CAD 文件复用。
 
 冻结布局、冻结板件与 attempt 文件：
 

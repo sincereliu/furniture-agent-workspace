@@ -112,10 +112,13 @@ class ProjectLayout:
         return tuple(units)
 
     def to_dict(self) -> dict[str, Any]:
-        """检查点字典。每个房间的图由 `layout_figures` 按当前几何挂上，按当前输入契约序列化。"""
-        from .layout_figures import project_layout_dict
-
-        return project_layout_dict(self)
+        """Canonical layout facts for persistence and content identity, without views."""
+        return {
+            "schema_version": self.schema_version,
+            "confirmed": self.confirmed,
+            "rooms": [scene.to_dict() for scene in self.rooms],
+            "cad": {"units": [unit.to_dict() for unit in self.executable_units()]},
+        }
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ProjectLayout":

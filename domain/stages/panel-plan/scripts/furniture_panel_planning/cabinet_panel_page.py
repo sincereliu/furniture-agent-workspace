@@ -245,7 +245,7 @@ def _door_hinge_locks(
     腔怎么切**不在页面里算**：直接用板件阶段的 `construction_geometry.door_hinge_locks()`，
     免得"被中立板切开的内空"在页面和板件各有一份、哪天漂了都不知道。
     这里算出来只是为了把按钮关掉，免得让人点了才被拒；真正的裁决在保存时
-    （`project_layout_edit._resolve_door_hinges`）。
+    （`panel_edit._resolve_door_hinges`）。
     """
     cabinet_id = str(cabinet.get("id") or "")
     try:

@@ -77,7 +77,7 @@ result = session.call(name, arguments)  # arguments 为对象或 JSON 字符串
 - `allowed_tools`、`required_tool`、`cad_generation_required`
 - `attempts`（编号、是否通过、错误；不含整份输出）
 - `current_view`（当前阶段给人看的内容；`include_view=false` 可省略）。`panel_plan` 是确认审查清单（净空、板件一行一条、接触去重、`markdown`），不是冻结 `cabinets[]` 树；冻结板件仍在 Store。`manufacture_plan` 与 `feature_tree_planned` 是**逐柜**产物（`{"cabinets": [{"id", "bom"|"tree"}]}`，与板件 `cabinets[]` 一一对应）。只关心一台时按客户指定的 `id` 查找，不能默认取第一台。其他阶段一般就是该阶段结果本身。
-- `layout` 与冻结哈希
+- `layout` 与冻结哈希：只包含布局领域数据；`layout_plan` 的 `current_view` 额外生成当前 SVG 与只读页面，这些展示字段不参与保存或布局摘要。
 
 `allowed_tools` 是当前合法的 `furniture_*` 工具名，不是方案推荐。`required_tool` 指继续推进流程时必须先调用的工具，不要求立即调用，也不代替客户接受当前结果。客户要修改时按 `allowed_tools` 选择修订或重试；客户还没接受时不代为确认。
 

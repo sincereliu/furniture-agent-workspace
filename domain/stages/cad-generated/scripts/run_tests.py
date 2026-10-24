@@ -24,9 +24,17 @@ TESTS_ROOT = SCRIPT_ROOT / "tests"
 sys.path.insert(0, str(SCRIPT_ROOT))
 
 from backlog_reconcile import reconcile_workspace
-from runtime_paths import AI_MODULE_RELATIVE_ROOT, bootstrap_runtime_paths
+from runtime_paths import (
+    AI_MODULE_RELATIVE_ROOT,
+    bootstrap_runtime_paths,
+    stage_script_roots,
+)
 
-TEST_ROOTS = (TESTS_ROOT, WORKSPACE_ROOT / AI_MODULE_RELATIVE_ROOT / "tests")
+TEST_ROOTS = (
+    *(root / "tests" for root in stage_script_roots(WORKSPACE_ROOT)
+      if (root / "tests").is_dir()),
+    WORKSPACE_ROOT / AI_MODULE_RELATIVE_ROOT / "tests",
+)
 
 
 def _suite(pattern: str) -> unittest.TestSuite:

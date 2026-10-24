@@ -3,18 +3,10 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import asdict
 from typing import Any, Mapping
 
 from furniture_layout.project_layout import ProjectLayout
-from furniture_manufacturing.manufacturing_bom import (
-    estimate_materials,
-    recompute_features,
-)
-from furniture_manufacturing.manufacturing_models import (
-    MachiningOperation,
-    PanelRecord,
-)
+from furniture_manufacturing.manufacturing_revision import revise_bom
 from furniture_panel_planning.cabinet_identity import cabinets_from_output
 from furniture_panel_planning.panel_pipeline import ENVELOPE_OWNED_FIELDS
 
@@ -140,8 +132,7 @@ class RevisionOpsMixin:
             revision.layout.to_dict()
         )
         if changed_stage == WorkflowStage.MANUFACTURING_PLANNED:
-            # 直接编辑制造输出后，重算派生快照（features/connection_points/materials），
-            # 避免它们与 panels/operations 漂移。**逐柜**各算各的。
+            # 制造阶段维护完整派生快照；工作流只负责逐柜委托与修订生命周期。
             output = {
                 **output,
                 "cabinets": [
@@ -197,31 +188,8 @@ class RevisionOpsMixin:
 
     @staticmethod
     def _recompute_manufactured_cabinet(entry: Mapping[str, Any]) -> dict[str, Any]:
-        """改过某台柜的板件/加工后，重算**这台柜**的派生快照（特征、连接点、材料）。
-
-        逐柜各算各的：一台的板件改了不该动另一台的派生值。
-        """
-        bom = dict(entry.get("bom") or {})
-        revised_panels = [
-            PanelRecord.from_dict(item) for item in bom.get("panels", [])
-        ]
-        revised_operations = [
-            MachiningOperation(**item) for item in bom.get("operations", [])
-        ]
-        features, connection_points = recompute_features(
-            revised_panels, revised_operations
-        )
-        return {
-            **entry,
-            "bom": {
-                **bom,
-                "features": [asdict(feature) for feature in features],
-                "connection_points": [asdict(point) for point in connection_points],
-                "materials": [
-                    asdict(record) for record in estimate_materials(revised_panels)
-                ],
-            },
-        }
+        """Delegate one cabinet's complete derived BOM to its owning stage."""
+        return {**entry, "bom": revise_bom(entry.get("bom") or {})}
 
     def confirm_layout(self, project: Project) -> Revision:
         return self.confirm_stage(project, WorkflowStage.LAYOUT_PLAN)

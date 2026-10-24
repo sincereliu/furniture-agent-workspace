@@ -55,6 +55,21 @@
 - `estimate_hardware()` 与 `emit_drilled_holes()` 遍历 `ALL_CONNECTORS` 生成 BOM 与可序列化的全局/local 孔位数据。
 - `estimate_materials()` 从板件派生材料 BOM（`MaterialRecord` 三类）：基材（substrate，按基材+厚度汇总 m²）、饰面（surface，按表面汇总 m²）、封边条（edge_banding，按材质/厚度/宽度/颜色汇总米数，四边周长 2×(长+宽)）；与五金 BOM 对称，写入 `BOMReport.materials`。
 - 实际 `.drilled-holes.json` / `.glb` 文件由 CAD 阶段 `workflow_artifact_writer.py` 写入；制造阶段只产出结构化孔位数据。
+- `BOMReport.from_dict()` 负责恢复制造类型；`manufacturing_revision.revise_bom()` 负责直接修订后的完整派生：以编辑后的板件和加工为依据，更新特征、连接点、五金、材料与总面积。工作流只调用该入口，不维护制造字段列表。五金品牌选项仍从 `requested_options.options` 读取；校验拒绝与当前加工特征不一致的五金快照。
+
+## 修订时的事实与派生约束
+
+本节区分开发约束与当前执行行为，防止把“重算派生值”理解成可在制造阶段改任意板件字段。
+
+| 数据 | 所有者与当前读取方式 | 修订约束 |
+| --- | --- | --- |
+| 柜类、尺寸、料厚、板件位置、铰链侧、背板与槽参数 | 布局或板件阶段；制造从冻结板件交接中读取 | 制造只读；要改回到字段所有者修订，不能通过 BOM 中的副本绕过上游确认 |
+| `PanelRecord` 上已物化的材质、封边、制造连接等制造字段，以及 `operations` | 制造阶段；直接修订时作为本阶段派生计算的依据 | 按制造契约明确编辑，不改原冻结板件；不能只改记录性的提案就声称已改加工 |
+| `features`、`connection_points`、`hardware`、`materials`、`total_area_m2` | `manufacturing_revision.revise_bom()` 统一更新 | 不单独手工维护这些快照；工作流不得选择性重算其中几项 |
+| `requested_options` / `appearance` | 保存选型输入；初次规划物化到相应板件字段 | 直接修订不再次执行 `plan_manufacturing()`，也不自动把所有选型记录重新物化；`requested_options.options` 的品牌选项仍参与五金派生 |
+| `readiness` | 客户或工厂明确接受程度的记录 | 派生重算及阶段确认不自动提升它；提高等级仍须满足本阶段 Skill 的接受条件 |
+
+`BOMReport.from_dict()` 只恢复类型，不重新规划。`revise_bom()` 返回新的制造字典，不推进状态、不写项目或冻结文件；由工作流创建修订，再走阶段验收和确认。运行时已检查逐柜覆盖、板件身份、适用的孔槽不变量及五金快照一致性；这不等于对所有冻结几何字段都做了全面的不可变性校验，字段只读约束仍须在修改审查中核对。
 
 ## 背板槽机制
 
