@@ -8,26 +8,15 @@ from __future__ import annotations
 import argparse
 from contextlib import contextmanager
 import json
-import os
 from pathlib import Path
-import socket
-import sys
-import tempfile
-import threading
-import time
-from urllib.request import urlopen
-from unittest import mock
 
-WORKSPACE = Path(__file__).resolve().parents[4]
-sys.path.insert(0, str(WORKSPACE / "domain/stages/cad-generated/scripts"))
-from runtime_paths import bootstrap_runtime_paths
-bootstrap_runtime_paths(WORKSPACE)
+from browser_support import install_room_probe
+from project_browser_support import WORKSPACE, isolated_project_server
 
 
 @contextmanager
 def isolated_server():
     import server
-    import uvicorn
     from furniture_layout.scene_planning import plan_scene
     from furniture_layout.scene_edit import apply_scene_edit
     from furniture_layout.scene_store import save_scene
@@ -38,10 +27,8 @@ def isolated_server():
             "placement": {"mode": "free", "origin_x_mm": 900, "origin_y_mm": 120, "rotation_z_deg": 0}}
     scene = apply_scene_edit(plan_scene(room, [item]), {"op": "set_pose", "item_id": "cab", "mode": "wall",
         "host_wall": "north", "origin_x_mm": 900, "origin_y_mm": 0, "origin_z_mm": 0, "rotation_z_deg": 0})
-    with tempfile.TemporaryDirectory(prefix="furniture-drag-browser-") as directory, \
-            mock.patch.object(server, "OUTPUT_ROOT", Path(directory)), \
-            mock.patch.object(server, "STORE_ROOT", Path(directory)), \
-            mock.patch.dict(os.environ, {"FURNITURE_PREVIEW_BROWSER": "0"}):
+    with isolated_project_server() as base:
+        directory = server.STORE_ROOT
         save_scene("drag-check", scene, root=directory)
         anchor = {**item, "placement": {"mode": "wall", "host_wall": "north"}}
         dependent = {"id": "shelf", "category": "shelf", "width": 400, "depth": 300, "height": 1000,
@@ -53,42 +40,15 @@ def isolated_server():
         save_scene("drag-fill", plan_scene(room, [anchor, fill]), root=directory)
         save_scene("drag-disjoint", plan_scene(room, [anchor,
             {**fill, "height": 600, "placement": {**fill["placement"], "origin_z_mm": 1500}}]), root=directory)
-        sock = socket.socket()
-        sock.bind(("127.0.0.1", 0))
-        sock.listen()
-        port = sock.getsockname()[1]
-        service = uvicorn.Server(uvicorn.Config(server.app, host="127.0.0.1", port=port,
-                                              log_level="error", lifespan="off"))
-        thread = threading.Thread(target=lambda: service.run(sockets=[sock]), daemon=True)
-        thread.start()
-        base = f"http://127.0.0.1:{port}"
-        try:
-            deadline = time.monotonic() + 15
-            while time.monotonic() < deadline:
-                try:
-                    with urlopen(base + "/health", timeout=1) as response:
-                        if response.status == 200:
-                            break
-                except OSError:
-                    time.sleep(.05)
-            else:
-                raise RuntimeError("temporary preview service did not become healthy")
-            yield base
-        finally:
-            service.should_exit = True
-            thread.join(timeout=10)
-            sock.close()
-            if thread.is_alive():
-                raise RuntimeError("temporary preview service did not stop")
+        yield base
 
 
 HOOK = """
-const checkDragModule=await import('/layout-view/layout_drag.js');
 window.__dragCheck={
   scene:()=>structuredClone(displayScene()),
   committed:()=>structuredClone(scene),
-  active:()=>Boolean(drag),
-  pointer:()=>drag&&drag.pointerId,
+  active:()=>input.isDragging(),
+  pointer:()=>window.__gestureProbe.pointer(),
   point:()=>{
     const item=scene.items[0],p=item.placement,angle=p.rotation_z_deg*Math.PI/180;
     const rect=canvas.getBoundingClientRect();
@@ -102,7 +62,7 @@ window.__dragCheck={
     throw Error('no exposed furniture surface for pointer test');
   },
   delta:([x,y])=>{
-    const item=scene.items[0],basis=camera();
+    const item=scene.items[0],basis=view.basis();
     const scale=verticalPlaneScale(canvas,basis,[...footprintCenter(item),item.z_start]);
     const a=checkDragModule.groundDragDelta({dx:1,dy:0,scale,right:basis.right,forward:basis.forward});
     const b=checkDragModule.groundDragDelta({dx:0,dy:1,scale,right:basis.right,forward:basis.forward});
@@ -126,12 +86,11 @@ def check(output: Path | None = None):
             page.on("request", lambda request: writes.append(request.post_data_json)
                     if request.method == "POST" and request.url.endswith("/edit") else None)
 
-            def instrument(route):
-                response = route.fetch()
-                body, suffix = response.text().rsplit("</script>", 1)
-                route.fulfill(response=response, body=body + HOOK + "</script>" + suffix)
-
-            page.route("**/editor", instrument)
+            install_room_probe(page, entry_hook=HOOK,
+                imports='''import * as checkDragModule from "/layout-view/layout_drag.js";
+import {verticalPlaneScale} from "/layout-view/render/room/layout_camera.js";
+import {footprintCenter} from "/layout-view/layout_solver.js";
+''', gesture_hook="window.__gestureProbe={pointer:()=>drag&&drag.pointerId};")
             url = base + "/api/room-scene/drag-check/editor"
 
             def open_page():

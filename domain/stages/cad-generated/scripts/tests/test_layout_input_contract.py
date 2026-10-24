@@ -173,7 +173,7 @@ class LayoutInputContractTests(unittest.TestCase):
         html = viewer["html"]
         payload = json.loads(re.search(r'<script id="scene-data" type="application/json">(.*?)</script>', html, re.S).group(1))
         self.assertEqual(RoomScene.from_dict(payload), scene)
-        self.assertIn("const READ_ONLY=true", html)
+        self.assertIn('"read_only":true', html)
         self.assertNotIn("__SCENE_JSON__", html)
 
 

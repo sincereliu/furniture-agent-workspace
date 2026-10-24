@@ -6,18 +6,11 @@ This starts a temporary loopback static server; it never opens or writes project
 from __future__ import annotations
 
 import argparse
-from contextlib import contextmanager
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
 import shutil
 import subprocess
-import threading
-from urllib.parse import unquote, urlsplit
-
-WEB_ROOT = Path(__file__).resolve().parents[1]
-WORKSPACE = WEB_ROOT.parents[2]
-STATIC = WEB_ROOT / "furniture_web" / "static"
+from browser_support import NODE_TESTS, WORKSPACE, static_server
 NODE_CHECKS = (
     "sofa_solid_check.mjs",
     "sofa_upholstery_check.mjs",
@@ -28,36 +21,6 @@ NODE_CHECKS = (
     "wall_contact_check.mjs",
     "wall_surface_check.mjs",
 )
-
-
-class StaticHandler(SimpleHTTPRequestHandler):
-    def translate_path(self, path: str) -> str:
-        path = unquote(urlsplit(path).path)
-        for prefix, root in (
-            ("/layout-view/", STATIC),
-            ("/vendor/three/0.186.0/", WORKSPACE / "vendor/three/0.186.0"),
-        ):
-            if path.startswith(prefix):
-                candidate = (root / path[len(prefix):]).resolve()
-                if candidate.is_relative_to(root.resolve()):
-                    return str(candidate)
-        return str(STATIC / "__not_found__")
-
-    def log_message(self, *_args) -> None:
-        pass
-
-
-@contextmanager
-def static_server():
-    server = ThreadingHTTPServer(("127.0.0.1", 0), StaticHandler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    try:
-        yield f"http://127.0.0.1:{server.server_port}"
-    finally:
-        server.shutdown()
-        server.server_close()
-        thread.join(timeout=5)
 
 
 def browser_checks(output: Path) -> dict:
@@ -72,12 +35,12 @@ def browser_checks(output: Path) -> dict:
             page.set_default_timeout(15000)
             page.on("pageerror", lambda error: errors.append(str(error)))
             page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
-            page.goto(base + "/layout-view/cartoon_outline_browser_check.html?sofa", wait_until="commit")
+            page.goto(base + "/web-checks/cartoon_outline_browser_check.html?sofa", wait_until="commit")
             page.wait_for_function("document.body.dataset.result !== undefined", timeout=60000)
             report["checks"] = json.loads(page.locator("#details").text_content())
             page.locator("canvas").first.screenshot(path=str(output / "sofa.png"))
             report["screenshots"].append("sofa.png")
-            page.goto(base + "/layout-view/cartoon_outline_browser_check.html?room")
+            page.goto(base + "/web-checks/cartoon_outline_browser_check.html?room")
             for viewport, prefix in ((1000, "room"), (560, "small-room")):
                 page.set_viewport_size({"width": viewport, "height": 800})
                 page.reload()
@@ -108,7 +71,7 @@ def main() -> int:
         if not node:
             raise RuntimeError("Node.js is required; node was not found on PATH")
         for filename in NODE_CHECKS:
-            result = subprocess.run([node, str(STATIC / filename)], capture_output=True, text=True,
+            result = subprocess.run([node, str(NODE_TESTS / filename)], capture_output=True, text=True,
                                     encoding="utf-8", timeout=30)
             report["node"].append({"name": filename, "passed": result.returncode == 0,
                                    "output": result.stdout + result.stderr})

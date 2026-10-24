@@ -1,0 +1,35 @@
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import * as THREE from "../../../../../vendor/three/0.186.0/three.module.js";
+registerHooks({ resolve(specifier, context, next) {
+  return next(specifier === "three" ? new URL("../../../../../vendor/three/0.186.0/three.module.js", import.meta.url).href : specifier, context);
+} });
+const { OUTLINE_STYLE, furnitureInkRadius, furnitureInkColor } = await import("../../furniture_web/static/render/outline/outline_style.js");
+const { addFurnitureInk, addStageInk } = await import("../../furniture_web/static/render/outline/layout_ink.js");
+// 风格的客观边界：完整基础外框、内部轻线、近景上限、远景收细。
+assert.ok(OUTLINE_STYLE.weightBase - OUTLINE_STYLE.weightVariation >= 1, "任何方向都不能削弱基础外框");
+assert.ok(OUTLINE_STYLE.weightVariation > 0, "保留方向轻重变化");
+assert.ok(OUTLINE_STYLE.maxRadiusPx * (OUTLINE_STYLE.weightBase + OUTLINE_STYLE.weightVariation) <= 3);
+assert.ok(OUTLINE_STYLE.seamOpacity < 0.5);
+const bounds = new THREE.Box3(new THREE.Vector3(-500,-500,-500), new THREE.Vector3(500,500,500));
+const camera = new THREE.PerspectiveCamera(48,1.5,1,20000);
+camera.position.z=2000; camera.updateMatrixWorld(true);
+const near=furnitureInkRadius(bounds,camera,600);
+camera.position.z=12000; camera.updateMatrixWorld(true);
+assert.ok(furnitureInkRadius(bounds,camera,600)<near);
+assert.ok(furnitureInkRadius(bounds,camera,300)<furnitureInkRadius(bounds,camera,600));
+assert.equal(furnitureInkColor(false,false),0x28231d);
+assert.equal(furnitureInkColor(true,false),0xf59e0b);
+assert.equal(furnitureInkColor(true,true),0xd93838);
+const mesh = new THREE.Mesh(new THREE.BoxGeometry(100,100,100));
+mesh.userData.kind="item"; mesh.layers.set(1);
+const seams = addFurnitureInk(mesh,{itemId:"cabinet",color:0xf59e0b});
+assert.equal(mesh.userData.kind,"item");
+assert.equal(mesh.userData.itemId,"cabinet");
+assert.equal(mesh.userData.cartoonInk.color,0xf59e0b);
+assert.ok(seams.isLineSegments && mesh.children.every(child=>!child.isMesh), "家具入口不创建膨胀外壳");
+assert.equal(seams.layers.mask,mesh.layers.mask);
+const wall = new THREE.Mesh(new THREE.BoxGeometry(100,100,100));
+assert.ok(addStageInk(wall).isMesh);
+assert.equal(wall.userData.cartoonInk,undefined,"场景边线不注册成家具");
+console.log("Furniture/stage ink APIs, full-rim minimum, width cap, projection and state colors pass.");

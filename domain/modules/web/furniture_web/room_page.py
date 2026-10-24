@@ -34,10 +34,10 @@ EDITOR_WIDTH_PX = 960
 EDITOR_HEIGHT_PX = 600
 
 
-def _layout_scene_src() -> str:
-    """画面脚本带文件时间，避免浏览器一直用旧的旋转箭头。"""
-    script = Path(__file__).resolve().parent / "static" / "layout_scene.js"
-    return f"/layout-view/layout_scene.js?v={int(script.stat().st_mtime)}"
+def _room_page_src() -> str:
+    """页面入口带文件时间；静态响应的 no-store 同时覆盖所有依赖。"""
+    script = Path(__file__).resolve().parent / "static" / "pages" / "room" / "index.js"
+    return f"/layout-view/pages/room/index.js?v={int(script.stat().st_mtime)}"
 
 
 def _json_for_script(payload: object) -> str:
@@ -141,23 +141,13 @@ def _render_canvas_html(
     tokens = {
         "__PAGE_CONFIG_JSON__": _json_for_script(page_config),
         "__SCENE_JSON__": _json_for_script(scene_payload),
-        "__SCENE_ID__": escape(scene_id, quote=True),
         "__HEADING__": escape(heading, quote=True),
-        "__HEADING_SUFFIX__": _json_for_script(heading_suffix),
         "__MODE_BADGE__": escape(mode_badge, quote=True),
-        "__READ_ONLY__": "true" if read_only else "false",
-        "__SHARE_FORM__": "true" if share_form else "false",
-        "__LAYOUT_URL__": _json_for_script(layout_url),
-        "__EDIT_URL__": _json_for_script(edit_url),
-        "__UNDO_URL__": _json_for_script(undo_url),
-        "__PANEL_URL_BASE__": _json_for_script(panel_url_base),
-        "__ROOMS_JSON__": _json_for_script(rooms),
-        "__VERSION_JSON__": _json_for_script(version),
         "__BODY_CLASS__": body_class,
         "__APP_LABEL__": escape(app_label, quote=True),
         "__TIPS__": tips,
         "__SHUTDOWN_BUTTON__": shutdown_button,
-        "/layout-view/layout_scene.js": _layout_scene_src(),
+        "/layout-view/pages/room/index.js": _room_page_src(),
         "__PAGE_EXTENSION_STYLES__": extension.styles,
         "__PAGE_EXTENSION_TOOLBAR__": extension.toolbar,
         "__PAGE_EXTENSION_PANEL__": extension.panel,

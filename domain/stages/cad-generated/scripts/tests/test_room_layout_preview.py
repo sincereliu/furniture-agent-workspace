@@ -679,8 +679,8 @@ class ProjectLayoutAdmissionTests(unittest.TestCase):
     def test_chair_solid_visualization_contract(self) -> None:
         """椅子具有独立的外形固件与检查脚本，在三维场景中不渲染为普通方块。"""
         static_dir = WORKSPACE_ROOT / "domain/modules/web/furniture_web/static"
-        chair_solid = static_dir / "chair_solid.js"
-        chair_check = static_dir / "chair_solid_check.mjs"
+        chair_solid = static_dir / "render/furniture/chair_solid.js"
+        chair_check = WORKSPACE_ROOT / "domain/modules/web/tests/node/chair_solid_check.mjs"
         self.assertTrue(chair_solid.is_file(), "chair_solid.js 必须存在")
         self.assertTrue(chair_check.is_file(), "chair_solid_check.mjs 必须存在")
 
@@ -688,20 +688,20 @@ class ProjectLayoutAdmissionTests(unittest.TestCase):
         self.assertIn("export function isFixedChair", content)
         self.assertIn("export function chairParts", content)
 
-        scene_js = (static_dir / "layout_scene.js").read_text(encoding="utf-8")
-        self.assertIn('import { isFixedChair } from "./chair_solid.js";', scene_js)
+        scene_js = (static_dir / "render/room/layout_scene.js").read_text(encoding="utf-8")
+        self.assertIn('import { isFixedChair } from "../furniture/chair_solid.js";', scene_js)
         self.assertIn("addChair", scene_js)
         self.assertIn("isFixedChair(item) && addChair(", scene_js)
 
-        meshes_js = (static_dir / "layout_meshes.js").read_text(encoding="utf-8")
-        self.assertIn('import { chairParts } from "./chair_solid.js";', meshes_js)
+        meshes_js = (static_dir / "render/room/layout_meshes.js").read_text(encoding="utf-8")
+        self.assertIn('import { chairParts } from "../furniture/chair_solid.js";', meshes_js)
         self.assertIn("export function addChair", meshes_js)
 
     def test_desk_solid_visualization_contract(self) -> None:
         """书桌具有独立的外形固件与检查脚本，在三维场景中不渲染为普通方块。"""
         static_dir = WORKSPACE_ROOT / "domain/modules/web/furniture_web/static"
-        desk_solid = static_dir / "desk_solid.js"
-        desk_check = static_dir / "desk_solid_check.mjs"
+        desk_solid = static_dir / "render/furniture/desk_solid.js"
+        desk_check = WORKSPACE_ROOT / "domain/modules/web/tests/node/desk_solid_check.mjs"
         self.assertTrue(desk_solid.is_file(), "desk_solid.js 必须存在")
         self.assertTrue(desk_check.is_file(), "desk_solid_check.mjs 必须存在")
 
@@ -709,13 +709,13 @@ class ProjectLayoutAdmissionTests(unittest.TestCase):
         self.assertIn("export function isFixedDesk", content)
         self.assertIn("export function deskParts", content)
 
-        scene_js = (static_dir / "layout_scene.js").read_text(encoding="utf-8")
-        self.assertIn('import { isFixedDesk } from "./desk_solid.js";', scene_js)
+        scene_js = (static_dir / "render/room/layout_scene.js").read_text(encoding="utf-8")
+        self.assertIn('import { isFixedDesk } from "../furniture/desk_solid.js";', scene_js)
         self.assertIn("addDesk", scene_js)
         self.assertIn("isFixedDesk(item) && addDesk(", scene_js)
 
-        meshes_js = (static_dir / "layout_meshes.js").read_text(encoding="utf-8")
-        self.assertIn('import { deskParts } from "./desk_solid.js";', meshes_js)
+        meshes_js = (static_dir / "render/room/layout_meshes.js").read_text(encoding="utf-8")
+        self.assertIn('import { deskParts } from "../furniture/desk_solid.js";', meshes_js)
         self.assertIn("export function addDesk", meshes_js)
 
     def test_desk_parts_geometry_and_clearance(self) -> None:

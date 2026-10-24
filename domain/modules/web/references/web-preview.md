@@ -1,71 +1,75 @@
-# 网页展示边界
+# 页面与模块边界
 
-本模块位于 `domain/modules/web/`。下面说的是浏览器里看见的那几页。
+路径相对 `domain/modules/web/`。本文件维护职责与接口；效果要求在 [视觉规范](visual-style.md)，命令与覆盖在 [检查方法](testing.md)，未完成问题在 [统一待办](../../../../backlog/web.md)。
 
-三维画面的风格、描边层次及验收参考见 [三维预览视觉规范](visual-style.md)。修改或重构渲染代码时一并遵守。
+## 页面与控制器
 
-## 本模块拥有
-
-| 干什么 | 文件 |
+| 入口 | 拥有的职责 |
 | --- | --- |
-| 房间页、草稿页、只读预览和分享页的 HTML | `furniture_web/room_page.py`，`templates/room_page.html`，`templates/room_page.js` |
-| 页面插槽。AI 助手往这里填样式和脚本，本模块不内置助手 | `room_page.PageExtension` |
-| 做过的项目名单 | `furniture_web/project_list.py`，`templates/project_list.html` |
-| 一台柜子的板件页 HTML | `furniture_web/panel_page.py` |
-| 房间和柜子的三维画面 | `furniture_web/static/`，地址仍是 `/layout-view/` |
-| 浏览器布局写入队列、版本和文档响应同步 | `static/layout_persistence.js` |
-| 把上面的脚本挂上预览进程 | `furniture_web/integration.py` |
+| `furniture_web/room_page.py`、`templates/room_page.html` | 草稿、项目、只读与分享页的 HTML、服务端权限和规范配置 |
+| `templates/room_page.js` | 读取配置与场景，调用页面入口，安装可信扩展 |
+| `static/pages/room/index.js` | 组装控制器、唯一画布同步入口、候选提交和写入结果提示 |
+| `pages/room/camera.js` | 视角预设、过渡、缩放、投影、标注开关和画布尺寸变化 |
+| `pages/room/gestures.js` | 指针/键盘桥接，持有布局阶段创建的私有拖动事务；取消则丢弃候选 |
+| `pages/room/details.js` | 家具列表、属性面板、数值微调与板件入口；调用阶段求解器 |
+| `pages/room/navigation.js` | 房间集合、切换、深链与文档安装；切换前检查同步控制器是否忙碌 |
+| `pages/room/layout_persistence.js` | 版本、串行请求队列、迟到响应失效、通知重读与失败恢复 |
+| `pages/room/lease.js` | 租约凭据、申请/收回/闲置让出、事件连接和页面关闭恢复 |
+| `pages/room/activity.js` | 工作副本记录、助手假设面板；确认/划掉走相同写入队列 |
+| `pages/room/layout_payload.js`、`item_hints.js`、`markup.js` | 规范数据到画布模型的转换、页面提示与 HTML 转义 |
+| `shared/reactivity.js` | 轻量响应式信号与组件引导 |
+| `furniture_web/panel_page.py`、`static/pages/panels/index.js` | 冻结板件页组装、选择、展示开关与页面事件 |
+| `pages/panels/sidebar.js`、`labels.js` | 板件列表、详情、汇总与字段标签 |
+| `pages/panels/editor.js` | 暂存顺纹/铰链修改、预览投影与一次保存；不自行规划板件 |
+| `furniture_web/home_page.py`、`project_list.py`、对应模板 | 工作台首页与项目列表 |
 
-画面脚本先从这个目录取。`layout_solver.js`、`layout_drag.js` 和 `layout_interaction.js` 不在这里，挂载时再去布局阶段找，所以页面里的地址不用改。
+表中 `pages/` 和下表的 `render/` 均位于 `furniture_web/static/`。
 
-卡通描边由 `layout_scene.js` 调用 `cartoon_outline.js`。`layout_ink.js` 提供两个明确入口：`addFurnitureInk(mesh, {itemId, color})` 注册整件身份/颜色并创建内部细线，家具不再接收无效的毫米厚度参数；`addStageInk(mesh, color, thickness)` 绘制墙体、地台等场景边线，厚度只用于实体膨胀壳。`outline_style.js` 集中保存家具投影线宽、方向轻重、内部线透明度、棱边角度和交互颜色，`layout_meshes.js` 的家具构建器调用家具入口，场景构建器调用场景入口。
+页面配置只在初始化时传入，动态文档经同步控制器交给导航安装。拖动事务、租约与板件修改各由相应控制器持有，通过方法和回调协作，不由外部直接改写模块内变量。
 
-`cartoon_outline.js` 拥有颜色/身份蒙版、遮挡计算及渲染状态恢复；按原网格复用蒙版代理，移除家具时清理代理和专有材质，借用的几何仍由原场景释放。视觉细则、参数、参考图和检查入口统一维护在 [三维预览视觉规范](visual-style.md)，本文件只记录模块职责。
+同步控制器按松手顺序写入，操作入队时复制坐标，发送时使用上一笔确认的版本和当前租约。交互/保存期间暂存文档，较新写入/读取使旧响应失效。失败后重读权威结果；重读失败时只回退仍属于该次操作的候选。外形保存期间禁止用旧尺寸开始位置手势。
 
-房间内生产家具的棱柱和现成家具的部件都进入同一套整体蒙版，内部只画轻棱边。`cartoon_outline.js` 根据整件家具的投影尺寸、镜头和画布计算线宽，再按屏幕轮廓朝向平滑调节轻重；这些确定性显示计算不依据 `manufacture` 分配描边样式。
+可编辑项目页先申请租约，再以取得的锁号订阅事件。并发申请合为一次；关闭后停止重抢，从浏览器缓存返回时恢复连接。服务端仍拥有写权限、租约准入和落盘。
 
-`wall_contact.js` 从实际墙块与家具棱边、软包包边及软包三角曲面计算接触，预先裁掉细线，并给颜色蒙版提供贴墙裁边数据；它负责可见性，不另设线宽或风格。细线与贴墙模块共用 `furniture_edges.js`，沙发曲面和包边由 `sofa_upholstery.js` 在部件尺寸边界内生成。每帧顺序为 `prepare(roots, camera)` → 主场景渲染 → `draw(roots, camera)`：准备只执行一次，`draw()` 消费本帧接触数据，漏掉准备或重复消费会明确报错，避免沿用上一帧状态。这些计算只影响预览，不更改摆放、足迹或制造数据。
+可信 `PageExtension` 通过 `pageHost.onProjectUpdated()` 和 `pageHost.onStatusToast()` 接入，不读写页面内部状态。模块不内置 AI 助手。
 
-房间墙体淡出时，`opening_markers.js` 保留对应门窗的无填充虚线框：门有地面底边，窗保留窗台高度。轮廓按深度参与遮挡且不写深度、不投影；悬停显示门窗 ID、宽高和窗台高度。`layout_scene.js` 随墙体透明度切换实体与轮廓，提示由 `layout_overlay.js` 显示。几何、淡出和悬停遮挡检查运行 `node domain/modules/web/furniture_web/static/opening_markers_check.mjs`。
+## 三维渲染
 
-`opening_models.js` 将规范洞口转换为带门套、门板和五金的木门，以及带窗框、窗扇、玻璃和窗台的窗户。`layout_meshes.js` 把每组实体挂在所属墙下，`layout_scene.js` 按每种材质的初始透明度统一淡出，玻璃保留不写深度的行为。仅增强预览造型，不解释门窗类型或更改布局事实；几何与真实浏览器检查运行 `.venv/Scripts/python.exe domain/modules/web/scripts/check_openings.py`，视觉口径见 [门窗造型](visual-style.md#门窗造型)。
-
-`room_lighting.js` 按房间和实际窗洞构建中央顶灯、窗光及独立遮光壳。房顶不显示但遮光，淡出的墙体和门窗框仍保留实体遮挡；这些代理位于家具描边和点选根节点以外。`layout_scene.js` 在房间舞台重建时释放并重建照明，在家具同步后更新投影者专用深度材质并重绘阴影，换视角不改变光源或阴影。新增逻辑仅为确定性显示计算与 GPU 资源生命周期，不改变布局、制造数据或阶段默认值。真实像素检查运行 `.venv/Scripts/python.exe domain/modules/web/scripts/check_lighting.py`，照明近似与维护口径见 [室内照明与隐藏房顶](visual-style.md#室内照明与隐藏房顶)。
-
-当前采用银河夜空与暖色顶灯，窗洞只提供较弱冷色夜间补光。`layout_diorama.js` 以同源请求读取随项目提供的 ESO/S. Brunier 银河全景，异步加载后通知 `layout_scene.js` 重绘；天空纹理不作为室内环境照明。`layout_overlay.js` 保留原图和许可的可见署名链接。素材许可、夜空方向与截图检查见 [星空与银河背景](visual-style.md#星空与银河背景)。背景与配光由本次视觉设计确定，运行时仅执行固定渲染和资源加载，不新增自然语言判断或阶段事实。
-
-`layout_persistence.js` 是浏览器布局文档的同步入口，私有状态不由页面模板直接修改。它按松手顺序串行保存，提交时复制操作坐标、发送时带上上一笔确认的版本和当前租约；助手假设的确认/划掉也走这条队列。拖动、转动视角或保存期间暂存文档，空闲后才交给页面安装；写入和较新的读取使旧响应失效。通知到来时只按需重读；写入拒绝或网络异常后重读权威结果，再释放队列。保存中切换房间会被页面挡住，防止用旧房间快照覆盖本地操作。同墙拖动比较完整位置，不能只凭墙名和高度跳过保存。
-
-`layout_interaction.js` 属于布局阶段，拥有一次手势的开始、更新、结束和取消。事务复制操作前位置并维护私有候选；页面只提供指针、相机比例及墙面投影方向。画布和属性栏读取候选，松手后提交其完整变换；Escape、pointercancel、丢失捕获或画布尺寸变化丢弃候选。贴墙时同时更新屏幕起点和房间原点，保持后续离墙连续。加载文档只转换数据形状，不改摆放模式。
-
-移动、旋转和高度交互都使用布局模块的 `poseOperation()`，以 `set_pose` 携带明确模式、完整三轴原点和朝向；靠墙时另带墙名。后端验证已摆放几何，不将手工位置重新解释为沿墙规划。普通数值微调使用相同编码。外形尺寸保存确认前不开始新的位置手势，避免用旧尺寸求解而服务端按新尺寸准入。编辑被拒或网络失败时安装权威重读结果；重读也失败时，仅回退仍属于该操作的候选，避免覆盖后续编辑。
-
-模板只负责把交互整理成规范 op、显示元数据/错误和通过 `showDocument()` 安装控制器交出的文档。渲染、碰撞求解和后端落盘各自保留原职责。确定性协议与同步状态由代码执行，不新增 LLM 判断或边界例外。检查直接导入控制器，覆盖延迟/乱序响应、连续保存、外部通知、拒绝恢复、网络失败、决策更新和独立单间：`node domain/modules/web/furniture_web/static/layout_persistence_check.mjs`。
-
-可编辑项目页先申请编辑租约，再用取得的锁号建立事件连接，避免启动时续租覆盖连接持有的有效期。页面区分申请中、占用、无权限、申请失败和闲置让出；网络或 HTTP 失败提供重试，其他窗口或助手占用时提供显式收回。收到租约归还通知后自动重新申请；失去租约时清除本页凭据，并在写入前核对持有者。并发申请合为一次，关闭页面后不再因归还通知重新抢锁。服务端租约规则和写权限仍由工作流执行。
-
-真实浏览器检查：在沙箱外运行 `.venv/Scripts/python.exe domain/modules/web/scripts/check_edit_lease.py`。检查使用临时项目和临时 HTTP 服务，覆盖刷新后的连接持有、双窗口收回并保存、关闭窗口及助手归还后的恢复、闲置恢复、网络/HTTP 失败重试、403 拒绝与并发申请；不修改用户项目。这里仅新增确定性的页面状态与协议处理，没有新增 LLM 判断或边界例外。
-
-## 留在原处
-
-| 干什么 | 留在 |
+| 模块 | 拥有的职责 |
 | --- | --- |
-| 房间页要画的字典 | `furniture_layout.room_page.room_page_payload` |
-| 干涉、越界、挡门窗、against 接触与 fill 空段的前端求解 | `furniture_layout/static/layout_solver.js`，与 `placement_check.py`、`placement.py` 一起改 |
-| 屏幕到毫米的拖动，以及贴回墙面 | `furniture_layout/static/layout_drag.js` |
-| 拖动事务、私有候选和完整位置操作编码 | `furniture_layout/static/layout_interaction.js` |
-| 确认时核对的房间 SVG | `furniture_layout/room_svg.py`，`layout_figures.py` |
-| 板件页要画的结构、顺纹和贴图摆法 | `furniture_panel_planning.cabinet_panel_page.panel_structure_view` |
-| 保存、撤销、编辑租约、进程退出 | `cad-generated/scripts/server.py` 和工作流 |
+| `render/room/layout_scene.js` | 视口组装、场景同步、墙体淡出、点选与生命周期 |
+| `render/room/layout_frame.js`、`layout_camera.js` | 房间/Three.js 坐标与确定性相机计算 |
+| `render/room/layout_meshes.js` | 舞台/家具网格组装与 GPU 资源释放 |
+| `render/room/layout_annotations.js`、`layout_labels.js`、`layout_overlay.js` | 锚点、标签投影、提示与素材署名 |
+| `render/room/wall_*.js`、`opening_*.js` | 真实墙块/洞口、墙面显示、门窗实体及淡出后的轮廓 |
+| `render/room/room_lighting.js` | 室内光、隐藏房顶、视角独立遮光壳与投影深度材质 |
+| `render/furniture/` | 桌椅、茶几与沙发的预览几何；尺寸边界与曲面分开，共用真实边缘 |
+| `render/outline/outline_style.js` | 共享线宽、方向轻重、内部线透明度、棱边角度与交互颜色 |
+| `render/outline/layout_ink.js`、`ink_depth.js` | 家具细线/场景边线入口，贴面线条的深度偏移 |
+| `render/outline/cartoon_outline.js` | 颜色/身份蒙版、投影线宽、遮挡合成和渲染状态恢复 |
+| `render/outline/wall_contact.js` | 真实墙块/有限地板求交、细线裁切和颜色蒙版裁边 |
+| `render/environment/` | 卡通材质、共享天空纹理、庭院与树带；不参与家具蒙版或交互 |
+| `render/panels/scene.js`、`camera.js`、`materials.js` | 冻结板件网格、开门/拆解、拾取、取景与程序木纹 |
 
-确认时，布局阶段调用本模块的 `render_viewer`，核对只读页是不是当前几何画出的。单间草稿的 HTML 也由 `room_http` 调用 `render_draft_page`。这两处是布局阶段对网页模块的依赖。网页模块不导入工作流，不写项目。
+每帧描边为 `prepare(roots, camera)` → 主场景渲染 → `draw(roots, camera)`，准备数据只消费一次。家具身份按整件共享，颜色蒙版可以裁接触，身份蒙版不裁空。代理借用原几何，专有材质与代理由描边模块清理，原几何由场景清理。
 
-改摆放规则时改布局阶段的求解脚本。改门窗颜色、相机、微缩场景或板件页样子时改本模块。
+`addFurnitureInk(mesh, {itemId, color})` 注册身份并创建细线；`addStageInk(mesh, color, thickness)` 仅处理墙体/地台边线。接触按真实部件边缘、包边、三角面和 0.5 mm 公差判断，不能按足迹或摆放模式关闭整面描边。
 
-## 拖动闭环检查
+照明遮光壳独立于可见墙淡出；主画面使用对数深度，透视阴影用专有 `MeshDepthMaterial` 写投影深度。房间/洞口重建时释放照明与遮光资源，家具同步后更新阴影，换视角复用阴影贴图。
 
-`node domain/stages/layout-plan/scripts/furniture_layout/static/interaction_check.mjs` 检查四面墙的离墙、横移、贴回和再次离墙、活动家具、取消及完整变换编码。
+天空从同源 `images/milky-way-eso0932a.jpg` 加载并用 `createImageBitmap` 解码，完成后重绘，不作为室内环境光。室外组随房间重建释放纹理、几何、材质与实例缓冲。素材许可和校验值维护在 [素材说明](../furniture_web/static/images/README.md)。
 
-`test_drag_transaction_roundtrip.py` 执行实际 JS 手势，并将输出交给真实项目和独立房间编辑入口，检查准入、保存、重读及撤销。运行：`.venv/Scripts/python.exe -m unittest discover -s domain/stages/cad-generated/scripts/tests -p test_drag_transaction_roundtrip.py`。
+## 服务与阶段边界
 
-真实页面检查在沙箱外执行：`.venv/Scripts/python.exe domain/modules/web/scripts/check_drag.py --output temp/drag-checks/transaction.png`。脚本使用临时目录和临时本机服务，运行真实 Chromium 指针事件及 HTTP 编辑，核对预览、保存和重开后的原点、朝向、足迹与净距；另查 Escape、pointercancel、网络失败恢复、迟到响应不会覆盖下一次拖动，以及外形保存期间不会用旧尺寸开始拖动。against/fill 约束分别核对无效离墙和旋转不发送编辑、高度停在可保存边界并可重开，以及不同高度带的 fill 不误锁移动。完成后清理测试服务，不读写用户项目。
+`integration.py` 将正式静态目录挂在 `/layout-view/`，并从布局阶段提供 `layout_solver.js`、`layout_drag.js`、`layout_interaction.js`。检查页只由临时测试服务的 `/web-checks/` 提供。
+
+| 数据或规则 | 所有者 |
+| --- | --- |
+| 场景字典、确认用 SVG | 布局阶段 `room_page_payload`、`room_svg.py`、`layout_figures.py` |
+| 摆放、碰撞、净距、against/fill | 布局阶段 `placement_check.py`、`placement.py`、`layout_solver.js` |
+| 屏幕到毫米、贴回墙面 | 布局阶段 `layout_drag.js` |
+| 拖动事务、候选、完整 `set_pose` 编码 | 布局阶段 `layout_interaction.js` |
+| 冻结板件、顺纹轴、六面 UV、铰链准入 | 板件阶段 `cabinet_panel_page.py` 与板件规划 |
+| 保存、撤销、租约、进程退出 | CAD 编排服务与工作流 |
+
+Web 运行时保留确定性展示计算、状态、结构化协议和资源副作用；家具规划、制造默认值与自然语言判断仍由相应阶段或 LLM 负责。

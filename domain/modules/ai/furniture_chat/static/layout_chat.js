@@ -7,7 +7,7 @@
  * 不在前端解析自然语言或改写业务规则。
  */
 
-import { Component, Injectable, signal, computed, effect } from "/layout-view/layout_angular.js";
+import { Component, Injectable, signal, computed, effect } from "@angular/core";
 
 const STAGE_LABELS = {
   layout_plan: "房间布局",

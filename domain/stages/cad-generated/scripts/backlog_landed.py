@@ -9,6 +9,12 @@ from __future__ import annotations
 
 
 LANDED_VERSIONS: dict[str, dict[str, int]] = {
+    "web.md": {
+        "web-organization": 1,
+        "floor-outline-contact": 1,
+        "nonindexed-surface-contact": 0,
+        "foreground-outline-occlusion": 0,
+    },
     "panel-plan.md": {
         "full-height-divider": 1,
         "half-height-divider": 0,

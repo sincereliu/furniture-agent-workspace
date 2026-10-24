@@ -94,8 +94,8 @@ class SkillArchitectureTests(unittest.TestCase):
         for name in ("room_page.py", "project_list.py", "panel_page.py", "integration.py"):
             self.assertTrue((pages / name).is_file(), name)
         self.assertTrue((pages / "templates" / "room_page.html").is_file())
-        self.assertTrue((pages / "static" / "layout_scene.js").is_file())
-        self.assertTrue((pages / "static" / "cabinet_structure.js").is_file())
+        self.assertTrue((pages / "static" / "render/room/layout_scene.js").is_file())
+        self.assertTrue((pages / "static" / "pages/panels/index.js").is_file())
         self.assertFalse((layout_static / "layout_scene.js").exists())
         self.assertTrue((layout_static / "layout_solver.js").is_file())
         self.assertTrue((layout_static / "layout_drag.js").is_file())

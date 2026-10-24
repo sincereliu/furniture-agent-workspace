@@ -9,7 +9,8 @@ import json
 import os
 from unittest import mock
 
-from check_drag import WORKSPACE, isolated_server
+from project_browser_support import WORKSPACE, isolated_project_server
+from browser_support import install_room_probe
 
 
 HOOK = """
@@ -17,8 +18,6 @@ window.__leaseCheck={
   snapshot:()=>({phase:leaseStore.phase,hasToken:Boolean(leaseStore.token),
     id:leaseStore.id,holder:leaseStore.shown&&leaseStore.shown.holder,
     editable:ownsLease(),pending:Boolean(leaseStore.pending)}),
-  canEdit:()=>canEditLayout(),
-  save:()=>persist(scene.items[0],'resize',{width:scene.items[0].width+1}),
   idle:()=>{leaseStore.lastInteraction=0;yieldIdleLease()},
 };
 """
@@ -40,7 +39,7 @@ def check():
         "placement": {"mode": "free", "origin_x_mm": 900,
                       "origin_y_mm": 200, "rotation_z_deg": 0}}]}]}
 
-    with isolated_server() as base, \
+    with isolated_project_server() as base, \
             mock.patch.dict(os.environ, {server.LAYOUT_EDIT_ENV: "1"}), \
             sync_playwright() as playwright:
         project = FurnitureOrchestrator(workspace_root=WORKSPACE,
@@ -51,12 +50,12 @@ def check():
         context = browser.new_context(viewport={"width": 1320, "height": 950})
         context.set_default_timeout(15000)
 
-        def instrument(route):
-            response = route.fetch()
-            body, suffix = response.text().rsplit("</script>", 1)
-            route.fulfill(response=response, body=body + HOOK + "</script>" + suffix)
-
-        context.route("**/preview", instrument)
+        install_room_probe(context, lease_hook=HOOK, entry_hook="""
+Object.assign(window.__leaseCheck,{
+  canEdit:()=>canEditLayout(),
+  save:()=>persist(scene.items[0],'resize',{width:scene.items[0].width+1}),
+});
+""")
 
         def open_page():
             page = context.new_page()
@@ -70,9 +69,19 @@ def check():
                                    "&& !window.__leaseCheck.snapshot().pending", arg=value)
 
         def held_by(page):
+            # "ready" follows POST completion; wait for the matching SSE connection
+            # to pin the authoritative lease before simulating the next handoff.
+            page.wait_for_function("""async url => {
+              const response=await fetch(url,{cache:'no-store'});
+              if(!response.ok)return false;
+              const document=await response.json(),lease=document.lease;
+              const snapshot=window.__leaseCheck.snapshot();
+              return snapshot.editable&&!snapshot.pending&&lease&&lease.holder==='page'
+                &&lease.id===snapshot.id&&lease.expires_in>60;
+            }""", arg=base + f"/api/project/{project.id}/layout")
             snapshot = page.evaluate("window.__leaseCheck.snapshot()")
             lease = read_lease(server.STORE_ROOT, project.id)
-            assert snapshot["editable"] and snapshot["hasToken"] and lease.id == snapshot["id"]
+            assert snapshot["editable"] and snapshot["hasToken"] and lease is not None and lease.id == snapshot["id"]
             assert page.locator("#lease-badge").evaluate("element => element.classList.contains('mine')")
 
         try:

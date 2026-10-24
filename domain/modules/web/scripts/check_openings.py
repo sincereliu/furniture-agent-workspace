@@ -10,7 +10,7 @@ from pathlib import Path
 import shutil
 import subprocess
 
-from check_outline import STATIC, WORKSPACE, static_server
+from browser_support import NODE_TESTS, WORKSPACE, static_server
 
 
 def main() -> int:
@@ -23,7 +23,7 @@ def main() -> int:
     report = {"checks": [], "screenshots": [], "errors": []}
     try:
         for name in ("opening_models_check.mjs", "opening_markers_check.mjs", "wall_solid_check.mjs"):
-            subprocess.run([shutil.which("node") or "node", str(STATIC / name)], check=True, timeout=30)
+            subprocess.run([shutil.which("node") or "node", str(NODE_TESTS / name)], check=True, timeout=30)
             report["checks"].append(name)
         with static_server() as base, sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=True)
@@ -32,12 +32,16 @@ def main() -> int:
                 page.set_default_timeout(15000)
                 page.on("pageerror", lambda error: report["errors"].append(str(error)))
                 page.on("console", lambda msg: report["errors"].append(msg.text) if msg.type == "error" else None)
-                page.goto(base + "/layout-view/opening_models_browser_check.html")
+                page.goto(base + "/web-checks/opening_models_browser_check.html")
                 page.wait_for_function("window.openingDemo !== undefined")
                 page.evaluate("__diag.scene.getObjectByName('milky-way-sky').userData.ready")
                 for mode in ("normal", "reverse", "detail", "far"):
                     page.evaluate("mode => openingDemo.show(mode)", mode)
-                    page.wait_for_timeout(400)
+                    page.wait_for_function("""() => {
+                      const walls=__diag.stageGroup.children.filter(n=>n.userData.wallId);
+                      return walls.some(w=>!w.visible)&&walls.every(w=>
+                        w.userData.material.opacity<0.002||w.userData.material.opacity>0.998);
+                    }""")
                     state = page.evaluate("""() => {
                       const walls=__diag.stageGroup.children.filter(n=>n.userData.wallId);
                       return walls.map(w=>({id:w.userData.wallId,visible:w.visible,opacity:w.userData.material.opacity,
@@ -47,8 +51,8 @@ def main() -> int:
                           count:o.children.length,
                         }))}));
                     }""")
-                    assert sum(len(w["openings"]) for w in state) == 5
-                    assert any(w["visible"] for w in state) and any(not w["visible"] for w in state)
+                    assert sum(len(w["openings"]) for w in state) == 5, (mode, state)
+                    assert any(w["visible"] for w in state) and any(not w["visible"] for w in state), (mode, state)
                     for wall in state:
                         for opening in wall["openings"]:
                             assert opening["surfaces"] and opening["count"] > 20, state
@@ -75,10 +79,10 @@ def main() -> int:
             finally:
                 browser.close()
     except Exception as error:
-        report["fatal"] = str(error)
+        report["fatal"] = f"{type(error).__name__}: {error}"
     (output / "results.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(report, ensure_ascii=False, indent=2))
-    return int(bool(report.get("fatal") or report["errors"]))
+    return int("fatal" in report or bool(report["errors"]))
 
 
 if __name__ == "__main__":

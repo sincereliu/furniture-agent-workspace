@@ -5,7 +5,7 @@ import argparse
 import json
 from pathlib import Path
 
-from check_outline import WORKSPACE, static_server
+from browser_support import WORKSPACE, static_server
 
 
 def main() -> int:
@@ -24,11 +24,11 @@ def main() -> int:
                 page.set_default_timeout(15000)
                 page.on("pageerror", lambda error: report["errors"].append(str(error)))
                 page.on("console", lambda msg: report["errors"].append(msg.text) if msg.type == "error" else None)
-                page.goto(base + "/layout-view/room_lighting_browser_check.html")
+                page.goto(base + "/web-checks/room_lighting_browser_check.html")
                 page.wait_for_function("window.lightingDemo !== undefined")
                 page.evaluate("__diag.scene.getObjectByName('milky-way-sky').userData.ready")
                 report["checks"] = page.evaluate("lightingDemo.checks()")
-                for mode in ("both", "ceiling", "window", "reverse"):
+                for mode in ("both", "ceiling", "window", "reverse", "horizon"):
                     page.evaluate("mode => lightingDemo.show(mode)", mode)
                     page.wait_for_timeout(400)
                     filename = f"{mode}.png"
@@ -37,10 +37,10 @@ def main() -> int:
             finally:
                 browser.close()
     except Exception as error:
-        report["fatal"] = str(error)
+        report["fatal"] = f"{type(error).__name__}: {error}"
     (output / "results.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(report, ensure_ascii=False, indent=2))
-    return int(bool(report.get("fatal") or report["errors"] or not report["checks"]
+    return int(bool("fatal" in report or report["errors"] or not report["checks"]
                     or any(not check["pass"] for check in report["checks"])))
 
 

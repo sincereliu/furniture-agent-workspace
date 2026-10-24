@@ -21,7 +21,7 @@
 
 ## 各文件干什么
 
-房间页、项目名单和三维画面在 [网页展示模块](../../../modules/web/README.md)。下表里的 `static/`，除 `layout_solver.js`、`layout_drag.js`、`layout_interaction.js` 和它们的检查脚本外，都在 `domain/modules/web/furniture_web/static/`。房间页模板在同模块的 `templates/`。
+房间页、项目名单和三维画面在 [网页展示模块](../../../modules/web/README.md)。Web 内部文件地图只维护在 [页面与模块边界](../../../modules/web/references/web-preview.md)，前端检查入口只维护在 [检查方法](../../../modules/web/references/testing.md)。下表的 `static/` 仅指本阶段的求解、拖动换算与事务。
 
 | 干什么 | 文件 | 代码归类 |
 | --- | --- | --- |
@@ -35,30 +35,12 @@
 | 给这套摆放配上每个房间的图，确认时核对图是不是刚算出来的 | `layout_figures.py` | calculation |
 | 配进去的那张 SVG | `room_svg.py` | calculation |
 | 房间页要画的字典：房间、家具、障碍和门窗。不拼 HTML | `room_page.py` 的 `room_page_payload` | schema |
-| 保存的只读预览、单间草稿、项目预览和分享共用一个模板。Python 读网页模块的 `templates/room_page.html` 填上当前房间。原点三轴、光标坐标、房间药丸、`?room=`、页眉牌子都在模板里。前端拖动检查在本阶段 `static/layout_solver.js`，必须与 `placement_check.py` 同步 | `furniture_web/room_page.py` | structured_protocol |
-| 做过的项目名单 | `furniture_web/project_list.py` | structured_protocol |
 | 把预览页打开，并准备这一页要读的数据 | `open_preview.py` | side_effect |
 | 布局页订阅项目文件和编辑租约。变了才通知，版本变了才重读整份布局 | `layout_events.py` | structured_protocol / side_effect |
 | 从最新布局取出一台已保存外形，供板件页使用。不要求整份布局已确认 | `cabinet_entry.py` | validation |
-| 房间页三维视口组装、相机控制、射线拾取与句柄同步 | `static/layout_scene.js` | calculation |
-| 日间工作室天空球、建筑微缩底座、卡通光照材质与缓存化地砖/台面贴图 | `static/layout_diorama.js` | calculation |
-| 文字标签 DOM 层、SVG 引线与左下角坐标轴角标 | `static/layout_overlay.js` | calculation |
-| 围墙/地板台子、家具棱柱、沙发/茶几/椅子网格、旋转环与尺寸标注线 | `static/layout_meshes.js` | calculation |
 | 前端碰撞、越界、门窗遮挡、贴合/铺满约束、四向净距与整数毫米拖拽求解（对应 `placement_check.py`、`placement.py`） | `static/layout_solver.js` | calculation / validation |
-| 正视图预设、基准取景距离、立面竖直平面比例与旋转方向符号 | `static/layout_camera.js` | calculation |
-| 预览围墙的厚度、转角和门窗洞，房间坐标 | `static/wall_solid.js` | calculation |
-| 不进生产的沙发在预览里的靠背、扶手和坐垫。要做成柜的沙发仍是盒子 | `static/sofa_solid.js` | calculation |
-| 不进生产的茶几在预览里的桌面、腿和层板。要做成柜的茶几仍是盒子 | `static/coffee_table_solid.js` | calculation |
-| 不进生产的椅子在预览里的立柱、腿、座面和靠背。要做成柜的椅子仍是盒子 | `static/chair_solid.js` | calculation |
-| 预览边线沿视线拉近 1 毫米，贴墙时仍画在墙前面 | `static/ink_depth.js` | calculation |
-| 页面入口将规范布局输出一次转换为画布模型；渲染层只读取该模型 | `static/layout_payload.js` | calculation |
-| 房间的东、南、上怎么画到屏幕上 | `static/layout_frame.js` | calculation |
-| 房间轴、家具尺寸线和标签锚点；全部用房间坐标计算 | `static/layout_annotations.js` | calculation |
-| 屏幕标注矩形避让、画布边界与稳定偏移 | `static/layout_labels.js` | calculation |
 | 拖动换算（屏幕像素 → 房间毫米）与"贴回墙面" | `static/layout_drag.js` | calculation |
 | 单次手势事务、私有候选、贴墙基准更新与完整变换操作编码 | `static/layout_interaction.js` | calculation / state / structured_protocol |
-| 布局页离线免构建 Angular Standalone 组件与响应式 Signals 运行时 | `static/layout_angular.js` | structured_protocol / side_effect |
-| 可选页面扩展的样式、按钮、侧栏、弹窗和启动代码插槽；不内置 AI 内容 | `furniture_web.room_page.PageExtension` / `templates/` | structured_protocol |
 | 严格 set_pose / resize 编辑；全屋和单间共用准入 | `scene_edit.py` | schema / calculation / validation |
 | 把这次改动算进某一间，算出一版还没确认的摆放。版本号和落盘不在这里 | `project_edit.py` | calculation |
 | 三个入口：建全屋摆放（`plan_project_layout`）、建单间（`plan_room_scene`）、写房间外壳（`write_room_shell`） | `layout_entry.py` | structured_protocol |
@@ -66,7 +48,7 @@
 | 单间统一已摆放格式；重读校验几何后重建图 | `scene_store.py` | state / side_effect |
 | 房间外壳的 STEP：地、墙、门窗洞。不是柜体模型 | `room_shell.py` | side_effect |
 
-页面结构在网页模块的 `templates/room_page.html`，交互胶水在 `templates/room_page.js`，碰撞与拖拽求解在本阶段 `static/layout_solver.js`，相机取景辅助在网页模块的 `static/layout_camera.js`。`furniture_web/room_page.py` 读入两份模板后填充参数，保存预览与实时页面使用同一份组装结果；模板不作为静态资源直接发布。
+页面结构在网页模块的 `templates/room_page.html`；`templates/room_page.js` 只读取配置、调用 `static/pages/room/index.js` 并安装可选扩展，交互控制器归 `static/pages/room/`。碰撞与拖拽求解仍归本阶段 `static/layout_solver.js`；相机取景计算归 Web 的 `static/render/room/layout_camera.js`。`furniture_web/room_page.py` 组装 HTML 与引导模板，保存预览和实时页面共用该入口，模板不作为静态资源直接发布。Web 文件与检查地图以模块内维护文档为准。
 
 页面 AI 助手是独立可选模块，界面与脚本归 `domain/modules/ai/furniture_chat/`，模型连接归同一模块的 `furniture_ai/`。
 网页模块只提供空的 `PageExtension`，不导入 AI 包，也不默认生成扩展。宿主仅为本机可编辑项目页传入 `PageExtension`；只读与分享页会丢弃扩展。
@@ -99,17 +81,12 @@ Python 在仓库根目录：
 node domain/stages/layout-plan/scripts/furniture_layout/static/<检查脚本>
 ```
 
-画面脚本在网页模块：
-
-```powershell
-node domain/modules/web/furniture_web/static/<检查脚本>
-```
+画面检查见 [Web 检查方法](../../../modules/web/references/testing.md)，不在本阶段重复列出。
 
 | 改了 | 跑 |
 | --- | --- |
 | `placement.py`、`placement_check.py`：干涉、贴边、门窗遮挡 | `test_room_scene_placement.py` |
 | 局部原点、足迹点序、正负转角、四面靠墙正面、离地高度、对称包络序列化 | `test_room_coordinate_contract.py` |
-| `static/layout_frame.js`、`static/layout_annotations.js`、`static/layout_payload.js`：三轴映射和标注。占用空间相同但点序不同的立方体，各自保留局部宽深方向 | `frame_check.mjs` |
 | `input_fields.py`，以及 `fill`、`against`、HTTP 准入 | `test_layout_input_contract.py` |
 | `validation.py`、`layout_figures.py`、`room_svg.py`、`room_shell.py`：建项前准入、铺满宽度、`manufacture`、房间外壳和 SVG | `test_room_layout_preview.py` |
 | `scene_edit.py`：移动、旋转、改尺寸 | `test_room_scene_edit.py` |
@@ -122,15 +99,7 @@ node domain/modules/web/furniture_web/static/<检查脚本>
 | `static/layout_solver.js` | `solver_check.mjs` |
 | `static/layout_interaction.js`、完整变换编辑和保存重读 | `interaction_check.mjs`、`test_drag_transaction_roundtrip.py`、网页模块 `scripts/check_drag.py` |
 | `static/layout_drag.js` | `drag_check.mjs` |
-| `static/layout_labels.js` | `labels_check.mjs` |
-| `static/wall_view.js` | `wall_view_check.mjs` |
-| `static/wall_solid.js` | `wall_solid_check.mjs` |
-| `static/sofa_solid.js` | `sofa_solid_check.mjs` |
-| `static/coffee_table_solid.js` | `coffee_table_check.mjs` |
-| `static/chair_solid.js` | `chair_solid_check.mjs` |
-| `static/ink_depth.js`、`static/layout_scene.js` 的边线深度 | `ink_depth_check.mjs` |
 | `cabinet_entry.py` | `test_cabinet_panel_page.py` |
-| `static/layout_scene.js`、`static/layout_diorama.js`、`static/layout_overlay.js`、`static/layout_meshes.js` | `test_project_preview.py` |
 
 `scene.py`、`scene_planning.py`、`layout_entry.py`、`project_layout.py`、`room_page.py` 和网页模块的 `templates/` 被上面多行用到。改它们时，跑它实际喂到的那些行。`scene.py` 的家具 id 规则还有板件阶段的对照，再加 `test_skill_architecture.py`。本阶段 `static/layout_solver.js` 里的拖动检查要和 `placement_check.py` 一起改，这时 `solver_check.mjs`、摆放检查和项目预览三行都跑。
 
