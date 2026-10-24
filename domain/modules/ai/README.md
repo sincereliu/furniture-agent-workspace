@@ -19,10 +19,9 @@ domain/modules/ai/
 - [维护、启用和禁用](references/ai-integration.md)
 - [Codex 登录与进程隔离](references/codex-isolation.md)
 
-仍使用同一个测试入口，自动发现阶段测试与本模块测试：
+仍使用同一个测试入口，按改动选择本模块相关文件（[测试选择指南](../../stages/cad-generated/references/testing.md)）：
 
 ```powershell
-.\.venv\Scripts\python.exe domain/stages/cad-generated/scripts/run_tests.py
 .\.venv\Scripts\python.exe domain/stages/cad-generated/scripts/run_tests.py -p test_ai_providers.py
 .\.venv\Scripts\python.exe domain/stages/cad-generated/scripts/run_tests.py -p test_web_chat_feature.py
 ```

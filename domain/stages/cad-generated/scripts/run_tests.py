@@ -1,8 +1,8 @@
-"""Run the whole integration test suite with the stage packages on sys.path.
+"""Run explicitly selected tests with the stage packages on sys.path.
 
 The test modules bootstrap their own imports through ``runtime_paths``; this
 script supplies stage/module test directories and discovery parameters, so a
-checkout can run every test with one documented command.
+checkout can run focused tests or request the whole suite with --all.
 """
 
 from __future__ import annotations
@@ -37,17 +37,27 @@ TEST_ROOTS = (
 )
 
 
-def _suite(pattern: str) -> unittest.TestSuite:
+def _suite(
+    pattern: str | list[str], name_patterns: list[str] | None = None,
+) -> unittest.TestSuite:
     bootstrap_runtime_paths(WORKSPACE_ROOT)
     for tests_root in TEST_ROOTS:
         if str(tests_root) not in sys.path:
             sys.path.insert(0, str(tests_root))
-    suite = unittest.TestSuite()
+    patterns = [pattern] if isinstance(pattern, str) else pattern
+    cases: dict[str, unittest.TestCase] = {}
     for tests_root in TEST_ROOTS:
-        suite.addTests(unittest.TestLoader().discover(
-            str(tests_root), pattern=pattern, top_level_dir=str(tests_root),
-        ))
-    return suite
+        for module_pattern in patterns:
+            loader = unittest.TestLoader()
+            loader.testNamePatterns = name_patterns
+            discovered = loader.discover(
+                str(tests_root), pattern=module_pattern, top_level_dir=str(tests_root),
+            )
+            if loader.errors:
+                raise ImportError("\n".join(loader.errors))
+            for case in _flatten(discovered):
+                cases.setdefault(case.id(), case)
+    return unittest.TestSuite(cases.values())
 
 
 def _flatten(suite: unittest.TestSuite):
@@ -75,7 +85,7 @@ def _unique(cases) -> list[str]:
     return list(seen)
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Run stage integration tests and independent AI module tests."
     )
@@ -85,24 +95,46 @@ def main() -> int:
         action="store_true",
         help="also list every case that did not fail, error, or skip",
     )
-    parser.add_argument(
+    selection = parser.add_mutually_exclusive_group(required=True)
+    selection.add_argument(
         "--pattern",
         "-p",
-        default="test_*.py",
-        help="glob for a single test module, e.g. -p test_panel_rule_contracts.py",
+        action="append",
+        help="test module glob; repeat -p to select several files",
     )
-    args = parser.parse_args()
+    selection.add_argument(
+        "--all", action="store_true", help="explicitly request the whole Python suite",
+    )
+    parser.add_argument(
+        "-k", action="append", default=[], metavar="NAME",
+        help="case-sensitive test ID substring or * glob; repeated -k values are ORed",
+    )
+    parser.add_argument(
+        "--list", action="store_true", dest="list_only",
+        help="list selected test IDs without running tests or reconciling backlog",
+    )
+    args = parser.parse_args(argv)
+
+    name_patterns = [name if "*" in name else f"*{name}*" for name in args.k]
+    try:
+        suite = _suite(args.pattern or "test_*.py", name_patterns or None)
+    except ImportError as error:
+        parser.error(str(error))
+    # unittest discards each executed case from the suite, so snapshot first.
+    all_ids = [_test_id(test) for test in _flatten(suite)]
+    if not all_ids:
+        parser.error("no tests matched; check -p / -k (use --list to preview selection)")
+    print(f"Selected {len(all_ids)} tests in {len(TEST_ROOTS)} test roots", flush=True)
+    if args.list_only:
+        for test_id in all_ids:
+            print(f"  {test_id}")
+        return 0
 
     repo_root = SCRIPT_ROOT.parents[4]
     for message in reconcile_workspace(repo_root):
         print(message, flush=True)
         if message.startswith("error:"):
             return 1
-
-    suite = _suite(args.pattern)
-    # unittest discards each executed case from the suite, so snapshot first.
-    all_ids = [_test_id(test) for test in _flatten(suite)]
-    print(f"Discovered {len(all_ids)} tests in {len(TEST_ROOTS)} test roots", flush=True)
 
     runner = unittest.TextTestRunner(verbosity=0)
     result = runner.run(suite)

@@ -66,15 +66,15 @@ Get-ChildItem -Recurse -Directory -Filter .cadgen-store temp, generated -ErrorAc
 
 ## 跑测试
 
-布局阶段维护时，只跑 [布局运行时映射](../../../../domain/stages/layout-plan/references/runtime-map.md) 的「维护时跑哪几个测试」里这次改动碰到的行。下面不带 `-p` 的命令是整库回归。
+默认按 [测试选择指南](../../../../domain/stages/cad-generated/references/testing.md) 选测。布局阶段维护时，只跑 [布局运行时映射](../../../../domain/stages/layout-plan/references/runtime-map.md) 的「维护时跑哪几个测试」里这次改动碰到的行。
 
 在仓库根目录、PowerShell：
 
 ```powershell
-.\.venv\Scripts\python.exe domain\stages\cad-generated\scripts\run_tests.py
+.\.venv\Scripts\python.exe domain\stages\cad-generated\scripts\run_tests.py -p test_panel_rule_contracts.py
 ```
 
-入口在 `run_tests.py`，用标准库 `unittest`，不需要额外安装。它调 `runtime_paths.bootstrap_runtime_paths()` 装好阶段包和独立 AI 模块，再发现六阶段中现有的 `scripts/tests/` 与 `domain/modules/ai/tests/` 下的全部测试。包括布局阶段的位置稳定性与脱墙旋转回归。原命令与 `-p` 用法不变。加 `-v` 会列出每个未失败用例。
+入口在 `run_tests.py`，用标准库 `unittest`，不需要额外安装。它调 `runtime_paths.bootstrap_runtime_paths()` 装好阶段包和独立 AI 模块，在六阶段中现有的 `scripts/tests/` 与 `domain/modules/ai/tests/` 下按文件筛选发现测试。`-p` 可重复，`-k` 进一步筛选类或方法，`--list` 只列清单（会导入选中的测试模块），加 `-v` 会列出每个未失败用例。没有范围参数会报错；专门整库回归时显式加 `--all`。
 
 合格结果是最后一行 `ran <总数>, failed 0, errored 0, skipped 0`。退出码 0 表示全绿。
 
@@ -82,10 +82,10 @@ Get-ChildItem -Recurse -Directory -Filter .cadgen-store temp, generated -ErrorAc
 
 已知环境限制：在 DSH 的 Windows 写入限制沙箱（`workspace-write`）下，`tempfile` 建出的临时目录会被拒绝访问，表现是一整片 `PermissionError`，涉及约 37 个用例。原因是沙箱给受限进程的新建对象补的那个 capability ACE，会被 `chmod` 重写 DACL 时抹掉，而 `tempfile.mkdtemp()` 恰好用 `mode=0o700`（唯一触发值；`0o755`/`0o750`/`0o711`/`0o777` 都正常）。这与本仓库代码无关，普通机器上是全绿；换更宽的权限预设即可绕开。
 
-本仓库测试按 `unittest` 写，不依赖 pytest。只想跑单个文件时加 `-p`：
+本仓库测试按 `unittest` 写，不依赖 pytest。例如先预览两个文件的选测清单，去掉 `--list` 即执行：
 
 ```powershell
-.\.venv\Scripts\python.exe domain\stages\cad-generated\scripts\run_tests.py -p test_panel_rule_contracts.py
+.\.venv\Scripts\python.exe domain\stages\cad-generated\scripts\run_tests.py -p test_panel_rule_contracts.py -p test_panel_output_baseline.py --list
 ```
 
 ## fnm / Node（可选）

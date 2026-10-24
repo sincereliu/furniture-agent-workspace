@@ -105,11 +105,12 @@ HTTP / function calling / AI 对话
 - 改页面样子：改 [网页展示模块](../../../modules/web/README.md)。改摆放求解或拖动换算仍改布局阶段。页面写项目仍走 `project_layout_edit`。
 - 修改公共结构前先确认跨阶段范围，在 `furniture_contracts` 维护唯一实现，并验证各阶段保存格式、冻结哈希与兼容入口。
 
-结构性改动先跑板件基线，不能为让重构通过而更新基线：
+验证按 [测试选择指南](testing.md) 选择改动直接涉及的行为与受影响交接。板件、制造等影响产物的结构性改动先跑板件基线，之后只补本次相关测试，不能为让重构通过而更新基线：
 
 ```powershell
 .\.venv\Scripts\python.exe domain/stages/cad-generated/scripts/run_tests.py -p test_panel_output_baseline.py
-.\.venv\Scripts\python.exe domain/stages/cad-generated/scripts/run_tests.py
 ```
+
+整库 Python 回归使用 `run_tests.py --all`，仅在明确需要整库覆盖时执行，不作为每次修改的固定收尾。
 
 测试使用明确输入与固定断言，不依赖本机历史项目。临时文件和外部 CAD 的环境要求见 [开发环境](../../../../.agents/skills/furniture-agent/references/dev-environment.md)。

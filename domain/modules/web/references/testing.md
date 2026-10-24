@@ -18,7 +18,7 @@
 
 可单独运行 `node domain/modules/web/tests/node/<文件名>`。新增行为检查放在该目录，采用 `*_check.mjs`，全部检查入口自动执行。专项命令只执行相关子集。
 
-宿主 Python 页面与服务检查：
+宿主 Python 页面与服务检查按本次影响选择下面的文件，不将清单整组执行。可重复 `-p` 合并相关文件，用 `-k` 进一步筛选类或方法；通用规则见 [测试选择指南](../../../stages/cad-generated/references/testing.md)。
 
 ```powershell
 .venv/Scripts/python.exe domain/stages/cad-generated/scripts/run_tests.py -p test_project_preview.py
